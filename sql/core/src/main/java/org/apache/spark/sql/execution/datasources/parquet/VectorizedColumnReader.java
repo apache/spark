@@ -166,9 +166,13 @@ public class VectorizedColumnReader {
       }
       case INT64: {
         boolean isDecimal = sparkType instanceof DecimalType;
+        // TIME columns (both MICROS and NANOS) need per-value processing in the updater: a unit
+        // conversion for MICROS and/or truncation to the requested precision. Lazy dictionary
+        // decoding would bypass the updater, so it must be disabled for them.
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
           updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS) ||
-          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS);
+          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS) ||
+          updaterFactory.isTimeTypeMatched(TimeUnit.NANOS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
           !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);

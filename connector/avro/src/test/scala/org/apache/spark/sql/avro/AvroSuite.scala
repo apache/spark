@@ -3322,6 +3322,33 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-57551: TIME(7-9) is truncated to microseconds when written to Avro") {
+    // Avro has no time-nanos logical type (upstream AVRO-4043), so TIME is stored as time-micros.
+    // Writing a TIME(7-9) value therefore drops the sub-microsecond digits, while the column's
+    // precision metadata (time(p)) is still preserved via the spark.sql.catalyst.type property.
+    withTempPath { dir =>
+      val df = spark.sql("""
+        SELECT
+          CAST(TIME '12:34:56.1234567' AS TIME(7)) as time_p7,
+          CAST(TIME '12:34:56.12345678' AS TIME(8)) as time_p8,
+          CAST(TIME '12:34:56.123456789' AS TIME(9)) as time_p9
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      // The declared precision is preserved.
+      Seq(7, 8, 9).foreach { p =>
+        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
+          s"Precision $p should be preserved")
+      }
+
+      // The value reads back truncated to microsecond resolution (.123456789 -> .123456).
+      val micros = java.time.LocalTime.of(12, 34, 56, 123456000)
+      checkAnswer(readDf, Row(micros, micros, micros))
+    }
+  }
+
   test("SPARK-57581: TIME is written as unit-correct time-micros for external readers") {
     // Expected microseconds-since-midnight for TIME'12:34:56.123456' truncated to each precision.
     val baseSeconds = (12 * 3600 + 34 * 60 + 56).toLong

@@ -64,6 +64,10 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("time(0) without time zone", TimeType(0))
   checkDataType("TIME(6)", TimeType(6))
   checkDataType("TIME(6) WITHOUT TIME ZONE", TimeType(6))
+  checkDataType("time(7)", TimeType(7))
+  checkDataType("TIME(8)", TimeType(8))
+  checkDataType("time(9)", TimeType(9))
+  checkDataType("TIME(9) WITHOUT TIME ZONE", TimeType(9))
   checkDataType("timestamp", TimestampType)
   checkDataType("TIMESTAMP WITH LOCAL TIME ZONE", TimestampType)
   checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
@@ -280,16 +284,16 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   test("unsupported precision of the time data type") {
     checkError(
       exception = intercept[SparkException] {
-        CatalystSqlParser.parseDataType("time(9)")
+        CatalystSqlParser.parseDataType("time(10)")
       },
       condition = "UNSUPPORTED_TIME_PRECISION",
-      parameters = Map("precision" -> "9"))
+      parameters = Map("precision" -> "10"))
     checkError(
       exception = intercept[SparkException] {
-        CatalystSqlParser.parseDataType("time(8) without time zone")
+        CatalystSqlParser.parseDataType("time(11) without time zone")
       },
       condition = "UNSUPPORTED_TIME_PRECISION",
-      parameters = Map("precision" -> "8"))
+      parameters = Map("precision" -> "11"))
     checkError(
       exception = intercept[ParseException] {
         CatalystSqlParser.parseDataType("time(-1)")

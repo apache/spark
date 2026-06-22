@@ -1382,6 +1382,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Some(localTime(hour = 23, minute = 59, sec = 59, micros = 1)))
     checkStringToTime("23:59:59.999999",
       Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+    // Nanosecond resolution (7-9 fractional digits).
+    checkStringToTime("23:59:59.0000001",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 100)))
+    checkStringToTime("23:59:59.00000012",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 120)))
+    checkStringToTime("23:59:59.000000123",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 123)))
+    checkStringToTime("23:59:59.999999999",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999, nanos = 999)))
+    checkStringToTime("12:34:56.123456789",
+      Some(localTime(hour = 12, minute = 34, sec = 56, micros = 123456, nanos = 789)))
 
     checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
     checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
@@ -1601,6 +1612,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       localTime(23, 59, 59, 120000))
     assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
       localTime(23, 59, 59, 900000))
+    // Nanosecond precisions 7, 8, 9.
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 9) ==
+      localTime(23, 59, 59, 999999, 999))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 8) ==
+      localTime(23, 59, 59, 999999, 990))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 7) ==
+      localTime(23, 59, 59, 999999, 900))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 6) ==
+      localTime(23, 59, 59, 999999))
   }
 
   test("add day-time interval to time") {

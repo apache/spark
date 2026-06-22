@@ -1146,13 +1146,16 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
           CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
           CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
-          CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
+          CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6,
+          CAST(TIME'12:34:56.1234567' AS TIME(7)) as time_p7,
+          CAST(TIME'12:34:56.12345678' AS TIME(8)) as time_p8,
+          CAST(TIME'12:34:56.123456789' AS TIME(9)) as time_p9
       """)
 
       df.write.mode("overwrite").orc(path)
       val result = spark.read.orc(path)
 
-      (0 to 6).foreach { p =>
+      (0 to TimeType.MAX_PRECISION).foreach { p =>
         assert(result.schema(s"time_p$p").dataType == TimeType(p))
       }
       checkAnswer(result, df)

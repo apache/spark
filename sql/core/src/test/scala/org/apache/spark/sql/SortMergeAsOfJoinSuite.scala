@@ -637,4 +637,37 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     )
   }
+
+  test("backward join - spill to disk") {
+    // Force spill by setting in-memory threshold to 1 row.
+    // Verifies that ExternalAppendOnlyUnsafeRowArray's spill path
+    // produces the same results as the in-memory path.
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val (df1, df2) = prepareForAsOfJoin()
+      // No equi-key (bufferAllRight path)
+      checkAnswer(
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        Seq(
+          Row(1, "x", "a", 1, "v", 1),
+          Row(5, "y", "b", 3, "x", 3),
+          Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+      // With equi-key (bufferRightGroup path)
+      checkAnswer(
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        Seq(
+          Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+    }
+  }
 }

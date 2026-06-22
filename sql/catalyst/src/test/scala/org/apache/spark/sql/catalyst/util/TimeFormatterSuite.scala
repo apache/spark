@@ -41,7 +41,16 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012000),
       ("23:59:59.000000", "HH:mm:ss.SSSSSS") -> (23 * 3600 + 59 * 60 + 59) * 1000000000L,
       ("23:59:59.999999", "HH:mm:ss.SSSSSS") ->
-        ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000)
+        ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000),
+      // Nanosecond resolution (7-9 fractional digits).
+      ("12:34:56.7890123", "HH:mm:ss.SSSSSSS") ->
+        ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012300),
+      ("12:34:56.78901234", "HH:mm:ss.SSSSSSSS") ->
+        ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012340),
+      ("12:34:56.789012345", "HH:mm:ss.SSSSSSSSS") ->
+        ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012345),
+      ("23:59:59.999999999", "HH:mm:ss.SSSSSSSSS") ->
+        ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999999)
     ).foreach { case ((inputStr, pattern), expectedMicros) =>
       val formatter = TimeFormatter(format = pattern, isParsing = true)
       assert(formatter.parse(inputStr) === expectedMicros)
@@ -73,7 +82,12 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
         "12:34:56.789012",
       ((23 * 3600 + 59 * 60 + 59) * 1000000000L, "HH:mm:ss.SSSSSS") -> "23:59:59.000000",
       ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999000, "HH:mm:ss.SSSSSS") ->
-        "23:59:59.999999"
+        "23:59:59.999999",
+      // Nanosecond resolution (7-9 fractional digits).
+      ((12 * 3600 + 34 * 60 + 56) * 1000000000L + 789012345, "HH:mm:ss.SSSSSSSSS") ->
+        "12:34:56.789012345",
+      ((23 * 3600 + 59 * 60 + 59) * 1000000000L + 999999999, "HH:mm:ss.SSSSSSSSS") ->
+        "23:59:59.999999999"
     ).foreach { case ((micros, pattern), expectedStr) =>
       val formatter = TimeFormatter(format = pattern)
       assert(formatter.format(micros) === expectedStr)
@@ -128,6 +142,15 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       assert(formatter.format(nanos) === tsStr)
       assert(formatter.format(nanosToLocalTime(nanos)) === tsStr)
     }
+    // Sub-microsecond fractions (digits 7-9) are formatted without trailing zeros.
+    Seq(
+      100L -> "00:00:00.0000001",
+      120L -> "00:00:00.00000012",
+      123L -> "00:00:00.000000123",
+      999999999L -> "00:00:00.999999999").foreach { case (nanos, tsStr) =>
+      assert(formatter.format(nanos) === tsStr)
+      assert(formatter.format(nanosToLocalTime(nanos)) === tsStr)
+    }
   }
 
   test("missing am/pm field") {
@@ -163,7 +186,12 @@ class TimeFormatterSuite extends SparkFunSuite with SQLHelper {
       "00:00:00.000001" -> localTime(micros = 1),
       "01:02:03" -> localTime(1, 2, 3),
       "1:2:3.999999" -> localTime(1, 2, 3, 999999),
-      "23:59:59.1" -> localTime(23, 59, 59, 100000)
+      "23:59:59.1" -> localTime(23, 59, 59, 100000),
+      // Nanosecond resolution (7-9 fractional digits).
+      "1:2:3.9999999" -> localTime(1, 2, 3, 999999, 900),
+      "1:2:3.99999999" -> localTime(1, 2, 3, 999999, 990),
+      "1:2:3.999999999" -> localTime(1, 2, 3, 999999, 999),
+      "23:59:59.123456789" -> localTime(23, 59, 59, 123456, 789)
     ).foreach { case (inputStr, micros) =>
       assert(formatter.parse(inputStr) === micros)
     }
