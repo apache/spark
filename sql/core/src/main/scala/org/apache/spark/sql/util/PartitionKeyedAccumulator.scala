@@ -35,7 +35,7 @@ import org.apache.spark.util.AccumulatorV2
  * `countFailedValues`), so only complete per-partition values are ever merged.
  *
  * Backed by a `ConcurrentHashMap`, whose per-entry atomicity is sufficient here: `add` and the
- * `putAll` in `merge` are last-write-wins per key, and the reads (`value`, `numPartitions`,
+ * `putAll` in `merge` are last-write-wins per key, and the reads (`value`, `accumulatedNumPartitions`,
  * `foldValues`) only require thread-safety and eventual consistency -- they are weakly consistent
  * during concurrent updates but exact once all updates have been merged. This avoids any explicit
  * locking (and the nested-lock pattern a two-map `merge` would otherwise need).
