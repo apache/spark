@@ -1942,7 +1942,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
-  test("DPP materialized-input eligibility requires a repeatable plan") {
+  test("DPP materialized-input eligibility requires an estimable pruning benefit") {
     // A materialized filtering side is injected as a standalone DPP subquery only when it has an
     // estimable pruning benefit. With CBO statistics on the partitioned table (the partition-side
     // NDV) and a small row bound on the filtering side (a LocalRelation's exact maxRows), the
@@ -1983,7 +1983,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           assert(activeDppSubqueries(df).exists {
             case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
             case _ => false
-          }, s"Should execute standalone DPP for a repeatable materialized plan:\n" +
+          }, s"Should execute standalone DPP for a materialized plan with an estimable benefit:\n" +
             df.queryExecution)
         }
 
@@ -1996,13 +1996,15 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
               df.queryExecution)
         }
 
-        // A LocalRelation is repeatable and exposes an exact maxRows, a conservative bound on its
-        // join-key NDV, so its pruning benefit is estimable and it gets a standalone DPP subquery.
+        // A LocalRelation is cheaply recomputable and exposes an exact maxRows, a conservative
+        // bound on its join-key NDV, so its pruning benefit is estimable and it gets a standalone
+        // DPP subquery.
         checkStandaloneDpp(Seq(1).toDF("p"))
-        // A checkpoint-derived LogicalRDD is also repeatable, but a checkpointed LocalRelation
-        // retains no column statistics and exposes no maxRows, so its pruning benefit cannot be
-        // estimated; with no broadcast to reuse it is not injected as a DPP subquery at all. The
-        // statistics-backed checkpointed case (retained NDV) is covered by a dedicated test.
+        // A checkpoint-derived LogicalRDD is also cheaply recomputable, but a checkpointed
+        // LocalRelation retains no column statistics and exposes no maxRows, so its pruning benefit
+        // cannot be estimated; with no broadcast to reuse it is not injected as a DPP subquery at
+        // all. The statistics-backed checkpointed case (retained NDV) is covered by a dedicated
+        // test.
         checkNoDpp(Seq(1).toDF("p").localCheckpoint(eager = true))
 
         val checkpointed = Seq(1).toDS().localCheckpoint(eager = true)
@@ -2018,7 +2020,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           DppMaterializedInputTestState.reset(counterId)
           assert(broadcastJoin.collect().toSeq === Seq(Row(1)))
           assert(activeDppSubqueries(broadcastJoin).isEmpty,
-            s"Shouldn't trigger DPP for a non-repeatable broadcast plan:\n" +
+            s"Shouldn't trigger DPP for an opaque broadcast plan:\n" +
               broadcastJoin.queryExecution)
 
           val target = spark.table("events").hint("merge")
@@ -2034,7 +2036,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           assert(rows.size === 1)
           assert(rows.head.getString(1) === "target")
           assert(activeDppSubqueries(withSiblingBroadcast).isEmpty,
-            s"A sibling broadcast shouldn't make a non-repeatable plan eligible for DPP:\n" +
+            s"A sibling broadcast shouldn't make an opaque plan eligible for DPP:\n" +
               withSiblingBroadcast.queryExecution)
         }
 
