@@ -23,6 +23,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf, SparkFunSuite}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
@@ -60,6 +61,16 @@ trait SparkSessionBinder extends SparkSessionBinderBase { self: SparkFunSuite =>
   }
 }
 
+/**
+ * [[SparkSessionBinderBase]] is needed for now as
+ * [[test.SharedSparkSessionBase SharedSparkSessionBase]] is still used by e.g.
+ * [[test.GenericWordSpecSuite]].
+ *
+ * This Base might be merged into [[SparkSessionBinder]] once it is not required anymore.
+ *
+ * TODO: migrate SharedSparkSessionBase users so this can be removed
+ */
+@Experimental
 trait SparkSessionBinderBase
   extends SparkSessionProvider
   with BeforeAndAfterEach
