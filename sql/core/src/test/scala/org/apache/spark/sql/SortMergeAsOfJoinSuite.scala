@@ -670,4 +670,60 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     }
   }
+
+  test("forward join - spill to disk") {
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val (df1, df2) = prepareForAsOfJoin()
+      checkAnswer(
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "forward"),
+        Seq(
+          Row(1, "x", "a", 1, "v", 1),
+          Row(5, "y", "b", 6, "y", 6)
+        )
+      )
+    }
+  }
+
+  test("nearest join - spill to disk") {
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val (df1, df2) = prepareForAsOfJoin()
+      checkAnswer(
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "nearest"),
+        Seq(
+          Row(1, "x", "a", 1, "v", 1),
+          Row(5, "y", "b", 6, "y", 6),
+          Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+    }
+  }
+
+  test("left outer join - spill to disk") {
+    withSQLConf(
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      val (df1, df2) = prepareForAsOfJoin()
+      checkAnswer(
+        df1.joinAsOf(
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
+          joinType = "leftouter", tolerance = null,
+          allowExactMatches = true, direction = "backward"),
+        Seq(
+          Row(1, "x", "a", null, null, null),
+          Row(5, "y", "b", null, null, null),
+          Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+    }
+  }
 }
