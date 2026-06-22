@@ -2,460 +2,460 @@
 datetime +/- interval
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 datetime +/- interval:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date + interval(m)                                 1035           1084          69          9.7         103.5       1.0X
-date + interval(m, d)                              1022           1136         161          9.8         102.2       1.0X
-date + interval(m, d, ms)                          3712           3820         154          2.7         371.2       0.3X
-date - interval(m)                                 1183           1185           2          8.5         118.3       0.9X
-date - interval(m, d)                              1038           1068          43          9.6         103.8       1.0X
-date - interval(m, d, ms)                          3727           3729           3          2.7         372.7       0.3X
-timestamp + interval(m)                            1936           1952          22          5.2         193.6       0.5X
-timestamp + interval(m, d)                         1996           2008          17          5.0         199.6       0.5X
-timestamp + interval(m, d, ms)                     2075           2077           3          4.8         207.5       0.5X
-timestamp - interval(m)                            1833           1846          18          5.5         183.3       0.6X
-timestamp - interval(m, d)                         1905           1905           1          5.3         190.5       0.5X
-timestamp - interval(m, d, ms)                     2075           2104          40          4.8         207.5       0.5X
+date + interval(m)                                 1246           1282          51          8.0         124.6       1.0X
+date + interval(m, d)                              1244           1251          11          8.0         124.4       1.0X
+date + interval(m, d, ms)                          3756           3761           8          2.7         375.6       0.3X
+date - interval(m)                                 1071           1074           5          9.3         107.1       1.2X
+date - interval(m, d)                              1099           1117          26          9.1         109.9       1.1X
+date - interval(m, d, ms)                          3787           3791           5          2.6         378.7       0.3X
+timestamp + interval(m)                            1819           1823           6          5.5         181.9       0.7X
+timestamp + interval(m, d)                         1871           1882          16          5.3         187.1       0.7X
+timestamp + interval(m, d, ms)                     2046           2062          23          4.9         204.6       0.6X
+timestamp - interval(m)                            1829           1830           2          5.5         182.9       0.7X
+timestamp - interval(m, d)                         1883           1885           3          5.3         188.3       0.7X
+timestamp - interval(m, d, ms)                     2057           2058           1          4.9         205.7       0.6X
 
 
 ================================================================================================
 Extract components
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 cast to timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to timestamp wholestage off                    196            197           2         51.0          19.6       1.0X
-cast to timestamp wholestage on                     220            266          38         45.5          22.0       0.9X
+cast to timestamp wholestage off                    212            212           0         47.1          21.2       1.0X
+cast to timestamp wholestage on                     219            226          11         45.6          21.9       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 year of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-year of timestamp wholestage off                    780            780           0         12.8          78.0       1.0X
-year of timestamp wholestage on                     786            843          91         12.7          78.6       1.0X
+year of timestamp wholestage off                    872            873           2         11.5          87.2       1.0X
+year of timestamp wholestage on                     873            877           4         11.5          87.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 quarter of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-quarter of timestamp wholestage off                 804            851          66         12.4          80.4       1.0X
-quarter of timestamp wholestage on                  803            821          36         12.5          80.3       1.0X
+quarter of timestamp wholestage off                 888            892           6         11.3          88.8       1.0X
+quarter of timestamp wholestage on                  893            911          23         11.2          89.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 month of timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-month of timestamp wholestage off                   976            982           8         10.2          97.6       1.0X
-month of timestamp wholestage on                    802            911          69         12.5          80.2       1.2X
+month of timestamp wholestage off                   876            877           1         11.4          87.6       1.0X
+month of timestamp wholestage on                    873            887          19         11.5          87.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 weekofyear of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekofyear of timestamp wholestage off             1328           1346          26          7.5         132.8       1.0X
-weekofyear of timestamp wholestage on              1314           1347          47          7.6         131.4       1.0X
+weekofyear of timestamp wholestage off             1159           1211          74          8.6         115.9       1.0X
+weekofyear of timestamp wholestage on              1271           1277           4          7.9         127.1       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 day of timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-day of timestamp wholestage off                     837            900          88         11.9          83.7       1.0X
-day of timestamp wholestage on                      816            834          12         12.3          81.6       1.0X
+day of timestamp wholestage off                     863            866           4         11.6          86.3       1.0X
+day of timestamp wholestage on                      874            884           7         11.4          87.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 dayofyear of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofyear of timestamp wholestage off               986            997          16         10.1          98.6       1.0X
-dayofyear of timestamp wholestage on                956            993          30         10.5          95.6       1.0X
+dayofyear of timestamp wholestage off               909            932          32         11.0          90.9       1.0X
+dayofyear of timestamp wholestage on                907            916           9         11.0          90.7       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 dayofmonth of timestamp:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofmonth of timestamp wholestage off              972            985          18         10.3          97.2       1.0X
-dayofmonth of timestamp wholestage on               925            943          22         10.8          92.5       1.1X
+dayofmonth of timestamp wholestage off              871            871           1         11.5          87.1       1.0X
+dayofmonth of timestamp wholestage on               876            879           2         11.4          87.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 dayofweek of timestamp:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-dayofweek of timestamp wholestage off              1124           1126           2          8.9         112.4       1.0X
-dayofweek of timestamp wholestage on               1096           1122          23          9.1         109.6       1.0X
+dayofweek of timestamp wholestage off              1038           1052          20          9.6         103.8       1.0X
+dayofweek of timestamp wholestage on               1028           1028           1          9.7         102.8       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 weekday of timestamp:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-weekday of timestamp wholestage off                1035           1062          39          9.7         103.5       1.0X
-weekday of timestamp wholestage on                 1017           1043          18          9.8         101.7       1.0X
+weekday of timestamp wholestage off                1003           1007           5         10.0         100.3       1.0X
+weekday of timestamp wholestage on                  988            993           4         10.1          98.8       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 hour of timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-hour of timestamp wholestage off                    638            648          13         15.7          63.8       1.0X
-hour of timestamp wholestage on                     646            693          29         15.5          64.6       1.0X
+hour of timestamp wholestage off                    659            660           2         15.2          65.9       1.0X
+hour of timestamp wholestage on                     660            663           3         15.2          66.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 minute of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-minute of timestamp wholestage off                  625            634          13         16.0          62.5       1.0X
-minute of timestamp wholestage on                   638            650          15         15.7          63.8       1.0X
+minute of timestamp wholestage off                  659            661           2         15.2          65.9       1.0X
+minute of timestamp wholestage on                   665            666           2         15.0          66.5       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 second of timestamp:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-second of timestamp wholestage off                  610            612           2         16.4          61.0       1.0X
-second of timestamp wholestage on                   615            668          84         16.3          61.5       1.0X
+second of timestamp wholestage off                  662            663           1         15.1          66.2       1.0X
+second of timestamp wholestage on                   667            682          15         15.0          66.7       1.0X
 
 
 ================================================================================================
 Current date and time
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 current_date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_date wholestage off                         183            184           1         54.5          18.3       1.0X
-current_date wholestage on                          214            221           8         46.7          21.4       0.9X
+current_date wholestage off                         203            203           0         49.3          20.3       1.0X
+current_date wholestage on                          223            226           2         44.8          22.3       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 current_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-current_timestamp wholestage off                    197            199           2         50.7          19.7       1.0X
-current_timestamp wholestage on                     224            248          23         44.7          22.4       0.9X
+current_timestamp wholestage off                    213            218           7         47.0          21.3       1.0X
+current_timestamp wholestage on                     232            248          25         43.2          23.2       0.9X
 
 
 ================================================================================================
 Date arithmetic
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 cast to date:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast to date wholestage off                         685            687           2         14.6          68.5       1.0X
-cast to date wholestage on                          687            708          26         14.6          68.7       1.0X
+cast to date wholestage off                         753            753           0         13.3          75.3       1.0X
+cast to date wholestage on                          753            758           6         13.3          75.3       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 last_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-last_day wholestage off                             794            795           1         12.6          79.4       1.0X
-last_day wholestage on                              802            814          13         12.5          80.2       1.0X
+last_day wholestage off                             897            900           3         11.1          89.7       1.0X
+last_day wholestage on                              900            903           2         11.1          90.0       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 next_day:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-next_day wholestage off                             724            744          29         13.8          72.4       1.0X
-next_day wholestage on                              712            717           3         14.0          71.2       1.0X
+next_day wholestage off                             780            784           5         12.8          78.0       1.0X
+next_day wholestage on                              797            804          10         12.5          79.7       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_add:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_add wholestage off                             665            690          36         15.0          66.5       1.0X
-date_add wholestage on                              691            777         102         14.5          69.1       1.0X
+date_add wholestage off                             802            833          45         12.5          80.2       1.0X
+date_add wholestage on                              743            747           6         13.5          74.3       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_sub:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_sub wholestage off                             730            806         108         13.7          73.0       1.0X
-date_sub wholestage on                              692            765          85         14.5          69.2       1.1X
+date_sub wholestage off                             754            757           3         13.3          75.4       1.0X
+date_sub wholestage on                              746            752           5         13.4          74.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 add_months:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-add_months wholestage off                          1122           1133          16          8.9         112.2       1.0X
-add_months wholestage on                            932           1053         107         10.7          93.2       1.2X
+add_months wholestage off                          1038           1038           1          9.6         103.8       1.0X
+add_months wholestage on                           1042           1049           7          9.6         104.2       1.0X
 
 
 ================================================================================================
 Formatting dates
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 format date:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-format date wholestage off                         4073           4103          42          2.5         407.3       1.0X
-format date wholestage on                          3526           3611          74          2.8         352.6       1.2X
+format date wholestage off                         3136           3152          23          3.2         313.6       1.0X
+format date wholestage on                          3129           3142          12          3.2         312.9       1.0X
 
 
 ================================================================================================
 Formatting timestamps
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 from_unixtime:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_unixtime wholestage off                       3940           4049         154          2.5         394.0       1.0X
-from_unixtime wholestage on                        3779           3898         119          2.6         377.9       1.0X
+from_unixtime wholestage off                       3504           3516          18          2.9         350.4       1.0X
+from_unixtime wholestage on                        3537           3542           5          2.8         353.7       1.0X
 
 
 ================================================================================================
 Convert timestamps
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 from_utc_timestamp:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-from_utc_timestamp wholestage off                   733            735           3         13.6          73.3       1.0X
-from_utc_timestamp wholestage on                    887           1007          84         11.3          88.7       0.8X
+from_utc_timestamp wholestage off                   798            807          13         12.5          79.8       1.0X
+from_utc_timestamp wholestage on                    850            855           6         11.8          85.0       0.9X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to_utc_timestamp:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_utc_timestamp wholestage off                    1135           1207         102          8.8         113.5       1.0X
-to_utc_timestamp wholestage on                     1114           1201         115          9.0         111.4       1.0X
+to_utc_timestamp wholestage off                    1066           1066           1          9.4         106.6       1.0X
+to_utc_timestamp wholestage on                     1080           1086           8          9.3         108.0       1.0X
 
 
 ================================================================================================
 Intervals
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 cast interval:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-cast interval wholestage off                        226            227           1         44.2          22.6       1.0X
-cast interval wholestage on                         217            220           4         46.1          21.7       1.0X
+cast interval wholestage off                        234            235           1         42.7          23.4       1.0X
+cast interval wholestage on                         226            228           3         44.2          22.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 datediff:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-datediff wholestage off                            1156           1162           9          8.7         115.6       1.0X
-datediff wholestage on                             1149           1166          21          8.7         114.9       1.0X
+datediff wholestage off                            1282           1285           4          7.8         128.2       1.0X
+datediff wholestage on                             1254           1261          10          8.0         125.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 months_between:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-months_between wholestage off                      3261           3447         263          3.1         326.1       1.0X
-months_between wholestage on                       3359           3620         284          3.0         335.9       1.0X
+months_between wholestage off                      3158           3160           3          3.2         315.8       1.0X
+months_between wholestage on                       3172           3187          15          3.2         317.2       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 window:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-window wholestage off                               825            829           5          1.2         825.1       1.0X
-window wholestage on                                815            882          58          1.2         815.4       1.0X
+window wholestage off                               571            573           3          1.8         570.7       1.0X
+window wholestage on                                649            657           7          1.5         649.0       0.9X
 
 
 ================================================================================================
 Truncation
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc YEAR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YEAR wholestage off                      808            814           9         12.4          80.8       1.0X
-date_trunc YEAR wholestage on                       783            880          64         12.8          78.3       1.0X
+date_trunc YEAR wholestage off                      872            879          10         11.5          87.2       1.0X
+date_trunc YEAR wholestage on                       827            830           3         12.1          82.7       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc YYYY:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YYYY wholestage off                     1013           1028          21          9.9         101.3       1.0X
-date_trunc YYYY wholestage on                       772            774           1         12.9          77.2       1.3X
+date_trunc YYYY wholestage off                      875            877           2         11.4          87.5       1.0X
+date_trunc YYYY wholestage on                       825            841          16         12.1          82.5       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc YY:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc YY wholestage off                        879            891          17         11.4          87.9       1.0X
-date_trunc YY wholestage on                         773            778           7         12.9          77.3       1.1X
+date_trunc YY wholestage off                        879            879           0         11.4          87.9       1.0X
+date_trunc YY wholestage on                         825            834          14         12.1          82.5       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc MON:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MON wholestage off                       794            812          26         12.6          79.4       1.0X
-date_trunc MON wholestage on                        749            800          49         13.4          74.9       1.1X
+date_trunc MON wholestage off                       856            858           3         11.7          85.6       1.0X
+date_trunc MON wholestage on                        813            819           5         12.3          81.3       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc MONTH:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MONTH wholestage off                     801            806           6         12.5          80.1       1.0X
-date_trunc MONTH wholestage on                      748            754          10         13.4          74.8       1.1X
+date_trunc MONTH wholestage off                     857            858           2         11.7          85.7       1.0X
+date_trunc MONTH wholestage on                      814            825          13         12.3          81.4       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc MM:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MM wholestage off                        868            876          12         11.5          86.8       1.0X
-date_trunc MM wholestage on                         746            751           4         13.4          74.6       1.2X
+date_trunc MM wholestage off                        858            864           9         11.7          85.8       1.0X
+date_trunc MM wholestage on                         816            819           3         12.3          81.6       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc DAY:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DAY wholestage off                       610            612           2         16.4          61.0       1.0X
-date_trunc DAY wholestage on                        615            617           2         16.3          61.5       1.0X
+date_trunc DAY wholestage off                       670            684          20         14.9          67.0       1.0X
+date_trunc DAY wholestage on                        628            636           9         15.9          62.8       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc DD:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc DD wholestage off                        610            611           1         16.4          61.0       1.0X
-date_trunc DD wholestage on                         615            618           5         16.3          61.5       1.0X
+date_trunc DD wholestage off                        671            680          13         14.9          67.1       1.0X
+date_trunc DD wholestage on                         630            638          11         15.9          63.0       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc HOUR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc HOUR wholestage off                      634            665          45         15.8          63.4       1.0X
-date_trunc HOUR wholestage on                       561            563           2         17.8          56.1       1.1X
+date_trunc HOUR wholestage off                      660            660           1         15.2          66.0       1.0X
+date_trunc HOUR wholestage on                       621            622           1         16.1          62.1       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc MINUTE:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc MINUTE wholestage off                    680            683           5         14.7          68.0       1.0X
-date_trunc MINUTE wholestage on                     573            622          65         17.5          57.3       1.2X
+date_trunc MINUTE wholestage off                    706            707           1         14.2          70.6       1.0X
+date_trunc MINUTE wholestage on                     672            677           6         14.9          67.2       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc SECOND:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc SECOND wholestage off                    336            385          70         29.8          33.6       1.0X
-date_trunc SECOND wholestage on                     275            278           2         36.4          27.5       1.2X
+date_trunc SECOND wholestage off                    346            347           1         28.9          34.6       1.0X
+date_trunc SECOND wholestage on                     302            308           6         33.2          30.2       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc WEEK:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc WEEK wholestage off                      663            665           3         15.1          66.3       1.0X
-date_trunc WEEK wholestage on                       639            714          76         15.6          63.9       1.0X
+date_trunc WEEK wholestage off                      732            733           1         13.7          73.2       1.0X
+date_trunc WEEK wholestage on                       690            698          12         14.5          69.0       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 date_trunc QUARTER:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-date_trunc QUARTER wholestage off                   924            932          12         10.8          92.4       1.0X
-date_trunc QUARTER wholestage on                    871            921          67         11.5          87.1       1.1X
+date_trunc QUARTER wholestage off                  1030           1032           2          9.7         103.0       1.0X
+date_trunc QUARTER wholestage on                    989            992           3         10.1          98.9       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc year:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc year wholestage off                           945            947           2         10.6          94.5       1.0X
-trunc year wholestage on                            903            963         107         11.1          90.3       1.0X
+trunc year wholestage off                          1054           1057           4          9.5         105.4       1.0X
+trunc year wholestage on                           1003           1004           1         10.0         100.3       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc yyyy:                               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yyyy wholestage off                           944           1052         152         10.6          94.4       1.0X
-trunc yyyy wholestage on                            900            947          98         11.1          90.0       1.0X
+trunc yyyy wholestage off                          1054           1056           3          9.5         105.4       1.0X
+trunc yyyy wholestage on                           1004           1008           3         10.0         100.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc yy:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc yy wholestage off                            1014           1071          81          9.9         101.4       1.0X
-trunc yy wholestage on                              900           1057          89         11.1          90.0       1.1X
+trunc yy wholestage off                            1054           1054           1          9.5         105.4       1.0X
+trunc yy wholestage on                             1002           1007           3         10.0         100.2       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc mon:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mon wholestage off                           1143           1158          22          8.8         114.3       1.0X
-trunc mon wholestage on                            1048           1079          22          9.5         104.8       1.1X
+trunc mon wholestage off                           1022           1039          24          9.8         102.2       1.0X
+trunc mon wholestage on                             965            971           7         10.4          96.5       1.1X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc month:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc month wholestage off                         1097           1118          30          9.1         109.7       1.0X
-trunc month wholestage on                           874            965          91         11.4          87.4       1.3X
+trunc month wholestage off                         1013           1033          28          9.9         101.3       1.0X
+trunc month wholestage on                           966            974          11         10.4          96.6       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 trunc mm:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-trunc mm wholestage off                             923            935          16         10.8          92.3       1.0X
-trunc mm wholestage on                              871            873           4         11.5          87.1       1.1X
+trunc mm wholestage off                            1007           1008           2          9.9         100.7       1.0X
+trunc mm wholestage on                              963            966           2         10.4          96.3       1.0X
 
 
 ================================================================================================
 Parsing
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to timestamp str:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to timestamp str wholestage off                     102            103           2          9.8         102.3       1.0X
-to timestamp str wholestage on                      100            104           4         10.0         100.5       1.0X
+to timestamp str wholestage off                     104            106           2          9.6         104.1       1.0X
+to timestamp str wholestage on                      108            110           1          9.2         108.4       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to_timestamp:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_timestamp wholestage off                         727            745          26          1.4         727.0       1.0X
-to_timestamp wholestage on                          726            728           2          1.4         726.2       1.0X
+to_timestamp wholestage off                         666            667           2          1.5         666.1       1.0X
+to_timestamp wholestage on                          688            692           7          1.5         687.8       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to_unix_timestamp:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_unix_timestamp wholestage off                    739            758          27          1.4         739.2       1.0X
-to_unix_timestamp wholestage on                     726            775          87          1.4         726.3       1.0X
+to_unix_timestamp wholestage off                    678            678           1          1.5         677.8       1.0X
+to_unix_timestamp wholestage on                     660            664           5          1.5         660.2       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to date str:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to date str wholestage off                          136            139           4          7.3         136.2       1.0X
-to date str wholestage on                           135            137           3          7.4         134.8       1.0X
+to date str wholestage off                          141            141           0          7.1         141.2       1.0X
+to date str wholestage on                           138            139           1          7.3         137.7       1.0X
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 to_date:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-to_date wholestage off                              641            642           1          1.6         641.4       1.0X
-to_date wholestage on                               632            634           2          1.6         632.0       1.0X
+to_date wholestage off                              602            603           2          1.7         601.7       1.0X
+to_date wholestage on                               587            590           3          1.7         587.1       1.0X
 
 
 ================================================================================================
 Conversion from/to external types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1010-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 9V74 80-Core Processor
 To/from Java's date-time:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-From java.sql.Date                                  285            296          18         17.6          56.9       1.0X
-From java.time.LocalDate                            247            249           2         20.2          49.4       1.2X
-Collect java.sql.Date                              1079           1222         125          4.6         215.8       0.3X
-Collect java.time.LocalDate                         954           1074         115          5.2         190.8       0.3X
-From java.sql.Timestamp                             200            204           7         25.0          39.9       1.4X
-From java.time.Instant                              202            209           7         24.8          40.4       1.4X
-Collect longs                                       979           1207         227          5.1         195.8       0.3X
-Collect java.sql.Timestamp                         1064           1316         262          4.7         212.9       0.3X
-Collect java.time.Instant                          1049           1071          24          4.8         209.7       0.3X
-java.sql.Date to Hive string                       4763           5185         438          1.0         952.5       0.1X
-java.time.LocalDate to Hive string                 3939           4019          69          1.3         787.8       0.1X
-java.sql.Timestamp to Hive string                  7164           7642         430          0.7        1432.7       0.0X
-java.time.Instant to Hive string                   5565           5830         307          0.9        1113.0       0.1X
+From java.sql.Date                                  313            315           1         16.0          62.7       1.0X
+From java.time.LocalDate                            268            270           2         18.6          53.6       1.2X
+Collect java.sql.Date                              1300           1380         100          3.8         259.9       0.2X
+Collect java.time.LocalDate                        1074           1134          94          4.7         214.8       0.3X
+From java.sql.Timestamp                             223            245          19         22.4          44.7       1.4X
+From java.time.Instant                              225            241          14         22.2          45.0       1.4X
+Collect longs                                       805            893          99          6.2         161.0       0.4X
+Collect java.sql.Timestamp                          979           1167         189          5.1         195.8       0.3X
+Collect java.time.Instant                           960           1062         107          5.2         192.1       0.3X
+java.sql.Date to Hive string                       3913           4064         209          1.3         782.5       0.1X
+java.time.LocalDate to Hive string                 3145           3256         108          1.6         629.0       0.1X
+java.sql.Timestamp to Hive string                  6279           6307          26          0.8        1255.8       0.0X
+java.time.Instant to Hive string                   4770           4858         111          1.0         954.0       0.1X
 
 
