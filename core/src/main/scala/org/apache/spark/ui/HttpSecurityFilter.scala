@@ -51,10 +51,12 @@ private class HttpSecurityFilter(
 
     val cspNonce = CspNonce.generate()
     try {
-      hres.setHeader("Content-Security-Policy",
-        s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
-        s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
-        s"object-src 'none'; base-uri 'self';")
+      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)) {
+        hres.setHeader("Content-Security-Policy",
+          s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
+          s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+          s"object-src 'none'; base-uri 'self';")
+      }
 
       val requestUser = hreq.getRemoteUser()
 
