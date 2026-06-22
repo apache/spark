@@ -92,7 +92,7 @@ trait CheckAnswerHelper extends Assertions {
         val errorMessage =
           s"""
              |Exception thrown while executing query:
-             |${df.queryExecution}
+             |${if (df.isInstanceOf[classic.DataFrame]) { df.queryExecution } else df.toString}
              |== Exception ==
              |$e
              |${SparkErrorUtils.stackTraceToString(e)}
@@ -106,7 +106,7 @@ trait CheckAnswerHelper extends Assertions {
          |Timezone: ${TimeZone.getDefault}
          |Timezone Env: ${sys.env.getOrElse("TZ", "")}
          |
-         |${df.queryExecution}
+         |${if (df.isInstanceOf[classic.DataFrame]) { df.queryExecution } else df.toString }
          |== Results ==
          |$results
        """.stripMargin
