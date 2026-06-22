@@ -21,6 +21,8 @@ package org.apache.spark.sql
 import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.CheckErrorHelper
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.internal.SQLConf
 // scalastyle:on
 
 /**
@@ -34,7 +36,11 @@ trait SessionQueryTestBase
     with SparkSessionProvider
     with CheckAnswerHelper
     with CheckErrorHelper
+    with SQLConfHelper
     with QueryCleanupHelper {
+
+  override def conf: SQLConf =
+    throw new UnsupportedOperationException("TODO: SessionQueryTestBase should not provide conf")
 
   /**
    * Documents used session so that tests can handle and document session-specific behaviour
