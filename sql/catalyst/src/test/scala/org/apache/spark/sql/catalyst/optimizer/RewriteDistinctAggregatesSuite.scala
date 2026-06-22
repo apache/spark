@@ -181,19 +181,21 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       "expected at least one AggregateExpression with a FILTER clause")
   }
 
-  test("conditional: disabled by default") {
-    val input = conditionalTestRelation
-      .groupBy(Symbol("a"))(
-        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
-        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
-      .analyze
-    val optimized = RewriteDistinctAggregates(input)
-    // The general RewriteDistinctAggregates still fires, but conditional
-    // canonicalization is disabled so the two conditional counts stay as 2
-    // distinct groups instead of collapsing to 1.
-    val expands = optimized.collect { case e: Expand => e }
-    assert(expands.head.projections.size == 2,
-      "expected 2 distinct groups when conditional canonicalization is disabled")
+  test("conditional: disabled when config is false") {
+    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      val input = conditionalTestRelation
+        .groupBy(Symbol("a"))(
+          countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+          countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
+        .analyze
+      val optimized = RewriteDistinctAggregates(input)
+      // The general RewriteDistinctAggregates still fires, but conditional
+      // canonicalization is disabled so the two conditional counts stay as 2
+      // distinct groups instead of collapsing to 1.
+      val expands = optimized.collect { case e: Expand => e }
+      assert(expands.head.projections.size == 2,
+        "expected 2 distinct groups when conditional canonicalization is disabled")
+    }
   }
 
   test("conditional: rewrite COUNT(DISTINCT IF(cond, col, NULL)) to COUNT(DISTINCT col) FILTER") {
@@ -202,11 +204,8 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
         countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      assertSingleDistinctGroupExpand(optimized, "c", classOf[If])
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", classOf[If])
   }
 
   test("conditional: rewrite COUNT(DISTINCT CASE WHEN cond THEN col END) to " +
@@ -216,11 +215,8 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         countDistinctCaseWhen(Symbol("b") > 1, Symbol("c")).as("cnt1"),
         countDistinctCaseWhen(Symbol("b") > 2, Symbol("c")).as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      assertSingleDistinctGroupExpand(optimized, "c", classOf[CaseWhen])
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", classOf[CaseWhen])
   }
 
   test("conditional: rewrite COUNT(DISTINCT CASE WHEN cond THEN col ELSE NULL END)") {
@@ -229,11 +225,8 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         countDistinctCaseWhenElseNull(Symbol("b") > 1, Symbol("c")).as("cnt1"),
         countDistinctCaseWhenElseNull(Symbol("b") > 2, Symbol("c")).as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      assertSingleDistinctGroupExpand(optimized, "c", classOf[CaseWhen])
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    assertSingleDistinctGroupExpand(optimized, "c", classOf[CaseWhen])
   }
 
   test("conditional: multiple conditional distinct counts collapse to single distinct group") {
@@ -243,12 +236,9 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"),
         countDistinctIf(Symbol("b") > 3, Symbol("c")).as("cnt3"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      // All three counts share the same base column c, collapsed to 1 distinct group.
-      assertSingleDistinctGroupExpand(optimized, "c", classOf[If])
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    // All three counts share the same base column c, collapsed to 1 distinct group.
+    assertSingleDistinctGroupExpand(optimized, "c", classOf[If])
   }
 
   test("conditional: single conditional distinct count is gated out by mayNeedtoRewrite") {
@@ -261,12 +251,9 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
       .groupBy(Symbol("a"))(
         countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      val expands = optimized.collect { case e: Expand => e }
-      assert(expands.isEmpty, "single conditional distinct count should not produce an Expand")
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.isEmpty, "single conditional distinct count should not produce an Expand")
   }
 
   test("conditional: do not rewrite IF with non-null else branch") {
@@ -279,15 +266,12 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
           .toAggregateExpression(isDistinct = true)
           .as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      // Plan is rewritten (2 distinct groups) but not canonicalized
-      checkRewrite(optimized)
-      val expands = optimized.collect { case e: Expand => e }
-      assert(expands.head.projections.size == 2,
-        "non-null else branch should not be collapsed to 1 distinct group")
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    // Plan is rewritten (2 distinct groups) but not canonicalized
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.head.projections.size == 2,
+      "non-null else branch should not be collapsed to 1 distinct group")
   }
 
   test("conditional: do not rewrite non-distinct COUNT") {
@@ -298,12 +282,9 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
           .as("cnt1"),
         countDistinct(Symbol("c")).as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      // Still a single distinct group (cnt2), no canonicalization of the non-distinct agg
-      comparePlans(optimized, input)
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    // Still a single distinct group (cnt2), no canonicalization of the non-distinct agg
+    comparePlans(optimized, input)
   }
 
   test("conditional: do not rewrite when FILTER already exists") {
@@ -316,14 +297,11 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
           .toAggregateExpression(isDistinct = true, filter = Some(Symbol("d") === "y"))
           .as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      checkRewrite(optimized)
-      val expands = optimized.collect { case e: Expand => e }
-      // 2 groups because existing FILTERs prevent canonicalization
-      assert(expands.head.projections.size == 2)
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups because existing FILTERs prevent canonicalization
+    assert(expands.head.projections.size == 2)
   }
 
   test("conditional: do not rewrite multi-branch CASE WHEN") {
@@ -342,14 +320,11 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         Count(caseWhen1).toAggregateExpression(isDistinct = true).as("cnt1"),
         Count(caseWhen2).toAggregateExpression(isDistinct = true).as("cnt2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      checkRewrite(optimized)
-      val expands = optimized.collect { case e: Expand => e }
-      // 2 groups - multi-branch CASE was not canonicalized
-      assert(expands.head.projections.size == 2)
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups - multi-branch CASE was not canonicalized
+    assert(expands.head.projections.size == 2)
   }
 
   test("conditional: do not rewrite SUM(DISTINCT IF(...))") {
@@ -362,13 +337,10 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
           .toAggregateExpression(isDistinct = true)
           .as("sum2"))
       .analyze
-
-    withSQLConf(SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      val optimized = RewriteDistinctAggregates(input)
-      checkRewrite(optimized)
-      val expands = optimized.collect { case e: Expand => e }
-      // 2 groups - SUM(DISTINCT IF) is not canonicalized
-      assert(expands.head.projections.size == 2)
-    }
+    val optimized = RewriteDistinctAggregates(input)
+    checkRewrite(optimized)
+    val expands = optimized.collect { case e: Expand => e }
+    // 2 groups - SUM(DISTINCT IF) is not canonicalized
+    assert(expands.head.projections.size == 2)
   }
 }
