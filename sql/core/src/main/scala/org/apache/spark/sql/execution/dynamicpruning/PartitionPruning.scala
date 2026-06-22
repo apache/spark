@@ -205,38 +205,66 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
   /**
-   * Returns whether a plan can be evaluated repeatedly from materialized inputs and produce the
-   * same rows.
+   * Returns whether the filtering side is cheap enough to recompute that DPP is worthwhile even
+   * without a selective predicate: its cost is dominated by an already-materialized input, with
+   * only scan-cost-bound operators above it.
    *
-   * LocalRelation rows are already locally available. A checkpoint-derived LogicalRDD establishes
-   * an explicit checkpoint boundary and can be used as a broadcast build side for DPP without
-   * evaluating the computation upstream of that boundary again.
+   * This is the cost-side counterpart to `hasSelectivePredicate`. A selective predicate is
+   * evidence of a high pruning ratio (the benefit term of `pruningHasBenefit`); an
+   * already-materialized input is the complementary signal on the cost term -- a `LocalRelation`
+   * (rows already local) or a checkpoint-derived `LogicalRDD` (`isCheckpointedInput` requires the
+   * RDD to be actually checkpointed, so a lazy checkpoint does not qualify) is ~free to re-read,
+   * so even a modest pruning ratio clears the benefit bar. `InMemoryRelation` is excluded because
+   * cache()/persist() are lazy: its presence does not guarantee the data has been materialized,
+   * and missing or evicted blocks may require recomputing the upstream plan.
    *
-   * InMemoryRelation is intentionally excluded because cache() and persist() are lazy: its
-   * presence does not guarantee the cached data has been materialized, and missing or evicted
-   * blocks may require evaluating the upstream computation again.
+   * The operators above the materialized input are restricted to ones whose cost is dominated by
+   * their input's scan bytes -- the only cost `calculatePlanOverhead` can see. `Project`/`Filter`
+   * add negligible compute, a `Union`'s cost is the sum of its (materialized) children, and
+   * `SubqueryAlias` is a no-op. `Aggregate`, joins, and opaque RDD operators (e.g. `mapPartitions`)
+   * are excluded: they add compute or a shuffle the scan-bytes cost model cannot see, so treating
+   * such a side as a cheap materialized input would overstate the pruning benefit. A `Project`/
+   * `Filter` is likewise excluded when its expressions embed a subquery (which carries its own
+   * plan) or an opaque user function (a UDF or a user-defined generator) -- both add recompute
+   * cost `calculatePlanOverhead` does not account for.
    *
-   * The supported operators are intentionally narrow. DPP is optional, and logical-plan
-   * determinism does not cover user functions stored outside Catalyst expressions.
+   * This is primarily a cost guard, but the eligible shapes are also repeatable in practice, which
+   * matters because DPP duplicates the filtering side and must produce the same keys on
+   * re-evaluation. Honest non-determinism does not slip through: a `rand()` (or a UDF marked
+   * non-deterministic) above the materialized input makes the resulting `DynamicPruningSubquery`
+   * non-deterministic (`PlanExpression.deterministic` folds in its build plan), so
+   * `CleanupDynamicPruningFilters` rewrites the dynamic predicate to `true` before physical
+   * planning rather than planning a standalone `SubqueryExec` -- it is never re-evaluated. That
+   * rule is non-excludable (`SparkOptimizer.nonExcludableRules`), so this holds regardless of
+   * `spark.sql.optimizer.excludedRules`. The
+   * residual, DPP-wide limitation is *hidden* non-determinism left marked deterministic; the
+   * opaque-expression exclusion above narrows it, and the rest is intentionally left to a future
+   * system-level design rather than patched piecemeal here. The one materialized-input-specific
+   * repeatability concern -- a checkpoint that has not been materialized yet -- is handled by
+   * `LogicalRDD.isCheckpointedInput` requiring the RDD to be actually checkpointed.
    */
-  private def isRepeatableMaterializedPlan(plan: LogicalPlan): Boolean = {
-    def isRepeatableExpression(expression: Expression): Boolean = {
-      expression.deterministic && !SubqueryExpression.hasSubquery(expression) &&
-        !expression.exists {
-          case _: NonSQLExpression | _: UserDefinedExpression | _: UserDefinedGenerator => true
-          case _ => false
-        }
+  private def isCheaplyRecomputableMaterializedPlan(plan: LogicalPlan): Boolean = {
+    // An expression keeps the side cheap only if its cost is bounded by the input scan that
+    // `calculatePlanOverhead` measures. A subquery embeds its own plan, and an opaque user
+    // function (a Scala/Python UDF, a user-defined generator, or any other non-Catalyst
+    // expression) adds CPU/IO the scan-bytes cost model cannot see -- recomputing either would
+    // cost more than the materialized leaf suggests, so it disqualifies the side.
+    def isScanCostBoundExpression(e: Expression): Boolean = {
+      !SubqueryExpression.hasSubquery(e) && !e.exists {
+        case _: NonSQLExpression | _: UserDefinedExpression | _: UserDefinedGenerator => true
+        case _ => false
+      }
     }
 
     plan match {
       case _: LocalRelation => true
       case r: LogicalRDD => r.isCheckpointedInput
-      case Project(projectList, child) if projectList.forall(isRepeatableExpression) =>
-        isRepeatableMaterializedPlan(child)
-      case Filter(condition, child) if isRepeatableExpression(condition) =>
-        isRepeatableMaterializedPlan(child)
-      case u: Union => u.children.forall(isRepeatableMaterializedPlan)
-      case SubqueryAlias(_, child) => isRepeatableMaterializedPlan(child)
+      case Project(projectList, child) if projectList.forall(isScanCostBoundExpression) =>
+        isCheaplyRecomputableMaterializedPlan(child)
+      case Filter(condition, child) if isScanCostBoundExpression(condition) =>
+        isCheaplyRecomputableMaterializedPlan(child)
+      case u: Union => u.children.forall(isCheaplyRecomputableMaterializedPlan)
+      case SubqueryAlias(_, child) => isCheaplyRecomputableMaterializedPlan(child)
       case _ => false
     }
   }
@@ -245,10 +273,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate or have a repeatable materialized input
+   *   (2) it needs to contain a selective predicate or a cheaply-recomputable materialized input
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && (hasSelectivePredicate(plan) || isRepeatableMaterializedPlan(plan))
+    !plan.isStreaming &&
+      (hasSelectivePredicate(plan) || isCheaplyRecomputableMaterializedPlan(plan))
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
