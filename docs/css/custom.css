@@ -13,10 +13,6 @@ body {
   padding-top: var(--navbar-height);
 }
 
-body.has-left-nav {
-  overflow-x: hidden;
-}
-
 a {
   background: transparent;
   color: #2fa4e7;

@@ -3,10 +3,6 @@
 {% for i in (1..current_page_segments.size) %}
   {% assign rel_path_to_root = rel_path_to_root | append: "../" %}
 {% endfor %}
-{% assign has_left_nav = false %}
-{% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "/streaming/" or page.url contains "migration-guide.html" %}
-  {% assign has_left_nav = true %}
-{% endif %}
 
 <!DOCTYPE html>
 <html class="no-js">
@@ -57,7 +53,7 @@
         {% endproduction %}
 
     </head>
-    <body class="global{% if has_left_nav %} has-left-nav{% endif %}">
+    <body class="global">
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
         <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
             <div class="navbar-brand"><a href="{{ rel_path_to_root }}index.html">
@@ -160,7 +156,7 @@
         {% endif %}
 
         <div class="container">
-            {% if has_left_nav %}
+            {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "/streaming/" or page.url contains "migration-guide.html" %}
                 {% if page.url contains "migration-guide.html" %}
                     {% include nav-left-wrapper-migration.html nav-migration=site.data.menu-migration %}
                 {% elsif page.url contains "/ml" %}
