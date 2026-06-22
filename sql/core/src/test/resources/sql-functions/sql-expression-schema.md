@@ -435,6 +435,7 @@
 | org.apache.spark.sql.catalyst.expressions.UnixDate | unix_date | SELECT unix_date(DATE("1970-01-02")) | struct<unix_date(1970-01-02):int> |
 | org.apache.spark.sql.catalyst.expressions.UnixMicros | unix_micros | SELECT unix_micros(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_micros(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixMillis | unix_millis | SELECT unix_millis(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_millis(1970-01-01 00:00:01Z):bigint> |
+| org.apache.spark.sql.catalyst.expressions.UnixNanos | unix_nanos | SELECT unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789') | struct<unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789'):decimal(21,0)> |
 | org.apache.spark.sql.catalyst.expressions.UnixSeconds | unix_seconds | SELECT unix_seconds(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_seconds(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixTimestamp | unix_timestamp | SELECT unix_timestamp() | struct<unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Upper | ucase | SELECT ucase('SparkSql') | struct<ucase(SparkSql):string> |

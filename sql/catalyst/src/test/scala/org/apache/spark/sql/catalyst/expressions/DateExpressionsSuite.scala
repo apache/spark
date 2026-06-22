@@ -41,7 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -1694,6 +1694,53 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val timestampWithNanos = new Timestamp(1000L)
     timestampWithNanos.setNanos(1000) // 1 microsecond
     checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
+  }
+
+  test("SPARK-57527: unix_nanos over nanosecond-precision timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+
+    def expectedNanos(v: TimestampNanosVal): Decimal = {
+      val nanos = BigInt(v.epochMicros) * NANOS_PER_MICROS + v.nanosWithinMicro.toInt
+      Decimal(BigDecimal(nanos), 21, 0)
+    }
+
+    // 2008-12-25 15:30:00.123456789 -> 1230219000123456789 nanos since the epoch. unix_nanos
+    // applies no zone shift, so the NTZ wall-clock value and the LTZ instant at the same UTC
+    // reading produce the same result; the declared precision does not re-truncate the value.
+    val ntz = localDateTimeToNanosVal(timestampNTZ(2008, 12, 25, 15, 30, 0, 123456789))
+    val ltz = instantToNanosVal(Instant.parse("2008-12-25T15:30:00.123456789Z"))
+    val post = Decimal(BigDecimal("1230219000123456789"), 21, 0)
+    foreachNanosPrecision { p =>
+      checkEvaluation(UnixNanos(Literal.create(ntz, TimestampNTZNanosType(p))), post)
+      checkEvaluation(UnixNanos(Literal.create(ltz, TimestampLTZNanosType(p))), post)
+    }
+
+    // Pre-epoch value exercises the negative-epoch path.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1960, 1, 1, 0, 0, 0, 1))
+    checkEvaluation(
+      UnixNanos(Literal.create(preEpoch, TimestampNTZNanosType(9))), expectedNanos(preEpoch))
+
+    // Far-future value: epochMicros * 1000 overflows a 64-bit BIGINT, so the DECIMAL result must
+    // exceed Long.MaxValue and the computation must not be done in long arithmetic.
+    val far = localDateTimeToNanosVal(timestampNTZ(9999, 12, 31, 23, 59, 59, 999999999))
+    checkEvaluation(UnixNanos(Literal.create(far, TimestampNTZNanosType(9))), expectedNanos(far))
+    val farResult =
+      UnixNanos(Literal.create(far, TimestampNTZNanosType(9))).eval().asInstanceOf[Decimal]
+    assert(farResult.toJavaBigDecimal.compareTo(java.math.BigDecimal.valueOf(Long.MaxValue)) > 0)
+
+    // NULL input.
+    checkEvaluation(UnixNanos(Literal.create(null, TimestampNTZNanosType(9))), null)
+    checkEvaluation(UnixNanos(Literal.create(null, TimestampLTZNanosType(9))), null)
+  }
+
+  test("SPARK-57527: unix_nanos rejects non-nanosecond input types") {
+    // unix_nanos accepts only the nanosecond-precision timestamp types; the microsecond
+    // TimestampType / TimestampNTZType (and other types) fail analysis with a type mismatch.
+    Seq(TimestampType, TimestampNTZType, DateType, LongType).foreach { dt =>
+      val mismatch = UnixNanos(Literal.create(null, dt))
+        .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(mismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+    }
   }
 
   test("TIMESTAMP_SECONDS") {

@@ -647,6 +647,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+-- !query schema
+struct<max(c):timestamp_ntz(9),min(c):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999	2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query schema
+struct<c:timestamp_ntz(9),count(1):bigint>
+-- !query output
+2020-01-01 00:00:00.000000001	2
+2020-01-01 00:00:00.000000999	1
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
 struct<unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>
@@ -692,3 +716,63 @@ SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: times
 struct<unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss):bigint,to_unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss):bigint>
 -- !query output
 NULL	NULL
+
+
+-- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k)
+-- !query schema
+struct<max_by(v, k):timestamp_ntz(9),min_by(v, k):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.000000999	2020-01-01 00:00:00.000000001
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):decimal(21,0)>
+-- !query output
+1577885075123456789
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7))
+-- !query schema
+struct<unix_nanos(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7))):decimal(21,0)>
+-- !query output
+1577885075123456700
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8))
+-- !query schema
+struct<unix_nanos(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8))):decimal(21,0)>
+-- !query output
+1577885075123456780
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999'):decimal(21,0)>
+-- !query output
+253402300799999999999
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001'):decimal(21,0)>
+-- !query output
+-315619199999999999
+
+
+-- !query
+SELECT unix_nanos(NULL :: timestamp_ntz(9))
+-- !query schema
+struct<unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9))):decimal(21,0)>
+-- !query output
+NULL

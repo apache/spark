@@ -1888,6 +1888,45 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57416: read INT64 TIME(MICROS, isAdjustedToUTC=true) as TimeType " +
+    "on both readers") {
+    // The Parquet TIME logical type may carry isAdjustedToUTC=true. Spark's TimeType is
+    // zone-less local time, so such a column is decoded as the raw micros-of-day, exactly
+    // as isAdjustedToUTC=false. Before SPARK-57416 the Types Framework row-based read guard
+    // rejected this encoding (FAILED_READ_FILE) while the vectorized path accepted it,
+    // leaving the two readers inconsistent. This pins that both readers now accept it.
+    // The column must be supplied via an explicit read schema because schema inference
+    // maps isAdjustedToUTC=true to an unsupported type.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_micros", TimeType())
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times_utc.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {

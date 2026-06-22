@@ -1559,9 +1559,16 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
 
   /**
    * Check if the given expression is cheap that we can inline it.
+   *
+   * This is consumed both by logical-stage callers (which only ever see `Attribute`) and by the
+   * `FilterExec` whole-stage-codegen CSE gate, which runs on predicates already bound for codegen
+   * and so sees `BoundReference` instead. The `BoundReference` branch therefore only fires on the
+   * codegen path -- logical plans never carry `BoundReference` -- and leaves the logical callers
+   * unaffected.
    */
   def isCheap(e: Expression): Boolean = e match {
-    case _: Attribute | _: OuterReference => true
+    // `BoundReference` is the codegen-bound form of an `Attribute`; a slot read, equally cheap.
+    case _: Attribute | _: OuterReference | _: BoundReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
     case _: PythonUDF =>

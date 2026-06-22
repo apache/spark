@@ -577,6 +577,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+-- !query analysis
+Aggregate [max(c#x) AS max(c)#x, min(c#x) AS min(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]
@@ -615,4 +639,58 @@ Project [unix_timestamp(1969-12-31 23:59:59.5, yyyy-MM-dd HH:mm:ss, Some(America
 SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: timestamp_ntz(9))
 -- !query analysis
 Project [unix_timestamp(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss)#xL, to_unix_timestamp(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k)
+-- !query analysis
+Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x, k#x]
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [unix_nanos(2020-01-01 13:24:35.123456789) AS unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7))
+-- !query analysis
+Project [unix_nanos(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(7))) AS unix_nanos(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8))
+-- !query analysis
+Project [unix_nanos(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz(8))) AS unix_nanos(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999')
+-- !query analysis
+Project [unix_nanos(9999-12-31 23:59:59.999999999) AS unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001')
+-- !query analysis
+Project [unix_nanos(1960-01-01 00:00:00.000000001) AS unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(NULL :: timestamp_ntz(9))
+-- !query analysis
+Project [unix_nanos(cast(null as timestamp_ntz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9)))#x]
 +- OneRowRelation
