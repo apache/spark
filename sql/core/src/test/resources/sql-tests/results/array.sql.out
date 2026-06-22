@@ -241,6 +241,52 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+select element_at(array(1, 2, 3), -2147483648)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "arraySize" : "3",
+    "indexValue" : "-2147483648"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "element_at(array(1, 2, 3), -2147483648)"
+  } ]
+}
+
+
+-- !query
+select element_at(array(1, 2, 3), idx) from values (-2147483648) as t(idx)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "arraySize" : "3",
+    "indexValue" : "-2147483648"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 38,
+    "fragment" : "element_at(array(1, 2, 3), idx)"
+  } ]
+}
+
+
+-- !query
 select elt(4, '123', '456')
 -- !query schema
 struct<>
