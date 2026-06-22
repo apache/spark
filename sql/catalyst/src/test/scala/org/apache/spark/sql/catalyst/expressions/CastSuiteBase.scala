@@ -2540,6 +2540,26 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast.needsTimeZone(TimestampNTZNanosType(9), TimeType(9)))
   }
 
+  test("isTimeToTimestampNTZ identifies only TIME -> TIMESTAMP_NTZ") {
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      // True only for TIME -> TIMESTAMP_NTZ (the current-date-dependent direction).
+      assert(Cast.isTimeToTimestampNTZ(TimeType(p), TimestampNTZType))
+      // The reverse direction is zone-independent, and TIMESTAMP_LTZ is not a counterpart.
+      assert(!Cast.isTimeToTimestampNTZ(TimestampNTZType, TimeType(p)))
+      assert(!Cast.isTimeToTimestampNTZ(TimeType(p), TimestampType))
+      assert(!Cast.isTimeToTimestampNTZ(TimestampType, TimeType(p)))
+      foreachNanosPrecision { q =>
+        assert(Cast.isTimeToTimestampNTZ(TimeType(p), TimestampNTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampNTZ(TimestampNTZNanosType(q), TimeType(p)))
+        assert(!Cast.isTimeToTimestampNTZ(TimeType(p), TimestampLTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampNTZ(TimestampLTZNanosType(q), TimeType(p)))
+      }
+    }
+    // Pairs that involve neither a TIME source nor a TIMESTAMP_NTZ target are false.
+    assert(!Cast.isTimeToTimestampNTZ(DateType, TimestampNTZType))
+    assert(!Cast.isTimeToTimestampNTZ(TimestampNTZType, TimestampNTZType))
+  }
+
   test("cast timestamp_ntz to time") {
     // Per ANSI rule 15.d the time-of-day fields are extracted and truncated to the target
     // precision; the operation is deterministic and time-zone independent.
