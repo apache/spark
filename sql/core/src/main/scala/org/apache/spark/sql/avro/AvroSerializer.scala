@@ -192,7 +192,11 @@ private[sql] class AvroSerializer(
       }
 
       case (_: TimeType, LONG) => avroType.getLogicalType match {
-        case _: LogicalTypes.TimeMicros => (getter, ordinal) => getter.getLong(ordinal)
+        // TimeType is stored internally as nanoseconds-since-midnight. The time-micros
+        // logical type stores microseconds-since-midnight, so convert nanos to micros
+        // to keep the on-disk value unit-correct for external Avro readers.
+        case _: LogicalTypes.TimeMicros => (getter, ordinal) =>
+          DateTimeUtils.nanosToMicros(getter.getLong(ordinal))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
       }
