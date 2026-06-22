@@ -241,12 +241,17 @@ public final class Variant {
     return sb.toString();
   }
 
+  // Jackson's JsonFactory is thread-safe and intended to be reused. `escapeJson` is called once
+  // per string value and object key while serializing, so sharing a single factory avoids
+  // allocating one for every string.
+  private static final JsonFactory JSON_FACTORY = new JsonFactory();
+
   // Escape a string so that it can be pasted into JSON structure.
   // For example, if `str` only contains a new-line character, then the result content is "\n"
   // (4 characters).
   static String escapeJson(String str) {
     try (CharArrayWriter writer = new CharArrayWriter();
-         JsonGenerator gen = new JsonFactory().createGenerator(writer)) {
+         JsonGenerator gen = JSON_FACTORY.createGenerator(writer)) {
       gen.writeString(str);
       gen.flush();
       return writer.toString();

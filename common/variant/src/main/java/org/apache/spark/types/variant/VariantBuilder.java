@@ -42,6 +42,11 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  * Build variant value and metadata by parsing JSON values.
  */
 public class VariantBuilder {
+  // Jackson's JsonFactory is thread-safe and intended to be reused. parseJson is invoked once per
+  // input JSON value (e.g. per row in parse_json), so sharing a single factory avoids allocating
+  // one (and its symbol tables) on every call.
+  private static final JsonFactory JSON_FACTORY = new JsonFactory();
+
   public VariantBuilder(boolean allowDuplicateKeys) {
     this(allowDuplicateKeys, true);
   }
@@ -70,7 +75,7 @@ public class VariantBuilder {
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys,
       boolean validateUnicodeInJsonParsing) throws IOException {
-    try (JsonParser parser = new JsonFactory().createParser(json)) {
+    try (JsonParser parser = JSON_FACTORY.createParser(json)) {
       parser.nextToken();
       return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing);
     }
