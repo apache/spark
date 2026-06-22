@@ -2328,6 +2328,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       TimeType(5)), localTime(23, 59, 0, 999990))
     checkEvaluation(cast(Literal.create("23:59:59.000001     "),
       TimeType(6)), localTime(23, 59, 59, 1))
+    // Nanosecond precisions 7, 8, 9.
+    checkEvaluation(cast(Literal.create("01:02:03.1234567"),
+      TimeType(7)), localTime(1, 2, 3, 123456, 700))
+    checkEvaluation(cast(Literal.create("01:02:03.12345678"),
+      TimeType(8)), localTime(1, 2, 3, 123456, 780))
+    checkEvaluation(cast(Literal.create("01:02:03.123456789"),
+      TimeType(9)), localTime(1, 2, 3, 123456, 789))
+    // More fractional digits than the target precision are truncated.
+    checkEvaluation(cast(Literal.create("01:02:03.123456789"),
+      TimeType(7)), localTime(1, 2, 3, 123456, 700))
   }
 
   test("context independent foldable") {
@@ -2474,6 +2484,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       localTime(11, 58, 59, 123400))
     checkEvaluation(cast(Literal(localTime(19, 2, 3, 765000), TimeType(3)), TimeType(2)),
       localTime(19, 2, 3, 760000))
+    // Nanosecond precisions 7, 8, 9.
+    checkEvaluation(cast(Literal(localTime(23, 59, 59, 999999, 999), TimeType(9)), TimeType(9)),
+      localTime(23, 59, 59, 999999, 999))
+    checkEvaluation(cast(Literal(localTime(1, 2, 3, 123456, 789), TimeType(9)), TimeType(8)),
+      localTime(1, 2, 3, 123456, 780))
+    checkEvaluation(cast(Literal(localTime(1, 2, 3, 123456, 789), TimeType(9)), TimeType(7)),
+      localTime(1, 2, 3, 123456, 700))
+    // Truncate nanosecond value down to the microsecond precision.
+    checkEvaluation(cast(Literal(localTime(1, 2, 3, 123456, 789), TimeType(9)), TimeType(6)),
+      localTime(1, 2, 3, 123456))
 
     for (sp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
       for (tp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
@@ -2642,5 +2662,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(cast(oneTwoThreeTime5, LongType), 3723L)
     checkEvaluation(cast(maxTime4, IntegerType), 86399)
     checkEvaluation(cast(maxTime4, LongType), 86399L)
+
+    // Nanosecond precisions: sub-second fraction is truncated to whole seconds.
+    val nanos9 = Literal.create(LocalTime.of(0, 0, 17, 999999999), TimeType(9))
+    checkEvaluation(cast(nanos9, IntegerType), 17)
+    checkEvaluation(cast(nanos9, LongType), 17L)
+    val maxNanos = Literal.create(LocalTime.of(23, 59, 59, 999999999), TimeType(9))
+    checkEvaluation(cast(maxNanos, IntegerType), 86399)
+    checkEvaluation(cast(maxNanos, LongType), 86399L)
   }
 }

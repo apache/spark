@@ -4122,7 +4122,19 @@ class AstBuilder extends DataTypeAstBuilder
         val zoneId = getZoneId(conf.sessionLocalTimeZone)
         val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
         specialDate.getOrElse(toLiteral(stringToDate, DateType))
-      case TIME => toLiteral(stringToTime, TimeType())
+      case TIME =>
+        // ANSI SQL (ISO/IEC 9075-2, Subclause 5.3, Syntax Rule 26): the fractional-seconds
+        // precision of a time literal is the number of digits in its seconds fraction. A literal
+        // with 7-9 fractional digits becomes a nanosecond-precision literal; <= 6 digits keep the
+        // default microsecond precision; more than 9 digits is rejected.
+        val p = fractionalSecondsDigits(value)
+        if (p > TimeType.MAX_PRECISION) {
+          throw QueryParsingErrors.timeLiteralPrecisionExceedsMaxError(value, ctx)
+        } else if (p > TimeType.MICROS_PRECISION) {
+          toLiteral(stringToTime, TimeType(p))
+        } else {
+          toLiteral(stringToTime, TimeType())
+        }
       case TIMESTAMP_NTZ =>
         nanosLiteralOpt(constructTimestampNTZNanosLiteral).getOrElse {
           convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
