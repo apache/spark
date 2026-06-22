@@ -22,7 +22,7 @@ import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription}
-import org.apache.orc.mapred.OrcStruct
+import org.apache.orc.mapred.{OrcInputFormat => OrcMapredInputFormat, OrcStruct}
 import org.apache.orc.mapreduce.{OrcInputFormat, OrcMapreduceRecordReader}
 
 import org.apache.spark.broadcast.Broadcast
@@ -114,7 +114,7 @@ case class OrcPartitionReaderFactory(
             .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(taskConf))
             .filesystem(fs)
             .orcTail(readerOptions.getOrcTail))
-        val options = org.apache.orc.mapred.OrcInputFormat
+        val options = OrcMapredInputFormat
           .buildOptions(taskConf, orcReader, fileSplit.getStart, fileSplit.getLength)
           .useSelected(true)
         new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
