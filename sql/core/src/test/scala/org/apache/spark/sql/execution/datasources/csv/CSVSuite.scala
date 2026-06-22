@@ -3921,6 +3921,22 @@ abstract class CSVSuite
       )
     }
   }
+
+  test("SPARK-57572: infer TimeType from CSV via spark.read.csv") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/time_infer.csv"
+        Seq("time", "12:13:14", "23:59:59.123456").toDF("value")
+          .coalesce(1).write.text(path)
+        val df = spark.read
+          .option("header", "true")
+          .option("inferSchema", "true")
+          .csv(path)
+        assert(df.schema("time").dataType === TimeType(TimeType.DEFAULT_PRECISION))
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -4032,7 +4048,9 @@ class CSVLegacyTimeParserSuite extends CSVSuite {
     Seq("Write timestamps correctly in ISO8601 format by default",
       // The result is different because the date/timestamp parser behavior is different. Not too
       // much value to test it.
-      "csv with variant")
+      "csv with variant",
+      // Legacy time parser does not support TIME type inference
+      "SPARK-57572: infer TimeType from CSV via spark.read.csv")
 
   override protected def sparkConf: SparkConf =
     super
