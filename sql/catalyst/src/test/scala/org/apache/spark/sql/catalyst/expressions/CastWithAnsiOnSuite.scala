@@ -868,6 +868,15 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-57588: cast invalid string input to time reports the target precision") {
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidInput = "not a time"
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType(precision)),
+        castErrMsg(invalidInput, TimeType(precision)))
+    }
+  }
+
   test("SPARK-52620: cast time to decimal with insufficient precision (ANSI on)") {
     // Create a time that will overflow Decimal(2, 0): 23:59:59 = 86399 seconds.
     val largeTime = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
