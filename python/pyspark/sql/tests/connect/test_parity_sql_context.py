@@ -16,9 +16,11 @@
 #
 import warnings
 
-from pyspark.sql.connect.context import SQLContext
 from pyspark.sql.tests.test_sql_context import SQLContextTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+
+if should_test_connect:
+    from pyspark.sql.connect.context import SQLContext
 
 
 class SQLContextParityTests(SQLContextTestsMixin, ReusedConnectTestCase):
