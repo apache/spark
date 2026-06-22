@@ -39,6 +39,8 @@ public class ArrayExpressionUtils {
    * @return        the resolved 0-based position
    */
   public static int resolveArrayIndex(int length, int index, QueryContext context) {
+    // Widen the index to long before Math.abs to avoid overflow: Math.abs(Int.MinValue)
+    // wraps back to a negative value and would bypass this out-of-bounds guard.
     if (length < Math.abs((long) index)) {
       throw QueryExecutionErrors.invalidElementAtIndexError(index, length, context);
     }

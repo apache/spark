@@ -212,6 +212,14 @@ NULL
 
 
 -- !query
+select element_at(array(1, 2, 3), idx) from values (-2147483648) as t(idx)
+-- !query schema
+struct<element_at(array(1, 2, 3), idx):int>
+-- !query output
+NULL
+
+
+-- !query
 select elt(4, '123', '456')
 -- !query schema
 struct<elt(4, 123, 456):string>

@@ -2701,6 +2701,8 @@ case class ElementAt(
   }
 
   private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    // Widen `ordinal` to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+    // wraps back to a negative value and would bypass the out-of-bounds guard below.
     if (ordinal == 0) {
       false
     } else if (elements.length < math.abs(ordinal.toLong)) {
@@ -2735,6 +2737,8 @@ case class ElementAt(
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
+        // Widen the index to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+        // wraps back to a negative value and would bypass this out-of-bounds guard.
         val index = ordinal.asInstanceOf[Int].toLong
         if (array.numElements() < math.abs(index)) {
           defaultValueOutOfBound match {
@@ -2812,6 +2816,8 @@ case class ElementAt(
             case None => s"${ev.isNull} = true;"
           }
 
+          // Widen the index to long before Math.abs to avoid overflow: Math.abs(Int.MinValue)
+          // wraps back to a negative value and would bypass this out-of-bounds guard.
           s"""
              |long $index = (long) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {

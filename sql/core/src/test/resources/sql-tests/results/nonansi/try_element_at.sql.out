@@ -60,6 +60,14 @@ NULL
 
 
 -- !query
+SELECT try_element_at(array(1, 2, 3), idx) from values (-2147483648) as t(idx)
+-- !query schema
+struct<try_element_at(array(1, 2, 3), idx):int>
+-- !query output
+NULL
+
+
+-- !query
 SELECT try_element_at(map('a','b'), 'a')
 -- !query schema
 struct<try_element_at(map(a, b), a):string>
