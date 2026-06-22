@@ -2634,6 +2634,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timestampNanosOverflowError(nanos: java.math.BigInteger): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"create a TIMESTAMP_LTZ(9) from $nanos nanoseconds since the epoch"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def timeAddIntervalOverflowError(
       time: Long,
       timePrecision: Int,

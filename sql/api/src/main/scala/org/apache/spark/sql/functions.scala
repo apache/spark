@@ -8570,6 +8570,15 @@ object functions {
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
   /**
+   * Creates a timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from
+   * the number of nanoseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def timestamp_nanos(e: Column): Column = Column.fn("timestamp_nanos", e)
+
+  /**
    * Gets the difference between the timestamps in the specified units by truncating the fraction
    * part.
    *
