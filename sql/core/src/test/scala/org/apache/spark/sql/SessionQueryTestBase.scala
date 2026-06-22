@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 // scalastyle:off funsuite
 import org.scalatest.funsuite.AnyFunSuite
+
+import org.apache.spark.CheckErrorHelper
 // scalastyle:on
 
 /**
@@ -31,6 +33,7 @@ trait SessionQueryTestBase
   extends AnyFunSuite
     with SparkSessionProvider
     with CheckAnswerHelper
+    with CheckErrorHelper
     with QueryCleanupHelper {
 
   /**
