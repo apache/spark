@@ -63,9 +63,16 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "case when id % 4 = 0 then null else cast(id * 100 as int) end as col2")
         .createOrReplaceTempView("t")
 
+      // Two conditional distinct counts on the same base so the rewrite fires (size > 1).
       checkRewriteAndResult(
-        "SELECT key, COUNT(DISTINCT IF(col1 > 10, col2, NULL)) FROM t GROUP BY key",
-        "SELECT key, COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t GROUP BY key")
+        """SELECT key,
+          |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)),
+          |  COUNT(DISTINCT IF(col1 > 20, col2, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t GROUP BY key""".stripMargin)
     }
   }
 
@@ -78,9 +85,16 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "case when id % 4 = 0 then null else cast(id * 100 as string) end as col2")
         .createOrReplaceTempView("t")
 
+      // Two CASE WHEN conditional distinct counts on the same base so the rewrite fires.
       checkRewriteAndResult(
-        "SELECT key, COUNT(DISTINCT CASE WHEN col1 > 10 THEN col2 END) FROM t GROUP BY key",
-        "SELECT key, COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t GROUP BY key")
+        """SELECT key,
+          |  COUNT(DISTINCT CASE WHEN col1 > 10 THEN col2 END),
+          |  COUNT(DISTINCT CASE WHEN col1 > 20 THEN col2 END)
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t GROUP BY key""".stripMargin)
     }
   }
 
@@ -93,10 +107,16 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "case when id % 4 = 0 then null else cast(id * 1.0 as double) end as col2")
         .createOrReplaceTempView("t")
 
+      // Two CASE WHEN ... ELSE NULL counts on the same base so the rewrite fires.
       checkRewriteAndResult(
-        """SELECT key, COUNT(DISTINCT CASE WHEN col1 > 10 THEN col2 ELSE NULL END)
+        """SELECT key,
+          |  COUNT(DISTINCT CASE WHEN col1 > 10 THEN col2 ELSE NULL END),
+          |  COUNT(DISTINCT CASE WHEN col1 > 20 THEN col2 ELSE NULL END)
           |FROM t GROUP BY key""".stripMargin,
-        "SELECT key, COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t GROUP BY key")
+        """SELECT key,
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t GROUP BY key""".stripMargin)
     }
   }
 
@@ -108,9 +128,16 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "case when id % 3 = 0 then null else cast(id * 100 as int) end as col2")
         .createOrReplaceTempView("t")
 
+      // Two counts so the rewrite fires without GROUP BY.
       checkRewriteAndResult(
-        "SELECT COUNT(DISTINCT IF(col1 > 10, col2, NULL)) FROM t",
-        "SELECT COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t")
+        """SELECT
+          |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)),
+          |  COUNT(DISTINCT IF(col1 > 20, col2, NULL))
+          |FROM t""".stripMargin,
+        """SELECT
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t""".stripMargin)
     }
   }
 
@@ -123,9 +150,17 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "cast(id * 100 as int) as col2")
         .createOrReplaceTempView("t")
 
+      // col1 values are 0, 5, 10 - both thresholds (> 10 and > 20) yield zero matches,
+      // so both counts return 0. Two counts so the rewrite fires.
       checkRewriteAndResult(
-        "SELECT key, COUNT(DISTINCT IF(col1 > 10, col2, NULL)) FROM t GROUP BY key",
-        "SELECT key, COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t GROUP BY key")
+        """SELECT key,
+          |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)),
+          |  COUNT(DISTINCT IF(col1 > 20, col2, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t GROUP BY key""".stripMargin)
     }
   }
 
@@ -138,9 +173,16 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "case when id % 3 = 0 then 100 when id % 3 = 1 then 100 else 200 end as col2")
         .createOrReplaceTempView("t")
 
+      // Two counts on the same base (with duplicates) so the rewrite fires.
       checkRewriteAndResult(
-        "SELECT key, COUNT(DISTINCT IF(col1 > 10, col2, NULL)) FROM t GROUP BY key",
-        "SELECT key, COUNT(DISTINCT col2) FILTER (WHERE col1 > 10) FROM t GROUP BY key")
+        """SELECT key,
+          |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)),
+          |  COUNT(DISTINCT IF(col1 > 20, col2, NULL))
+          |FROM t GROUP BY key""".stripMargin,
+        """SELECT key,
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 10),
+          |  COUNT(DISTINCT col2) FILTER (WHERE col1 > 20)
+          |FROM t GROUP BY key""".stripMargin)
     }
   }
 

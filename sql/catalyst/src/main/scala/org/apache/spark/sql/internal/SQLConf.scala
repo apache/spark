@@ -1368,15 +1368,15 @@ object SQLConf {
 
   val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
     buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
       .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
         "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
         "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
         "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
         "counts share the same base column.")
       .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
