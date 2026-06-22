@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -236,6 +237,10 @@ abstract class DockerJDBCIntegrationSuite
       case NonFatal(e) =>
         logError(log"Failed to initialize Docker container for " +
           log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
+        // Dump the container's own logs BEFORE afterAll() tears it down, so that a
+        // connection timeout (e.g. Oracle "ORA-12541: No listener") can be diagnosed
+        // from the database's bootstrap output rather than guessed at.
+        dumpContainerLogs()
         try {
           afterAll()
         } finally {
@@ -260,6 +265,34 @@ abstract class DockerJDBCIntegrationSuite
    */
   def getConnection(): Connection = {
     DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
+  }
+
+  /**
+   * Best-effort dump of the database container's stdout/stderr to the test log. Used when
+   * container initialization fails (e.g. the JDBC connection never succeeds within
+   * `connectionTimeout`) so the database's own bootstrap output is available for diagnosis.
+   * Never throws.
+   */
+  private def dumpContainerLogs(): Unit = {
+    if (docker == null || container == null) return
+    try {
+      val logs = new StringBuilder
+      docker.logContainerCmd(container.getId)
+        .withStdOut(true)
+        .withStdErr(true)
+        .withTail(2000)
+        .exec(new ResultCallback.Adapter[Frame]() {
+          override def onNext(frame: Frame): Unit = {
+            logs.append(new String(frame.getPayload, StandardCharsets.UTF_8))
+          }
+        })
+        .awaitCompletion(60, TimeUnit.SECONDS)
+      logWarning(s"Docker container logs for ${this.getClass.getName} " +
+        s"(image=${db.imageName}, container=${container.getId}):\n${logs.toString}")
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to capture Docker container logs: ${e.getMessage}")
+    }
   }
 
   /**
