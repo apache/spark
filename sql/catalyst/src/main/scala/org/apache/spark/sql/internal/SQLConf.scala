@@ -4777,6 +4777,25 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
+  val PYTHON_UDF_MAX_BYTES_PER_BATCH =
+    buildConf("spark.sql.execution.python.udf.maxBytesPerBatch")
+      .internal()
+      .doc("Byte-size cap for a batch of rows sent to a worker for regular (pickle-serialized, " +
+        "non-Arrow) Python UDF evaluation. Without it, BatchEvalPythonExec batches purely by " +
+        "row count (spark.sql.execution.python.udf.maxRecordsPerBatch), so one oversized batch " +
+        "can OOM the executor; a finite value caps the batch at the min of the row-count and " +
+        "byte limits. The size is a best-effort per-row estimate of the pickled size of the " +
+        "converted row (its accuracy is observable via the pythonEstimatedInputBytes vs " +
+        "pythonDataSent metrics); a row larger than the cap still yields a one-row batch. " +
+        "-1 (the default) means no limit.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
+        "The value of spark.sql.execution.python.udf.maxBytesPerBatch should " +
+          "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
+      .createWithDefault(-1)
+
   val PYTHON_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.python.udf.buffer.size")
       .doc(

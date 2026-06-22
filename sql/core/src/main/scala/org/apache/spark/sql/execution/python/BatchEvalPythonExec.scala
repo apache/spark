@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.ByteArrayOutputStream
+
 import scala.jdk.CollectionConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
@@ -47,12 +49,14 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
 
   override protected def evaluatorFactory: EvalPythonEvaluatorFactory = {
     val batchSize = conf.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
+    val maxBytesPerBatch = conf.getConf(SQLConf.PYTHON_UDF_MAX_BYTES_PER_BATCH)
     val binaryAsBytes = conf.pysparkBinaryAsBytes
     new BatchEvalPythonEvaluatorFactory(
       child.output,
       udfs,
       output,
       batchSize,
+      maxBytesPerBatch,
       pythonMetrics,
       jobArtifactUUID,
       sessionUUID,
@@ -68,6 +72,7 @@ class BatchEvalPythonEvaluatorFactory(
     udfs: Seq[PythonUDF],
     output: Seq[Attribute],
     batchSize: Int,
+    maxBytesPerBatch: Long,
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
@@ -83,7 +88,8 @@ class BatchEvalPythonEvaluatorFactory(
     EvaluatePython.registerPicklers() // register pickler for Row
 
     // Input iterator to Python.
-    val inputIterator = BatchEvalPythonExec.getInputIterator(iter, schema, batchSize, binaryAsBytes)
+    val inputIterator = BatchEvalPythonExec.getInputIterator(
+      iter, schema, batchSize, binaryAsBytes, maxBytesPerBatch, pythonMetrics)
 
     // Output iterator for results from Python.
     val outputIterator =
@@ -123,7 +129,12 @@ object BatchEvalPythonExec {
       iter: Iterator[InternalRow],
       schema: StructType,
       batchSize: Int,
-      binaryAsBytes: Boolean): Iterator[Array[Byte]] = {
+      binaryAsBytes: Boolean,
+      maxBytesPerBatch: Long = -1L,
+      pythonMetrics: Map[String, SQLMetric] = Map.empty): Iterator[Array[Byte]] = {
+    val peakPickledBatchBytesMetric = pythonMetrics.get("pythonPeakPickledBatchBytes")
+    val oversizedBatchMetric = pythonMetrics.get("pythonOversizedBatchCount")
+    val estimatedInputBytesMetric = pythonMetrics.get("pythonEstimatedInputBytes")
     val dataTypes = schema.map(_.dataType)
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
@@ -140,22 +151,66 @@ object BatchEvalPythonExec {
     // Please note that cache by reference is still enabled depending on `needConversion`.
     val pickle = new Pickler(/* useMemo = */ needConversion,
       /* valueCompare = */ false)
-    // Input iterator to Python: input rows are grouped so we send them in batches to Python.
-    // For each row, add it to the queue.
-    iter.map { row =>
+
+    // Converts a row to the java object pickled to Python. When `sizeAcc` is defined, toJava also
+    // accumulates the per-row pickled-size estimate at its leaf cases during this same traversal
+    // (no second walk).
+    def convertRow(row: InternalRow, sizeAcc: Option[PickledSizeAccumulator]): Any = {
       if (needConversion) {
-        EvaluatePython.toJava(row, schema, binaryAsBytes)
+        EvaluatePython.toJava(row, schema, binaryAsBytes, sizeAcc)
       } else {
         // fast path for these types that does not need conversion in Python
+        sizeAcc.foreach(_.add(PickledSizeAccumulator.PER_VALUE_OVERHEAD))
         val fields = new Array[Any](row.numFields)
         var i = 0
         while (i < row.numFields) {
           val dt = dataTypes(i)
-          fields(i) = EvaluatePython.toJava(row.get(i, dt), dt, binaryAsBytes)
+          fields(i) = EvaluatePython.toJava(row.get(i, dt), dt, binaryAsBytes, sizeAcc)
           i += 1
         }
         fields
       }
-    }.grouped(batchSize).map(x => pickle.dumps(x.toArray))
+    }
+
+    // Input iterator to Python: input rows are grouped so we send them in batches to Python.
+    val batchedIter: Iterator[Array[Any]] =
+      if (maxBytesPerBatch < 0) {
+        // No byte limit configured (the default, -1): preserve exact row-count batching behavior.
+        iter.map(convertRow(_, None)).grouped(batchSize).map(_.toArray)
+      } else {
+        // A finite byte cap is set, so batch by both row count and estimated bytes (see
+        // ByteBoundedAsArrayIterator). The size is estimated on the converted values (the things
+        // actually pickled), accounted by toJava during conversion itself; estimator accuracy is
+        // observable via pythonEstimatedInputBytes vs pythonDataSent.
+        val sizeAcc = new PickledSizeAccumulator
+        val someSizeAcc = Some(sizeAcc)
+        new ByteBoundedAsArrayIterator(
+          iter.map { row =>
+            val converted = convertRow(row, someSizeAcc)
+            (converted, sizeAcc.getAndReset())
+          },
+          batchSize,
+          maxBytesPerBatch,
+          oversizedBatchMetric,
+          estimatedInputBytesMetric)
+      }
+
+    batchedIter.map { objects =>
+      val baos = new ByteArrayOutputStream(1024)
+      pickle.dump(objects, baos)
+      // Record the peak pickled-batch size: the primary contiguous JVM-heap allocation on this
+      // path, and one oversized batch can OOM the executor. Read baos.size() BEFORE the
+      // toByteArray copy, so the measurement does not depend on that second contiguous allocation
+      // succeeding (a near-limit batch would OOM there, otherwise losing the metric). The
+      // `> value` guard keeps the per-task max (`set` overwrites); SQLMetric surfaces the
+      // cross-task max in the UI's (min, med, max) breakdown, mirroring how peakMemory is reported.
+      peakPickledBatchBytesMetric.foreach { metric =>
+        val pickledBytes = baos.size().toLong
+        if (pickledBytes > metric.value) {
+          metric.set(pickledBytes)
+        }
+      }
+      baos.toByteArray
+    }
   }
 }

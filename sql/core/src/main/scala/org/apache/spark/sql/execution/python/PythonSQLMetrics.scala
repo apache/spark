@@ -28,6 +28,8 @@ trait PythonSQLMetrics { self: SparkPlan =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ PythonSQLMetrics.pythonOtherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
+    } ++ PythonSQLMetrics.pythonBatchSizeMetricsDesc.map { case (k, v) =>
+      k -> SQLMetrics.createSizeMetric(sparkContext, v)
     }
   }
 
@@ -52,6 +54,24 @@ object PythonSQLMetrics {
   }
 
   val pythonOtherMetricsDesc: Map[String, String] = {
-    Map("pythonNumRowsReceived" -> "number of output rows")
+    Map(
+      "pythonNumRowsReceived" -> "number of output rows",
+      // Input batches cut at the byte cap, counted once per cut batch. Only populated when a
+      // finite spark.sql.execution.python.udf.maxBytesPerBatch is set.
+      "pythonOversizedBatchCount" -> "number of batches cut at the byte limit")
+  }
+
+  // Size metrics for the regular (pickle) Python UDF input batching path (BatchEvalPythonExec).
+  // pythonPeakPickledBatchBytes is the peak per-batch pickled size (the primary contiguous heap
+  // allocation on this path; reported as the cross-task max via the UI's min/med/max breakdown,
+  // like peakMemory). pythonEstimatedInputBytes is the running sum of the per-row size estimates
+  // the byte cap uses, compared against the measured pythonDataSent to gauge estimator accuracy
+  // (only populated when a byte cap is configured). Kept out of pythonSizeMetricsDesc, which also
+  // feeds the Python data source DSv2 metric declarations
+  // (UserDefinedPythonDataSource.createPythonMetrics) that never populate these.
+  val pythonBatchSizeMetricsDesc: Map[String, String] = {
+    Map(
+      "pythonPeakPickledBatchBytes" -> "peak pickled batch size in bytes",
+      "pythonEstimatedInputBytes" -> "estimated pickled input size in bytes")
   }
 }
