@@ -63,8 +63,10 @@ object PythonSQLMetrics {
 
   // Size metrics for the regular (pickle) Python UDF input batching path (BatchEvalPythonExec).
   // pythonPeakPickledBatchBytes is the peak per-batch pickled size (the primary contiguous heap
-  // allocation on this path; reported as the cross-task max via the UI's min/med/max breakdown,
-  // like peakMemory). pythonEstimatedInputBytes is the running sum of the per-row size estimates
+  // allocation on this path). Like peakMemory it is a SIZE metric, so the figure to read is the
+  // per-partition max in the UI's min/med/max breakdown; the aggregated total (the sum of the
+  // per-task peaks) is not meaningful on its own. pythonEstimatedInputBytes is the running sum
+  // of the per-row size estimates
   // the byte cap uses, compared against the measured pythonDataSent to gauge estimator accuracy
   // (only populated when a byte cap is configured). Kept out of pythonSizeMetricsDesc, which also
   // feeds the Python data source DSv2 metric declarations
