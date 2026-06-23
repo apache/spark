@@ -939,3 +939,150 @@ SELECT timestamp_nanos(CAST(NULL AS BIGINT))
 struct<timestamp_nanos(CAST(NULL AS BIGINT)):timestamp_ltz(9)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_LTZ '0001-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999') ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	0001-01-01 00:00:00
+timestamp_ltz(9)	9999-12-31 23:59:59.999999999
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ltz(9)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	1582-10-04 12:30:45.1234567
+timestamp_ltz(9)	1582-10-15 23:59:59.123456789
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '1969-12-31 23:59:59.0000001 Asia/Kolkata' :: timestamp_ltz(7),
+    '1969-12-31 23:59:59.999999999 UTC' :: timestamp_ltz(9)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	1969-12-31 10:29:59.0000001
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_LTZ '2026-06-21 10:16:30 Asia/Kathmandu'
+    ELSE '2026-06-21 10:16:30.987654321 UTC' :: timestamp_ltz(9) END AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2026-06-20 21:31:30
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '0001-01-01', '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(8)>
+-- !query output
+timestamp_ltz(8)	0001-01-01 00:00:00
+
+
+-- !query
+SELECT typeof(greatest(TIMESTAMP_LTZ '0001-01-01 00:00:00',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9)))
+-- !query schema
+struct<typeof(greatest(TIMESTAMP '0001-01-01 00:00:00', CAST(9999-12-31 23:59:59.999999999 AS TIMESTAMP_LTZ(9)))):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+SELECT greatest(TIMESTAMP_LTZ '1500-03-01 12:00:00',
+    '1582-10-15 00:00:00.123456789' :: timestamp_ltz(9),
+    TIMESTAMP_LTZ '2026-06-21 10:16:30.5')
+-- !query schema
+struct<greatest(TIMESTAMP '1500-03-01 12:00:00', CAST(1582-10-15 00:00:00.123456789 AS TIMESTAMP_LTZ(9)), TIMESTAMP '2026-06-21 10:16:30.5'):timestamp_ltz(9)>
+-- !query output
+2026-06-21 10:16:30.5
+
+
+-- !query
+SELECT least('1970-01-01 00:00:00.0000001' :: timestamp_ltz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query schema
+struct<least(CAST(1970-01-01 00:00:00.0000001 AS TIMESTAMP_LTZ(7)), CAST(1969-12-31 23:59:59.999999999 AS TIMESTAMP_LTZ(9))):timestamp_ltz(9)>
+-- !query output
+1969-12-31 23:59:59.999999999
+
+
+-- !query
+SELECT array('0001-01-01 00:00:00.0000001' :: timestamp_ltz(7),
+    TIMESTAMP_LTZ '2026-06-21 10:16:30 Asia/Kolkata',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query schema
+struct<array(CAST(0001-01-01 00:00:00.0000001 AS TIMESTAMP_LTZ(7)), TIMESTAMP '2026-06-20 21:46:30', CAST(9999-12-31 23:59:59.999999999 AS TIMESTAMP_LTZ(9))):array<timestamp_ltz(9)>>
+-- !query output
+[0001-01-01 00:00:00.0000001,2026-06-20 21:46:30,9999-12-31 23:59:59.999999999]
+
+
+-- !query
+SELECT typeof(array(TIMESTAMP_LTZ '9999-12-31 23:59:59',
+    '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9)))
+-- !query schema
+struct<typeof(array(TIMESTAMP '9999-12-31 23:59:59', CAST(0001-01-01 00:00:00.000000001 AS TIMESTAMP_LTZ(9)))):string>
+-- !query output
+array<timestamp_ltz(9)>
+
+
+-- !query
+SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9),
+    'max', TIMESTAMP_LTZ '9999-12-31 23:59:59.999999')
+-- !query schema
+struct<map(min, CAST(0001-01-01 00:00:00.000000001 AS TIMESTAMP_LTZ(9)), max, TIMESTAMP '9999-12-31 23:59:59.999999'):map<string,timestamp_ltz(9)>>
+-- !query output
+{"max":9999-12-31 23:59:59.999999,"min":0001-01-01 00:00:00.000000001}
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.123456789',
+    '1970-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2026-06-21 10:16:30.123456789
+
+
+-- !query
+SELECT typeof(c) FROM (
+    SELECT TIMESTAMP_NTZ '1582-10-15 00:00:00' AS c
+    UNION ALL SELECT '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query schema
+struct<typeof(c):string>
+-- !query output
+timestamp_ltz(9)
+timestamp_ltz(9)
+
+
+-- !query
+SELECT typeof(coalesce('0001-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    '2026-06-21 10:16:30.123456789 UTC' :: timestamp_ltz(9)))
+-- !query schema
+struct<typeof(coalesce(CAST(0001-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)), CAST(2026-06-21 10:16:30.123456789 UTC AS TIMESTAMP_LTZ(9)))):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+SELECT typeof(CASE WHEN true
+    THEN '1969-12-31 23:59:59.1234567' :: timestamp_ntz(7)
+    ELSE '1970-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9) END)
+-- !query schema
+struct<typeof(CASE WHEN true THEN CAST(1969-12-31 23:59:59.1234567 AS TIMESTAMP_NTZ(7)) ELSE CAST(1970-01-01 00:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)) END):string>
+-- !query output
+timestamp_ltz(9)
