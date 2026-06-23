@@ -35,7 +35,6 @@ trait SessionQueryTestBase
     with SparkSessionProvider
     with CheckAnswerHelper
     with CheckErrorHelper
-    with SQLConfHelper
     with QueryCleanupHelper {
 
   /**
