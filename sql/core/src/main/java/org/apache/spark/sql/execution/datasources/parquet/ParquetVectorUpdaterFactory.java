@@ -1504,7 +1504,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readBinary(total, values, offset);
+      valuesReader.readFixedLenByteArray(total, arrayLen, values, offset);
     }
 
     @Override

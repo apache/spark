@@ -238,6 +238,11 @@ public class VectorizedByteStreamSplitValuesReader
     }
   }
 
+  @Override
+  public void readFixedLenByteArray(int total, int len, WritableColumnVector c, int rowId) {
+    readBinary(total, c, rowId);
+  }
+
   // --------------- skip methods ---------------
   // All types share the same page layout, so skipping is just advancing the offset.
   // skipBooleans is not overridden: BSS never encodes booleans; the base class throws.

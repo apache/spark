@@ -453,4 +453,108 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
       }
     }
   }
+
+  test("PLAIN-encoded FIXED_LEN_BYTE_ARRAY round-trip (dictionary disabled)") {
+    // Regression test: the FixedLenByteArrayUpdater batch read path must not use
+    // the length-prefixed readBinary(total, c, rowId) method which is designed for
+    // variable-length BYTE_ARRAY. FLBA data has no length prefix; each value is
+    // exactly `arrayLen` raw bytes. This test writes FLBA columns with PLAIN encoding
+    // (dictionary disabled) and verifies the vectorized reader round-trips correctly.
+    val schemaStr =
+      """message root {
+        |  required fixed_len_byte_array(4) flba4;
+        |  required fixed_len_byte_array(12) flba12;
+        |  optional fixed_len_byte_array(8) flba8_nullable;
+        |}
+      """.stripMargin
+    val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+    withMemoryModes { offHeapMode =>
+      withSQLConf(
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        withTempDir { dir =>
+          val path = new Path(dir.toURI.toString, "plain_flba.parquet")
+          // Use enough rows to span multiple pages and force the batch read path.
+          val size = 8193
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val writer = ExampleParquetWriter.builder(path)
+            .withType(schema)
+            .withDictionaryEncoding(false)
+            .withWriterVersion(PARQUET_1_0)
+            .withConf(hadoopConf)
+            .build()
+
+          try {
+            (1 to size).foreach { i =>
+              val record = new SimpleGroup(schema)
+              // FLBA(4): big-endian encoding of i
+              val flba4 = Array[Byte](
+                ((i >> 24) & 0xFF).toByte,
+                ((i >> 16) & 0xFF).toByte,
+                ((i >> 8) & 0xFF).toByte,
+                (i & 0xFF).toByte)
+              record.add("flba4", Binary.fromConstantByteArray(flba4))
+              // FLBA(12): repeat the index across 12 bytes (simulates decimal-sized FLBA)
+              val flba12 = Array.fill(12)(((i % 256)).toByte)
+              flba12(0) = ((i >> 8) & 0xFF).toByte
+              record.add("flba12", Binary.fromConstantByteArray(flba12))
+              // Nullable: null every 4th row
+              if (i % 4 != 0) {
+                val flba8 = Array.tabulate(8)(b => ((i + b) & 0xFF).toByte)
+                record.add("flba8_nullable", Binary.fromConstantByteArray(flba8))
+              }
+              writer.write(record)
+            }
+          } finally {
+            writer.close()
+          }
+
+          // Verify encoding metadata: columns should use PLAIN (not dictionary)
+          val footer = readAllFootersWithoutSummaryFiles(
+            path.getParent, hadoopConf).head.getParquetMetadata
+          val columnChunks = footer.getBlocks.asScala.head.getColumns.asScala
+          assert(columnChunks.length === 3)
+          columnChunks.foreach { chunk =>
+            assert(chunk.getEncodings.contains(Encoding.PLAIN),
+              s"Column ${chunk.getPath} should use PLAIN encoding")
+            assert(!chunk.getEncodings.contains(Encoding.PLAIN_DICTIONARY) &&
+              !chunk.getEncodings.contains(Encoding.RLE_DICTIONARY),
+              s"Column ${chunk.getPath} should NOT use dictionary encoding")
+          }
+
+          // Read back with the vectorized reader and verify data
+          val actual = spark.read.parquet(path.toString).collect()
+          assert(actual.length === size)
+          val sorted = actual.sortBy(r => java.util.Arrays.hashCode(r.getAs[Array[Byte]](0)))
+            .sortBy(r => {
+              val b = r.getAs[Array[Byte]](0)
+              ((b(0) & 0xFF) << 24) | ((b(1) & 0xFF) << 16) |
+                ((b(2) & 0xFF) << 8) | (b(3) & 0xFF)
+            })
+          (1 to size).foreach { i =>
+            val row = sorted(i - 1)
+            val expectedFlba4 = Array[Byte](
+              ((i >> 24) & 0xFF).toByte,
+              ((i >> 16) & 0xFF).toByte,
+              ((i >> 8) & 0xFF).toByte,
+              (i & 0xFF).toByte)
+            assert(row.getAs[Array[Byte]](0) === expectedFlba4,
+              s"flba4 mismatch at i=$i")
+            val expectedFlba12 = Array.fill(12)(((i % 256)).toByte)
+            expectedFlba12(0) = ((i >> 8) & 0xFF).toByte
+            assert(row.getAs[Array[Byte]](1) === expectedFlba12,
+              s"flba12 mismatch at i=$i")
+            if (i % 4 == 0) {
+              assert(row.isNullAt(2), s"flba8_nullable should be null at i=$i")
+            } else {
+              val expectedFlba8 = Array.tabulate(8)(b => ((i + b) & 0xFF).toByte)
+              assert(row.getAs[Array[Byte]](2) === expectedFlba8,
+                s"flba8_nullable mismatch at i=$i")
+            }
+          }
+        }
+      }
+    }
+  }
 }
