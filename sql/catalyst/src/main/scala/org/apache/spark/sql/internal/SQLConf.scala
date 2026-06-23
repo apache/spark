@@ -4788,7 +4788,7 @@ object SQLConf {
         "converted row (its accuracy is observable via the pythonEstimatedInputBytes vs " +
         "pythonDataSent metrics); a row larger than the cap still yields a one-row batch. " +
         "-1 (the default) means no limit.")
-      .version("5.0.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),

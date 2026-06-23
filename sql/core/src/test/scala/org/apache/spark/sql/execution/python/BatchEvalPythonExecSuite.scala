@@ -177,6 +177,32 @@ class BatchEvalPythonExecSuite extends SharedSparkSession
     assert(estMetric.value >= 10 * 1000L) // 10 rows of a 1000-char string, plus overhead
   }
 
+  test("SPARK-57593: getInputIterator does not byte-bound when maxBytesPerBatch is -1 (no limit)") {
+    EvaluatePython.registerPicklers()
+    val schema = StructType(Seq(StructField("s", StringType)))
+    // 250 wide rows: more than batchSize so row-count batching genuinely splits them, and each row
+    // is wide enough that any finite byte cap would split them into far more batches (the sibling
+    // test above cuts 10 of these at a 2048-byte cap).
+    def wideRows(): Iterator[InternalRow] = (0 until 250).iterator.map { _ =>
+      new GenericInternalRow(Array[Any](UTF8String.fromString("x" * 1000)))
+    }
+
+    // -1 (the default) routes to the row-count-only batcher: batches are cut purely at batchSize
+    // (250 rows / 100 = 3 batches) with no byte bound, and the byte-only metrics stay unpopulated.
+    val estMetric = SQLMetrics.createSizeMetric(spark.sparkContext, "est")
+    val oversizedMetric = SQLMetrics.createMetric(spark.sparkContext, "ov")
+    val batches = BatchEvalPythonExec
+      .getInputIterator(wideRows(), schema, batchSize = 100, binaryAsBytes = false,
+        maxBytesPerBatch = -1L,
+        pythonMetrics = Map(
+          "pythonEstimatedInputBytes" -> estMetric,
+          "pythonOversizedBatchCount" -> oversizedMetric)).size
+    // Row-count only: 3 batches (100 + 100 + 50). A finite byte cap would produce many more.
+    assert(batches === 3)
+    assert(estMetric.value === 0L)       // no per-row estimate accumulated on the no-limit path
+    assert(oversizedMetric.value === 0L) // no batch cut at a byte limit
+  }
+
   test("SPARK-57593: toJava accumulates the pickled-size estimate during conversion") {
     val acc = new PickledSizeAccumulator
     def sized(value: Any, dataType: DataType): Long = {
