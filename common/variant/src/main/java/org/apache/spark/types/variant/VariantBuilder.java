@@ -131,17 +131,6 @@ public class VariantBuilder {
     return builder.result();
   }
 
-  // Thrown by `insertAtPath` when a path segment does not match the value it is applied to (e.g.
-  // an object-key segment on a scalar, or an array-index segment on an object). `depth` is the
-  // index of the failing segment, used to reconstruct the path prefix for the error message.
-  public static final class VariantPathTypeMismatchException extends RuntimeException {
-    public final int depth;
-
-    public VariantPathTypeMismatchException(int depth) {
-      this.depth = depth;
-    }
-  }
-
   // Return a new variant equal to `v` with `val` inserted at `segments` (which must be non-empty).
   // An object leaf adds a field (or throws VARIANT_DUPLICATE_KEY if the key exists); an array leaf
   // inserts at the index, shifting elements right and padding with nulls past the end. Missing
@@ -597,17 +586,12 @@ public class VariantBuilder {
           int newId = addKey(fieldKey);
           fields.add(new FieldEntry(fieldKey, newId, writePos - start));
           if (isTarget && !isLast) {
-            // Descend into the existing field to insert deeper in the path.
             appendWithInsertionImpl(value, metadata, elementPos, segments, depth + 1, val);
           } else {
-            // Copy the field unchanged. When `isTarget && isLast`, the new field appended below
-            // collides with this one, so `finishWritingObject` raises VARIANT_DUPLICATE_KEY.
             appendVariantImpl(value, metadata, elementPos);
           }
         }
         if (isLast) {
-          // Add the new field. A pre-existing key yields a duplicate that `finishWritingObject`
-          // rejects with VARIANT_DUPLICATE_KEY.
           int newId = addKey(key);
           fields.add(new FieldEntry(key, newId, writePos - start));
           appendVariant(val);

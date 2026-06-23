@@ -21582,7 +21582,7 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     (error if it already exists); an array path inserts at the index, shifting later elements
     right. Missing intermediate keys are created. Returns NULL if any argument is NULL.
 
-    .. versionadded:: 5.0.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------

@@ -1403,6 +1403,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
 
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("5")), Literal("$.a"), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(VariantInsert(
+        Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
+
     val uncastableValue = VariantInsert(
       Literal(parseJson("{}")),
       Literal("$.a"),

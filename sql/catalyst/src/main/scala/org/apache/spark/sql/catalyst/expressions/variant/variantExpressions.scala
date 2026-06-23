@@ -833,7 +833,7 @@ object VariantDelete {
       > SELECT _FUNC_(NULL, '$.a', 1);
        NULL
   """,
-  since = "5.0.0",
+  since = "4.3.0",
   group = "variant_funcs"
 )
 // scalastyle:on line.size.limit
@@ -868,17 +868,19 @@ case class VariantInsert(input: Expression, path: Expression, value: Expression)
     }
   }
 
-  // When the path is a foldable expression, parse it once at planning time and cache the parsed
-  // segments together with the source string (needed for error messages). `None` means the path is
-  // dynamic (or a foldable NULL, which makes the whole expression NULL and is never evaluated).
-  @transient private lazy val foldablePath: Option[(Array[VariantPathSegment], String)] = {
+  // When the path is a foldable expression, parse it once at planning time and cache it. The Java
+  // segments are derived once per task (see `ParsedInsertPath`), avoiding a per-row conversion.
+  // `None` means the path is dynamic (or a foldable NULL, which makes the whole expression NULL and
+  // is never evaluated).
+  @transient private lazy val foldablePath: Option[VariantInsert.ParsedInsertPath] = {
     if (path.foldable) {
       val p = path.eval()
       if (p == null) {
         None
       } else {
         val s = p.asInstanceOf[UTF8String].toString
-        Some((VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
+        Some(VariantInsert.ParsedInsertPath(
+          VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
       }
     } else {
       None
@@ -888,9 +890,9 @@ case class VariantInsert(input: Expression, path: Expression, value: Expression)
   override protected def nullSafeEval(v: Any, p: Any, valValue: Any): Any = {
     val inputVariant = v.asInstanceOf[VariantVal]
     foldablePath match {
-      case Some((segments, pathStr)) =>
+      case Some(parsed) =>
         VariantExpressionEvalUtils.insertAtPath(
-          inputVariant, segments, pathStr, valValue, value.dataType, prettyName)
+          inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType, prettyName)
       case None =>
         VariantExpressionEvalUtils.insertAtPath(
           inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName)
@@ -902,12 +904,12 @@ case class VariantInsert(input: Expression, path: Expression, value: Expression)
     nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) => {
       val fromArg = ctx.addReferenceObj("from", value.dataType)
       foldablePath match {
-        case Some((segments, pathStr)) =>
-          val segArg = ctx.addReferenceObj("insertSegments", segments)
-          val pathArg = ctx.addReferenceObj("insertPath", pathStr)
+        case Some(parsed) =>
+          val parsedArg = ctx.addReferenceObj("insertPath", parsed)
           s"""
-             |${ev.value} =
-             |  $cls.insertAtPath($vVal, $segArg, $pathArg, $valVal, $fromArg, "$prettyName");
+             |${ev.value} = $cls.insertAtPath(
+             |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
+             |  "$prettyName");
            """.stripMargin
         case None =>
           s"""
@@ -922,6 +924,16 @@ case class VariantInsert(input: Expression, path: Expression, value: Expression)
   override protected def withNewChildrenInternal(
       newFirst: Expression, newSecond: Expression, newThird: Expression): VariantInsert =
     copy(input = newFirst, path = newSecond, value = newThird)
+}
+
+object VariantInsert {
+  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
+  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
+  // source string, retained for error messages.
+  case class ParsedInsertPath(segments: Array[VariantPathSegment], pathStr: String) {
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
 }
 
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator

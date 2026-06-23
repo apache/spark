@@ -9740,7 +9740,7 @@ object functions {
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.3.0
    */
   def variant_insert(v: Column, path: Column, value: Column): Column =
     Column.fn("variant_insert", v, path, value)
@@ -9759,7 +9759,7 @@ object functions {
    * @param value
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
-   * @since 5.0.0
+   * @since 4.3.0
    */
   def variant_insert(v: Column, path: String, value: Column): Column =
     Column.fn("variant_insert", v, lit(path), value)
