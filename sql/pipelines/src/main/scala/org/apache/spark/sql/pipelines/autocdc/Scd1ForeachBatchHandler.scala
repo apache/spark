@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
 
@@ -55,19 +57,43 @@ case class Scd1ForeachBatchHandler(
       )
     )
 
-    batchProcessor.mergeMicrobatchOntoAuxiliaryTable(
-      reconciledMicrobatchDf = reconciledMicrobatch,
-      auxiliaryTableIdentifier = auxiliaryTableIdentifier
-    )
+    // Both merges run through [[rewrapTargetMergeUnsupported]] so that a MERGE-incapable target
+    // surfaces as a user-facing AutoCDC error naming the declared target, rather than leaking the
+    // raw planner failure that names the internal auxiliary table (merged first, below).
+    rewrapTargetMergeUnsupported {
+      batchProcessor.mergeMicrobatchOntoAuxiliaryTable(
+        reconciledMicrobatchDf = reconciledMicrobatch,
+        auxiliaryTableIdentifier = auxiliaryTableIdentifier
+      )
 
-    // Failure between these two merges is safe under foreachBatch retry: the aux merge
-    // only ever mutates a tombstone when this batch's event makes it stale (strictly newer
-    // delete advances it) or redundant (`>=` upsert revives the key, GC'ing the tombstone),
-    // so on retry those preconditions no longer hold against the just-advanced aux state -
-    // the aux merge is a no-op and the target merge replays as if for the first time.
-    batchProcessor.mergeMicrobatchOntoTarget(
-      reconciledMicrobatchDf = reconciledMicrobatch,
-      targetTableIdentifier = targetTableIdentifier
-    )
+      // Failure between these two merges is safe under foreachBatch retry: the aux merge
+      // only ever mutates a tombstone when this batch's event makes it stale (strictly newer
+      // delete advances it) or redundant (`>=` upsert revives the key, GC'ing the tombstone),
+      // so on retry those preconditions no longer hold against the just-advanced aux state -
+      // the aux merge is a no-op and the target merge replays as if for the first time.
+      batchProcessor.mergeMicrobatchOntoTarget(
+        reconciledMicrobatchDf = reconciledMicrobatch,
+        targetTableIdentifier = targetTableIdentifier
+      )
+    }
+  }
+
+  /**
+   * Re-wrap the planner's MERGE-unsupported failure so it names the user's declared target rather
+   * than the internal auxiliary table that happens to be merged first. By construction the
+   * auxiliary table must be using the same table format and catalog as the target table.
+   */
+  private def rewrapTargetMergeUnsupported[T](block: => T): T = {
+    try block
+    catch {
+      case e: SparkUnsupportedOperationException
+          if e.getCondition == "UNSUPPORTED_FEATURE.TABLE_OPERATION" &&
+            e.getMessageParameters.get("operation") == "MERGE INTO TABLE" =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
+          messageParameters = Map("tableName" -> targetTableIdentifier.quotedString),
+          cause = Option(e)
+        )
+    }
   }
 }

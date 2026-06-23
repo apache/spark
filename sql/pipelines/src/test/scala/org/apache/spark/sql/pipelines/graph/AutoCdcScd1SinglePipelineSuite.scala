@@ -168,7 +168,7 @@ class AutoCdcScd1SinglePipelineSuite
   }
 
   test("an AutoCDC flow whose target connector does not support MERGE fails during " +
-    "flow execution") {
+    "flow execution with AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE") {
     val session = spark
     import session.implicits._
 
@@ -205,20 +205,15 @@ class AutoCdcScd1SinglePipelineSuite
       ))
     }
 
-    // The auxiliary-table MERGE runs before the target-table MERGE, so the auxiliary table is the
-    // one named in the connector's MERGE-unsupported failure.
-    val auxIdent = AutoCdcAuxiliaryTable.identifier(
-      TableIdentifier("target_no_merge", Some(database), Some(catalog))
-    )
+    val targetIdent = TableIdentifier("target_no_merge", Some(database), Some(catalog))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx) }
     checkErrorInPipelineFailure(
       failure = ex,
-      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      condition = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
       sqlState = Some("0A000"),
       parameters = Map(
-        "tableName" -> auxIdent.quotedString,
-        "operation" -> "MERGE INTO TABLE"
+        "tableName" -> targetIdent.quotedString
       )
     )
   }
