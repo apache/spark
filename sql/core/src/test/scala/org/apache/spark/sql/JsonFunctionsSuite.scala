@@ -275,7 +275,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     val depth = 999
     val nested = "[" * depth + "1" + "]" * depth
     val expression = MultiGetJsonObject(
-      Literal(s"""{"a":$nested,"b":2}"""), Seq("a", "b"), Seq("$.a", "$.b"))
+      Literal(s"""{"a":$nested,"b":2}"""), Seq("$.a", "$.b"))
     val result = Array.ofDim[Any](1)
     val thread = new Thread(
       null,

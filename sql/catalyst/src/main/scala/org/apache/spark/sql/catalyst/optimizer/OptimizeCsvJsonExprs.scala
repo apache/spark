@@ -189,7 +189,6 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
           val alias = Alias(
             MultiGetJsonObject(
               json,
-              pathSegments.map(_.last),
               nonConflictingPaths.map(_._2)),
             "_shared_json_paths")()
           Some(SharedJsonFields(json, pathSegments, alias))

@@ -210,7 +210,6 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
           case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
         val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fieldNames == Seq("b", "a"))
         assert(shared.fallbackPaths == Seq("$.b", "$['a']"))
 
         val sharedAttr = sharedAlias.toAttribute
@@ -258,7 +257,6 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
           case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
         val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fieldNames == Seq("b", "c.d", "e", "b"))
         assert(shared.fallbackPaths == Seq("$.a.b", "$['a']['c.d']", "$.e", "$.f.b"))
 
         val sharedAttr = sharedAlias.toAttribute

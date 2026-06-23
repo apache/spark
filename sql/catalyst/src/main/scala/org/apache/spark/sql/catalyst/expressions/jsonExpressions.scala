@@ -167,21 +167,18 @@ object GetJsonObject {
  */
 case class MultiGetJsonObject(
     json: Expression,
-    fieldNames: Seq[String],
     fallbackPaths: Seq[String])
   extends UnaryExpression
   with ExpectsInputTypes {
 
-  require(
-    fieldNames.nonEmpty &&
-      fallbackPaths.length == fieldNames.length)
+  require(fallbackPaths.nonEmpty)
 
   override def child: Expression = json
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  override lazy val dataType: DataType = StructType(fieldNames.indices.map { index =>
+  override lazy val dataType: DataType = StructType(fallbackPaths.indices.map { index =>
     StructField(s"_$index", StringType, nullable = true)
   })
 
@@ -203,7 +200,6 @@ case class MultiGetJsonObject(
 
   @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
-    fieldNames,
     fallbackPaths.map(UTF8String.fromString),
     namedPaths)
 

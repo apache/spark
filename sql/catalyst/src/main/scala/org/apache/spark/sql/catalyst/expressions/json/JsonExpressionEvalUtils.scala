@@ -578,15 +578,13 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
  * Evaluates multiple simple named JSON paths in one parse.
  */
 case class MultiGetJsonObjectEvaluator(
-    fieldNames: Seq[String],
     fallbackPaths: Seq[UTF8String],
     namedPaths: Seq[Seq[String]]) {
   import SharedFactory._
 
   require(
-    fieldNames.nonEmpty &&
-      fallbackPaths.length == fieldNames.length &&
-      namedPaths.length == fieldNames.length)
+    fallbackPaths.nonEmpty &&
+      namedPaths.length == fallbackPaths.length)
 
   @transient
   private lazy val useTopLevelFastPath: Boolean =
@@ -602,7 +600,7 @@ case class MultiGetJsonObjectEvaluator(
 
   @transient
   private lazy val nullRow: InternalRow =
-    new GenericInternalRow(Array.ofDim[Any](fieldNames.length))
+    new GenericInternalRow(Array.ofDim[Any](fallbackPaths.length))
 
   @transient
   private lazy val fallbackEvaluators: Seq[GetJsonObjectEvaluator] =
@@ -621,8 +619,8 @@ case class MultiGetJsonObjectEvaluator(
   def evaluate(json: UTF8String): InternalRow = {
     if (json == null) return null
 
-    val values = Array.ofDim[Any](fieldNames.length)
-    val matched = Array.ofDim[Boolean](fieldNames.length)
+    val values = Array.ofDim[Any](fallbackPaths.length)
+    val matched = Array.ofDim[Boolean](fallbackPaths.length)
 
     try {
       val validObject = Utils.tryWithResource(
