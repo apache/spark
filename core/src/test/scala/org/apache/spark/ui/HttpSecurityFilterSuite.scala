@@ -153,7 +153,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
   }
 
-  test("Content-Security-Policy header has only frame-ancestors when CSP is disabled") {
+  test("frame-ancestors is set even when full CSP is disabled (frameAncestors enabled by default)") {
     val conf = new SparkConf(false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
@@ -163,7 +163,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
-    // Even with CSP disabled, frame-ancestors should be set for clickjacking protection
+    // frameAncestors.enabled defaults to true, so frame-ancestors CSP is emitted
     val cspCaptor = ArgumentCaptor.forClass(classOf[String])
     verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
     assert(cspCaptor.getValue === "frame-ancestors 'self';")
@@ -180,6 +180,20 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     filter.doFilter(req, res, chain)
 
     verify(res).setHeader(meq("X-XSS-Protection"), meq("0"))
+  }
+
+  test("no CSP header when both CSP and frameAncestors are disabled") {
+    val conf = new SparkConf(false)
+      .set(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED, false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
   }
 
   test("doAs impersonation") {
