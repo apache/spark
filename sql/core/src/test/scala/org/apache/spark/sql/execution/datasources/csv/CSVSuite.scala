@@ -3588,6 +3588,36 @@ abstract class CSVSuite
       matchPVals = true)
   }
 
+  test("SPARK-49444: CSV parsing failure with more than max columns and custom lineSep") {
+    val schema = new StructType()
+      .add("intColumn", IntegerType, nullable = true)
+      .add("decimalColumn", DecimalType(10, 2), nullable = true)
+
+    val fileReadException = intercept[SparkException] {
+      spark
+        .read
+        .schema(schema)
+        .option("header", "false")
+        .option("maxColumns", "2")
+        .option("lineSep", "|")
+        .csv(testFile("test-data/more-columns-custom-sep.csv"))
+        .collect()
+    }
+
+    checkErrorMatchPVals(
+      exception = fileReadException,
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> ".*more-columns-custom-sep.csv"))
+
+    val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = malformedCSVException,
+      condition = "MALFORMED_CSV_RECORD",
+      parameters = Map("badRecord" -> "1,3.14,string,5,7"),
+      sqlState = "KD000")
+  }
+
   test("csv with variant") {
     withTempPath { path =>
       val data =

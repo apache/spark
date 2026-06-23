@@ -315,7 +315,7 @@ class UnivocityParser(
   }
 
   private def parseLine(line: String): Array[String] =
-    UnivocityParser.parseLine(tokenizer, line)
+    UnivocityParser.parseLine(tokenizer, line, options.lineSeparator)
 
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
@@ -671,14 +671,23 @@ private[sql] object UnivocityParser {
    * ArrayIndexOutOfBoundsException into MALFORMED_CSV_RECORD so the per-line and streaming paths
    * fail consistently.
    */
-  def parseLine(tokenizer: CsvParser, line: String): Array[String] = {
+  def parseLine(
+      tokenizer: CsvParser, line: String, lineSep: Option[String] = None): Array[String] = {
     try {
       tokenizer.parseLine(line)
     } catch {
       case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
-        throw malformedCsvRecord(e, line)
+        val record = lineSep match {
+          case Some(sep) if line.endsWith(sep) => line.dropRight(sep.length)
+          case _ => line.stripLineEnd
+        }
+        throw malformedCsvRecord(e, record)
       case e: ArrayIndexOutOfBoundsException =>
-        throw malformedCsvRecord(e, line)
+        val record = lineSep match {
+          case Some(sep) if line.endsWith(sep) => line.dropRight(sep.length)
+          case _ => line.stripLineEnd
+        }
+        throw malformedCsvRecord(e, record)
     }
   }
 
@@ -696,8 +705,9 @@ private[sql] object UnivocityParser {
 
     val filteredLines: Iterator[String] = CSVExprUtils.filterCommentAndEmpty(lines, options)
 
+    val lineSep = options.lineSeparator.getOrElse("\n")
     val safeParser = new FailureSafeParser[String](
-      input => parser.parse(input),
+      input => parser.parse(input + lineSep),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
