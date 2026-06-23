@@ -336,6 +336,24 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     e.getMessage should equal("Async progress tracking cannot be used with AvailableNow trigger")
   }
 
+  test("Fail with streaming sink evolution enabled") {
+    val inputData = new MemoryStream[Int](id = 0, spark)
+    val ds = inputData.toDF()
+
+    withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "true") {
+      val e = intercept[IllegalArgumentException] {
+        ds.writeStream
+          .format("noop")
+          .name("evolving_sink")
+          .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+          .start()
+      }
+      e.getMessage should equal(
+        "Async progress tracking cannot be used with streaming sink evolution " +
+          s"(${SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key})")
+    }
+  }
+
   test("switching between async wal commit enabled and trigger once") {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
