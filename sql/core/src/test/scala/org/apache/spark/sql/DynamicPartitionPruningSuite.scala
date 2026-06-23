@@ -2014,6 +2014,14 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
         }.toDF("p")
         checkNoDpp(mappedKeys)
 
+        // An opaque side becomes DPP-eligible through a selective predicate, and a `limit` gives it
+        // an exact maxRows. That maxRows must not be a pruning-benefit NDV bound for a side that is
+        // not cheaply recomputable: a standalone subquery would re-evaluate the stateful
+        // mapPartitions, prune the fact to the first key, and drop the rows the join's second
+        // evaluation needs. With the maxRows bound gated on isCheaplyRecomputableMaterializedPlan,
+        // no benefit is estimated, no standalone DPP is injected, and the result stays correct.
+        checkNoDpp(mappedKeys.filter($"p" > 0).limit(1))
+
         withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
           val broadcastJoin =
             spark.table("events").join(broadcast(mappedKeys), Seq("p")).select("p")
@@ -2022,6 +2030,39 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           assert(activeDppSubqueries(broadcastJoin).isEmpty,
             s"Shouldn't trigger DPP for an opaque broadcast plan:\n" +
               broadcastJoin.queryExecution)
+
+          // The cheaply-recomputable structural branches of isCheaplyRecomputableMaterializedPlan
+          // are exercised through broadcast reuse: a checkpointed input carries no statistics and
+          // no maxRows, so it has no estimable benefit and only the eligibility decision (not the
+          // benefit term) determines whether the broadcast is reused for DPP.
+          val cpKeys = Seq(1).toDF("p").localCheckpoint(eager = true)
+
+          def checkBroadcastReuseEligible(side: DataFrame): Unit = {
+            checkPartitionPruningPredicate(
+              spark.table("events").join(broadcast(side), Seq("p")).select("p"),
+              withSubquery = false, withBroadcast = true)
+          }
+
+          def checkBroadcastReuseIneligible(side: DataFrame): Unit = {
+            checkPartitionPruningPredicate(
+              spark.table("events").join(broadcast(side), Seq("p")).select("p"),
+              withSubquery = false, withBroadcast = false)
+          }
+
+          // A non-selective Filter/Project above a materialized input stays eligible: its recompute
+          // cost is dominated by the materialized leaf, so it reuses the broadcast for DPP even
+          // though the boolean-cast filter is not classified selective by isLikelySelective.
+          checkBroadcastReuseEligible(cpKeys.filter($"p".cast("boolean")).select($"p"))
+
+          // An Aggregate over a materialized input is excluded: its shuffle/compute cost is
+          // invisible to the scan-bytes cost model, so it is not DPP-eligible even with a reusable
+          // broadcast.
+          checkBroadcastReuseIneligible(cpKeys.groupBy("p").count().select("p"))
+
+          // A UDF projection over a materialized input is excluded: an opaque user function adds
+          // CPU/IO the scan-bytes cost model cannot see.
+          val identityUdf = udf((x: Int) => x)
+          checkBroadcastReuseIneligible(cpKeys.select(identityUdf($"p").as("p")))
 
           val target = spark.table("events").hint("merge")
             .join(mappedKeys.hint("merge"), Seq("p"))

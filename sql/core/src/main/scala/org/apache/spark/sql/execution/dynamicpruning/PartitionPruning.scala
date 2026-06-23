@@ -167,8 +167,19 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             // but an exact `maxRows`, which is a conservative upper bound on its join-key NDV. Use
             // it when the column statistic is missing so a small, selective materialized side still
             // yields a statistics-based ratio rather than falling through to the gated fallback.
+            // Restrict this to a cheaply-recomputable materialized side: DPP re-evaluates the
+            // filtering side, so deriving a pruning benefit from the `maxRows` of an opaque plan
+            // (e.g. one with a `mapPartitions`, which `isCheaplyRecomputableMaterializedPlan`
+            // rejects) could inject a standalone subquery that prunes a partition the join's
+            // re-evaluation then needs, giving wrong results for a hidden-non-deterministic side.
             val otherDistinctCount =
-              distinctCounts(rightAttr, otherPlan).orElse(otherPlan.maxRows.map(BigInt(_)))
+              distinctCounts(rightAttr, otherPlan).orElse {
+                if (isCheaplyRecomputableMaterializedPlan(otherPlan)) {
+                  otherPlan.maxRows.map(BigInt(_))
+                } else {
+                  None
+                }
+              }
             val availableStats = partDistinctCount.isDefined && partDistinctCount.get > 0 &&
               otherDistinctCount.isDefined
             if (!availableStats) {
