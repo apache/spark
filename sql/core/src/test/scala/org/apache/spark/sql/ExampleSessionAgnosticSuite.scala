@@ -21,10 +21,15 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 
 /**
- * Example for
+ * Example of a classic/connect-agnostic suite.
+ *
+ * The idea is to define test logic in suites that extend [[SessionQueryTest]]
+ * and add 'connect variant' that mixin `connect.SessionQueryTest`.
+ * This way, the test is run with both classic and connect.
  */
 class ExampleSessionAgnosticSuite extends SessionQueryTest {
 
+  // suite-wide configs can be set via sparkConf
   override protected def sparkConf: SparkConf =
     super.sparkConf
       .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
@@ -43,6 +48,7 @@ class ExampleSessionAgnosticSuite extends SessionQueryTest {
       val df2 = spark.table("t")
       val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
+      // diverging behaviour can be documented via `sessionType`
       if (sessionType == "connect") {
         // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
         assert(selfJoin.columns.length == 6,
@@ -60,6 +66,8 @@ class ExampleSessionAgnosticSuite extends SessionQueryTest {
   }
 
   test("testcase that uses withConf") {
+    // since SQLConf is not part of the public API,
+    // `withConf` can be used to temporarily change the RuntimeConfig.
     withConf("spark.sql.charAsVarchar" -> "true") {
       withTable("t") {
         spark.sql(s"CREATE TABLE t(col CHAR(5)) USING foo")

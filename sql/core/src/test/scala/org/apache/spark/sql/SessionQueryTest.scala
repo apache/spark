@@ -33,6 +33,8 @@ import org.apache.spark.SparkFunSuite
  * it is exposed as a [[SparkSession sql.SparkSession]] to allow for overriding on the connect side.
  *
  * For classic-specific tests, use [[classic.SessionQueryTest]].
+ *
+ * For example usage, see [[ExampleSessionAgnosticSuite]] and its connect variant.
  */
 trait SessionQueryTest
   extends SparkFunSuite
