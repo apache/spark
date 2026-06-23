@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
-import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, REPLACE, UPDATE}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
@@ -369,8 +369,8 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
 /**
  * Replace groups of data in an existing table during a row-level operation.
  *
- * This node is constructed in rules that rewrite DELETE, UPDATE, MERGE operations for data sources
- * that can replace groups of data (e.g. files, partitions).
+ * This node is constructed in rules that rewrite DELETE, UPDATE, MERGE, and REPLACE operations for
+ * data sources that can replace groups of data (e.g. files, partitions).
  *
  * @param table a plan that references a row-level operation table
  * @param condition a condition that defines matching groups
@@ -452,12 +452,12 @@ case class ReplaceData(
 /**
  * Writes a delta of rows to an existing table during a row-level operation.
  *
- * This node references a query that translates a logical DELETE, UPDATE, MERGE operation into
- * a set of row-level changes to be encoded in the table. Each row in the query represents either
- * a delete, update or insert and stores the operation type in a special column.
+ * This node references a query that translates a logical DELETE, UPDATE, MERGE, or REPLACE
+ * operation into a set of row-level changes to be encoded in the table. Each row in the query
+ * represents either a delete, update, or insert and stores the operation type in a special column.
  *
- * This node is constructed in rules that rewrite DELETE, UPDATE, MERGE operations for data sources
- * that can handle deltas of rows.
+ * This node is constructed in rules that rewrite DELETE, UPDATE, MERGE, and REPLACE operations for
+ * data sources that can handle deltas of rows.
  *
  * @param table a plan that references a row-level operation table
  * @param condition a condition that defines matching records
@@ -537,6 +537,10 @@ case class WriteDelta(
   private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
     operation.command match {
       case DELETE =>
+        MetadataAttribute.isPreservedOnDelete(attr)
+      case REPLACE =>
+        // REPLACE emits delete rows for matched target rows and insert rows for source rows.
+        // Insert rows carry no metadata, so metadata nullability only needs delete preservation.
         MetadataAttribute.isPreservedOnDelete(attr)
       case UPDATE | MERGE if operation.representUpdateAsDeleteAndInsert =>
         MetadataAttribute.isPreservedOnDelete(attr) && MetadataAttribute.isPreservedOnReinsert(attr)
@@ -1213,6 +1217,44 @@ case class MergeIntoTable(
       newLeft: LogicalPlan,
       newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
+  }
+}
+
+/**
+ * The logical plan of the `INSERT INTO t REPLACE USING (cols) <query>` command, resolved from
+ * [[InsertIntoStatement]] when its replace criteria is an [[InsertReplaceUsing]].
+ *
+ * Scoped replace deletes every target row whose scope-column tuple appears in the source and
+ * appends all source rows, including duplicates that share the same scope tuple. The command uses
+ * [[RowLevelOperation.Command.REPLACE]] so connectors can distinguish this scope-level replacement
+ * from per-row MERGE semantics.
+ *
+ * @param targetTable the target relation to replace rows in
+ * @param scopeColumns unqualified target column names whose values define a replace scope tuple
+ * @param query        the source query, already aligned to the target table output
+ */
+case class ReplaceUsingTable(
+    targetTable: LogicalPlan,
+    scopeColumns: Seq[String],
+    query: LogicalPlan)
+    extends BinaryCommand with SupportsSubquery with TransactionalWrite {
+
+  override def table: LogicalPlan = EliminateSubqueryAliases(targetTable)
+
+  lazy val rewritable: Boolean = {
+    EliminateSubqueryAliases(targetTable) match {
+      case ExtractV2Table(_: SupportsRowLevelOperations) => true
+      case _ => false
+    }
+  }
+
+  override def left: LogicalPlan = targetTable
+  override def right: LogicalPlan = query
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan,
+      newRight: LogicalPlan): ReplaceUsingTable = {
+    copy(targetTable = newLeft, query = newRight)
   }
 }
 

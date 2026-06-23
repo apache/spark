@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, Grou
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
-import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, REPLACE, UPDATE}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -112,6 +112,12 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
       case MERGE =>
         // rewrite the group filter subquery as joins
+        val filter = Filter(cond, relation)
+        RewritePredicateSubquery(filter)
+
+      case REPLACE =>
+        // REPLACE group filters are expressed as correlated subqueries and must be rewritten
+        // before the dynamic pruning query is planned.
         val filter = Filter(cond, relation)
         RewritePredicateSubquery(filter)
     }

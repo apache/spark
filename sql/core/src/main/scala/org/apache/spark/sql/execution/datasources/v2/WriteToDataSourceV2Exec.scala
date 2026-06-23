@@ -503,7 +503,7 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec with TransactionalExec {
 }
 
 /**
- * A trait for row-level write operations (UPDATE, DELETE, MERGE).
+ * A trait for row-level write operations (UPDATE, DELETE, MERGE, REPLACE).
  */
 trait RowLevelWriteExec extends V2ExistingTableWriteExec {
   def rowLevelCommand: RowLevelOperation.Command
@@ -544,6 +544,10 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
       case MERGE => getMergeSummary()
       case UPDATE => getUpdateSummary()
       case DELETE => getDeleteSummary()
+      // Scoped REPLACE has no dedicated write summary yet: existing row-level tasks do not count
+      // inserted rows, and numOutputRows conflates copied/deleted/inserted rows, so any derived
+      // count would be wrong. Returning None until we add metrics.
+      case REPLACE => None
     }
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
 
 /**
  * A mix-in interface for {@link Table} row-level operations support. Data sources can implement
- * this interface to indicate they support rewriting data for DELETE, UPDATE, MERGE operations.
+ * this interface to indicate they support rewriting data for row-level operations.
  *
  * @since 3.3.0
  */
@@ -32,8 +32,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperationInfo;
 public interface SupportsRowLevelOperations extends Table {
   /**
    * Returns a {@link RowLevelOperationBuilder} to build a {@link RowLevelOperation}.
-   * Spark will call this method while planning DELETE, UPDATE and MERGE operations
-   * that require rewriting data.
+   * Spark will call this method while planning row-level operations that require rewriting data.
    *
    * @param info the row-level operation info such as command (e.g. DELETE) and options
    * @return the row-level operation builder

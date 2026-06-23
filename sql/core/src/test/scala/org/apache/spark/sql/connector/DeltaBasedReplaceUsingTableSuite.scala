@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.write;
-
-import org.apache.spark.annotation.Experimental;
+package org.apache.spark.sql.connector
 
 /**
- * An interface for building a {@link RowLevelOperation}.
- *
- * @since 3.3.0
+ * Runs the scoped-replace coverage against a delta-based (merge-on-read) row-level table, which
+ * lowers `REPLACE USING` to a [[org.apache.spark.sql.catalyst.plans.logical.WriteDelta]] node.
  */
-@Experimental
-public interface RowLevelOperationBuilder {
-  /**
-   * Returns a {@link RowLevelOperation} that controls how Spark rewrites data
-   * for DELETE, UPDATE, MERGE, and REPLACE commands.
-   */
-  RowLevelOperation build();
+class DeltaBasedReplaceUsingTableSuite extends ReplaceUsingTableSuiteBase {
+
+  override protected def isDeltaBasedReplace: Boolean = true
+
+  override protected lazy val extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put("supports-deltas", "true")
+    props
+  }
 }

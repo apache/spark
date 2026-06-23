@@ -25,8 +25,8 @@ import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * A logical representation of a data source DELETE, UPDATE, or MERGE operation that requires
- * rewriting data.
+ * A logical representation of a data source DELETE, UPDATE, MERGE, or REPLACE operation that
+ * requires rewriting data.
  *
  * @since 3.3.0
  */
@@ -39,7 +39,7 @@ public interface RowLevelOperation {
    * @since 3.3.0
    */
   enum Command {
-    DELETE, UPDATE, MERGE
+    DELETE, UPDATE, MERGE, REPLACE
   }
 
   /**

@@ -682,6 +682,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE ON/USING")
   }
 
+  def insertReplaceUsingNonDeterministicSource(): Throwable = {
+    new AnalysisException(
+      errorClass = "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE",
+      messageParameters = Map.empty)
+  }
+
+  def insertReplaceUsingDuplicateScopeColumn(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INSERT_REPLACE_USING_DUPLICATE_SCOPE_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
