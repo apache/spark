@@ -22,7 +22,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{OP_ID, SESSION_ID}
 import org.apache.spark.internal.config.Status.LIVE_ENTITY_UPDATE_PERIOD
@@ -45,9 +45,7 @@ private[connect] class SparkConnectServerListener(
     new ConcurrentHashMap[String, LiveExecutionData]
 
   private val (retainedStatements: Int, retainedSessions: Int) = {
-    (
-      SparkEnv.get.conf.get(CONNECT_UI_STATEMENT_LIMIT),
-      SparkEnv.get.conf.get(CONNECT_UI_SESSION_LIMIT))
+    (sparkConf.get(CONNECT_UI_STATEMENT_LIMIT), sparkConf.get(CONNECT_UI_SESSION_LIMIT))
   }
 
   // How often to update live entities. -1 means "never update" when replaying applications,
