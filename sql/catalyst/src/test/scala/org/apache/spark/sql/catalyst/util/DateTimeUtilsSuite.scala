@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.types.{Decimal, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
-import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -724,6 +724,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       withDefaultTimeZone(zid) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "1769-01-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "1769-10-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "1769-10-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "1769-10-16T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_DAY, "1769-10-17T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "1769-10-17T17:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
@@ -873,6 +877,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val expected = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2018-11-04T01:00:00-02:00"), zone).get
     assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
+  }
+
+  test("truncTimestamp date-level units across DST boundaries") {
+    val la = getZoneId("America/Los_Angeles")
+    // YEAR / QUARTER truncation of an instant in March (post-spring-forward) crosses
+    // the DST boundary: Jan 1 is in PST, March is in PDT, so the offset at the
+    // candidate (Jan 1 wall-clock) differs from the offset at the original. The fast
+    // path falls back to the slow path, which resolves Jan 1 00:00 in PST.
+    val mar = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-15T12:00:00-07:00"), la).get
+    val expectedYear = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-01T00:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(mar, DateTimeUtils.TRUNC_TO_YEAR, la) === expectedYear)
+    val expectedQuarter = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-01T00:00:00-08:00"), la).get
+    assert(
+      DateTimeUtils.truncTimestamp(mar, DateTimeUtils.TRUNC_TO_QUARTER, la) === expectedQuarter)
+    // MONTH where original and candidate are both in PDT: April fully in DST, no cross.
+    val apr = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-04-15T12:00:00-07:00"), la).get
+    val expectedMonth = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-04-01T00:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(apr, DateTimeUtils.TRUNC_TO_MONTH, la) === expectedMonth)
   }
 
   test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
@@ -1382,6 +1409,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Some(localTime(hour = 23, minute = 59, sec = 59, micros = 1)))
     checkStringToTime("23:59:59.999999",
       Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999)))
+    // Nanosecond resolution (7-9 fractional digits).
+    checkStringToTime("23:59:59.0000001",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 100)))
+    checkStringToTime("23:59:59.00000012",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 120)))
+    checkStringToTime("23:59:59.000000123",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 0, nanos = 123)))
+    checkStringToTime("23:59:59.999999999",
+      Some(localTime(hour = 23, minute = 59, sec = 59, micros = 999999, nanos = 999)))
+    checkStringToTime("12:34:56.123456789",
+      Some(localTime(hour = 12, minute = 34, sec = 56, micros = 123456, nanos = 789)))
 
     checkStringToTime("1:2:3.0", Some(localTime(hour = 1, minute = 2, sec = 3)))
     checkStringToTime("T1:02:3.04", Some(localTime(hour = 1, minute = 2, sec = 3, micros = 40000)))
@@ -1494,6 +1532,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "targetType" -> "\"TIME(6)\"",
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
+
+    // The error must report the requested target precision, not the default TIME(6).
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidTime = "not a time"
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          stringToTimeAnsi(UTF8String.fromString(invalidTime), precision, null)
+        },
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> s"'$invalidTime'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> s""""TIME($precision)"""",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
   }
 
   test("timeToMicros") {
@@ -1601,6 +1654,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       localTime(23, 59, 59, 120000))
     assert(truncateTimeToPrecision(localTime(23, 59, 59, 987654), 1) ==
       localTime(23, 59, 59, 900000))
+    // Nanosecond precisions 7, 8, 9.
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 9) ==
+      localTime(23, 59, 59, 999999, 999))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 8) ==
+      localTime(23, 59, 59, 999999, 990))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 7) ==
+      localTime(23, 59, 59, 999999, 900))
+    assert(truncateTimeToPrecision(localTime(23, 59, 59, 999999, 999), 6) ==
+      localTime(23, 59, 59, 999999))
   }
 
   test("add day-time interval to time") {

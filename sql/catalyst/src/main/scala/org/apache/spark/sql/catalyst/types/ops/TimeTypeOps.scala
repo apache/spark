@@ -49,7 +49,7 @@ import org.apache.spark.sql.types.{ObjectType, TimeType}
  *   - Values stored as Long nanoseconds since midnight
  *   - Range: 0 to 86,399,999,999,999
  *   - External type: java.time.LocalTime
- *   - Precision (0-6) affects display only, not storage
+ *   - Precision (0-9) affects display only, not storage
  *
  * @param t
  *   The TimeType with precision information

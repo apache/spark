@@ -1122,7 +1122,7 @@ struct<time_trunc(MICROSECOND, TIME '12:34:56.123456'):time(6)>
 -- !query
 SELECT time_trunc('HOUR', time'12:34:56.123456789')
 -- !query schema
-struct<time_trunc(HOUR, TIME '12:34:56.123456'):time(6)>
+struct<time_trunc(HOUR, TIME '12:34:56.123456789'):time(9)>
 -- !query output
 12:00:00
 
@@ -1130,7 +1130,7 @@ struct<time_trunc(HOUR, TIME '12:34:56.123456'):time(6)>
 -- !query
 SELECT time_trunc('MINUTE', time'12:34:56.123456789')
 -- !query schema
-struct<time_trunc(MINUTE, TIME '12:34:56.123456'):time(6)>
+struct<time_trunc(MINUTE, TIME '12:34:56.123456789'):time(9)>
 -- !query output
 12:34:00
 
@@ -1138,7 +1138,7 @@ struct<time_trunc(MINUTE, TIME '12:34:56.123456'):time(6)>
 -- !query
 SELECT time_trunc('SECOND', time'12:34:56.123456789')
 -- !query schema
-struct<time_trunc(SECOND, TIME '12:34:56.123456'):time(6)>
+struct<time_trunc(SECOND, TIME '12:34:56.123456789'):time(9)>
 -- !query output
 12:34:56
 
@@ -1146,7 +1146,7 @@ struct<time_trunc(SECOND, TIME '12:34:56.123456'):time(6)>
 -- !query
 SELECT time_trunc('MILLISECOND', time'12:34:56.123456789')
 -- !query schema
-struct<time_trunc(MILLISECOND, TIME '12:34:56.123456'):time(6)>
+struct<time_trunc(MILLISECOND, TIME '12:34:56.123456789'):time(9)>
 -- !query output
 12:34:56.123
 
@@ -1154,7 +1154,7 @@ struct<time_trunc(MILLISECOND, TIME '12:34:56.123456'):time(6)>
 -- !query
 SELECT time_trunc('MICROSECOND', time'12:34:56.123456789')
 -- !query schema
-struct<time_trunc(MICROSECOND, TIME '12:34:56.123456'):time(6)>
+struct<time_trunc(MICROSECOND, TIME '12:34:56.123456789'):time(9)>
 -- !query output
 12:34:56.123456
 
@@ -1242,7 +1242,7 @@ struct<time_trunc(MICROSECOND, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('HOUR', time'00:00:00.000000001')
 -- !query schema
-struct<time_trunc(HOUR, TIME '00:00:00'):time(6)>
+struct<time_trunc(HOUR, TIME '00:00:00.000000001'):time(9)>
 -- !query output
 00:00:00
 
@@ -1250,7 +1250,7 @@ struct<time_trunc(HOUR, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('MINUTE', time'00:00:00.000000001')
 -- !query schema
-struct<time_trunc(MINUTE, TIME '00:00:00'):time(6)>
+struct<time_trunc(MINUTE, TIME '00:00:00.000000001'):time(9)>
 -- !query output
 00:00:00
 
@@ -1258,7 +1258,7 @@ struct<time_trunc(MINUTE, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('SECOND', time'00:00:00.000000001')
 -- !query schema
-struct<time_trunc(SECOND, TIME '00:00:00'):time(6)>
+struct<time_trunc(SECOND, TIME '00:00:00.000000001'):time(9)>
 -- !query output
 00:00:00
 
@@ -1266,7 +1266,7 @@ struct<time_trunc(SECOND, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('MILLISECOND', time'00:00:00.000000001')
 -- !query schema
-struct<time_trunc(MILLISECOND, TIME '00:00:00'):time(6)>
+struct<time_trunc(MILLISECOND, TIME '00:00:00.000000001'):time(9)>
 -- !query output
 00:00:00
 
@@ -1274,7 +1274,7 @@ struct<time_trunc(MILLISECOND, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('MICROSECOND', time'00:00:00.000000001')
 -- !query schema
-struct<time_trunc(MICROSECOND, TIME '00:00:00'):time(6)>
+struct<time_trunc(MICROSECOND, TIME '00:00:00.000000001'):time(9)>
 -- !query output
 00:00:00
 
@@ -1282,7 +1282,7 @@ struct<time_trunc(MICROSECOND, TIME '00:00:00'):time(6)>
 -- !query
 SELECT time_trunc('HOUR', time'23:59:59.999999999')
 -- !query schema
-struct<time_trunc(HOUR, TIME '23:59:59.999999'):time(6)>
+struct<time_trunc(HOUR, TIME '23:59:59.999999999'):time(9)>
 -- !query output
 23:00:00
 
@@ -1290,7 +1290,7 @@ struct<time_trunc(HOUR, TIME '23:59:59.999999'):time(6)>
 -- !query
 SELECT time_trunc('MINUTE', time'23:59:59.999999999')
 -- !query schema
-struct<time_trunc(MINUTE, TIME '23:59:59.999999'):time(6)>
+struct<time_trunc(MINUTE, TIME '23:59:59.999999999'):time(9)>
 -- !query output
 23:59:00
 
@@ -1298,7 +1298,7 @@ struct<time_trunc(MINUTE, TIME '23:59:59.999999'):time(6)>
 -- !query
 SELECT time_trunc('SECOND', time'23:59:59.999999999')
 -- !query schema
-struct<time_trunc(SECOND, TIME '23:59:59.999999'):time(6)>
+struct<time_trunc(SECOND, TIME '23:59:59.999999999'):time(9)>
 -- !query output
 23:59:59
 
@@ -1306,7 +1306,7 @@ struct<time_trunc(SECOND, TIME '23:59:59.999999'):time(6)>
 -- !query
 SELECT time_trunc('MILLISECOND', time'23:59:59.999999999')
 -- !query schema
-struct<time_trunc(MILLISECOND, TIME '23:59:59.999999'):time(6)>
+struct<time_trunc(MILLISECOND, TIME '23:59:59.999999999'):time(9)>
 -- !query output
 23:59:59.999
 
@@ -1314,7 +1314,7 @@ struct<time_trunc(MILLISECOND, TIME '23:59:59.999999'):time(6)>
 -- !query
 SELECT time_trunc('MICROSECOND', time'23:59:59.999999999')
 -- !query schema
-struct<time_trunc(MICROSECOND, TIME '23:59:59.999999'):time(6)>
+struct<time_trunc(MICROSECOND, TIME '23:59:59.999999999'):time(9)>
 -- !query output
 23:59:59.999999
 
@@ -1843,7 +1843,7 @@ struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56.123456789')
 -- !query schema
-struct<time_diff(HOUR, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
+struct<time_diff(HOUR, TIME '00:00:00', TIME '12:34:56.123456789'):bigint>
 -- !query output
 12
 
@@ -1851,7 +1851,7 @@ struct<time_diff(HOUR, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56.123456789')
 -- !query schema
-struct<time_diff(MINUTE, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
+struct<time_diff(MINUTE, TIME '00:00:00', TIME '12:34:56.123456789'):bigint>
 -- !query output
 754
 
@@ -1859,7 +1859,7 @@ struct<time_diff(MINUTE, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query schema
-struct<time_diff(SECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
+struct<time_diff(SECOND, TIME '00:00:00', TIME '12:34:56.123456789'):bigint>
 -- !query output
 45296
 
@@ -1867,7 +1867,7 @@ struct<time_diff(SECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query schema
-struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
+struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '12:34:56.123456789'):bigint>
 -- !query output
 45296123
 
@@ -1875,7 +1875,7 @@ struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query schema
-struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '12:34:56.123456'):bigint>
+struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '12:34:56.123456789'):bigint>
 -- !query output
 45296123456
 
@@ -1963,7 +1963,7 @@ struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'00:00:00.000000001')
 -- !query schema
-struct<time_diff(HOUR, TIME '00:00:00', TIME '00:00:00'):bigint>
+struct<time_diff(HOUR, TIME '00:00:00', TIME '00:00:00.000000001'):bigint>
 -- !query output
 0
 
@@ -1971,7 +1971,7 @@ struct<time_diff(HOUR, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'00:00:00.000000001')
 -- !query schema
-struct<time_diff(MINUTE, TIME '00:00:00', TIME '00:00:00'):bigint>
+struct<time_diff(MINUTE, TIME '00:00:00', TIME '00:00:00.000000001'):bigint>
 -- !query output
 0
 
@@ -1979,7 +1979,7 @@ struct<time_diff(MINUTE, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query schema
-struct<time_diff(SECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
+struct<time_diff(SECOND, TIME '00:00:00', TIME '00:00:00.000000001'):bigint>
 -- !query output
 0
 
@@ -1987,7 +1987,7 @@ struct<time_diff(SECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query schema
-struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
+struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '00:00:00.000000001'):bigint>
 -- !query output
 0
 
@@ -1995,7 +1995,7 @@ struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query schema
-struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
+struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00.000000001'):bigint>
 -- !query output
 0
 
@@ -2003,7 +2003,7 @@ struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00'):bigint>
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'23:59:59.999999999')
 -- !query schema
-struct<time_diff(HOUR, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
+struct<time_diff(HOUR, TIME '00:00:00', TIME '23:59:59.999999999'):bigint>
 -- !query output
 23
 
@@ -2011,7 +2011,7 @@ struct<time_diff(HOUR, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'23:59:59.999999999')
 -- !query schema
-struct<time_diff(MINUTE, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
+struct<time_diff(MINUTE, TIME '00:00:00', TIME '23:59:59.999999999'):bigint>
 -- !query output
 1439
 
@@ -2019,7 +2019,7 @@ struct<time_diff(MINUTE, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query schema
-struct<time_diff(SECOND, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
+struct<time_diff(SECOND, TIME '00:00:00', TIME '23:59:59.999999999'):bigint>
 -- !query output
 86399
 
@@ -2027,7 +2027,7 @@ struct<time_diff(SECOND, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query schema
-struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
+struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '23:59:59.999999999'):bigint>
 -- !query output
 86399999
 
@@ -2035,7 +2035,7 @@ struct<time_diff(MILLISECOND, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query schema
-struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '23:59:59.999999'):bigint>
+struct<time_diff(MICROSECOND, TIME '00:00:00', TIME '23:59:59.999999999'):bigint>
 -- !query output
 86399999999
 

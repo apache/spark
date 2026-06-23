@@ -24,7 +24,7 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -3323,5 +3323,27 @@ class CollectionExpressionsSuite
         "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
         "functionName" -> "`array_insert`"))
+  }
+
+  test("SPARK-57335: element_at with index = Int.MinValue") {
+    val a = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    // Non-ANSI: an out-of-bounds index must return null. `Math.abs(Int.MinValue)`
+    // overflows back to a negative value, which previously bypassed the bounds check
+    // and leaked an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue)), null)
+    }
+    // ANSI: the documented error is raised instead of an internal exception.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[SparkArrayIndexOutOfBoundsException](
+        ElementAt(a, Literal(Int.MinValue)),
+        "INVALID_ARRAY_INDEX_IN_ELEMENT_AT")
+    }
+    // try_element_at must not throw even under ANSI, since it hardcodes
+    // failOnError = false. Without the widened bounds check this leaked
+    // an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
+    }
   }
 }

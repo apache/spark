@@ -774,3 +774,200 @@ SELECT unix_nanos(NULL :: timestamp_ltz(9))
 -- !query analysis
 Project [unix_nanos(cast(null as timestamp_ltz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query analysis
+Project [timestamp_nanos(1230219000123456789) AS timestamp_nanos(1230219000123456789)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query analysis
+Project [timestamp_nanos(-1) AS timestamp_nanos(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query analysis
+Project [timestamp_nanos(253402300799999999999) AS timestamp_nanos(253402300799999999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query analysis
+Project [timestamp_nanos(10000000000000000000000000) AS timestamp_nanos(10000000000000000000000000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1.0D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query analysis
+Project [timestamp_nanos(cast(null as bigint)) AS timestamp_nanos(CAST(NULL AS BIGINT))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_LTZ '0001-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999') ORDER BY c
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ltz(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ltz(9)) AS c#x]
+         :  +- Project [cast(1582-10-04 12:30:45.1234567 as timestamp_ltz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(1582-10-15 23:59:59.123456789 as timestamp_ltz(9)) AS CAST(1582-10-15 23:59:59.123456789 AS TIMESTAMP_LTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '1969-12-31 23:59:59.0000001 Asia/Kolkata' :: timestamp_ltz(7),
+    '1969-12-31 23:59:59.999999999 UTC' :: timestamp_ltz(9)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [coalesce(cast(cast(1969-12-31 23:59:59.0000001 Asia/Kolkata as timestamp_ltz(7)) as timestamp_ltz(9)), cast(1969-12-31 23:59:59.999999999 UTC as timestamp_ltz(9))) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_LTZ '2026-06-21 10:16:30 Asia/Kathmandu'
+    ELSE '2026-06-21 10:16:30.987654321 UTC' :: timestamp_ltz(9) END AS v)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '0001-01-01', '2020-01-01 00:00:00.12345678' :: timestamp_ltz(8)) AS v)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(greatest(TIMESTAMP_LTZ '0001-01-01 00:00:00',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9)))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT greatest(TIMESTAMP_LTZ '1500-03-01 12:00:00',
+    '1582-10-15 00:00:00.123456789' :: timestamp_ltz(9),
+    TIMESTAMP_LTZ '2026-06-21 10:16:30.5')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT least('1970-01-01 00:00:00.0000001' :: timestamp_ltz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query analysis
+Project [least(cast(cast(1970-01-01 00:00:00.0000001 as timestamp_ltz(7)) as timestamp_ltz(9)), cast(1969-12-31 23:59:59.999999999 as timestamp_ltz(9))) AS least(CAST(1970-01-01 00:00:00.0000001 AS TIMESTAMP_LTZ(7)), CAST(1969-12-31 23:59:59.999999999 AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array('0001-01-01 00:00:00.0000001' :: timestamp_ltz(7),
+    TIMESTAMP_LTZ '2026-06-21 10:16:30 Asia/Kolkata',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(array(TIMESTAMP_LTZ '9999-12-31 23:59:59',
+    '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9)))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9),
+    'max', TIMESTAMP_LTZ '9999-12-31 23:59:59.999999')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.123456789',
+    '1970-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [coalesce(cast(2026-06-21 10:16:30.123456789 as timestamp_ltz(9)), cast(1970-01-01 00:00:00.000000001 UTC as timestamp_ltz(9))) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c) FROM (
+    SELECT TIMESTAMP_NTZ '1582-10-15 00:00:00' AS c
+    UNION ALL SELECT '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9))
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Project [cast(c#x as timestamp_ltz(9)) AS c#x]
+      :  +- Project [1582-10-15 00:00:00 AS c#x]
+      :     +- OneRowRelation
+      +- Project [cast(9999-12-31 23:59:59.999999999 as timestamp_ltz(9)) AS CAST(9999-12-31 23:59:59.999999999 AS TIMESTAMP_LTZ(9))#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT typeof(coalesce('0001-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    '2026-06-21 10:16:30.123456789 UTC' :: timestamp_ltz(9)))
+-- !query analysis
+Project [typeof(coalesce(cast(cast(0001-01-01 00:00:00.0000001 as timestamp_ntz(7)) as timestamp_ltz(9)), cast(2026-06-21 10:16:30.123456789 UTC as timestamp_ltz(9)))) AS typeof(coalesce(CAST(0001-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)), CAST(2026-06-21 10:16:30.123456789 UTC AS TIMESTAMP_LTZ(9))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(CASE WHEN true
+    THEN '1969-12-31 23:59:59.1234567' :: timestamp_ntz(7)
+    ELSE '1970-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9) END)
+-- !query analysis
+Project [typeof(CASE WHEN true THEN cast(cast(1969-12-31 23:59:59.1234567 as timestamp_ntz(7)) as timestamp_ltz(9)) ELSE cast(1970-01-01 00:00:00.123456789 UTC as timestamp_ltz(9)) END) AS typeof(CASE WHEN true THEN CAST(1969-12-31 23:59:59.1234567 AS TIMESTAMP_NTZ(7)) ELSE CAST(1970-01-01 00:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)) END)#x]
++- OneRowRelation

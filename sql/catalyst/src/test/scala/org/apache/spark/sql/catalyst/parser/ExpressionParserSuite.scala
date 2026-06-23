@@ -1367,6 +1367,18 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("tIme '12:13:14'", Literal(LocalTime.parse("12:13:14")))
     assertEqual("TIME'23:59:59.999999'", Literal(LocalTime.parse("23:59:59.999999")))
 
+    // ANSI SQL: the literal precision is the number of fractional-second digits. 7-9 digits
+    // produce a nanosecond-precision TIME literal; <= 6 digits keep the default precision (6).
+    assertEqual(
+      "TIME '12:34:56.1234567'",
+      Literal.create(LocalTime.parse("12:34:56.123456700"), TimeType(7)))
+    assertEqual(
+      "TIME '12:34:56.12345678'",
+      Literal.create(LocalTime.parse("12:34:56.123456780"), TimeType(8)))
+    assertEqual(
+      "TIME '23:59:59.999999999'",
+      Literal.create(LocalTime.parse("23:59:59.999999999"), TimeType(9)))
+
     checkError(
       exception = parseException("time '12-13.14'"),
       condition = "INVALID_TYPED_LITERAL",
@@ -1376,6 +1388,17 @@ class ExpressionParserSuite extends AnalysisTest {
         fragment = "time '12-13.14'",
         start = 0,
         stop = 14))
+
+    // More than 9 fractional-second digits is rejected.
+    checkError(
+      exception = parseException("TIME '12:34:56.1234567890'"),
+      condition = "INVALID_TIME_LITERAL_PRECISION",
+      sqlState = "22023",
+      parameters = Map("value" -> "'12:34:56.1234567890'"),
+      context = ExpectedContext(
+        fragment = "TIME '12:34:56.1234567890'",
+        start = 0,
+        stop = 25))
   }
 
   test("collate expression origin") {

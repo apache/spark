@@ -208,6 +208,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>singleVariantColumn</code></td>
+    <td>(none)</td>
+    <td>If specified, the entire JSON record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>

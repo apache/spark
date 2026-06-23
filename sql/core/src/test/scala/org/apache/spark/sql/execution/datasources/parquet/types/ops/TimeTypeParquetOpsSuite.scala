@@ -28,26 +28,25 @@ import org.apache.spark.sql.types.TimeType
 /**
  * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
  *
- * TimeType is written to Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false). The
- * read-path guard accepts any INT64 TIME(MICROS) column - both isAdjustedToUTC values -
- * and rejects every other primitive/annotation combination so that reading fails loudly
- * rather than silently mis-decoding (e.g. interpreting NANOS as MICROS, which would be
- * off by 1000x).
+ * TimeType is stored in Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false) for precision
+ * 0..6 and INT64 TIME(NANOS, isAdjustedToUTC=false) for precision 7..9. The read-path guard
+ * accepts both of those local-time encodings and rejects every other primitive/annotation
+ * combination so that reading fails loudly rather than silently mis-decoding.
  *
  * SPARK-57416: the guard accepts isAdjustedToUTC=true to mirror the legacy
- * ParquetRowConverter guard (which only checks the TIME annotation and the MICROS unit).
- * Spark's TimeType is zone-less local time, so the flag carries no extra information on
- * read and the raw micros-of-day value decodes identically either way. This keeps the
- * framework read path consistent with both the legacy row-based reader and the vectorized
- * reader.
+ * ParquetRowConverter guard (which only checks the TIME annotation and unit). Spark's
+ * TimeType is zone-less local time, so the flag carries no extra information on read and the
+ * raw time-of-day value decodes identically either way. This keeps the framework read path
+ * consistent with both the legacy row-based reader and the vectorized reader.
  */
 class TimeTypeParquetOpsSuite extends SparkFunSuite {
 
   private val timeMicros = TimeType(TimeType.MICROS_PRECISION)
+  private val timeNanos = TimeType(TimeType.NANOS_PRECISION)
 
   // ---------- accept ----------
 
-  test("accepts INT64 TIME(MICROS, isAdjustedToUTC=false) - the canonical encoding") {
+  test("accepts INT64 TIME(MICROS, isAdjustedToUTC=false) - the canonical micros encoding") {
     val field = Types.primitive(INT64, REQUIRED)
       .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
       .named("c")
@@ -68,17 +67,29 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     TimeTypeParquetOps.requireCompatibleParquetType(timeMicros, field)
   }
 
+  test("accepts INT64 TIME(NANOS, isAdjustedToUTC=false) - the canonical nanos encoding") {
+    val field = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.NANOS))
+      .named("c")
+    // Must not throw.
+    TimeTypeParquetOps.requireCompatibleParquetType(timeNanos, field)
+  }
+
+  test("accepts INT64 TIME(NANOS, isAdjustedToUTC=true) - matches legacy lenient read") {
+    // Same zone-less reasoning as the MICROS case (SPARK-57416): the UTC-adjustment flag
+    // carries no information for Spark's local-time TimeType, so a NANOS column is accepted
+    // regardless of the flag.
+    val field = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(true, TimeUnit.NANOS))
+      .named("c")
+    // Must not throw.
+    TimeTypeParquetOps.requireCompatibleParquetType(timeNanos, field)
+  }
+
   // ---------- the primary reject paths ----------
 
   test("rejects raw INT64 with no logical type annotation") {
     val field = Types.primitive(INT64, REQUIRED).named("c")
-    assertRejects(timeMicros, field)
-  }
-
-  test("rejects INT64 TIME(NANOS, isAdjustedToUTC=false)") {
-    val field = Types.primitive(INT64, REQUIRED)
-      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.NANOS))
-      .named("c")
     assertRejects(timeMicros, field)
   }
 

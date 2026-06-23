@@ -17,7 +17,7 @@
 package org.apache.spark.udf.worker.core
 
 import java.io.{File, IOException}
-import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
+import java.nio.file.{Files, FileVisitResult, Path, Paths, SimpleFileVisitor}
 import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
 
 import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
@@ -213,15 +213,23 @@ class TestDirectWorkerDispatcher(
    * Creates a private (owner-only, 0700) temp directory for worker sockets.
    * On POSIX filesystems the permissions are applied atomically at creation;
    * the non-POSIX branch tightens best-effort after creation.
+   *
+   * The directory is anchored under a short base path (see [[shortTempBase]])
+   * rather than the configured `java.io.tmpdir`. Builds point the latter at a
+   * deep location (e.g. `<module>/target/tmp`), which combined with the
+   * generated socket leaf would push the worker's Unix-domain socket path past
+   * the platform `sun_path` limit (108 bytes on Linux, 104 on macOS) and fail
+   * with "AF_UNIX path too long".
    */
   private def createPrivateTempDirectory(): Path = {
     val attr = PosixFilePermissions.asFileAttribute(
       PosixFilePermissions.fromString("rwx------"))
+    val base = shortTempBase()
     try {
-      Files.createTempDirectory("spark-udf-worker", attr)
+      Files.createTempDirectory(base, "spark-udf-worker", attr)
     } catch {
       case _: UnsupportedOperationException =>
-        val dir = Files.createTempDirectory("spark-udf-worker")
+        val dir = Files.createTempDirectory(base, "spark-udf-worker")
         val f = dir.toFile
         // Bit-wise AND (NOT &&): all six setters must run even if an earlier
         // one returns false, so the final permission state matches owner-only.
@@ -237,5 +245,27 @@ class TestDirectWorkerDispatcher(
         }
         dir
     }
+  }
+
+  /**
+   * Picks the shortest usable base directory for the socket temp dir so the
+   * resulting Unix-domain socket path stays within the platform `sun_path`
+   * limit (108 bytes on Linux, 104 on macOS).
+   *
+   * This mirrors how PySpark already chooses its UDS directory in
+   * `python/run-tests.py` (`spark.python.unix.domain.socket.dir`): prefer the
+   * OS temp-dir env vars (`TMPDIR`/`TEMP`/`TMP`) and fall back to `/tmp`. Builds
+   * point `java.io.tmpdir` at a deep `<module>/target/tmp`, which combined with
+   * the generated socket leaf would overflow `sun_path`; the OS temp dir is
+   * short (e.g. a per-user `/tmp/...` on Linux runners, `/var/folders/...` via
+   * `$TMPDIR` on macOS). `java.io.tmpdir` remains the last-resort fallback.
+   */
+  private def shortTempBase(): Path = {
+    val candidates =
+      Seq("TMPDIR", "TEMP", "TMP").flatMap(sys.env.get).filter(_.nonEmpty) :+ "/tmp"
+    candidates
+      .map(Paths.get(_))
+      .find(p => Files.isDirectory(p) && Files.isWritable(p))
+      .getOrElse(Paths.get(System.getProperty("java.io.tmpdir")))
   }
 }

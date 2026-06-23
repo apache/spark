@@ -20,21 +20,21 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary, TableViewCatalog, V1Table, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{DelegatingTable, Identifier, Relation, RelationCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, View, ViewCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Tests for the view side of [[MetadataTable]]: view-text expansion on read, and
+ * Tests for the view side of [[DelegatingTable]]: view-text expansion on read, and
  * CREATE VIEW / ALTER VIEW ... AS going through the v2 write path
  * (`CreateV2ViewExec` / `AlterV2ViewExec`). View writes route through
  * [[ViewCatalog#createView]] / [[ViewCatalog#replaceView]].
  * Data-source-table read paths live in
  * [[org.apache.spark.sql.connector.DataSourceV2MetadataTableSuite]].
  *
- * TODO: register a `MetadataTable`-backed `DelegatingCatalogExtension` as
+ * TODO: register a `DelegatingTable`-backed `DelegatingCatalogExtension` as
  * `spark.sql.catalog.spark_catalog` and run the shared
  * [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against the v2 path for full
  * parity with the v1 persisted-view coverage.
@@ -43,7 +43,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.view_catalog", classOf[TestingTableViewCatalog].getName)
+    .set("spark.sql.catalog.view_catalog", classOf[TestingRelationCatalog].getName)
 
   // --- View read path -----------------------------------------------------
 
@@ -71,54 +71,52 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
     // End-to-end coverage of the v2 encoder -> parser round-trip: test_unqualified_multi is a
     // view whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part namespace) and
     // whose body references `t` unqualified. At read time the unqualified `t` must expand to
-    // view_catalog.ns1.ns2.t via the captured context -- which TestingTableViewCatalog resolves to
+    // view_catalog.ns1.ns2.t via the captured context -- which TestingRelationCatalog resolves to
     // its own `t` fixture at that namespace.
     checkAnswer(
       spark.table("view_catalog.outer_ns.test_unqualified_multi"),
       Row("multi"))
   }
 
-  // --- ViewInfo unit tests -----------------------------------------------
+  // --- View unit tests -----------------------------------------------
 
   test("multi-part captured namespace round-trips through V1Table.toCatalogTable") {
-    // (a) ViewInfo.Builder stores (cat, Array(db1, db2)) as typed fields.
+    // (a) View.Builder stores (cat, Array(db1, db2)) as typed fields.
     // (b) V1Table.toCatalogTable reads them directly and emits v1's numbered
     //     view.catalogAndNamespace.* keys so (c) the resulting CatalogTable's
     //     `viewCatalogAndNamespace` exposes the full (cat, db1, db2), which is what the v1
     //     view-resolution path consumes to expand unqualified references in the view body.
-    val info = new ViewInfo.Builder()
+    val info = new View.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withQueryText("SELECT col FROM t")
       .withCurrentCatalog("my_cat")
       .withCurrentNamespace(Array("db1", "db2"))
       .build()
-    val motTable = new MetadataTable(info, "v")
     // Any CatalogPlugin works here; toCatalogTable only reads `catalog.name()`.
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
     val ct = V1Table.toCatalogTable(
-      catalog, Identifier.of(Array("ns"), "v"), motTable)
+      catalog, Identifier.of(Array("ns"), "v"), info)
     assert(ct.viewCatalogAndNamespace == Seq("my_cat", "db1", "db2"))
 
     // Namespace parts containing dots flow through structurally (no string encoding).
-    val infoWeird = new ViewInfo.Builder()
+    val infoWeird = new View.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withQueryText("SELECT col FROM t")
       .withCurrentCatalog("my_cat")
       .withCurrentNamespace(Array("weird.db", "normal"))
       .build()
     val ctWeird = V1Table.toCatalogTable(
-      catalog, Identifier.of(Array("ns"), "v"), new MetadataTable(infoWeird, "v"))
+      catalog, Identifier.of(Array("ns"), "v"), infoWeird)
     assert(ctWeird.viewCatalogAndNamespace == Seq("my_cat", "weird.db", "normal"))
   }
 
   test("view with no captured catalog omits viewCatalogAndNamespace") {
-    val info = new ViewInfo.Builder()
+    val info = new View.Builder()
       .withSchema(new StructType().add("col", "string"))
       .withQueryText("SELECT * FROM spark_catalog.default.t")
       .build()
-    val motTable = new MetadataTable(info, "v")
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-    val ct = V1Table.toCatalogTable(catalog, Identifier.of(Array("ns"), "v"), motTable)
+    val ct = V1Table.toCatalogTable(catalog, Identifier.of(Array("ns"), "v"), info)
     assert(ct.viewCatalogAndNamespace.isEmpty)
   }
 
@@ -209,7 +207,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
       // `unsupportedCreateOrReplaceViewOnTableError`. Pre-seed a non-view entry at a
       // multi-level-namespace identifier to exercise the rendering.
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingTableViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val tblIdent = Identifier.of(Array("ns1", "inner"), "t_err")
       catalog.createTable(
         tblIdent,
@@ -347,7 +345,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   test("DESCRIBE TABLE EXTENDED ... AS JSON on a v2 view succeeds") {
     // `DescribeRelationJsonCommand` is a v1 runnable command that reads v1-shaped fields off
     // a `CatalogTable`. For non-session v2 views the resolved `ResolvedPersistentView.info`
-    // is a plain `ViewInfo`; the command projects it to a `CatalogTable` via
+    // is a plain `View`; the command projects it to a `CatalogTable` via
     // `V1Table.toCatalogTable` so DESC ... AS JSON works uniformly across session and
     // non-session view catalogs.
     seedV2View("v_desc_json")
@@ -366,7 +364,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
 
   private def seedV2Table(name: String): Unit = {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingTableViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     catalog.createTable(
       Identifier.of(Array("default"), name),
       new TableInfo.Builder()
@@ -375,9 +373,9 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
         .build())
   }
 
-  test("SHOW TABLES on a TableViewCatalog returns both tables and views (v1-parity)") {
-    // For a `TableViewCatalog` (a catalog exposing both tables and views in a shared
-    // identifier namespace), SHOW TABLES routes through `listTableAndViewSummaries` so views
+  test("SHOW TABLES on a RelationCatalog returns both tables and views (v1-parity)") {
+    // For a `RelationCatalog` (a catalog exposing both tables and views in a shared
+    // identifier namespace), SHOW TABLES routes through `listRelationSummaries` so views
     // appear alongside tables -- matching the v1 SHOW TABLES output. Pure `TableCatalog`
     // catalogs (no view mixin) continue to use `listTables` and return tables only.
     seedV2View("v_in_show_tables")
@@ -394,29 +392,29 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
 }
 
 /**
- * A [[TableViewCatalog]]: round-trips [[MetadataTable]] for created views and tables and
+ * A [[RelationCatalog]]: round-trips [[DelegatingTable]] for created views and tables and
  * exposes a few canned read-only view fixtures (`test_view`, `test_unqualified_view`,
  * `test_unqualified_multi`, plus an unqualified-target view at `ns1.ns2.t`) used by the
  * view-read tests. Entries created via `createTable` / `createView` are distinguished by the
- * stored value's runtime type (ViewInfo vs TableInfo). The single-RPC perf entry point
- * [[loadTableOrView]] returns either kind; [[loadTable]] is tables-only per the
+ * stored [[Relation]]'s runtime type (View vs Table). The single-RPC perf entry point
+ * [[loadRelation]] returns either kind; [[loadTable]] is tables-only per the
  * [[TableCatalog#loadTable]] contract.
  */
-class TestingTableViewCatalog extends TableViewCatalog {
+class TestingRelationCatalog extends RelationCatalog {
 
   // Holds entries (views and tables) created via createTable / createView within the session.
-  // Keyed by (namespace, name); the stored value's runtime type (ViewInfo vs TableInfo)
-  // distinguishes views from tables. Mixed-catalog: shared identifier namespace per the
-  // TableViewCatalog contract.
+  // Keyed by (namespace, name); the stored [[Relation]]'s runtime type (View vs Table)
+  // distinguishes views from tables. Tables are stored as a DelegatingTable wrapping the
+  // TableInfo. Mixed-catalog: shared identifier namespace per the RelationCatalog contract.
   private val createdViews =
-    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
+    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), Relation]()
 
-  // Canned read-only view fixtures, exposed only via the perf path (loadTableOrView). loadView
-  // does not need to expose them because the resolver routes TableViewCatalog reads through
-  // loadTableOrView.
-  private def fixtureView(ident: Identifier): Option[ViewInfo] = ident.name() match {
+  // Canned read-only view fixtures, exposed only via the perf path (loadRelation). loadView
+  // does not need to expose them because the resolver routes RelationCatalog reads through
+  // loadRelation.
+  private def fixtureView(ident: Identifier): Option[View] = ident.name() match {
     case "test_view" =>
-      Some(new ViewInfo.Builder()
+      Some(new View.Builder()
         .withSchema(new StructType().add("col", "string").add("i", "int"))
         .withQueryText(
           "SELECT col, col::int AS i FROM spark_catalog.default.t WHERE col = 'b'")
@@ -424,7 +422,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
           SQLConf.ANSI_ENABLED.key, (ident.namespace().head == "ansi").toString))
         .build())
     case "test_unqualified_view" =>
-      Some(new ViewInfo.Builder()
+      Some(new View.Builder()
         .withSchema(new StructType().add("col", "string"))
         .withQueryText("SELECT col FROM t WHERE col = 'b'")
         .withCurrentCatalog("spark_catalog")
@@ -434,7 +432,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
       // View whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part). The
       // unqualified `t` in the body must resolve via that captured context to
       // view_catalog.ns1.ns2.t, which this catalog also serves (see `t` case below).
-      Some(new ViewInfo.Builder()
+      Some(new View.Builder()
         .withSchema(new StructType().add("col", "string"))
         .withQueryText("SELECT col FROM t")
         .withCurrentCatalog("view_catalog")
@@ -443,22 +441,21 @@ class TestingTableViewCatalog extends TableViewCatalog {
     case "t" if ident.namespace().toSeq == Seq("ns1", "ns2") =>
       // Target of test_unqualified_multi's unqualified reference. Self-contained view so
       // the test doesn't need external data.
-      Some(new ViewInfo.Builder()
+      Some(new View.Builder()
         .withSchema(new StructType().add("col", "string"))
         .withQueryText("SELECT 'multi' AS col")
         .build())
     case _ => None
   }
 
-  override def loadTableOrView(ident: Identifier): Table = {
-    // Single-RPC perf path: returns tables AND views (as MetadataTable). Stored entries
-    // win over fixture views (the fixture namespace is read-only and disjoint from
-    // createdViews in practice). loadTable, loadView, tableExists, viewExists all derive
-    // from this via the TableViewCatalog default impls.
+  override def loadRelation(ident: Identifier): Relation = {
+    // Single-RPC perf path: returns tables AND views. Stored entries win over fixture views
+    // (the fixture namespace is read-only and disjoint from createdViews in practice).
+    // loadTable, loadView, tableExists, viewExists all derive from this via the
+    // RelationCatalog default impls.
     val key = (ident.namespace().toSeq, ident.name())
     Option(createdViews.get(key))
       .orElse(fixtureView(ident))
-      .map(new MetadataTable(_, ident.toString))
       .getOrElse(throw new NoSuchTableException(ident))
   }
 
@@ -467,23 +464,24 @@ class TestingTableViewCatalog extends TableViewCatalog {
     // TableAlreadyExistsException. The shared `createdViews` keyspace makes `putIfAbsent`
     // throw uniformly for both table-at-ident and view-at-ident collisions.
     val key = (ident.namespace().toSeq, ident.name())
-    if (createdViews.putIfAbsent(key, info) != null) {
+    val table = new DelegatingTable(info, ident.toString)
+    if (createdViews.putIfAbsent(key, table) != null) {
       throw new TableAlreadyExistsException(ident)
     }
-    new MetadataTable(info, ident.toString)
+    table
   }
 
-  /** Test-only accessor: returns the stored TableInfo (table or view) for the identifier. */
-  def getStoredInfo(namespace: Array[String], name: String): TableInfo = {
+  /** Test-only accessor: returns the stored Relation (table or view) for the identifier. */
+  def getStoredInfo(namespace: Array[String], name: String): Relation = {
     Option(createdViews.get((namespace.toSeq, name))).getOrElse {
       throw new NoSuchTableException(Identifier.of(namespace, name))
     }
   }
 
-  /** Test-only accessor: returns the stored ViewInfo; fails if the entry is not a view. */
-  def getStoredView(namespace: Array[String], name: String): ViewInfo = getStoredInfo(
+  /** Test-only accessor: returns the stored View; fails if the entry is not a view. */
+  def getStoredView(namespace: Array[String], name: String): View = getStoredInfo(
     namespace, name) match {
-    case v: ViewInfo => v
+    case v: View => v
     case _ => throw new IllegalStateException(
       s"stored entry at ${namespace.mkString(".")}.$name is not a view")
   }
@@ -494,7 +492,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
   override def dropTable(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = createdViews.get(key)
-    if (existing == null || existing.isInstanceOf[ViewInfo]) return false
+    if (existing == null || existing.isInstanceOf[View]) return false
     createdViews.remove(key) != null
   }
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
@@ -505,7 +503,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
     val targetNs = namespace.toSeq
     val ids = new java.util.ArrayList[Identifier]()
     createdViews.forEach { (key, info) =>
-      if (key._1 == targetNs && !info.isInstanceOf[ViewInfo]) {
+      if (key._1 == targetNs && !info.isInstanceOf[View]) {
         ids.add(Identifier.of(key._1.toArray, key._2))
       }
     }
@@ -518,14 +516,14 @@ class TestingTableViewCatalog extends TableViewCatalog {
     val targetNs = namespace.toSeq
     val ids = new java.util.ArrayList[Identifier]()
     createdViews.forEach { (key, info) =>
-      if (key._1 == targetNs && info.isInstanceOf[ViewInfo]) {
+      if (key._1 == targetNs && info.isInstanceOf[View]) {
         ids.add(Identifier.of(key._1.toArray, key._2))
       }
     }
     ids.toArray(new Array[Identifier](0))
   }
 
-  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def createView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     if (createdViews.putIfAbsent(key, info) != null) {
       throw new ViewAlreadyExistsException(ident)
@@ -533,10 +531,10 @@ class TestingTableViewCatalog extends TableViewCatalog {
     info
   }
 
-  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def replaceView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = createdViews.get(key)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+    if (existing == null || !existing.isInstanceOf[View]) {
       throw new NoSuchViewException(ident)
     }
     createdViews.put(key, info)
@@ -546,7 +544,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
   override def dropView(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = createdViews.get(key)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
+    if (existing == null || !existing.isInstanceOf[View]) return false
     createdViews.remove(key) != null
   }
 
@@ -554,7 +552,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
     val oldKey = (oldIdent.namespace().toSeq, oldIdent.name())
     val newKey = (newIdent.namespace().toSeq, newIdent.name())
     val existing = createdViews.get(oldKey)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+    if (existing == null || !existing.isInstanceOf[View]) {
       throw new NoSuchViewException(oldIdent)
     }
     if (createdViews.putIfAbsent(newKey, existing) != null) {
@@ -600,14 +598,14 @@ class TestingTableOnlyCatalog extends TableCatalog {
  */
 class TestingViewOnlyCatalog extends ViewCatalog {
   private val store =
-    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), ViewInfo]()
+    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), View]()
 
   // Seeded on first `initialize`. Filters `spark_catalog.default.t` so the read test can
   // assert deterministic output. ALTER VIEW tests overwrite it via `replaceView`.
   private def seedDefault(): Unit = {
     val key = (Seq("default"), "pure_v")
     if (!store.containsKey(key)) {
-      val info = new ViewInfo.Builder()
+      val info = new View.Builder()
         .withSchema(new StructType().add("x", "int"))
         .withQueryText("SELECT x FROM spark_catalog.default.t WHERE x > 1")
         .build()
@@ -624,12 +622,12 @@ class TestingViewOnlyCatalog extends ViewCatalog {
     ids.toArray(new Array[Identifier](0))
   }
 
-  override def loadView(ident: Identifier): ViewInfo = {
+  override def loadView(ident: Identifier): View = {
     val key = (ident.namespace().toSeq, ident.name())
     Option(store.get(key)).getOrElse(throw new NoSuchViewException(ident))
   }
 
-  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def createView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     if (store.putIfAbsent(key, info) != null) {
       throw new ViewAlreadyExistsException(ident)
@@ -637,7 +635,7 @@ class TestingViewOnlyCatalog extends ViewCatalog {
     info
   }
 
-  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def replaceView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     if (!store.containsKey(key)) throw new NoSuchViewException(ident)
     store.put(key, info)

@@ -361,7 +361,7 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.length * INT.defaultSize)
+    assert(cached.cacheBuilder.materializedSizeInBytes === expectedAnswer.length * INT.defaultSize)
   }
 
    test("cached row count should be calculated") {
@@ -375,7 +375,7 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right row count was calculated.
-    assert(cached.cacheBuilder.rowCountStats.value === 6)
+    assert(cached.cacheBuilder.materializedRowCount === 6)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {

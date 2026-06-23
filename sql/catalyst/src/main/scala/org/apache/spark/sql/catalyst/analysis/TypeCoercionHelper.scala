@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.PromoteStrings.conf
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -82,6 +83,8 @@ import org.apache.spark.sql.types.{
   StringType,
   StringTypeExpression,
   StructType,
+  TimestampLTZNanosType,
+  TimestampNTZNanosType,
   TimestampNTZType,
   TimestampType,
   TimestampTypeExpression,
@@ -244,14 +247,58 @@ abstract class TypeCoercionHelper {
     (d1, d2) match {
       case (_, _: TimeType) => None
       case (_: TimeType, _) => None
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
 
-      case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        Some(TimestampType)
-
-      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        Some(TimestampNTZType)
+      // The remaining datetime types (DATE and the micro/nanos TIMESTAMP_LTZ / TIMESTAMP_NTZ
+      // families) widen along two independent axes:
+      //   - time-zone family: the result is LTZ if either input is LTZ-family, otherwise NTZ. This
+      //     mirrors the microsecond precedent where TIMESTAMP + TIMESTAMP_NTZ widens to TIMESTAMP.
+      //     DATE is family-neutral and adopts the family of the other side.
+      //   - precision: the maximum of the two precisions, where the micro types and DATE count as 6
+      //     and the nanos types contribute their own precision p in [7, 9].
+      // The (family, precision) pair then maps back to a concrete type: precision 6 yields the
+      // micro type, precision in [7, 9] yields the nanos type.
+      //
+      // Note: this common-type resolution is intentionally more permissive than the nanosecond
+      // conversion rules in Cast.canUpCast / Cast.canANSIStoreAssign, which keep cross-family and
+      // DATE <-> nanos casts explicit-CAST-only while the nanos types are unreleased (SPARK-57323
+      // etc.). Coercion here mirrors the microsecond precedent so that UNION / CASE / coalesce /
+      // IN / comparison resolve a common type the same way they do for the micro families; the
+      // stricter explicit-only stance is deliberately scoped to up-cast and store assignment, not
+      // to common-type resolution.
+      case _ =>
+        // Fractional-seconds precision of the microsecond timestamp types; the nanos types carry
+        // 7-9. DATE has no time component and is treated as the micro precision so that
+        // DATE <-> micro widens to the micro type and DATE <-> nanos to the nanos type.
+        val MicrosPrecision = 6
+        def isLtz(d: DatetimeType): Boolean =
+          d.isInstanceOf[TimestampType] || d.isInstanceOf[TimestampLTZNanosType]
+        def isNtz(d: DatetimeType): Boolean =
+          d.isInstanceOf[TimestampNTZType] || d.isInstanceOf[TimestampNTZNanosType]
+        def precisionOf(d: DatetimeType): Int = d match {
+          case t: TimestampLTZNanosType => t.precision
+          case t: TimestampNTZNanosType => t.precision
+          case _ => MicrosPrecision // DateType / TimestampType / TimestampNTZType
+        }
+        // Beyond TimeType (handled above), the only datetime types are DATE and the micro/nanos
+        // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead
+        // of being silently mis-widened (treated as a family-neutral precision-6 type and folded
+        // into DATE) when it should be wired in explicitly.
+        def isWidenable(d: DatetimeType): Boolean =
+          isLtz(d) || isNtz(d) || d.isInstanceOf[DateType]
+        if (!isWidenable(d1) || !isWidenable(d2)) {
+          throw SparkException.internalError(
+            s"Unexpected datetime types in findWiderDateTimeType: $d1, $d2")
+        } else if (!isLtz(d1) && !isNtz(d1) && !isLtz(d2) && !isNtz(d2)) {
+          // Both sides are DATE; callers short-circuit equal types, so this is just defensive.
+          Some(DateType)
+        } else {
+          val p = math.max(precisionOf(d1), precisionOf(d2))
+          if (isLtz(d1) || isLtz(d2)) {
+            Some(if (p <= MicrosPrecision) TimestampType else TimestampLTZNanosType(p))
+          } else {
+            Some(if (p <= MicrosPrecision) TimestampNTZType else TimestampNTZNanosType(p))
+          }
+        }
     }
 
   /**

@@ -71,3 +71,7 @@ select col, date_format(col, ''), to_char(col, ''), to_varchar(col, '') from v;
 select date_format(date'2023-08-18', 'yyyy-MM-dd'), to_char(date'2023-08-18', 'yyyy-MM-dd'), to_varchar(date'2023-08-18', 'yyyy-MM-dd');
 select date_format(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ'), to_char(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ'), to_varchar(timestamp_ltz'2023-08-18 09:13:14.123456Z', 'yyyy-MM-dd HH:mm:ss.SSSSSSZ');
 select date_format(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS'), to_char(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS'), to_varchar(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:ss.SSSSSS');
+
+-- SPARK-57575: TIME type formatting
+select to_char(TIME'12:13:14', 'HH:mm:ss'), to_varchar(TIME'12:13:14', 'HH:mm:ss');
+select to_char(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS'), to_varchar(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS');

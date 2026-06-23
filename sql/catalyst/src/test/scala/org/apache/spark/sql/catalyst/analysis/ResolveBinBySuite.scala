@@ -126,17 +126,21 @@ class ResolveBinBySuite extends AnalysisTest {
   }
 
   test("rejects invalid BIN WIDTH") {
-    def invalid(w: Expression): Unit =
-      expectError(unresolved(binWidth = w), "BIN_BY_INVALID_BIN_WIDTH")
-    invalid(Literal(1, YearMonthIntervalType()))   // year-month
-    invalid(Literal(0L, DayTimeIntervalType()))    // zero
-    invalid(Literal(-1L, DayTimeIntervalType()))   // negative
+    expectError(
+      unresolved(binWidth = Literal(1, YearMonthIntervalType())), "BIN_BY_INVALID_BIN_WIDTH_TYPE")
+    expectError(
+      unresolved(binWidth = Literal(0L, DayTimeIntervalType())), "BIN_BY_NON_POSITIVE_BIN_WIDTH")
+    expectError(
+      unresolved(binWidth = Literal(-1L, DayTimeIntervalType())), "BIN_BY_NON_POSITIVE_BIN_WIDTH")
     // Null width is rejected as a null argument, distinct from a non-positive width.
     expectError(
       unresolved(binWidth = Literal(null, DayTimeIntervalType())), "BIN_BY_NULL_ARGUMENT")
     // A foldable CAST that throws on eval (ANSI) surfaces cleanly, not as a raw exception.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      invalid(Cast(Literal.create("not an interval", StringType), DayTimeIntervalType()))
+      expectError(
+        unresolved(binWidth = Cast(Literal.create("not an interval", StringType),
+          DayTimeIntervalType())),
+        "BIN_BY_INVALID_BIN_WIDTH")
     }
     // Non-foldable is rejected before evaluation.
     val widthAttr = AttributeReference("w", DayTimeIntervalType(), nullable = true)()
@@ -236,11 +240,13 @@ class ResolveBinBySuite extends AnalysisTest {
     assert(resolved2.rangeEnd.exprId == t2End.exprId)
   }
 
-  test("rejects unresolvable column references with BIN_BY_COLUMN_NOT_FOUND") {
+  test("rejects unresolvable column references with UNRESOLVED_COLUMN") {
     expectError(
-      unresolved(rangeStart = UnresolvedAttribute("nonexistent")), "BIN_BY_COLUMN_NOT_FOUND")
+      unresolved(rangeStart = UnresolvedAttribute("nonexistent")),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     expectError(
-      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))), "BIN_BY_COLUMN_NOT_FOUND")
+      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
   }
 
   test("rejects nested column refs through the full analyzer (RULE_ORDERING_DEPENDENCIES)") {
@@ -291,7 +297,8 @@ class ResolveBinBySuite extends AnalysisTest {
     // Integral, DECIMAL, DT INTERVAL, and other non-float/double types are rejected;
     // users CAST to DOUBLE in an upstream projection.
     Seq(intCol, decimalCol, intervalCol, label).foreach { c =>
-      expectError(unresolved(child = child, distribute = Seq(c)), "BIN_BY_DISTRIBUTE_TYPE_MISMATCH")
+      expectError(
+        unresolved(child = child, distribute = Seq(c)), "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE")
     }
   }
 

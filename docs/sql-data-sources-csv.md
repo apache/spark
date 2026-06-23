@@ -217,6 +217,12 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>singleVariantColumn</code></td>
+    <td>(none)</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>multiLine</code></td>
     <td>false</td>
     <td>Allows a row to span multiple lines, by parsing line breaks within quoted values as part of the value itself. CSV built-in functions ignore this option.</td>
