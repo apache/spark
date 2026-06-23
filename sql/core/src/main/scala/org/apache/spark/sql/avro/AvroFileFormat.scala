@@ -22,7 +22,7 @@ import java.io._
 import scala.util.control.NonFatal
 
 import org.apache.avro.{LogicalType, LogicalTypes, Schema}
-import org.apache.avro.file.DataFileReader
+import org.apache.avro.file.{DataFileReader, DataFileStream}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +33,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
@@ -69,7 +69,14 @@ private[sql] class AvroFileFormat extends FileFormat
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
-      path: Path): Boolean = true
+      path: Path): Boolean = {
+    val parsedOptions = new AvroOptions(options, sparkSession.sessionState.newHadoopConf())
+    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      return false
+    }
+    true
+  }
 
   override def prepareWrite(
       spark: SparkSession,
@@ -95,6 +102,12 @@ private[sql] class AvroFileFormat extends FileFormat
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
+      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+        // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
+        // archive reads are enabled; otherwise the file is read directly. The V2 data source has
+        // no archive support, so this dispatch lives here.
+        readArchive(file, conf, parsedOptions, requiredSchema, filters)
+      } else {
       val userProvidedSchema = parsedOptions.schema
 
       // TODO Removes this check once `FileFormat` gets a general file filtering interface method.
@@ -156,6 +169,76 @@ private[sql] class AvroFileFormat extends FileFormat
         }
       } else {
         Iterator.empty
+      }
+      }
+    }
+  }
+
+  /**
+   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry, deserializing each entry like a
+   * standalone Avro file via a forward-only [[DataFileStream]] (so the archive is never unpacked to
+   * disk and memory stays bounded). The whole archive is a single split (see `isSplitable`). A
+   * fresh datum reader and deserializer are built per entry, since each entry carries its own
+   * writer schema in its header.
+   *
+   * Kept separate from the per-file reader (rather than dispatched inside it) because only this V1
+   * read path supports archives; the V2 data source is intentionally left untouched.
+   */
+  private def readArchive(
+      file: PartitionedFile,
+      conf: Configuration,
+      parsedOptions: AvroOptions,
+      requiredSchema: StructType,
+      filters: Seq[Filter]): Iterator[InternalRow] = {
+    val userProvidedSchema = parsedOptions.schema
+    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+      val datumReader = userProvidedSchema match {
+        case Some(schema) => new GenericDatumReader[GenericRecord](schema)
+        case None => new GenericDatumReader[GenericRecord]()
+      }
+      val stream = new DataFileStream[GenericRecord](in, datumReader)
+      val avroSchema = userProvidedSchema.getOrElse(stream.getSchema)
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseSpec(
+        stream.getMetaString, parsedOptions.datetimeRebaseModeInRead)
+      val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+        new OrderedFilters(filters, requiredSchema)
+      } else {
+        new NoopFilters
+      }
+      val deserializer = new AvroDeserializer(
+        avroSchema,
+        requiredSchema,
+        parsedOptions.positionalFieldMatching,
+        datetimeRebaseMode,
+        avroFilters,
+        parsedOptions.useStableIdForUnionType,
+        parsedOptions.stableIdPrefixForUnionType,
+        parsedOptions.recursiveFieldMaxDepth)
+      // The record is deserialized eagerly in `hasNext` because `AvroDeserializer#deserialize` may
+      // filter rows (returning None); the stream is closed once its records are exhausted.
+      new Iterator[InternalRow] with Closeable {
+        private var nextRow: Option[InternalRow] = None
+
+        private def advance(): Unit = {
+          while (nextRow.isEmpty && stream.hasNext) {
+            nextRow = deserializer.deserialize(stream.next()).asInstanceOf[Option[InternalRow]]
+          }
+          if (nextRow.isEmpty) close()
+        }
+
+        override def hasNext: Boolean = {
+          advance()
+          nextRow.isDefined
+        }
+
+        override def next(): InternalRow = {
+          advance()
+          val row = nextRow.getOrElse(throw new NoSuchElementException("next on empty iterator"))
+          nextRow = None
+          row
+        }
+
+        override def close(): Unit = stream.close()
       }
     }
   }

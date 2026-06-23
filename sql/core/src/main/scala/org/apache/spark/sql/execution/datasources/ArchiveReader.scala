@@ -170,8 +170,16 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
   /** Opens the archive as a tar stream, transparently decompressing `.tar.gz` / `.tgz`. */
   private def openTarStream(conf: Configuration): TarArchiveInputStream = {
     val base = CodecStreams.createInputStreamWithCloseResource(conf, path)
-    val tarBytes = if (needsExplicitGunzip) new GZIPInputStream(base) else base
-    new TarArchiveInputStream(tarBytes)
+    try {
+      // GZIPInputStream reads the gzip header in its constructor, so a corrupt archive can throw
+      // here -- after `base` is already open -- and `base` must not leak.
+      val tarBytes = if (needsExplicitGunzip) new GZIPInputStream(base) else base
+      new TarArchiveInputStream(tarBytes)
+    } catch {
+      case NonFatal(e) =>
+        try base.close() catch { case NonFatal(_) => }
+        throw e
+    }
   }
 
   /**
@@ -199,7 +207,7 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
 
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => cleanup()))
 
-    new Iterator[T] with Closeable {
+    val entries = new Iterator[T] with Closeable {
       private var currentIter: Iterator[T] = Iterator.empty
       private var done = false
 
@@ -228,9 +236,6 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
         }
       }
 
-      // Open the first entry eagerly so construction reflects the archive's first entry.
-      advance()
-
       override def hasNext: Boolean = {
         advance()
         !done && currentIter.hasNext
@@ -247,5 +252,19 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
         cleanup()
       }
     }
+
+    // Open the first entry eagerly so the construction cost (and any failure) surfaces here rather
+    // than at the first `hasNext`. A corrupt archive throws before the caller ever holds the
+    // iterator, leaving it nothing to close: executors release the stream through the task-
+    // completion listener, but driver-side callers (e.g. Avro's header-only schema inference) have
+    // no task, so close it here before propagating.
+    try {
+      entries.hasNext
+    } catch {
+      case NonFatal(e) =>
+        cleanup()
+        throw e
+    }
+    entries
   }
 }

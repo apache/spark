@@ -22,12 +22,12 @@ import java.util.Locale
 import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaFormatter, SchemaParseException}
-import org.apache.avro.file.{DataFileReader, FileReader}
+import org.apache.avro.file.{DataFileReader, DataFileStream, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, OutputWriterFactory}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -86,8 +86,22 @@ private[sql] object AvroUtils extends Logging {
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .getOrElse {
-        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
+        val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(options))
+        // Tar archives are inferred by reading each entry's writer schema from its Avro header
+        // (streamed, never unpacked to disk), then any loose files. Avro has no DSv2 reader and
+        // does not merge schemas, so this is V1-only and uses the first readable writer schema.
+        val (archives, nonArchives) = if (fileSourceOptions.archiveFormatEnabled) {
+          files.partition(f => ArchiveReader.isArchivePath(f.getPath))
+        } else {
+          (Seq.empty[FileStatus], files)
+        }
+        if (archives.nonEmpty) {
+          inferAvroSchemaFromArchives(archives, nonArchives, conf, parsedOptions.ignoreExtension,
+            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles)
+        } else {
+          inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
+            fileSourceOptions.ignoreCorruptFiles)
+        }
       }
 
     SchemaConverters.toSqlType(
@@ -222,6 +236,61 @@ private[sql] object AvroUtils extends Logging {
       case None =>
         throw new FileNotFoundException(
           "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+    }
+  }
+
+  /**
+   * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading each entry's
+   * writer schema from its Avro header via a forward-only [[DataFileStream]] -- the archive is
+   * streamed, never unpacked to disk, and records are never scanned. Mirrors
+   * [[inferAvroSchemaFromFiles]]: schema evolution is not supported, so the first readable writer
+   * schema (across the archives, then any loose files) is used for the whole dataset.
+   */
+  private def inferAvroSchemaFromArchives(
+      archives: Seq[FileStatus],
+      nonArchives: Seq[FileStatus],
+      conf: Configuration,
+      ignoreExtension: Boolean,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean): Schema = {
+    // Drain each archive fully so its stream is released (exhausting the iterator runs the
+    // reader's cleanup); only the first readable writer schema is kept.
+    val archiveSchemas = archives.iterator.flatMap { f =>
+      readArchiveEntrySchemas(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+    }.toSeq
+    archiveSchemas.headOption.getOrElse {
+      // No readable schema in any archive; fall back to the loose files. With none readable there
+      // either, `inferAvroSchemaFromFiles` raises the standard "no Avro files found" error.
+      inferAvroSchemaFromFiles(nonArchives, conf, ignoreExtension, ignoreCorruptFiles)
+    }
+  }
+
+  /**
+   * Streams `path` entry by entry and yields each entry's Avro writer schema, read from the
+   * [[DataFileStream]] header (records are never scanned). Honors `ignoreCorruptFiles` and
+   * `ignoreMissingFiles` at the archive level.
+   */
+  private def readArchiveEntrySchemas(
+      path: Path,
+      conf: Configuration,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean): Iterator[Schema] = {
+    try {
+      ArchiveReader(path).readEntries(conf) { (_, in) =>
+        val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
+        try {
+          Iterator.single(stream.getSchema)
+        } finally {
+          stream.close()
+        }
+      }
+    } catch {
+      case _: FileNotFoundException if ignoreMissingFiles =>
+        logWarning(log"Skipped missing archive: ${MDC(PATH, path)}")
+        Iterator.empty
+      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        logWarning(log"Skipped the corrupted archive: ${MDC(PATH, path)}", e)
+        Iterator.empty
     }
   }
 
