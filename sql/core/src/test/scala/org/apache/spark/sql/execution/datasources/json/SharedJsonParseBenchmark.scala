@@ -23,7 +23,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 
 /**
- * Benchmarks sharing repeated simple top-level get_json_object parsing.
+ * Benchmarks sharing repeated simple get_json_object parsing.
  *
  * To run this benchmark:
  * {{{
@@ -75,6 +75,40 @@ object SharedJsonParseBenchmark extends SqlBasedBenchmark {
       }
 
       data.unpersist()
+
+      val nestedData = spark.range(0, rows, 1, 4)
+        .select(to_json(struct(struct(Seq.tabulate(fieldCount) { index =>
+          fieldValue.as(s"field_$index")
+        }: _*).as("payload"))).as("json"))
+        .cache()
+      nestedData.count()
+
+      Seq(2, 4, 8, 16).foreach { selectedFieldCount =>
+        val pathBenchmark = new Benchmark(
+          s"get_json_object extracting $selectedFieldCount of $fieldCount nested fields",
+          rows,
+          output = output)
+
+        def extractPaths(sharedParsing: Boolean): Unit = {
+          withSQLConf(
+              SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+              SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+            nestedData.select(Seq.tabulate(selectedFieldCount) { index =>
+              get_json_object($"json", s"$$.payload.field_$index")
+            }: _*).noop()
+          }
+        }
+
+        pathBenchmark.addCase("shared parsing off", 3) { _ =>
+          extractPaths(sharedParsing = false)
+        }
+        pathBenchmark.addCase("shared parsing on", 3) { _ =>
+          extractPaths(sharedParsing = true)
+        }
+        pathBenchmark.run()
+      }
+
+      nestedData.unpersist()
     }
   }
 }
