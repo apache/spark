@@ -241,6 +241,29 @@ class Dataset[T] private[sql] (
     // scalastyle:on println
   }
 
+  private[connect] def explainString(mode: String): String = {
+    val protoMode = mode.trim.toLowerCase(util.Locale.ROOT) match {
+      case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
+      case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
+      case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
+      case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
+      case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
+      case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
+    }
+    sparkSession
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(protoMode))
+      .getExplain
+      .getExplainString
+  }
+
+  private[connect] def explainString(extended: Boolean): String = if (extended) {
+    explainString("extended")
+  } else {
+    explainString("simple")
+  }
+
+  private[connect] def explainString(): String = explainString("simple")
+
   /** @inheritdoc */
   def isLocal: Boolean = sparkSession
     .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)

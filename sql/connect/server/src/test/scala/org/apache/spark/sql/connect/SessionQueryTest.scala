@@ -38,7 +38,10 @@ trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
    * This method is used by [[checkAnswer]] internally but cannot yet be implemented in connect.
    * Thus we always return `false` for now.
    */
-  override def isDfSorted(df: sql.DataFrame): Boolean = false
+  override def isDfSorted(df: sql.DataFrame): Boolean = df match {
+      case df: DataFrame => df.explainString(true).contains("sort")
+      case df => super.isDfSorted(df)
+    }
 
   override def sessionType: String = "connect"
 }
