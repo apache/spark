@@ -26,42 +26,35 @@ class SketchEnvelopeSuite extends SparkFunSuite {
 
   private val prettyName = "test_fn"
 
+  // A couple of real collation ids used to exercise the derived key-encoding / collation checks.
+  private val utf8Binary: Int = CollationFactory.UTF8_BINARY_COLLATION_ID
+  private val unicode: Int = CollationFactory.collationNameToId("UNICODE")
+  private val unicodeCi: Int = CollationFactory.collationNameToId("UNICODE_CI")
+
   /** Builds a profile with collation-independent numeric defaults that callers can override. */
   private def profile(
-      sketchKind: Byte = SketchKind.HLL,
-      keyEncoding: Byte = KeyEncoding.NUMERIC_OR_BINARY,
       collationId: Int = SketchEnvelope.NO_COLLATION_ID,
       icuMajor: Short = 0,
       icuMinor: Short = 0,
       dsLibMajor: Short = 6,
-      dsLibMinor: Short = 2,
-      sparkCollationRev: Short = 1): SketchProfile =
+      dsLibMinor: Short = 2): SketchProfile =
     SketchProfile(
-      sketchKind = sketchKind,
-      keyEncoding = keyEncoding,
-      engineOrigin = EngineOrigin.JVM_SPARK,
       collationId = collationId,
       icuMajor = icuMajor,
       icuMinor = icuMinor,
       dsLibMajor = dsLibMajor,
-      dsLibMinor = dsLibMinor,
-      sparkCollationRev = sparkCollationRev,
-      featureFlags = 0.toByte)
+      dsLibMinor = dsLibMinor)
 
   // -- Round-tripping ---------------------------------------------------------------------------
 
   test("wrap/unwrap round-trips the payload and the profile") {
     val payload = Array[Byte](1, 2, 3, 4, 5, 6, 7)
-    val p = profile(
-      sketchKind = SketchKind.THETA,
-      keyEncoding = KeyEncoding.ICU_SORTKEY,
-      collationId = 42,
-      icuMajor = 75,
-      icuMinor = 1)
+    val p = profile(collationId = unicode, icuMajor = 75, icuMinor = 1)
 
     val wrapped = SketchEnvelope.wrap(payload, p)
     assert(SketchEnvelope.hasEnvelope(wrapped))
-    assert(wrapped.length == payload.length + SketchEnvelope.HEADER_LEN)
+    // The magic byte plus the 4-byte length prefix come before the protobuf and payload.
+    assert((wrapped(0) & 0xFF) == 0xFF)
 
     val (profileOpt, recovered) = SketchEnvelope.unwrap(wrapped)
     assert(profileOpt.contains(p))
@@ -80,19 +73,14 @@ class SketchEnvelopeSuite extends SparkFunSuite {
     assert(recovered.isEmpty)
   }
 
-  test("every sketch kind and key encoding round-trips") {
+  test("every collation and icu version round-trips") {
     val payload = Array[Byte](9, 8, 7)
-    val kinds = Seq(
-      SketchKind.HLL, SketchKind.THETA, SketchKind.TUPLE_DOUBLE, SketchKind.TUPLE_INTEGER,
-      SketchKind.KLL_LONG, SketchKind.KLL_FLOAT, SketchKind.KLL_DOUBLE, SketchKind.ITEMS)
-    val encodings = Seq(
-      KeyEncoding.NUMERIC_OR_BINARY, KeyEncoding.RAW_BYTES, KeyEncoding.ICU_SORTKEY,
-      KeyEncoding.UTF8_LCASE_CPS, KeyEncoding.ICU_COLLATION_KEY_STRING)
-    for (k <- kinds; e <- encodings) {
-      val p = profile(sketchKind = k, keyEncoding = e, collationId = 3, icuMajor = 70)
+    val collations = Seq(SketchEnvelope.NO_COLLATION_ID, utf8Binary, unicode, unicodeCi)
+    for (c <- collations; icu <- Seq[Short](0, 70, 75)) {
+      val p = profile(collationId = c, icuMajor = icu, icuMinor = 1)
       val (profileOpt, recovered) = SketchEnvelope.unwrap(SketchEnvelope.wrap(payload, p))
-      assert(profileOpt.contains(p), s"kind=$k encoding=$e")
-      assert(recovered.sameElements(payload), s"kind=$k encoding=$e")
+      assert(profileOpt.contains(p), s"collation=$c icu=$icu")
+      assert(recovered.sameElements(payload), s"collation=$c icu=$icu")
     }
   }
 
@@ -110,55 +98,51 @@ class SketchEnvelopeSuite extends SparkFunSuite {
 
   test("buffers shorter than the header are treated as legacy") {
     assert(!SketchEnvelope.hasEnvelope(Array.empty[Byte]))
-    assert(!SketchEnvelope.hasEnvelope(Array[Byte](1, 2, 3)))
-    assert(!SketchEnvelope.hasEnvelope(new Array[Byte](SketchEnvelope.HEADER_LEN - 1)))
+    assert(!SketchEnvelope.hasEnvelope(Array[Byte](0xFF.toByte, 0, 0)))
     assert(!SketchEnvelope.hasEnvelope(null))
   }
 
-  test("magic prefix with an inconsistent payload length is treated as legacy") {
-    // A buffer that happens to start with the magic bytes but whose embedded payload-length field
-    // does not match the actual length must NOT be mistaken for an envelope.
-    val buf = new Array[Byte](30)
-    val bb = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN)
-    bb.put(0xDB.toByte)
-    bb.put(0x53.toByte)
-    bb.put(0x4B.toByte)
-    bb.put(0x01.toByte)
-    // Write a bogus payload length at the payload_length offset (real inner length would be
-    // 30 - HEADER_LEN), so the length cross-check must reject this buffer.
-    bb.position(SketchEnvelope.HEADER_LEN - 4)
-    bb.putInt(999)
+  test("magic byte with an out-of-range length is treated as legacy") {
+    // A buffer that starts with the magic byte but whose embedded protobuf length does not fit
+    // inside the buffer must NOT be mistaken for an envelope.
+    val buf = new Array[Byte](20)
+    val bb = ByteBuffer.wrap(buf).order(ByteOrder.BIG_ENDIAN)
+    bb.put(0xFF.toByte)
+    bb.putInt(999) // bogus protobuf length, far larger than the buffer
     assert(!SketchEnvelope.hasEnvelope(buf))
     val (profileOpt, recovered) = SketchEnvelope.unwrap(buf)
     assert(profileOpt.isEmpty)
     assert(recovered.eq(buf))
   }
 
-  test("wrap output is never mistaken for a native DataSketches preamble") {
-    // Byte index 2 of the magic is 0x4B == 75, which is outside the valid DataSketches FamilyId
-    // range (1..14), guaranteeing the magic cannot collide with a native preamble.
-    val wrapped = SketchEnvelope.wrap(Array[Byte](1, 2, 3), profile())
-    assert((wrapped(2) & 0xFF) > 14)
+  test("magic byte with an unparseable protobuf falls back to legacy") {
+    // protobuf length fits, but the bytes are not a valid SketchMetadata, so unwrap must not throw.
+    val buf = Array[Byte](0xFF.toByte, 0, 0, 0, 1, 0x08.toByte)
+    assert(SketchEnvelope.hasEnvelope(buf))
+    val (profileOpt, recovered) = SketchEnvelope.unwrap(buf)
+    assert(profileOpt.isEmpty)
+    assert(recovered.eq(buf))
   }
 
   // -- Compatibility policy ---------------------------------------------------------------------
 
   test("identical profiles are compatible") {
-    val p = profile(keyEncoding = KeyEncoding.ICU_SORTKEY, collationId = 1, icuMajor = 75)
+    val p = profile(collationId = unicode, icuMajor = 75)
     // Should not throw.
     SketchEnvelope.assertCompatible(p, p, prettyName, allowMismatch = false)
   }
 
   test("numeric encodings ignore collation and ICU differences") {
-    val observed = profile(collationId = 1, icuMajor = 70)
-    val runtime = profile(collationId = 2, icuMajor = 99)
+    val observed = profile(collationId = SketchEnvelope.NO_COLLATION_ID, icuMajor = 70)
+    val runtime = profile(collationId = SketchEnvelope.NO_COLLATION_ID, icuMajor = 99)
     // Numeric key encodings carry no collation/ICU semantics, so these are compatible.
     SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = false)
   }
 
   test("key encoding mismatch is a hard error") {
-    val observed = profile(keyEncoding = KeyEncoding.RAW_BYTES)
-    val runtime = profile(keyEncoding = KeyEncoding.ICU_SORTKEY)
+    // Numeric (no collation) vs UTF8_BINARY (raw bytes): the derived key encodings differ.
+    val observed = profile(collationId = SketchEnvelope.NO_COLLATION_ID)
+    val runtime = profile(collationId = utf8Binary)
     checkError(
       exception = intercept[SparkRuntimeException] {
         SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = false)
@@ -166,13 +150,14 @@ class SketchEnvelopeSuite extends SparkFunSuite {
       condition = "SKETCH_KEY_ENCODING_MISMATCH",
       parameters = Map(
         "function" -> s"`$prettyName`",
-        "left" -> "raw_bytes",
-        "right" -> "icu_sortkey"))
+        "left" -> "numeric_or_binary",
+        "right" -> "raw_bytes"))
   }
 
   test("collation mismatch is a hard error") {
-    val observed = profile(keyEncoding = KeyEncoding.ICU_SORTKEY, collationId = 1, icuMajor = 75)
-    val runtime = profile(keyEncoding = KeyEncoding.ICU_SORTKEY, collationId = 2, icuMajor = 75)
+    // Two distinct ICU collations share the icu_sortkey encoding, so the collation ids must match.
+    val observed = profile(collationId = unicode, icuMajor = 75)
+    val runtime = profile(collationId = unicodeCi, icuMajor = 75)
     checkError(
       exception = intercept[SparkRuntimeException] {
         SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = false)
@@ -180,15 +165,13 @@ class SketchEnvelopeSuite extends SparkFunSuite {
       condition = "SKETCH_COLLATION_MISMATCH",
       parameters = Map(
         "function" -> s"`$prettyName`",
-        "left" -> "1",
-        "right" -> "2"))
+        "left" -> unicode.toString,
+        "right" -> unicodeCi.toString))
   }
 
   test("ICU version mismatch is a hard error") {
-    val observed =
-      profile(keyEncoding = KeyEncoding.ICU_SORTKEY, collationId = 5, icuMajor = 75, icuMinor = 1)
-    val runtime =
-      profile(keyEncoding = KeyEncoding.ICU_SORTKEY, collationId = 5, icuMajor = 76, icuMinor = 2)
+    val observed = profile(collationId = unicode, icuMajor = 75, icuMinor = 1)
+    val runtime = profile(collationId = unicode, icuMajor = 76, icuMinor = 2)
     checkError(
       exception = intercept[SparkRuntimeException] {
         SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = false)
@@ -200,46 +183,31 @@ class SketchEnvelopeSuite extends SparkFunSuite {
         "right" -> "76.2"))
   }
 
-  test("differing Spark collation revision is a soft warning, not an error") {
-    val observed = profile(sparkCollationRev = 1)
-    val runtime = profile(sparkCollationRev = 2)
-    // Numeric encoding + only the revision differs: this only logs a warning, it must not throw.
-    SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = false)
-  }
-
   test("allowMismatch suppresses hard errors") {
-    val observed = profile(keyEncoding = KeyEncoding.RAW_BYTES)
-    val runtime = profile(keyEncoding = KeyEncoding.ICU_SORTKEY)
+    val observed = profile(collationId = SketchEnvelope.NO_COLLATION_ID)
+    val runtime = profile(collationId = utf8Binary)
     // Should not throw when version mismatches are explicitly allowed.
     SketchEnvelope.assertCompatible(observed, runtime, prettyName, allowMismatch = true)
   }
 
-  // -- currentProfile / currentItemsProfile -----------------------------------------------------
+  // -- currentProfile ---------------------------------------------------------------------------
 
   test("currentProfile for numeric types uses the numeric encoding") {
-    val p = SketchEnvelope.currentProfile(SketchKind.KLL_LONG, LongType)
-    assert(p.sketchKind == SketchKind.KLL_LONG)
-    assert(p.keyEncoding == KeyEncoding.NUMERIC_OR_BINARY)
+    val p = SketchEnvelope.currentProfile(LongType)
     assert(p.collationId == SketchEnvelope.NO_COLLATION_ID)
     assert(p.icuMajor == 0 && p.icuMinor == 0)
-    assert(p.engineOrigin == EngineOrigin.JVM_SPARK)
+    assert(SketchEnvelope.keyEncodingForCollation(p.collationId) == KeyEncoding.NUMERIC_OR_BINARY)
   }
 
   test("currentProfile for UTF8_BINARY strings uses the raw-bytes encoding") {
-    val p = SketchEnvelope.currentProfile(SketchKind.HLL, StringType)
-    assert(p.keyEncoding == KeyEncoding.RAW_BYTES)
+    val p = SketchEnvelope.currentProfile(StringType)
     assert(p.collationId == CollationFactory.UTF8_BINARY_COLLATION_ID)
-  }
-
-  test("currentItemsProfile for UTF8_BINARY strings still uses ITEMS kind") {
-    val p = SketchEnvelope.currentItemsProfile(StringType)
-    assert(p.sketchKind == SketchKind.ITEMS)
+    assert(SketchEnvelope.keyEncodingForCollation(p.collationId) == KeyEncoding.RAW_BYTES)
   }
 
   test("profile helper string accessors") {
     assert(profile(icuMajor = 75, icuMinor = 1).icuVersionString == "75.1")
     assert(profile(icuMajor = 0, icuMinor = 0).icuVersionString == null)
     assert(profile(dsLibMajor = 6, dsLibMinor = 2).datasketchesVersionString == "6.2")
-    assert(profile().engineName == "jvm_spark")
   }
 }

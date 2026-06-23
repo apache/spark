@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
-import org.apache.spark.sql.catalyst.util.{SketchEnvelope, SketchKind}
+import org.apache.spark.sql.catalyst.util.SketchEnvelope
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
@@ -106,7 +106,6 @@ case class KllSketchAggBigint(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_bigint"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_LONG
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -249,7 +248,6 @@ case class KllSketchAggFloat(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_float"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_FLOAT
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -386,7 +384,6 @@ case class KllSketchAggDouble(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_double"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_DOUBLE
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -517,7 +514,6 @@ case class KllMergeAggBigint(
   }
 
   override def prettyName: String = "kll_merge_agg_bigint"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_LONG
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllLongsSketch = KllLongsSketch.newHeapInstance(k)
@@ -591,7 +587,6 @@ case class KllMergeAggFloat(
   }
 
   override def prettyName: String = "kll_merge_agg_float"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_FLOAT
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllFloatsSketch = KllFloatsSketch.newHeapInstance(k)
@@ -665,7 +660,6 @@ case class KllMergeAggDouble(
   }
 
   override def prettyName: String = "kll_merge_agg_double"
-  override protected def kllSketchKind: Byte = SketchKind.KLL_DOUBLE
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllDoublesSketch = KllDoublesSketch.newHeapInstance(k)
@@ -808,9 +802,6 @@ trait KllSketchAggBase {
   def kExpr: Option[Expression]
   def prettyName: String
 
-  /** The envelope sketch-kind tag for this KLL value type (long, float, or double). */
-  protected def kllSketchKind: Byte
-
   /**
    * Wraps a serialized KLL sketch in a provenance envelope when envelope writes are enabled. KLL
    * sketches only ingest numeric values, so the recorded provenance is collation-independent and
@@ -818,7 +809,7 @@ trait KllSketchAggBase {
    */
   protected def maybeWrapKll(payload: Array[Byte]): Array[Byte] = {
     if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(kllSketchKind, LongType))
+      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(LongType))
     } else {
       payload
     }

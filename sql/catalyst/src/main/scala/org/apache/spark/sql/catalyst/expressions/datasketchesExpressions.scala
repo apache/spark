@@ -23,7 +23,7 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{KeyEncoding, SketchEnvelope, SketchKind}
+import org.apache.spark.sql.catalyst.util.{KeyEncoding, SketchEnvelope}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, StructField, StructType}
@@ -155,10 +155,10 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(sketch) - Returns the provenance metadata recorded in a DataSketches sketch envelope.
-    The result is a struct with the sketch kind, key encoding, collation id, ICU version,
-    DataSketches library version, engine and a flag indicating whether the input carried an
-    envelope. For legacy sketches without an envelope, every field except `has_envelope` is NULL.
-    This reads only the envelope header and does not touch the underlying DataSketches library. """,
+    The result is a struct with the derived key encoding, collation id, ICU version, DataSketches
+    library version and a flag indicating whether the input carried an envelope. For legacy
+    sketches without an envelope, every field except `has_envelope` is NULL. This reads only the
+    envelope header and does not touch the underlying DataSketches library. """,
   examples = """
     Examples:
       > SELECT _FUNC_(hll_sketch_agg(col)).has_envelope FROM VALUES (1), (2), (3) tab(col);
@@ -188,27 +188,24 @@ case class SketchMetadata(child: Expression)
       case Some(p) =>
         val collationId: Any =
           if (p.collationId == SketchEnvelope.NO_COLLATION_ID) null else p.collationId
+        val keyEncoding = SketchEnvelope.keyEncodingForCollation(p.collationId)
         InternalRow(
-          UTF8String.fromString(SketchKind.name(p.sketchKind)),
-          UTF8String.fromString(KeyEncoding.name(p.keyEncoding)),
+          UTF8String.fromString(KeyEncoding.name(keyEncoding)),
           collationId,
           if (p.icuVersionString == null) null else UTF8String.fromString(p.icuVersionString),
           UTF8String.fromString(p.datasketchesVersionString),
-          UTF8String.fromString(p.engineName),
           true)
       case None =>
-        InternalRow(null, null, null, null, null, null, false)
+        InternalRow(null, null, null, null, false)
     }
   }
 }
 
 object SketchMetadata {
   val outputType: StructType = StructType(Seq(
-    StructField("kind", StringType, nullable = true),
     StructField("key_encoding", StringType, nullable = true),
     StructField("collation_id", IntegerType, nullable = true),
     StructField("icu_version", StringType, nullable = true),
     StructField("datasketches_version", StringType, nullable = true),
-    StructField("engine", StringType, nullable = true),
     StructField("has_envelope", BooleanType, nullable = false)))
 }

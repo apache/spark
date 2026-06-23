@@ -138,6 +138,8 @@ object MimaExcludes {
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+    // Generated protobuf code for the sketch provenance envelope.
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.util.sketch.SketchEnvelopeProtos*"),
 
     // SPARK-44104: shaded protobuf code and Apis with parameters relocated
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_protobuf.protobuf.*"),

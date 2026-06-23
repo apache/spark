@@ -1,0 +1,45 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package org.apache.spark.sql.catalyst.util.sketch;
+
+option java_package = "org.apache.spark.sql.catalyst.util.sketch";
+option java_outer_classname = "SketchEnvelopeProtos";
+
+// Provenance recorded alongside a materialized Apache DataSketches buffer that the native sketch
+// preamble does not capture. This message is serialized into the sketch envelope header (see
+// org.apache.spark.sql.catalyst.util.SketchEnvelope for the on-the-wire framing). The schema is
+// intentionally small and may grow over time; readers must tolerate unknown/added fields, which
+// proto3 guarantees.
+//
+// Fields use proto3 default semantics: a field left at its default (0) is not written on the wire
+// and reads back as 0. Numeric (collation-independent) sketches use collation_id = -1 to mark the
+// absence of a collation, so the UTF8_BINARY collation (id 0) remains distinguishable.
+message SketchMetadata {
+  // Major/minor version of the Apache DataSketches library that produced the payload.
+  int32 datasketches_major = 1;
+  int32 datasketches_minor = 2;
+
+  // Spark collation id under which string keys were encoded, or -1 when no collation applies.
+  int32 collation_id = 3;
+
+  // Major/minor version of the ICU library backing the collation, or 0 when ICU does not apply.
+  int32 icu_major = 4;
+  int32 icu_minor = 5;
+}

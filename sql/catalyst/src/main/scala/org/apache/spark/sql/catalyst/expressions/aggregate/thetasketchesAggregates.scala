@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchEnvelope, SketchKind, SketchProfile, ThetaSketchUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchEnvelope, SketchProfile, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -298,7 +298,7 @@ case class ThetaSketchAgg(
   /** Wraps the payload in a provenance envelope when envelope writes are enabled. */
   private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
     if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(SketchKind.THETA, left.dataType))
+      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(left.dataType))
     } else {
       payload
     }
