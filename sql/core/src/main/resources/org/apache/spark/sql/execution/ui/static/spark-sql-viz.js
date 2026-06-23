@@ -804,7 +804,7 @@ function showZoomHint() {
   clearTimeout(zoomHintTimeout);
   zoomHintTimeout = setTimeout(function () {
     hint.classList.remove("visible");
-  }, 1500);
+  }, 1000);
 }
 
 function updateZoomLevelLabel(scale) {
