@@ -48,7 +48,7 @@ case class BatchEvalPythonUDTFExec(
     requiredChildOutput: Seq[Attribute],
     resultAttrs: Seq[Attribute],
     child: SparkPlan)
-  extends EvalPythonUDTFExec with PythonSQLMetrics {
+  extends EvalPythonUDTFExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {

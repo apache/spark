@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * A physical plan that evaluates a [[PythonUDF]]
  */
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec with PythonSQLMetrics {
+  extends EvalPythonExec with PythonPickleBatchMetrics {
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
