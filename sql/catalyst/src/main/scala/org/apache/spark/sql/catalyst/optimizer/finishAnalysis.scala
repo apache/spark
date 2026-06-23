@@ -21,6 +21,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
@@ -151,8 +152,13 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
             c.dataType match {
               case n: TimestampNTZNanosType =>
                 MakeTimestampNTZNanos(dateLit, c.child, n.precision).replacement
-              case _ =>
+              case _: TimestampNTZType =>
                 MakeTimestampNTZ(dateLit, c.child).replacement
+              case other =>
+                // Unreachable: the outer guard `Cast.isTimeToTimestampNTZ` only matches the micro
+                // TimestampNTZType and the nanosecond TimestampNTZNanosType targets.
+                throw SparkException.internalError(
+                  s"Unexpected target type in TIME -> TIMESTAMP_NTZ rewrite: $other")
             }
           case currentTimeType : CurrentTime =>
             val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,

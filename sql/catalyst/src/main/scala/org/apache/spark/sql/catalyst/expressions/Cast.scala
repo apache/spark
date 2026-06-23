@@ -1024,6 +1024,12 @@ case class Cast(
     case _: TimestampNTZNanosType =>
       buildCast[TimestampNanosVal](_, v => DateTimeUtils.truncateTimeToPrecision(
         DateTimeUtils.timestampNTZNanosToNanosOfDay(v), to.precision))
+    // Unreachable for valid casts: `canCast(_, TimeType)` only allows the source types handled
+    // above (and NullType is short-circuited in castInternal). Fail fast to keep the interpreted
+    // and codegen (castToTimeCode) paths consistent if a future canCast arm is added without a
+    // matching converter here.
+    case _ =>
+      throw SparkException.internalError(s"Cannot cast $from to ${to.typeName}.")
   }
 
   // IntervalConverter
@@ -1755,8 +1761,10 @@ case class Cast(
             $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
               $dateTimeUtilsCls.timestampNTZNanosToNanosOfDay($c), ${to.precision});
           """
+      // Unreachable for valid casts (see castToTime). Fail fast at codegen time instead of
+      // silently emitting a null, matching the interpreted path.
       case _ =>
-        (_, _, evNull) => code"$evNull = true;"
+        throw SparkException.internalError(s"Cannot cast $from to ${to.typeName}.")
     }
   }
 
