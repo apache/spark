@@ -26,46 +26,46 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * An in-memory [[TableViewCatalog]] for tests. Tables and views share a single keyspace per
- * the [[TableViewCatalog]] contract; the stored value's runtime type ([[TableInfo]] vs
- * [[ViewInfo]]) is the kind discriminator. Also implements [[SupportsNamespaces]] with a
+ * An in-memory [[RelationCatalog]] for tests. Tables and views share a single keyspace per
+ * the [[RelationCatalog]] contract; the stored [[Relation]]'s runtime type ([[Table]] vs
+ * [[View]]) is the kind discriminator. Tables are stored as a [[DelegatingTable]] wrapping the
+ * [[TableInfo]] passed to `createTable`. Also implements [[SupportsNamespaces]] with a
  * minimal namespace store, so analyzer rules that read namespace metadata (e.g.
  * `ApplyDefaultCollation` consulting `loadNamespaceMetadata` for `PROP_COLLATION`) work
  * uniformly with the v1 session catalog. Suitable for any test suite that wants to exercise
  * v2 view DDL or inspection commands against a non-session catalog.
  */
-class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces {
+class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
 
   private val store =
-    new ConcurrentHashMap[(Seq[String], String), TableInfo]()
+    new ConcurrentHashMap[(Seq[String], String), Relation]()
   private val namespaces =
     new ConcurrentHashMap[Seq[String], util.Map[String, String]]()
 
-  override def loadTableOrView(ident: Identifier): Table = {
+  override def loadRelation(ident: Identifier): Relation = {
     val key = (ident.namespace().toSeq, ident.name())
-    Option(store.get(key))
-      .map(new MetadataTable(_, ident.toString))
-      .getOrElse(throw new NoSuchTableException(ident))
+    Option(store.get(key)).getOrElse(throw new NoSuchTableException(ident))
   }
 
   // ----- TableCatalog -----------------------------------------------------------------
 
   override def createTable(ident: Identifier, info: TableInfo): Table = {
     val key = (ident.namespace().toSeq, ident.name())
-    if (store.putIfAbsent(key, info) != null) {
+    val table = new DelegatingTable(info, ident.toString)
+    if (store.putIfAbsent(key, table) != null) {
       throw new TableAlreadyExistsException(ident)
     }
-    new MetadataTable(info, ident.toString)
+    table
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    throw new UnsupportedOperationException("alterTable not supported on InMemoryTableViewCatalog")
+    throw new UnsupportedOperationException("alterTable not supported on InMemoryRelationCatalog")
   }
 
   override def dropTable(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = store.get(key)
-    if (existing == null || existing.isInstanceOf[ViewInfo]) return false
+    if (existing == null || existing.isInstanceOf[View]) return false
     store.remove(key) != null
   }
 
@@ -73,7 +73,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
     val oldKey = (oldIdent.namespace().toSeq, oldIdent.name())
     val newKey = (newIdent.namespace().toSeq, newIdent.name())
     val existing = store.get(oldKey)
-    if (existing == null || existing.isInstanceOf[ViewInfo]) {
+    if (existing == null || existing.isInstanceOf[View]) {
       throw new NoSuchTableException(oldIdent)
     }
     if (store.putIfAbsent(newKey, existing) != null) {
@@ -86,7 +86,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
     val target = namespace.toSeq
     val ids = new java.util.ArrayList[Identifier]()
     store.forEach { (key, info) =>
-      if (key._1 == target && !info.isInstanceOf[ViewInfo]) {
+      if (key._1 == target && !info.isInstanceOf[View]) {
         ids.add(Identifier.of(key._1.toArray, key._2))
       }
     }
@@ -99,14 +99,14 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
     val target = namespace.toSeq
     val ids = new java.util.ArrayList[Identifier]()
     store.forEach { (key, info) =>
-      if (key._1 == target && info.isInstanceOf[ViewInfo]) {
+      if (key._1 == target && info.isInstanceOf[View]) {
         ids.add(Identifier.of(key._1.toArray, key._2))
       }
     }
     ids.toArray(new Array[Identifier](0))
   }
 
-  override def createView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def createView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     if (store.putIfAbsent(key, info) != null) {
       throw new ViewAlreadyExistsException(ident)
@@ -114,10 +114,10 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
     info
   }
 
-  override def replaceView(ident: Identifier, info: ViewInfo): ViewInfo = {
+  override def replaceView(ident: Identifier, info: View): View = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = store.get(key)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+    if (existing == null || !existing.isInstanceOf[View]) {
       throw new NoSuchViewException(ident)
     }
     store.put(key, info)
@@ -127,7 +127,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
   override def dropView(ident: Identifier): Boolean = {
     val key = (ident.namespace().toSeq, ident.name())
     val existing = store.get(key)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) return false
+    if (existing == null || !existing.isInstanceOf[View]) return false
     store.remove(key) != null
   }
 
@@ -135,7 +135,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
     val oldKey = (oldIdent.namespace().toSeq, oldIdent.name())
     val newKey = (newIdent.namespace().toSeq, newIdent.name())
     val existing = store.get(oldKey)
-    if (existing == null || !existing.isInstanceOf[ViewInfo]) {
+    if (existing == null || !existing.isInstanceOf[View]) {
       throw new NoSuchViewException(oldIdent)
     }
     if (store.putIfAbsent(newKey, existing) != null) {
@@ -219,16 +219,16 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
   // Test-only accessors --------------------------------------------------------------
 
   /** Returns the stored entry (table or view) for the identifier, or throws if missing. */
-  def getStoredInfo(namespace: Array[String], name: String): TableInfo = {
+  def getStoredInfo(namespace: Array[String], name: String): Relation = {
     Option(store.get((namespace.toSeq, name))).getOrElse {
       throw new NoSuchTableException(Identifier.of(namespace, name))
     }
   }
 
-  /** Returns the stored ViewInfo, or throws if the entry is missing or is not a view. */
-  def getStoredView(namespace: Array[String], name: String): ViewInfo = {
+  /** Returns the stored View, or throws if the entry is missing or is not a view. */
+  def getStoredView(namespace: Array[String], name: String): View = {
     getStoredInfo(namespace, name) match {
-      case v: ViewInfo => v
+      case v: View => v
       case _ => throw new IllegalStateException(
         s"stored entry at ${namespace.mkString(".")}.$name is not a view")
     }
