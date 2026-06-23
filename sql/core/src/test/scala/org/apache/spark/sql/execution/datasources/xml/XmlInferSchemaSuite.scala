@@ -28,13 +28,15 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
   ArrayType,
   BooleanType,
+  DateType,
   DecimalType,
   DoubleType,
   IntegerType,
   LongType,
   StringType,
   StructField,
-  StructType
+  StructType,
+  TimeType
 }
 
 class XmlInferSchemaSuite
@@ -645,6 +647,50 @@ class XmlInferSchemaSuite
     // nullValue option is used during parsing
     assert(xmlDF.schema === expectedSchema)
     checkAnswer(xmlDF, expectedAns)
+  }
+
+  test("TIME type inference") {
+    val xmlString = Seq("""<ROW><t>13:31:24.123456</t></ROW>""")
+    val df = readData(xmlString)
+    assert(df.schema === new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION)))
+    checkAnswer(df, Row(java.time.LocalTime.of(13, 31, 24, 123456000)))
+  }
+
+  test("TIME type inference - disabled when timeType.enabled is false") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val xmlString = Seq("""<ROW><t>13:31:24</t></ROW>""")
+      val df = readData(xmlString)
+      // Falls through to date/timestamp or string
+      assert(df.schema.fields.head.dataType != TimeType(TimeType.DEFAULT_PRECISION))
+    }
+  }
+
+  test("TIME type inference - negative cases") {
+    // Date strings should not infer as TIME
+    val xmlDate = Seq("""<ROW><t>2024-01-15</t></ROW>""")
+    val dfDate = readData(xmlDate)
+    assert(dfDate.schema.fields.head.dataType === DateType)
+
+    // Timestamp strings should not infer as TIME
+    val xmlTs = Seq("""<ROW><t>2024-01-15T13:31:24</t></ROW>""")
+    val dfTs = readData(xmlTs)
+    assert(dfTs.schema.fields.head.dataType != TimeType(TimeType.DEFAULT_PRECISION))
+  }
+
+  test("TIME type inference - cross-row merge") {
+    // TIME + TIME -> TIME
+    val xmlTime = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>09:15:00.123</t></ROW>""")
+    val dfTime = readData(xmlTime)
+    assert(dfTime.schema === new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION)))
+
+    // TIME + non-time string -> StringType
+    val xmlMixed = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>not-a-time</t></ROW>""")
+    val dfMixed = readData(xmlMixed)
+    assert(dfMixed.schema.fields.head.dataType === StringType)
   }
 }
 
