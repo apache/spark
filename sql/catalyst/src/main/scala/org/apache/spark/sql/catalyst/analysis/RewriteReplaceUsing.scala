@@ -160,7 +160,9 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
 
     // Every source row is inserted; row IDs and metadata are null for new rows.
     val relationValueByExprId =
-      relation.output.zipWithIndex.map { case (attr, i) => attr.exprId -> insertRef.output(i) }.toMap
+      relation.output.zipWithIndex.map {
+        case (attr, i) => attr.exprId -> insertRef.output(i)
+      }.toMap
     val insertAssignments = rowPart.map { attr =>
       val value = relationValueByExprId.getOrElse(attr.exprId, Literal(null, attr.dataType))
       Assignment(attr, value)

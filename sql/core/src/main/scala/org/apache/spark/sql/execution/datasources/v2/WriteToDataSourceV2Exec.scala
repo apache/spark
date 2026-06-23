@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, InsertSummaryImpl, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeleteSummaryImpl, DeltaWrite, DeltaWriter, InsertSummaryImpl, MergeSummaryImpl, PhysicalWriteInfoImpl, ReplaceSummaryImpl, RowLevelOperation, RowLevelOperationTable, UpdateSummaryImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
@@ -396,9 +396,12 @@ case class ReplaceDataExec(
     copy(query = newChild)
   }
 
-  override protected def getDeleteSummary(): Option[DeleteSummaryImpl] = {
-    // DELETE ReplaceData plans filter out the deleted rows early in the plan, and they don't
-    // reach this node. We need to calculate this value as numScannedRows - numCopiedRows.
+  /**
+   * Derives the number of deleted rows for copy-on-write row-level operations. Matched rows are
+   * removed before the writer, so DELETE and REPLACE both compute this count as numScannedRows -
+   * numCopiedRows to keep the execution metric and connector summary aligned.
+   */
+  private def deriveDeletedRows(): Long = {
     val numScannedRows = collectFirst(query) {
       case b: BatchScanExec if b.table.isInstanceOf[RowLevelOperationTable] =>
         getMetricValue(b.metrics, "numOutputRows")
@@ -413,7 +416,20 @@ case class ReplaceDataExec(
 
     // SQLMetric.set is a no-op if value is -1, leaving the metric in its invalid state.
     sparkMetrics("numDeletedRows").set(numDeletedRows)
+    numDeletedRows
+  }
+
+  override protected def getDeleteSummary(): Option[DeleteSummaryImpl] = {
+    val numDeletedRows = deriveDeletedRows()
     super.getDeleteSummary().map(_.copy(numDeletedRows = numDeletedRows))
+  }
+
+  override protected def getReplaceSummary(): Option[ReplaceSummaryImpl] = {
+    val numDeletedRows = deriveDeletedRows()
+    Some(ReplaceSummaryImpl(
+      numInsertedRows = getMetricValue(sparkMetrics, "numInsertedRows"),
+      numDeletedRows = numDeletedRows,
+      numCopiedRows = getMetricValue(sparkMetrics, "numCopiedRows")))
   }
 }
 
@@ -522,6 +538,16 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
             SQLLastAttemptMetrics.createMetric(sparkContext, "number of deleted rows"),
           "numCopiedRows" ->
             SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
+      case REPLACE =>
+        // The COW and MOR rewrites populate different subsets of these counters, but exposing a
+        // stable metric set keeps the REPLACE summary and SQL UI consistent across both paths.
+        Map(
+          "numInsertedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of inserted rows"),
+          "numDeletedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of deleted rows"),
+          "numCopiedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
       case _ => Map.empty
     })
 
@@ -544,10 +570,7 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
       case MERGE => getMergeSummary()
       case UPDATE => getUpdateSummary()
       case DELETE => getDeleteSummary()
-      // Scoped REPLACE has no dedicated write summary yet: existing row-level tasks do not count
-      // inserted rows, and numOutputRows conflates copied/deleted/inserted rows, so any derived
-      // count would be wrong. Returning None until we add metrics.
-      case REPLACE => None
+      case REPLACE => getReplaceSummary()
     }
   }
 
@@ -576,6 +599,18 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
     Some(DeleteSummaryImpl(
       getMetricValue(sparkMetrics, "numDeletedRows"),
       getMetricValue(sparkMetrics, "numCopiedRows")))
+  }
+
+  /**
+   * Builds the REPLACE summary from the writing-task metrics. The base implementation covers the
+   * merge-on-read path, where the writing task counts deleted rows directly and no target rows are
+   * copied. The copy-on-write path overrides this to derive numDeletedRows from the scan.
+   */
+  protected def getReplaceSummary(): Option[ReplaceSummaryImpl] = {
+    Some(ReplaceSummaryImpl(
+      numInsertedRows = getMetricValue(sparkMetrics, "numInsertedRows"),
+      numDeletedRows = getMetricValue(sparkMetrics, "numDeletedRows"),
+      numCopiedRows = 0L))
   }
 }
 
@@ -783,6 +818,7 @@ case class DataAndMetadataWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
+    var numInsertedRows = 0L
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -802,6 +838,7 @@ case class DataAndMetadataWritingSparkTask(
           writer.write(metadataProj, dataProj)
 
         case INSERT_OPERATION =>
+          numInsertedRows += 1L
           dataProj.project(row)
           writer.write(dataProj)
 
@@ -812,6 +849,7 @@ case class DataAndMetadataWritingSparkTask(
 
     sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
     sparkMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
+    sparkMetrics.get("numInsertedRows").foreach(_.add(numInsertedRows))
   }
 }
 
@@ -824,6 +862,7 @@ case class DataWithProjectionWritingSparkTask(
       writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numCopiedRows = 0L
+    var numInsertedRows = 0L
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -841,6 +880,7 @@ case class DataWithProjectionWritingSparkTask(
           writer.write(dataProj)
 
         case INSERT_OPERATION =>
+          numInsertedRows += 1L
           dataProj.project(row)
           writer.write(dataProj)
 
@@ -851,6 +891,7 @@ case class DataWithProjectionWritingSparkTask(
 
     sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
     sparkMetrics.get("numCopiedRows").foreach(_.add(numCopiedRows))
+    sparkMetrics.get("numInsertedRows").foreach(_.add(numInsertedRows))
   }
 }
 
@@ -873,6 +914,7 @@ case class DeltaWritingSparkTask(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numDeletedRows = 0L
+    var numInsertedRows = 0L
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -898,6 +940,7 @@ case class DeltaWritingSparkTask(
           writer.reinsert(null, rowProjection)
 
         case INSERT_OPERATION =>
+          numInsertedRows += 1L
           rowProjection.project(row)
           writer.insert(rowProjection)
 
@@ -908,6 +951,7 @@ case class DeltaWritingSparkTask(
 
     sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
     sparkMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
+    sparkMetrics.get("numInsertedRows").foreach(_.add(numInsertedRows))
   }
 }
 
@@ -924,6 +968,7 @@ case class DeltaWithMetadataWritingSparkTask(
       writer: DeltaWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
     var numUpdatedRows = 0L
     var numDeletedRows = 0L
+    var numInsertedRows = 0L
 
     while (iter.hasNext) {
       val row = iter.next()
@@ -952,6 +997,7 @@ case class DeltaWithMetadataWritingSparkTask(
           writer.reinsert(metadataProjection, rowProjection)
 
         case INSERT_OPERATION =>
+          numInsertedRows += 1L
           rowProjection.project(row)
           writer.insert(rowProjection)
 
@@ -962,6 +1008,7 @@ case class DeltaWithMetadataWritingSparkTask(
 
     sparkMetrics.get("numUpdatedRows").foreach(_.add(numUpdatedRows))
     sparkMetrics.get("numDeletedRows").foreach(_.add(numDeletedRows))
+    sparkMetrics.get("numInsertedRows").foreach(_.add(numInsertedRows))
   }
 }
 

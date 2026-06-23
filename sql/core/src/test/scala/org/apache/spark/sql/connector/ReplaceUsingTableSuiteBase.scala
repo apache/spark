@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.write.{BatchWrite, ReplaceSummary, ReplaceSummaryImpl, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.v2.{ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -30,6 +36,8 @@ import org.apache.spark.sql.types.StructType
  * against final table contents so they hold for both backends.
  */
 abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
+
+  import testImplicits._
 
   private val schemaString = "pk INT NOT NULL, id INT, dep STRING"
 
@@ -283,5 +291,187 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
       }
       assert(groupFilterCond.isEmpty, "no group filter when runtime filtering is disabled")
     }
+  }
+
+  private def getReplaceSummary(): ReplaceSummary = {
+    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
+    t.commits.last.writeSummary.get.asInstanceOf[ReplaceSummary]
+  }
+
+  // numCopiedRows reports rows physically re-emitted by copy-on-write replacement. Merge-on-read
+  // replacement records deletes and inserts without copying target rows.
+  private def checkReplaceSummary(
+      numInsertedRows: Long,
+      numDeletedRows: Long,
+      numCopiedRows: Long): Unit = {
+    val summary = getReplaceSummary()
+    assert(summary.numInsertedRows() === numInsertedRows,
+      s"Expected numInsertedRows=$numInsertedRows, got ${summary.numInsertedRows()}")
+    assert(summary.numDeletedRows() === numDeletedRows,
+      s"Expected numDeletedRows=$numDeletedRows, got ${summary.numDeletedRows()}")
+    val expectedCopied = if (isDeltaBasedReplace) 0L else numCopiedRows
+    assert(summary.numCopiedRows() === expectedCopied,
+      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  }
+
+  private def replaceWriteMetrics(plan: SparkPlan): Map[String, SQLMetric] = {
+    collectFirst(plan) {
+      case e: ReplaceDataExec => e.metrics
+      case e: WriteDeltaExec => e.metrics
+    }.getOrElse(fail("expected a ReplaceDataExec or WriteDeltaExec in the executed plan"))
+  }
+
+  private def assertWriteMetric(
+      metrics: Map[String, SQLMetric],
+      name: String,
+      expected: Long): Unit = {
+    val metric = metrics.getOrElse(name, fail(s"missing SQL UI metric: $name"))
+    assert(metric.value === expected, s"Expected $name=$expected, got ${metric.value}")
+  }
+
+  test("replace using reports summary and SQL UI metrics for matching scopes") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable(schemaString,
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      val plan = executeAndKeepPlan {
+        sql(
+          s"""INSERT INTO $tableNameAsString REPLACE USING (dep)
+             |SELECT * FROM VALUES (10, 10, 'hr'), (11, 11, 'hr') AS t(pk, id, dep)
+             |""".stripMargin)
+      }
+
+      // Runtime group filtering limits the COW scan to the matched group, so no rows are copied.
+      checkReplaceSummary(numInsertedRows = 2, numDeletedRows = 2, numCopiedRows = 0)
+      val metrics = replaceWriteMetrics(plan)
+      assertWriteMetric(metrics, "numInsertedRows", 2)
+      assertWriteMetric(metrics, "numDeletedRows", 2)
+      assertWriteMetric(metrics, "numCopiedRows", 0)
+    }
+  }
+
+  test("replace using reports copied rows for copy-on-write carryover") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+      createAndInitTable(schemaString,
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      val plan = executeAndKeepPlan {
+        sql(
+          s"""INSERT INTO $tableNameAsString REPLACE USING (dep)
+             |SELECT * FROM VALUES (10, 10, 'hr'), (11, 11, 'hr') AS t(pk, id, dep)
+             |""".stripMargin)
+      }
+
+      checkReplaceSummary(numInsertedRows = 2, numDeletedRows = 2, numCopiedRows = 1)
+      val metrics = replaceWriteMetrics(plan)
+      assertWriteMetric(metrics, "numInsertedRows", 2)
+      assertWriteMetric(metrics, "numDeletedRows", 2)
+      assertWriteMetric(metrics, "numCopiedRows", if (isDeltaBasedReplace) 0 else 1)
+    }
+  }
+
+  test("replace using reports inserts only when no scope matches") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable(schemaString,
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+
+      val plan = executeAndKeepPlan {
+        sql(
+          s"""INSERT INTO $tableNameAsString REPLACE USING (dep)
+             |SELECT * FROM VALUES (20, 20, 'finance') AS t(pk, id, dep)
+             |""".stripMargin)
+      }
+
+      checkReplaceSummary(numInsertedRows = 1, numDeletedRows = 0, numCopiedRows = 0)
+      val metrics = replaceWriteMetrics(plan)
+      assertWriteMetric(metrics, "numInsertedRows", 1)
+      assertWriteMetric(metrics, "numDeletedRows", 0)
+      assertWriteMetric(metrics, "numCopiedRows", 0)
+    }
+  }
+
+  test("replace using reports all-zero metrics for an empty source") {
+    withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
+      createAndInitTable(schemaString,
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "software" }
+          |""".stripMargin)
+
+      val plan = executeAndKeepPlan {
+        sql(
+          s"""INSERT INTO $tableNameAsString REPLACE USING (dep)
+             |SELECT * FROM VALUES (0, 0, 'x') AS t(pk, id, dep) WHERE 1 = 0
+             |""".stripMargin)
+      }
+
+      checkReplaceSummary(numInsertedRows = 0, numDeletedRows = 0, numCopiedRows = 0)
+      val metrics = replaceWriteMetrics(plan)
+      assertWriteMetric(metrics, "numInsertedRows", 0)
+      assertWriteMetric(metrics, "numDeletedRows", 0)
+      assertWriteMetric(metrics, "numCopiedRows", 0)
+    }
+  }
+
+  test("replace metric values are stable across scan-stage retries") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable(schemaString,
+          """{ "pk": 1, "id": 1, "dep": "hr" }
+            |{ "pk": 2, "id": 2, "dep": "software" }
+            |{ "pk": 3, "id": 3, "dep": "hr" }
+            |{ "pk": 4, "id": 4, "dep": "software" }
+            |""".stripMargin)
+
+        Seq((10, 1, "legal"), (20, 2, "finance")).toDF("pk", "id", "dep")
+          .createOrReplaceTempView("source")
+
+        withSparkContextConf(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""INSERT INTO $tableNameAsString REPLACE USING (id)
+               |SELECT * FROM source
+               |""".stripMargin)
+        }
+
+        checkReplaceSummary(numInsertedRows = 2, numDeletedRows = 2, numCopiedRows = 2)
+      }
+    }
+  }
+
+  test("replace summary commit falls back to the no-summary commit for legacy connectors") {
+    // Connectors that do not override commit(messages, WriteSummary) use BatchWrite's default
+    // delegation.
+    val committedMessages =
+      new java.util.concurrent.atomic.AtomicReference[Array[WriterCommitMessage]]
+
+    val legacyWrite = new BatchWrite {
+      override def createBatchWriterFactory(
+          info: org.apache.spark.sql.connector.write.PhysicalWriteInfo)
+        : org.apache.spark.sql.connector.write.DataWriterFactory = {
+        throw new UnsupportedOperationException("not needed for this test")
+      }
+
+      override def commit(messages: Array[WriterCommitMessage]): Unit = {
+        committedMessages.set(messages)
+      }
+
+      override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+    }
+
+    val summary: WriteSummary = ReplaceSummaryImpl(
+      numInsertedRows = 5L, numDeletedRows = 2L, numCopiedRows = 0L)
+
+    val messages = Array.empty[WriterCommitMessage]
+    legacyWrite.commit(messages, summary)
+
+    assert(committedMessages.get() != null, "default commit(messages, summary) must delegate")
+    assert(committedMessages.get() eq messages, "the original commit messages must be forwarded")
   }
 }

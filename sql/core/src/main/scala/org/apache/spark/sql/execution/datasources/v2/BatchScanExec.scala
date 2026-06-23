@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, REPLACE}
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.EmptyRDDWithPartitions
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
@@ -50,10 +50,11 @@ case class BatchScanExec(
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
     val name = "number of output rows"
     val metric = table match {
-      // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE,
-      // so that the driver-side derivation `numDeletedRows = numScannedRows - numCopiedRows` in
-      // `ReplaceDataExec.getWriteSummary` stays correct under stage retries.
-      case rlot: RowLevelOperationTable if rlot.operation.command() == DELETE =>
+      // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE or
+      // REPLACE, so that the driver-side derivation `numDeletedRows = numScannedRows -
+      // numCopiedRows` in `ReplaceDataExec` stays correct under stage retries.
+      case rlot: RowLevelOperationTable
+          if Seq(DELETE, REPLACE).contains(rlot.operation.command()) =>
         SQLLastAttemptMetrics.createMetric(sparkContext, name)
       case _ =>
         SQLMetrics.createMetric(sparkContext, name)
