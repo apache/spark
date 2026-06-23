@@ -57,10 +57,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ``metadata`` may be a static iterable or a zero-arg callable; the callable is invoked
     before every RPC (so short-TTL credentials refresh across reattach) and must be thread-safe
     because ``ReleaseExecute`` runs in a background thread pool. A ``PERMISSION_DENIED`` mid-
-    stream is retried so the next ``ReattachExecute`` can use a refreshed credential. The retry
-    counter resets only on forward progress (a returned response), so a token that never refreshes
-    to a valid one fails fast after ``_MAX_PERMISSION_DENIED_RETRIES`` consecutive denials instead
-    of spinning, while a long-lived stream can recover from token expiry any number of times.
+    stream is retried so the next ``ReattachExecute`` can use a refreshed credential, capped at
+    ``_MAX_PERMISSION_DENIED_RETRIES`` consecutive denials (reset on forward progress) so an
+    unrefreshable token fails fast instead of spinning.
     """
 
     _lock: ClassVar[RLock] = RLock()
@@ -119,8 +118,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # finishes without producing one, another iterator needs to be reattached.
         self._result_complete = False
 
-        # Consecutive PERMISSION_DENIED reattaches since the last returned response; capped so a
-        # token that never refreshes to a valid one fails fast instead of spinning forever.
         self._permission_denied_retries = 0
 
         self._metadata_provider: Callable[[], Iterable[Tuple[str, str]]]
@@ -347,8 +344,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 e.code() == grpc.StatusCode.PERMISSION_DENIED
                 and self._permission_denied_retries < self._MAX_PERMISSION_DENIED_RETRIES
             ):
-                # Treat mid-stream PERMISSION_DENIED as a token-expiry signal; reattach so the
-                # metadata provider can produce a fresh credential.
+                # Mid-stream PERMISSION_DENIED signals token expiry; reattach with fresh metadata.
                 logger.debug(
                     f"PERMISSION_DENIED on stream for operation {self._operation_id}; "
                     f"reattaching with refreshed metadata "

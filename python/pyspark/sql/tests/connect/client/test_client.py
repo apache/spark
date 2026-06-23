@@ -1329,10 +1329,8 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                 ),
             )
 
-        # ExecutePlan #1 hits PERMISSION_DENIED before any response, the reattach attempt observes
-        # OPERATION_NOT_FOUND so a fresh ExecutePlan starts. The retry counter carries over (no
-        # reset on OPERATION_NOT_FOUND) but stays under the cap, so a second PERMISSION_DENIED is
-        # still retried and the stream then recovers.
+        # The counter is not reset on OPERATION_NOT_FOUND, but stays under the cap, so the second
+        # PERMISSION_DENIED on the fresh ExecutePlan is still retried and the stream recovers.
         stub = self._stub_with(
             [permission_denied, permission_denied],
             [not_found, self.response, self.finished],
@@ -1356,8 +1354,8 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         def permission_denied():
             raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
 
-        # One response makes forward progress (resetting the counter), then PERMISSION_DENIED
-        # repeats with no further progress until the per-iterator cap is exhausted and propagates.
+        # After one response resets the counter, PERMISSION_DENIED repeats with no further progress
+        # until the cap is exhausted and it propagates.
         stub = self._stub_with(
             [self.response, permission_denied],
             [permission_denied, permission_denied, permission_denied],
@@ -1375,9 +1373,8 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         )
 
     def test_permission_denied_spin_fails_fast_across_operation_not_found(self):
-        """SPARK-57425: a token that never refreshes to a valid one must fail fast instead of
-        spinning forever through PERMISSION_DENIED -> OPERATION_NOT_FOUND -> fresh ExecutePlan.
-        The counter is not reset on OPERATION_NOT_FOUND, so the cap stops the loop."""
+        """SPARK-57425: an unrefreshable token must fail fast instead of spinning forever through
+        PERMISSION_DENIED -> OPERATION_NOT_FOUND -> fresh ExecutePlan."""
 
         def permission_denied():
             raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
