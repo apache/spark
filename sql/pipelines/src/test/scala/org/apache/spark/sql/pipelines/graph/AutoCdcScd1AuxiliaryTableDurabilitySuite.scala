@@ -181,6 +181,38 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("region", "id"))
   }
 
+  test("a dry run resolves and validates the graph without provisioning the auxiliary " +
+    "table") {
+    val session = spark
+    import session.implicits._
+
+    // Auxiliary-table provisioning moved out of flow execution and into the materialization
+    // phase, which a dry run deliberately skips (`dryRunPipeline` only resolves + validates
+    // the graph; it never calls `DatasetManager.materializeDatasets`). So a dry run must
+    // leave no auxiliary table behind -- it stays free of catalog side effects.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
+
+    val updateCtx = TestPipelineUpdateContext(spark, ctx.toDataflowGraph, storageRoot)
+    updateCtx.pipelineExecution.dryRunPipeline()
+
+    assert(
+      !spark.catalog.tableExists(auxTableNameFor("target")),
+      "a dry run must not provision the AutoCDC auxiliary table"
+    )
+  }
+
   test("if the AutoCDC auxiliary table is dropped between runs, it is transparently " +
     "recreated") {
     val session = spark

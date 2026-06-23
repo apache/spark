@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ColumnSelection,
   UnqualifiedColumnName
 }
@@ -218,6 +219,64 @@ class AutoCdcScd1SchemaEvolutionSuite
         Row(1, "alice", 1L, cdcMeta(None, Some(1L)), null),
         Row(2, "bob", 2L, cdcMeta(None, Some(2L)), "b@x.com")
       )
+    )
+  }
+
+  test("additive target-column evolution leaves the SCD1 auxiliary table schema unchanged") {
+    val session = spark
+    import session.implicits._
+
+    // The SCD1 auxiliary table carries only the AutoCDC key columns plus the CDC metadata
+    // column -- never any data columns. So when the target evolves additively (a new data
+    // column appears between runs), the target grows but the auxiliary schema must stay
+    // (keys + _cdc_metadata). This is the SCD1 counterpart to the SCD2 hidden-aux
+    // schema-evolution contract (`AutoCdcScd2SchemaEvolutionSuite`): SCD1 is immune to the
+    // motivating union-by-name bug precisely because its aux carries no data columns. The
+    // materialization-time aux create/evolve path must preserve this invariant across reruns.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    // Shared (id, name, version) stream so the streaming checkpoint resumes cleanly across
+    // runs; run #1 projects away `name` (target starts at (id, version)), run #2 keeps it so
+    // the target additively gains `name`.
+    val stream = MemoryStream[(Int, String, Long)]
+    def buildCtx(includeName: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "version")
+      val projectedDf = if (includeName) sourceDf else sourceDf.drop("name")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
+    }
+
+    val expectedAuxSchema = Seq("id", AutoCdcReservedNames.cdcMetadataColName)
+
+    // Run #1: target is (id, version); aux is (id, _cdc_metadata).
+    stream.addData((1, "ignored", 1L))
+    runPipeline(buildCtx(includeName = false))
+    assert(
+      spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema,
+      "auxiliary schema after run #1 should be the keys plus the CDC metadata column"
+    )
+
+    // Run #2: `name` is added to the target (appended last by mergeSchemas). The auxiliary
+    // schema must be byte-for-byte unchanged.
+    stream.addData((2, "bob", 2L))
+    runPipeline(buildCtx(includeName = true))
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(
+        Row(1, 1L, cdcMeta(None, Some(1L)), null),
+        Row(2, 2L, cdcMeta(None, Some(2L)), "bob")
+      )
+    )
+    assert(
+      spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema,
+      "additive target evolution must not alter the SCD1 auxiliary schema"
     )
   }
 
