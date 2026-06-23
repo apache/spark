@@ -18,11 +18,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, Expression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -39,18 +40,24 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
       if v2Write.table.resolved && v2Write.query.resolved &&
         !containsCheckInvariant(v2Write.query) && v2Write.outputResolved =>
       v2Write.table match {
-        case r: DataSourceV2Relation
-          if r.table.constraints != null && r.table.constraints.nonEmpty =>
-          // Check constraint is the only enforced constraint for DSV2 tables.
-          val checkInvariants = r.table.constraints.collect {
-            case c: Check =>
-              val unresolvedExpr = buildCatalystExpression(c)
-              val columnExtractors = mutable.Map[String, Expression]()
-              buildColumnExtractors(unresolvedExpr, columnExtractors)
-              CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
-          }
+        case r: DataSourceV2Relation =>
+          val tableCheckInvariants =
+            if (r.table.constraints != null && r.table.constraints.nonEmpty) {
+              // Check constraint is the only enforced constraint for DSV2 tables.
+              r.table.constraints.collect {
+                case c: Check =>
+                  val unresolvedExpr = buildCatalystExpression(c)
+                  val columnExtractors = mutable.Map[String, Expression]()
+                  buildColumnExtractors(unresolvedExpr, columnExtractors)
+                  CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
+              }.toSeq
+            } else {
+              Seq.empty
+            }
+          val genColInvariants = buildGeneratedColumnConstraints(r, v2Write)
+          val allInvariants = tableCheckInvariants ++ genColInvariants
           // Combine the check invariants into a single expression using conjunctive AND.
-          checkInvariants.reduceOption(And).fold(v2Write)(
+          allInvariants.reduceOption(And).fold(v2Write)(
             condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
         case _ =>
           v2Write
@@ -70,6 +77,57 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
     Option(c.predicate())
       .flatMap(V2ExpressionUtils.toCatalyst)
       .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(c.predicateSql()))
+  }
+
+  /**
+   * For each user-provided generated column, add a CheckInvariant that validates the column
+   * value matches the generation expression. Auto-filled generated columns are excluded:
+   * ResolveOutputRelation strips their GENERATION_EXPRESSION metadata from the table output,
+   * so they won't appear here.
+   */
+  private def buildGeneratedColumnConstraints(
+      r: DataSourceV2Relation,
+      v2Write: V2WriteCommand): Seq[Expression] = {
+    if (!GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog, r.table.columns())) {
+      return Seq.empty
+    }
+
+    // Use V2 columns from the table to access both V2 expressions and SQL strings.
+    // Only add constraints for generated columns whose GENERATION_EXPRESSION metadata
+    // is still present in the table output -- ResolveOutputRelation strips the metadata
+    // from auto-filled columns so they are excluded here.
+    val v2Columns = r.table.columns()
+    val resolver = catalogManager.v1SessionCatalog.conf.resolver
+    val userProvidedGenCols = r.output
+      .filter(attr => GeneratedColumn.isGeneratedColumn(attr.metadata))
+      .map(_.name)
+      .toSet
+
+    v2Columns.flatMap { col =>
+      Option(col.columnGenerationExpression())
+        .filter(_ => userProvidedGenCols.exists(n => resolver(n, col.name)))
+        .map { genExpr =>
+          val catalystExpr = buildGenerationCatalystExpression(genExpr)
+          val colRef = UnresolvedAttribute(col.name)
+          val columnExtractors = Seq(col.name -> colRef)
+          val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
+          CheckInvariant(
+            EqualNullSafe(colRef, catalystExpr),
+            columnExtractors,
+            "Generated Column",
+            s"${col.name} <=> $genExprSql")
+        }
+    }.toSeq
+  }
+
+  /**
+   * Convert a V2 GenerationExpression to a Catalyst expression.
+   * Try the V2 expression first, fall back to parsing the SQL string.
+   */
+  private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
+    Option(genExpr.getExpression)
+      .flatMap(V2ExpressionUtils.toCatalyst)
+      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(genExpr.getSql))
   }
 
   private def buildColumnExtractors(
