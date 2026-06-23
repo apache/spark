@@ -808,4 +808,100 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
       }
     }
   }
+
+  test("SparkConnectDatabaseMetaData getPrimaryKeys") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      // Spark has no primary keys, so an empty result set with the JDBC schema is returned.
+      Using.resource(metadata.getPrimaryKeys(null, null, null)) { rs =>
+        val rsmd = rs.getMetaData
+        assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === Seq(
+          "TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "COLUMN_NAME", "KEY_SEQ", "PK_NAME"))
+        assert(!rs.next())
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getImportedKeys and getExportedKeys") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      val foreignKeySchema = Seq(
+        "PKTABLE_CAT", "PKTABLE_SCHEM", "PKTABLE_NAME", "PKCOLUMN_NAME",
+        "FKTABLE_CAT", "FKTABLE_SCHEM", "FKTABLE_NAME", "FKCOLUMN_NAME",
+        "KEY_SEQ", "UPDATE_RULE", "DELETE_RULE", "FK_NAME", "PK_NAME", "DEFERRABILITY")
+      // Spark has no foreign keys, so both return an empty result set with the JDBC schema.
+      Seq(
+        () => metadata.getImportedKeys(null, null, null),
+        () => metadata.getExportedKeys(null, null, null)).foreach { getForeignKeys =>
+        Using.resource(getForeignKeys()) { rs =>
+          val rsmd = rs.getMetaData
+          assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === foreignKeySchema)
+          assert(!rs.next())
+        }
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getTypeInfo") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      Using.resource(metadata.getTypeInfo) { rs =>
+        val rsmd = rs.getMetaData
+        assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === Seq(
+          "TYPE_NAME", "DATA_TYPE", "PRECISION", "LITERAL_PREFIX", "LITERAL_SUFFIX",
+          "CREATE_PARAMS", "NULLABLE", "CASE_SENSITIVE", "SEARCHABLE", "UNSIGNED_ATTRIBUTE",
+          "FIXED_PREC_SCALE", "AUTO_INCREMENT", "LOCAL_TYPE_NAME", "MINIMUM_SCALE",
+          "MAXIMUM_SCALE", "SQL_DATA_TYPE", "SQL_DATETIME_SUB", "NUM_PREC_RADIX"))
+
+        case class TypeInfo(
+            name: String,
+            dataType: Int,
+            precision: Int,
+            caseSensitive: Boolean,
+            nullable: Short,
+            searchable: Short,
+            minScale: Short,
+            maxScale: Short)
+        val types = new Iterator[TypeInfo] {
+          def hasNext: Boolean = rs.next()
+          def next(): TypeInfo = TypeInfo(
+            name = rs.getString("TYPE_NAME"),
+            dataType = rs.getInt("DATA_TYPE"),
+            precision = rs.getInt("PRECISION"),
+            caseSensitive = rs.getBoolean("CASE_SENSITIVE"),
+            nullable = rs.getShort("NULLABLE"),
+            searchable = rs.getShort("SEARCHABLE"),
+            minScale = rs.getShort("MINIMUM_SCALE"),
+            maxScale = rs.getShort("MAXIMUM_SCALE"))
+        }.toSeq
+
+        // results are ordered by DATA_TYPE
+        assert(types.map(t => (t.name, t.dataType)) === Seq(
+          ("TINYINT", Types.TINYINT),
+          ("BIGINT", Types.BIGINT),
+          ("BINARY", Types.VARBINARY),
+          ("DECIMAL", Types.DECIMAL),
+          ("INT", Types.INTEGER),
+          ("SMALLINT", Types.SMALLINT),
+          ("FLOAT", Types.FLOAT),
+          ("DOUBLE", Types.DOUBLE),
+          ("STRING", Types.VARCHAR),
+          ("BOOLEAN", Types.BOOLEAN),
+          ("DATE", Types.DATE),
+          ("TIMESTAMP", Types.TIMESTAMP)))
+
+        // every type is nullable and searchable
+        assert(types.forall(_.nullable == DatabaseMetaData.typeNullable))
+        assert(types.forall(_.searchable == DatabaseMetaData.typeSearchable))
+        // only STRING is case-sensitive
+        assert(types.filter(_.caseSensitive).map(_.name) === Seq("STRING"))
+
+        // DECIMAL carries precision and scale
+        val decimal = types.find(_.name == "DECIMAL").get
+        assert(decimal.precision === 38)
+        assert(decimal.minScale === 0)
+        assert(decimal.maxScale === 38)
+      }
+    }
+  }
 }
