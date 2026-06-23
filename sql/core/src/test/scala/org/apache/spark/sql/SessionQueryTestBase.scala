@@ -39,6 +39,9 @@ trait SessionQueryTestBase
 
   /**
    * Sets all configurations specified in `pairs`, calls `f`, and then restores all configurations.
+   *
+   * Use this instead of `withSQLConf` as [[internal.SQLConf SQLConf]] is not part of Spark's public
+   * API.
    */
   protected def withConf[T](pairs: (String, String)*)(f: => T): T = {
     val (keys, values) = pairs.unzip
