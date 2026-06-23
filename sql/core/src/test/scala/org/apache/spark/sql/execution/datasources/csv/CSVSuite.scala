@@ -3595,13 +3595,39 @@ abstract class CSVSuite
 
   test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns surfaces " +
     "MALFORMED_CSV_RECORD") {
-    // inferFromDataset called csvParser.parseLine(header) directly without the AIOOBE guard
-    // that UnivocityParser.parseLine wraps. A header line wider than maxColumns must surface
-    // as MALFORMED_CSV_RECORD, not a raw TextParsingException.
+    // Without an explicit schema, inference runs eagerly via inferFromDataset and parses the first
+    // line there, so the error surfaces from CSVDataSource rather than from CSVHeaderChecker.
+    // This test validates the inferFromDataset path.
     withTempPath { path =>
       Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
       val e = intercept[SparkRuntimeException] {
         spark.read
+          .option("header", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> "a,b,c"),
+        matchPVals = false)
+    }
+  }
+
+  test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns and explicit schema " +
+    "surfaces MALFORMED_CSV_RECORD") {
+    // With an explicit schema, inference is skipped and the read-time header check in
+    // CSVHeaderChecker.checkHeaderColumnNames(lines, tokenizer) runs. That guard must surface
+    // MALFORMED_CSV_RECORD rather than a raw TextParsingException.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val schema = StructType(Seq(
+        StructField("a", StringType), StructField("b", StringType)))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .schema(schema)
           .option("header", "true")
           .option("maxColumns", "2")
           .csv(path.getAbsolutePath)
@@ -3648,11 +3674,35 @@ abstract class CSVSuite
 
   test("SPARK-57515: Dataset[String] CSV read with header exceeding maxColumns surfaces " +
     "MALFORMED_CSV_RECORD") {
-    // inferFromDataset called csvParser.parseLine(header) directly without the AIOOBE guard
-    // that UnivocityParser.parseLine wraps.
+    // Without an explicit schema, inference runs eagerly via inferFromDataset and parses the
+    // first line there. This validates the inferFromDataset path for Dataset[String].
     val lines = spark.createDataset(Seq("a,b,c", "1,2,3"))
     val e = intercept[SparkRuntimeException] {
       spark.read
+        .option("header", "true")
+        .option("maxColumns", "2")
+        .csv(lines)
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> "a,b,c"),
+      matchPVals = false)
+  }
+
+  test("SPARK-57515: Dataset[String] CSV read with header exceeding maxColumns and explicit " +
+    "schema surfaces MALFORMED_CSV_RECORD") {
+    // With an explicit schema, inference is skipped and the read-time header check in
+    // CSVHeaderChecker.checkHeaderColumnNames(line: String) runs. That guard must surface
+    // MALFORMED_CSV_RECORD rather than a raw TextParsingException.
+    val schema = StructType(Seq(
+      StructField("a", StringType), StructField("b", StringType)))
+    val lines = spark.createDataset(Seq("a,b,c", "1,2,3"))
+    val e = intercept[SparkRuntimeException] {
+      spark.read
+        .schema(schema)
         .option("header", "true")
         .option("maxColumns", "2")
         .csv(lines)

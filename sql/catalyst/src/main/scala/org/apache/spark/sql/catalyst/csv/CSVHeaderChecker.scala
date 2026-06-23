@@ -137,7 +137,8 @@ class CSVHeaderChecker(
         case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
         // scalastyle:on line.size.limit
           // In the multiLine stream path the field appender is reset before the AIOOBE propagates,
-          // so the record content is unavailable; pass an empty string as the bad-record marker.
+          // so the record content is unavailable; use the bounded parsed content when present,
+          // empty string as the fallback.
           throw UnivocityParser.malformedCsvRecord(e, Option(e.getParsedContent).getOrElse(""))
         case e: ArrayIndexOutOfBoundsException =>
           throw UnivocityParser.malformedCsvRecord(e, "")
