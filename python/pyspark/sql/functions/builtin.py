@@ -11820,7 +11820,7 @@ def unix_nanos(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", True)
+    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
     >>> df = spark.sql(
     ...     "SELECT TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789' AS ts"
     ... )
