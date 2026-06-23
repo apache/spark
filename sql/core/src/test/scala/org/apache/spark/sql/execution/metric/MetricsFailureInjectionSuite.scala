@@ -463,10 +463,15 @@ class MetricsFailureInjectionSuite
           // raw counter overcounts. SLAM reports only the last successful attempt per RDD.
           assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
           assert(stage2Metric.value > 300, s"stage2Metric=${stage2Metric.value}")
+          assert(stage3Metric.value === 5)
 
           assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
           assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
           assert(stage3SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
+
+          assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage3SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
         }
       }
     }

@@ -348,6 +348,8 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     // end-of-task in WritingSparkTask), and ResultStage.findMissingPartitions only re-runs
     // partitions that haven't successfully completed, so the writer accumulator single-counts;
     // this test is regression coverage that retries don't break the SLAM-aware `UpdateSummary`.
+    // It does not independently assert that a retry fired (there is no overcounting metric to
+    // observe on the result stage).
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

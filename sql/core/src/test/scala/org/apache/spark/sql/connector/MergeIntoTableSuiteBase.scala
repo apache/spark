@@ -2747,7 +2747,10 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         // For metadata variants, MergeRowsExec lives in a non-leaf shuffle map stage that the
         // fetch-failure injection forces to re-run, so the raw per-MergeRowsExec accumulator
-        // (`metric.value`) overcounts. SLAM-aware `MergeSummary` (asserted above) is correct.
+        // (`metric.value`) overcounts. This doubles as a direct check that a retry actually
+        // fired. SLAM-aware `MergeSummary` (asserted above) is correct.
+        // For noMetadata variants, MergeRowsExec is in the result stage and is not re-run by an
+        // upstream injection, so there is no overcounting metric to assert.
         if (!noMetadata) {
           val rawUpdated = mergeExec.metrics("numTargetRowsUpdated").value
           assert(rawUpdated > 2L,
