@@ -120,7 +120,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
-      treePatternbits.containsPattern(CURRENT_LIKE)
+      treePatternbits.containsPattern(CURRENT_LIKE) || treePatternbits.containsPattern(CAST)
     }
 
     plan.transformDownWithSubqueriesAndPruning(transformCondition) {

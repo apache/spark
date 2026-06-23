@@ -419,8 +419,8 @@ object Cast extends QueryErrorsBase {
   /**
    * Returns true for a cast from `TIME(p)` to `TIMESTAMP_NTZ(q)` (q in [6, 9]). Such casts derive
    * their date fields from `CURRENT_DATE`, so they are stabilized within a query by
-   * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] (which is why the `Cast` node
-   * advertises the `CURRENT_LIKE` tree pattern for this pair).
+   * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]], which scans `CAST` nodes and
+   * uses this predicate on the resolved plan.
    */
   def isTimeToTimestampNTZ(from: DataType, to: DataType): Boolean = (from, to) match {
     case (_: TimeType, _: TimestampNTZType) => true
@@ -673,18 +673,7 @@ case class Cast(
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
-  final override def nodePatternsInternal(): Seq[TreePattern] = dataType match {
-    // TIME -> TIMESTAMP_NTZ depends on CURRENT_DATE, so it must be visited by ComputeCurrentTime
-    // (which prunes on the CURRENT_LIKE pattern) to be stabilized within a query. This pattern is
-    // computed eagerly when the Cast is constructed, possibly before the child is resolved, so it
-    // must not inspect child.dataType (which can throw on an unresolved child - and even on a
-    // child that reports resolved == true, such as an OuterReference wrapping an unresolved
-    // attribute). Key off the always-available target type instead and tag every cast to the NTZ
-    // family; ComputeCurrentTime applies the precise TIME-source check on the resolved plan and
-    // leaves non-TIME sources untouched.
-    case _: TimestampNTZType | _: TimestampNTZNanosType => Seq(CAST, CURRENT_LIKE)
-    case _ => Seq(CAST)
-  }
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
 
   override def contextIndependentFoldable: Boolean = {
     child.contextIndependentFoldable && !Cast.needsTimeZone(child.dataType, dataType)
