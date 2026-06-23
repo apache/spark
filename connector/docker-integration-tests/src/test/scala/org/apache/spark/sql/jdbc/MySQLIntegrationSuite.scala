@@ -187,12 +187,12 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
         val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
         checkAnswer(df, Row(
-        Date.valueOf("1991-11-09"),
-        Timestamp.valueOf("1970-01-01 13:31:24"),
-        Timestamp.valueOf("1996-01-01 01:23:45"),
-        Timestamp.valueOf("2009-02-13 23:31:30"),
-        Date.valueOf("2001-01-01"),
-        Timestamp.valueOf("1970-01-01 13:31:24.123")))
+          Date.valueOf("1991-11-09"),
+          Timestamp.valueOf("1970-01-01 13:31:24"),
+          Timestamp.valueOf("1996-01-01 01:23:45"),
+          Timestamp.valueOf("2009-02-13 23:31:30"),
+          Date.valueOf("2001-01-01"),
+          Timestamp.valueOf("1970-01-01 13:31:24.123")))
       }
     }
     val df = spark.read.format("jdbc")
