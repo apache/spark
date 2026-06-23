@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.avro
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -240,11 +240,12 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading each entry's
-   * writer schema from its Avro header via a forward-only [[DataFileStream]] -- the archive is
-   * streamed, never unpacked to disk, and records are never scanned. Mirrors
+   * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading the writer schema
+   * from the first readable archive entry's Avro header via a forward-only [[DataFileStream]] -- the
+   * archive is streamed, never unpacked to disk, and records are never scanned. Mirrors
    * [[inferAvroSchemaFromFiles]]: schema evolution is not supported, so the first readable writer
-   * schema (across the archives, then any loose files) is used for the whole dataset.
+   * schema (across the archives, then any loose files) is used for the whole dataset, and archives
+   * past the first readable one are never opened.
    */
   private def inferAvroSchemaFromArchives(
       archives: Seq[FileStatus],
@@ -253,30 +254,32 @@ private[sql] object AvroUtils extends Logging {
       ignoreExtension: Boolean,
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean): Schema = {
-    // Drain each archive fully so its stream is released (exhausting the iterator runs the
-    // reader's cleanup); only the first readable writer schema is kept.
-    val archiveSchemas = archives.iterator.flatMap { f =>
-      readArchiveEntrySchemas(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
-    }.toSeq
-    archiveSchemas.headOption.getOrElse {
-      // No readable schema in any archive; fall back to the loose files. With none readable there
-      // either, `inferAvroSchemaFromFiles` raises the standard "no Avro files found" error.
-      inferAvroSchemaFromFiles(nonArchives, conf, ignoreExtension, ignoreCorruptFiles)
-    }
+    archives.iterator
+      .flatMap(f => firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles))
+      .nextOption()
+      .getOrElse {
+        // No readable schema in any archive; fall back to the loose files. With none readable
+        // there either, `inferAvroSchemaFromFiles` raises the standard "no Avro files found" error.
+        inferAvroSchemaFromFiles(nonArchives, conf, ignoreExtension, ignoreCorruptFiles)
+      }
   }
 
   /**
-   * Streams `path` entry by entry and yields each entry's Avro writer schema, read from the
-   * [[DataFileStream]] header (records are never scanned). Honors `ignoreCorruptFiles` and
-   * `ignoreMissingFiles` at the archive level.
+   * Reads the Avro writer schema of `path`'s first readable entry from its [[DataFileStream]]
+   * header (records are never scanned), then closes the archive without reading further entries.
+   * Returns `None` for an empty archive, or for a missing/corrupt archive under the respective
+   * ignore flag. Because only the first entry is read, a corrupt later entry never affects
+   * inference -- matching [[inferAvroSchemaFromFiles]], which stops at the first readable file.
    */
-  private def readArchiveEntrySchemas(
+  private def firstArchiveEntrySchema(
       path: Path,
       conf: Configuration,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Iterator[Schema] = {
+      ignoreMissingFiles: Boolean): Option[Schema] = {
     try {
-      ArchiveReader(path).readEntries(conf) { (_, in) =>
+      // `readEntries` returns a Closeable iterator; take the first entry's schema and close it so
+      // the archive stream is released without draining the remaining entries.
+      val entries = ArchiveReader(path).readEntries(conf) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
         try {
           Iterator.single(stream.getSchema)
@@ -284,13 +287,21 @@ private[sql] object AvroUtils extends Logging {
           stream.close()
         }
       }
+      try {
+        if (entries.hasNext) Some(entries.next()) else None
+      } finally {
+        entries match {
+          case c: Closeable => c.close()
+          case _ =>
+        }
+      }
     } catch {
       case _: FileNotFoundException if ignoreMissingFiles =>
         logWarning(log"Skipped missing archive: ${MDC(PATH, path)}")
-        Iterator.empty
+        None
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(log"Skipped the corrupted archive: ${MDC(PATH, path)}", e)
-        Iterator.empty
+        None
     }
   }
 

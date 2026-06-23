@@ -391,7 +391,7 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     test("inference unions differing fields across archive entries and loose files") {
       // An archive entry (id, name) and a loose file (id, extra) in one dir infer a unioned schema
       // matching the same files all loose. mergeSchema makes the union explicit for Avro; compare
-      // by field set since union order is not stable.
+      // by (name, dataType, nullable) set since union order is not stable.
       val opts = Map("mergeSchema" -> "true")
       val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
       val loose = Seq((3, 30)).toDF("id", "extra")
@@ -406,8 +406,8 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
           Files.write(new File(looseDir, entryName(0)).toPath, encodeFile(inArchive))
           Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
           val looseFields = inferredSchema(Seq(looseDir.getCanonicalPath), opts)
-            .map(f => f.name -> f.dataType).toSet
-          assert(schema.map(f => f.name -> f.dataType).toSet == looseFields,
+            .map(f => (f.name, f.dataType, f.nullable)).toSet
+          assert(schema.map(f => (f.name, f.dataType, f.nullable)).toSet == looseFields,
             s"archive+loose inference diverged from a directory; got $schema")
         }
       }
