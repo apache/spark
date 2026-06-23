@@ -29,7 +29,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
-  Table => CatalogTable,
+  Table => V2Table,
   TableCatalog,
   TableChange,
   TableInfo
@@ -324,7 +324,7 @@ object DatasetManager extends Logging {
     // Create the table if absent, otherwise evolve it (schema + properties).
     existingTableOpt match {
       case Some(existingTable) =>
-        evolveTableInCatalog(
+        evolveTable(
           catalog = catalog,
           tableIdentifier = identifier,
           existingTable = existingTable,
@@ -333,7 +333,7 @@ object DatasetManager extends Logging {
           mergeWithExistingSchema = isTableIncrementallyUpdated
         )
       case None =>
-        createTableInCatalog(
+        createTable(
           catalog = catalog,
           tableIdentifier = identifier,
           schema = outputSchema,
@@ -352,7 +352,7 @@ object DatasetManager extends Logging {
   /** Loads the table at `identifier` from `catalog`, or `None` if it does not exist. */
   private def loadTableIfExists(
       catalog: TableCatalog,
-      identifier: Identifier): Option[CatalogTable] = {
+      identifier: Identifier): Option[V2Table] = {
     Option.when(catalog.tableExists(identifier))(catalog.loadTable(identifier))
   }
 
@@ -364,7 +364,7 @@ object DatasetManager extends Logging {
    * @param properties the table properties to create the table with.
    * @param transforms the partition/cluster transforms to create the table with.
    */
-  private def createTableInCatalog(
+  private def createTable(
       catalog: TableCatalog,
       tableIdentifier: Identifier,
       schema: StructType,
@@ -381,9 +381,9 @@ object DatasetManager extends Logging {
   }
 
   /**
-   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema and
-   * (re)setting its properties. Partitioning/clustering cannot change in place, so no transforms are
-   * accepted here.
+   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema
+   * and properties, skipping the catalog `alterTable` entirely when nothing actually changes.
+   * Partitioning/clustering cannot change in place, so no transforms are accepted here.
    *
    * @param existingTable           the currently materialized table.
    * @param desiredSchema           the schema the table should have as computed in the current
@@ -395,10 +395,10 @@ object DatasetManager extends Logging {
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
    */
-  private def evolveTableInCatalog(
+  private def evolveTable(
       catalog: TableCatalog,
       tableIdentifier: Identifier,
-      existingTable: CatalogTable,
+      existingTable: V2Table,
       desiredSchema: StructType,
       properties: Map[String, String],
       mergeWithExistingSchema: Boolean): Unit = {
@@ -409,8 +409,18 @@ object DatasetManager extends Logging {
       desiredSchema
     }
     val columnChanges = diffSchemas(currentSchema, targetSchema)
-    val setProperties = properties.map { case (k, v) => TableChange.setProperty(k, v) }
-    catalog.alterTable(tableIdentifier, (columnChanges ++ setProperties).toArray: _*)
+
+    val existingProperties = existingTable.properties()
+    val propertyChanges = properties.collect {
+      case (k, v) if !Option(existingProperties.get(k)).contains(v) =>
+        TableChange.setProperty(k, v)
+    }
+    val allTableChanges = columnChanges ++ propertyChanges
+
+    // If there are no table changes to evolve with, avoid the no-op round-trip alter altogether.
+    if (allTableChanges.nonEmpty) {
+      catalog.alterTable(tableIdentifier, allTableChanges.toArray: _*)
+    }
   }
 
   /**
