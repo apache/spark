@@ -48,9 +48,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
   // `binWidthExpr` must be fully resolved before validation can proceed. The optional
   // `originExpr` must also be resolved when present; an absent `ALIGN TO` clause defaults to
   // `1970-01-01 00:00:00` and bypasses user-facing foldability and type checks. The
-  // range/distribute column references can stay as `UnresolvedAttribute`; `resolveColumn` below
-  // converts a missing name to `BIN_BY_COLUMN_NOT_FOUND` rather than letting the default
-  // resolution pass leave them unresolved indefinitely.
+  // range/distribute column references can stay as `UnresolvedAttribute`.
   private def readyToResolve(b: UnresolvedBinBy): Boolean = {
     b.childrenResolved && b.binWidthExpr.resolved && b.originExpr.forall(_.resolved)
   }
@@ -87,11 +85,11 @@ object ResolveBinBy extends Rule[LogicalPlan] {
           throw QueryCompilationErrors.binByNullArgumentError("BIN WIDTH")
         }
         if (v.asInstanceOf[Long] <= 0L) {
-          throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
+          throw QueryCompilationErrors.binByNonPositiveBinWidthError(b.binWidthExpr)
         }
         v.asInstanceOf[Long]
       case _ =>
-        throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
+        throw QueryCompilationErrors.binByInvalidBinWidthTypeError(b.binWidthExpr)
     }
 
     val sessionZone = SQLConf.get.sessionLocalTimeZone
@@ -132,7 +130,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       attr.dataType match {
         case _: FloatType | _: DoubleType => // ok
         case other =>
-          throw QueryCompilationErrors.binByDistributeTypeMismatchError(attr.name, other)
+          throw QueryCompilationErrors.binByInvalidDistributeColumnTypeError(attr.name, other)
       }
     }
     val seen = mutable.HashSet.empty[ExprId]
@@ -163,12 +161,13 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       // Still unresolved here means genuinely absent: ResolveReferences rewrites resolvable refs.
       child.resolve(u.nameParts, resolver) match {
         case Some(a: Attribute) => a
-        case _ => throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
+        case _ =>
+          throw QueryCompilationErrors.unresolvedColumnError(u.name, child.output.map(_.name))
       }
     case a: Attribute => a
     case ne: NamedExpression if ne.resolved =>
-      // A nested ref (e.g. `struct.field`) is resolved to an Alias(GetStructField) by
-      // ResolveReferences; the column exists, so this is distinct from BIN_BY_COLUMN_NOT_FOUND.
+      // A resolved non-Attribute here is a nested field (e.g. `struct.field`) that
+      // ResolveReferences wrapped in an Alias; BIN BY only accepts top-level columns.
       throw QueryCompilationErrors.binByRequiresTopLevelColumnError(ne.name)
     case other =>
       // Genuinely unexpected; the grammar restricts these positions to multipartIdentifier.

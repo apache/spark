@@ -307,12 +307,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "rangeType" -> toSQLType(rangeType)))
   }
 
-  def binByColumnNotFoundError(columnName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "BIN_BY_COLUMN_NOT_FOUND",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
-  }
-
   def binByDisabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
@@ -325,11 +319,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
-  def binByDistributeTypeMismatchError(
+  def binByInvalidDistributeColumnTypeError(
       columnName: String,
       columnType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "BIN_BY_DISTRIBUTE_TYPE_MISMATCH",
+      errorClass = "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE",
       messageParameters = Map(
         "columnName" -> toSQLId(columnName),
         "columnType" -> toSQLType(columnType)))
@@ -351,6 +345,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BIN_BY_INVALID_BIN_WIDTH",
       messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByNonPositiveBinWidthError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_NON_POSITIVE_BIN_WIDTH",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByInvalidBinWidthTypeError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_BIN_WIDTH_TYPE",
+      messageParameters = Map("inputType" -> toSQLType(expr.dataType)))
   }
 
   def binByMissingDistributeError(): Throwable = {
