@@ -163,6 +163,18 @@ class TxnTable(
   }
 }
 
+// Variant of TxnTable that also advertises the REPLACE opt-in. Capability marker interfaces such
+// as SupportsRowLevelReplace are checked on the resolved relation's table, so a transactional
+// wrapper must carry the same markers as its delegate (TxnTable already preserves
+// SupportsRowLevelOperations by extending the base table); otherwise REPLACE commands would be
+// rejected for tables that opted in. Selected by TxnTableCatalog when the delegate opts in.
+class TxnReplaceTable(
+    delegate: InMemoryRowLevelOperationTable,
+    schema: StructType,
+    catalog: TxnTableCatalog)
+  extends TxnTable(delegate, schema, catalog)
+  with SupportsRowLevelReplace
+
 // A special table catalog used in row-level operation transactions. The lifecycle of this catalog
 // is tied to the transaction. A new catalog instance is created at the beginning of a transaction
 // and discarded at the end. The catalog is responsible for pinning all tables involved in the
@@ -192,8 +204,19 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       // Wrap the live underlying instance (not a snapshot copy from loadTable) so commits
       // propagate back to the catalog's authoritative state.
       val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
-      new TxnTable(table, table.schema(), this)
+      newTxnTable(table, table.schema())
     })
+  }
+
+  // The wrapper must mirror the delegate's capability markers (see TxnReplaceTable) so that
+  // marker-gated operations resolve consistently whether or not a transaction is active.
+  private def newTxnTable(
+      delegate: InMemoryRowLevelOperationTable,
+      schema: StructType): TxnTable = {
+    delegate match {
+      case _: SupportsRowLevelReplace => new TxnReplaceTable(delegate, schema, this)
+      case _ => new TxnTable(delegate, schema, this)
+    }
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -211,10 +234,10 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTxnTable = new TxnTable(txnTable.delegate, schema, this)
-    newTxnTable.scanEvents ++= txnTable.scanEvents
-    tables.put(ident, newTxnTable)
-    newTxnTable
+    val updatedTxnTable = newTxnTable(txnTable.delegate, schema)
+    updatedTxnTable.scanEvents ++= txnTable.scanEvents
+    tables.put(ident, updatedTxnTable)
+    updatedTxnTable
   }
 
   // TODO: Currently not transactional. Should be revised when Atomic CTAS/RTAS is implemented.

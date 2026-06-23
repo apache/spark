@@ -1243,7 +1243,7 @@ case class ReplaceUsingTable(
 
   lazy val rewritable: Boolean = {
     EliminateSubqueryAliases(targetTable) match {
-      case ExtractV2Table(_: SupportsRowLevelOperations) => true
+      case ExtractV2Table(_: SupportsRowLevelReplace) => true
       case _ => false
     }
   }

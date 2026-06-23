@@ -27,10 +27,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ReplaceDataProjections,
   WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
-import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
+import org.apache.spark.sql.connector.catalog.{SupportsRowLevelOperations, SupportsRowLevelReplace}
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationInfoImpl, RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.REPLACE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -76,6 +77,33 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
     val info = RowLevelOperationInfoImpl(command, options)
     val operation = table.newRowLevelOperationBuilder(info).build()
     RowLevelOperationTable(table, operation)
+  }
+
+  /**
+   * Resolves the target of an `INSERT INTO ... REPLACE` command and builds its
+   * [[RowLevelOperation.Command.REPLACE]] operation table, gating on the connector opt-in.
+   *
+   * REPLACE is dispatched only to connectors that explicitly opt in via
+   * [[SupportsRowLevelReplace]]. A table that supports row-level operations but not REPLACE takes
+   * the same unsupported-operation path as a non-row-level table, so its operation builder is
+   * never invoked with a command it did not expect. Keeping the gate here ensures rewrites that
+   * dispatch [[RowLevelOperation.Command.REPLACE]] reject unsupported tables identically.
+   */
+  protected def buildReplaceOperationTable(
+      aliasedTable: LogicalPlan): (DataSourceV2Relation, RowLevelOperationTable) = {
+    EliminateSubqueryAliases(aliasedTable) match {
+      case rel: DataSourceV2Relation =>
+        rel.table match {
+          case tbl: SupportsRowLevelReplace =>
+            (rel, buildOperationTable(tbl, REPLACE, rel.options))
+          case _ =>
+            throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(rel.table.name())
+        }
+
+      case other =>
+        throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
+          other.simpleString(maxFields = 2))
+    }
   }
 
   protected def buildRelationWithAttrs(

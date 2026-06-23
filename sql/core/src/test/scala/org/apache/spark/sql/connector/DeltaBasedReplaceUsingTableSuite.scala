@@ -25,8 +25,8 @@ class DeltaBasedReplaceUsingTableSuite extends ReplaceUsingTableSuiteBase {
 
   override protected def isDeltaBasedReplace: Boolean = true
 
-  override protected lazy val extraTableProps: java.util.Map[String, String] = {
-    val props = new java.util.HashMap[String, String]()
+  override protected def extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String](super.extraTableProps)
     props.put("supports-deltas", "true")
     props
   }

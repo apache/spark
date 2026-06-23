@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.connector.catalog.{InMemoryRowLevelOperationTable, InMemoryTable}
 import org.apache.spark.sql.connector.write.{BatchWrite, ReplaceSummary, ReplaceSummaryImpl, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{ReplaceDataExec, WriteDeltaExec}
@@ -43,6 +43,13 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def isDeltaBasedReplace: Boolean = false
 
+  // Select the in-memory table subclass that implements SupportsRowLevelReplace via props.
+  override protected def extraTableProps: java.util.Map[String, String] = {
+    val props = new java.util.HashMap[String, String]()
+    props.put(InMemoryRowLevelOperationTable.SUPPORTS_ROW_LEVEL_REPLACE, "true")
+    props
+  }
+
   test("replace using deletes matching scopes and inserts all source rows") {
     createAndInitTable(schemaString,
       """{ "pk": 1, "id": 1, "dep": "hr" }
@@ -60,6 +67,26 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(2, 2, "software") :: Row(10, 10, "hr") :: Row(11, 11, "hr") :: Nil)
+  }
+
+  test("replace using still works after an ALTER TABLE that preserves the opt-in") {
+    createAndInitTable(schemaString,
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    // Altering an unrelated property must not rebuild the table as the unmarked base class, which
+    // would cause the REPLACE USING below to fail the analysis gate.
+    sql(s"ALTER TABLE $tableNameAsString SET TBLPROPERTIES ('comment' = 'updated')")
+
+    sql(
+      s"""INSERT INTO $tableNameAsString REPLACE USING (dep)
+         |SELECT * FROM VALUES (10, 10, 'hr') AS t(pk, id, dep)
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "software") :: Row(10, 10, "hr") :: Nil)
   }
 
   test("replace using leaves scopes absent from the source untouched") {

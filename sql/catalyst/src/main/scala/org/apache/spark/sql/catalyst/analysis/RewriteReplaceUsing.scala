@@ -22,9 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, CTERelationDef, CTERelationRef, Filter, Join, JoinHint, LogicalPlan, Project, ReplaceData, ReplaceUsingTable, Union, WithCTE, WriteDelta}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN}
-import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
-import org.apache.spark.sql.connector.write.RowLevelOperation.Command.REPLACE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.IntegerType
@@ -55,25 +53,13 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
         throw QueryCompilationErrors.insertReplaceUsingNonDeterministicSource()
       }
 
-      EliminateSubqueryAliases(aliasedTable) match {
-        case rel: DataSourceV2Relation =>
-          rel.table match {
-            case tbl: SupportsRowLevelOperations =>
-              val operationTable = buildOperationTable(tbl, REPLACE, rel.options)
-              val scopeOrdinals = resolveScopeOrdinals(rel, scopeColumns)
-              operationTable.operation match {
-                case _: SupportsDelta =>
-                  buildWriteDeltaPlan(rel, operationTable, scopeOrdinals, source)
-                case _ =>
-                  buildReplaceDataPlan(rel, operationTable, scopeOrdinals, source)
-              }
-            case _ =>
-              throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(rel.table.name())
-          }
-
-        case other =>
-          throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
-            other.simpleString(maxFields = 2))
+      val (rel, operationTable) = buildReplaceOperationTable(aliasedTable)
+      val scopeOrdinals = resolveScopeOrdinals(rel, scopeColumns)
+      operationTable.operation match {
+        case _: SupportsDelta =>
+          buildWriteDeltaPlan(rel, operationTable, scopeOrdinals, source)
+        case _ =>
+          buildReplaceDataPlan(rel, operationTable, scopeOrdinals, source)
       }
   }
 
