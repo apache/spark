@@ -3507,7 +3507,10 @@ class FunctionsTestsMixin:
 
     def test_variant_expressions(self):
         df = self.spark.createDataFrame(
-            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+            [
+                Row(json="""{ "a" : 1 }""", path="$.a", newpath="$.z"),
+                Row(json="""{ "b" : 2 }""", path="$.b", newpath="$.z"),
+            ]
         )
         v = F.parse_json(df.json)
 

@@ -592,6 +592,8 @@ public class VariantBuilder {
           }
         }
         if (isLast) {
+          // Append the new field unconditionally; if `key` already exists, the duplicate is
+          // detected by `finishWritingObject`, which raises VARIANT_DUPLICATE_KEY.
           int newId = addKey(key);
           fields.add(new FieldEntry(key, newId, writePos - start));
           appendVariant(val);
