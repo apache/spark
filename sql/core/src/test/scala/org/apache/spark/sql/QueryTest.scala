@@ -1212,4 +1212,19 @@ class QueryTestSuite extends QueryTest with SparkSessionBinder {
       "from range(2)"),
       Seq(Row(Row(null)), Row(Row("null"))))
   }
+
+  test("checkAnswer demands correct result order for ordered queries") {
+    val e = intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(
+        sql("SELECT col1 FROM VALUE 1, 2, 1, 3 ORDER BY col 1"),
+        Seq(Row(3), Row(1), Row(1), Row(2)))
+    }
+    assert(e.getMessage().contains("Results do not match for query"))
+  }
+
+  test("checkAnswer ignores result order for unordered queries") {
+    checkAnswer(
+      sql("SELECT col1 FROM VALUE 1, 2, 1, 3"),
+      Seq(Row(3), Row(1), Row(1), Row(2)))
+  }
 }
