@@ -39,7 +39,7 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   protected override def spark: SparkSession = _connectSpark
 
   /** The underlying classic session used by the in-process server. */
-  protected def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
+  private def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
