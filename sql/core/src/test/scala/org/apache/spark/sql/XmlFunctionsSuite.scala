@@ -100,13 +100,13 @@ class XmlFunctionsSuite extends SharedSparkSession {
           Seq(Row(goodRec, "{\"a\":1}"), Row(badRec, null)))
 
         // FAILFAST: the malformed record aborts the query.
-        val e = intercept[SparkException] {
-          spark.sql("SELECT from_xml(value, 'variant', " +
-            "map('rowTag','Event','mode','FAILFAST')) AS d FROM from_xml_variant_mode").collect()
-        }
-        assert(e.getMessage.toLowerCase(Locale.ROOT).contains("malformed"),
-          s"FAILFAST should surface the parse failure (wholeStageCodegen=$wholeStage), " +
-            s"got: ${e.getMessage.take(220)}")
+        checkError(
+          exception = intercept[SparkException] {
+            spark.sql("SELECT from_xml(value, 'variant', " +
+              "map('rowTag','Event','mode','FAILFAST')) AS d FROM from_xml_variant_mode").collect()
+          },
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
       }
     }
   }
