@@ -22,42 +22,42 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 
 /**
  * A v1 [[CatalogTable]] (representing a session-catalog view) exposed through the v2
- * [[ViewInfo]] surface, mirroring the way [[V1Table]] exposes a v1 table CatalogTable through
+ * [[View]] surface, mirroring the way [[V1Table]] exposes a v1 table CatalogTable through
  * the v2 [[Table]] surface. Holds the original [[CatalogTable]] in [[v1Table]] for v1-only
  * paths that need the full v1 metadata representation (e.g. `DescribeTableCommand`,
  * `ShowCreateTableCommand`, anything that calls `CatalogTable#toLinkedHashMap`).
  *
- * Note on `properties()`: the inherited [[ViewInfo#properties]] bag is built from the entire
+ * Note on `properties()`: the inherited [[View#properties]] bag is built from the entire
  * `v1Table.properties` map, which intermixes user TBLPROPERTIES with v1-internal storage keys
  * (`view.sqlConfig.*`, `view.catalogAndNamespace.*`, `view.query.out.*`, `view.schemaMode`).
  * v2 view inspection / SET execs (`ShowV2ViewPropertiesExec`, `AlterV2ViewSetPropertiesExec`,
- * etc.) never see a `V1ViewInfo` -- `ResolveSessionCatalog` rewrites session-catalog views to
+ * etc.) never see a `V1View` -- `ResolveSessionCatalog` rewrites session-catalog views to
  * v1 commands first -- so the bag stays internal to v1-only paths. Consumers that do receive
- * a `V1ViewInfo` should prefer the typed accessors ([[ViewInfo#sqlConfigs]],
- * [[ViewInfo#currentNamespace]], [[ViewInfo#currentCatalog]], [[ViewInfo#queryColumnNames]],
- * [[ViewInfo#schemaMode]]) for the v1-internal fields rather than scraping `properties()` for
+ * a `V1View` should prefer the typed accessors ([[View#sqlConfigs]],
+ * [[View#currentNamespace]], [[View#currentCatalog]], [[View#queryColumnNames]],
+ * [[View#schemaMode]]) for the v1-internal fields rather than scraping `properties()` for
  * them.
  */
-private[sql] class V1ViewInfo(val v1Table: CatalogTable)
-    extends ViewInfo(V1ViewInfo.builderFrom(v1Table))
+private[sql] class V1View(val v1Table: CatalogTable)
+    extends View(V1View.builderFrom(v1Table))
 
-private[sql] object V1ViewInfo {
+private[sql] object V1View {
   /**
-   * Convert a v1 [[CatalogTable]] view into a [[ViewInfo.Builder]] with the same fields.
-   * Used as the {@code super(builder)} argument when constructing a [[V1ViewInfo]].
+   * Convert a v1 [[CatalogTable]] view into a [[View.Builder]] with the same fields.
+   * Used as the {@code super(builder)} argument when constructing a [[V1View]].
    */
-  private def builderFrom(v1Table: CatalogTable): ViewInfo.Builder = {
-    val builder = new ViewInfo.Builder()
+  private def builderFrom(v1Table: CatalogTable): View.Builder = {
+    val builder = new View.Builder()
     builder.withSchema(v1Table.schema)
     builder.withProperties(v1Table.properties.asJava)
     // v1 stores collation / comment in typed `CatalogTable` fields rather than in `properties`,
-    // but consumers reading off [[ViewInfo]] (`ApplyDefaultCollation.fetchDefaultCollation`,
+    // but consumers reading off [[View]] (`ApplyDefaultCollation.fetchDefaultCollation`,
     // `ShowCreateV2ViewExec`, etc.) expect them under `PROP_COLLATION` / `PROP_COMMENT`. Bridge
     // them through the typed setters so the v2 surface sees the same view metadata regardless
     // of which catalog produced it.
     v1Table.collation.foreach(builder.withCollation)
     v1Table.comment.foreach(builder.withComment)
-    // ViewInfo requires a non-null queryText; v1 views always have one, but defend against
+    // View requires a non-null queryText; v1 views always have one, but defend against
     // an old/corrupt CatalogTable with `viewText = None` by falling back to an empty string.
     builder.withQueryText(v1Table.viewText.getOrElse(""))
     val cn = v1Table.viewCatalogAndNamespace

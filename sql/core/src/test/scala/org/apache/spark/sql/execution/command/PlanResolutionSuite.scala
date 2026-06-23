@@ -153,7 +153,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
     if (tableType == CatalogTableType.VIEW) {
-      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Stub the view-only fields that resolution reads through `V1View.builderFrom`.
       // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
       // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
       when(t.viewText).thenReturn(None)

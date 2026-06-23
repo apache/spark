@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1ViewInfo, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
@@ -105,10 +105,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   }
 
   // Strategy cases that target v2 views read `ResolvedPersistentView.info` directly. For
-  // session-catalog (v1) views the payload is a `V1ViewInfo` wrapping the original
-  // `CatalogTable`; v2 catalogs supply a regular `ViewInfo` from the catalog.
+  // session-catalog (v1) views the payload is a `V1View` wrapping the original
+  // `CatalogTable`; v2 catalogs supply a regular `View` from the catalog.
   // `ResolveSessionCatalog` rewrites session-catalog views to v1 commands before this strategy
-  // fires, so v2 cases that don't expect a `V1ViewInfo` won't see one.
+  // fires, so v2 cases that don't expect a `V1View` won't see one.
 
   private def qualifyLocInTableSpec(tableSpec: TableSpec): TableSpec = {
     val newLoc = tableSpec.location.map { loc =>
@@ -269,13 +269,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // Views are wrapped in V1Table so the exec can extract schema and provider uniformly --
     // session-catalog (v1) views unwrap to their original `CatalogTable`; non-session v2
     // views go through `V1Table.toCatalogTable` to synthesize an equivalent `CatalogTable`
-    // from the resolved `ViewInfo`.
+    // from the resolved `View`.
     case CreateTableLike(
         ResolvedIdentifier(catalog, ident), source,
         locationStr, provider, serdeInfo, properties, ifNotExists) =>
       val table = source match {
         case ResolvedTable(_, _, t, _) => t
-        case ResolvedPersistentView(_, _, info: V1ViewInfo) => V1Table(info.v1Table)
+        case ResolvedPersistentView(_, _, info: V1View) => V1Table(info.v1Table)
         case rpv @ ResolvedPersistentView(viewCatalog, viewIdent, _) =>
           V1Table(V1Table.toCatalogTable(viewCatalog, viewIdent, rpv.info))
         case ResolvedTempView(_, meta) => V1Table(meta)
@@ -366,7 +366,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     // View DDL / inspection on a non-session v2 catalog that the v1 rewrite in
     // `ResolveSessionCatalog` can't handle (its `ResolvedViewIdentifier` matcher is gated on
-    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `ViewInfo`
+    // `isSessionCatalog`). Routed to dedicated v2 execs that read the typed `View`
     // resolved at analysis time directly from `ResolvedPersistentView.info` -- no re-loading
     // at exec time.
     case SetViewProperties(rpv @ ResolvedPersistentView(catalog, ident, _), props) =>
