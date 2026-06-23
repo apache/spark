@@ -117,6 +117,13 @@ trait CodegenSupport extends SparkPlan {
    *     # call consume(), which will call parent.doConsume()
    *      if (shouldStop()) return;
    *   }
+   *
+   * If the emitted code depends on the partition index, read it from
+   * `ctx.currentPartitionIndexVar` rather than hard-coding the field name
+   * `partitionIndex`. `UnionExec` rebinds `currentPartitionIndexVar` per
+   * fused child so that each child sees its own child-local index; a
+   * hard-coded reference would silently observe the global `UnionRDD` index
+   * under fusion.
    */
   protected def doProduce(ctx: CodegenContext): String
 

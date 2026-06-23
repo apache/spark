@@ -18,13 +18,14 @@ package org.apache.spark.sql.connect.client
 
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Base64, UUID}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CountDownLatch, Executor, TimeUnit}
 
 import scala.collection.mutable
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => PAny, StringValue}
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.concurrent.Eventually
@@ -823,6 +824,246 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       // No BINARY_BYTE_MARSHALLER header.
       assert(!headerInterceptor.headers.exists(_.containsKey(key)))
     }
+  }
+
+  test("one-shot RPC deadlines fire on slow server") {
+    val latch = new CountDownLatch(1)
+    val slowService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.analyzePlan(request, responseObserver)
+      }
+      override def config(
+          request: proto.ConfigRequest,
+          responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.config(request, responseObserver)
+      }
+      override def interrupt(
+          request: proto.InterruptRequest,
+          responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.interrupt(request, responseObserver)
+      }
+      override def releaseSession(
+          request: proto.ReleaseSessionRequest,
+          responseObserver: StreamObserver[proto.ReleaseSessionResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        responseObserver.onNext(
+          proto.ReleaseSessionResponse
+            .newBuilder()
+            .setSessionId(request.getSessionId)
+            .build())
+        responseObserver.onCompleted()
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
+    service = slowService
+    val d = FiniteDuration(50, TimeUnit.MILLISECONDS)
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(
+        RpcDeadlines(
+          analyzePlan = Some(d),
+          config = Some(d),
+          interrupt = Some(d),
+          releaseSession = Some(d)))
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    def expectDeadlineExceeded(thunk: => Any): Unit = {
+      val ex = intercept[SparkException] { thunk }
+      assert(ex.getCause.isInstanceOf[StatusRuntimeException])
+      assert(
+        ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+          Status.Code.DEADLINE_EXCEEDED)
+    }
+
+    try {
+      expectDeadlineExceeded(
+        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()))
+      val configOp = proto.ConfigRequest.Operation
+        .newBuilder()
+        .setGetOption(
+          proto.ConfigRequest.GetOption.newBuilder().addKeys("spark.sql.shuffle.partitions"))
+        .build()
+      expectDeadlineExceeded(client.config(configOp))
+      expectDeadlineExceeded(client.interruptAll())
+      expectDeadlineExceeded(client.releaseSession())
+    } finally {
+      latch.countDown()
+    }
+  }
+
+  test("analyzePlan with short deadline fires, then succeeds after disabling deadlines") {
+    val latch = new CountDownLatch(1)
+    val slowService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.analyzePlan(request, responseObserver)
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
+    service = slowService
+    val noRetry = RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry")
+
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(RpcDeadlines(analyzePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .retryPolicy(noRetry)
+      .build()
+    try {
+      val ex = intercept[SparkException] {
+        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+      }
+      assert(
+        ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+          Status.Code.DEADLINE_EXCEEDED)
+      client.shutdown()
+    } finally {
+      latch.countDown()
+    }
+
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(RpcDeadlines.disabled)
+      .retryPolicy(noRetry)
+      .build()
+    client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+  }
+
+  test("reattachable execute recovers from mid-stream deadline via ReattachExecute") {
+    val executeLatch = new CountDownLatch(1)
+    @volatile var reattachCalled = false
+    val midStreamService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+        val sessionId = request.getSessionId
+        val operationId =
+          if (request.hasOperationId) request.getOperationId
+          else UUID.randomUUID().toString
+        val serverSideSessionId = "srv-deadline-test"
+        responseObserver.onNext(
+          ExecutePlanResponse
+            .newBuilder()
+            .setSessionId(sessionId)
+            .setServerSideSessionId(serverSideSessionId)
+            .setOperationId(operationId)
+            .setResponseId("r1")
+            .build())
+        executeLatch.await(250, TimeUnit.MILLISECONDS)
+        responseObserver.onCompleted()
+      }
+
+      override def reattachExecute(
+          request: proto.ReattachExecuteRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+        reattachCalled = true
+        val sessionId = request.getSessionId
+        val operationId = request.getOperationId
+        val serverSideSessionId = "srv-deadline-test"
+        responseObserver.onNext(
+          ExecutePlanResponse
+            .newBuilder()
+            .setSessionId(sessionId)
+            .setServerSideSessionId(serverSideSessionId)
+            .setOperationId(operationId)
+            .setResponseId("r2")
+            .build())
+        responseObserver.onNext(
+          ExecutePlanResponse
+            .newBuilder()
+            .setSessionId(sessionId)
+            .setServerSideSessionId(serverSideSessionId)
+            .setOperationId(operationId)
+            .setResponseId("r3")
+            .setResultComplete(proto.ExecutePlanResponse.ResultComplete.newBuilder().build())
+            .build())
+        responseObserver.onCompleted()
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(midStreamService).build().start()
+    service = midStreamService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(
+        RpcDeadlines(reattachableExecutePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .enableReattachableExecute()
+      .build()
+
+    try {
+      val iter = client.execute(buildPlan("select 1"))
+      val reattachableIter = ExecutePlanResponseReattachableIterator.fromIterator(iter)
+      iter.foreach(_ => ())
+
+      assert(reattachableIter.resultComplete, "iterator should complete after reattach")
+      assert(reattachCalled, "ReattachExecute should have been called")
+    } finally {
+      executeLatch.countDown()
+    }
+  }
+
+  test("non-reattachable executePlan has no client-side deadline") {
+    val latch = new CountDownLatch(1)
+    val slowService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+        latch.await(250, TimeUnit.MILLISECONDS)
+        super.executePlan(request, responseObserver)
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(slowService).build().start()
+    service = slowService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .disableReattachableExecute()
+      .rpcDeadlines(
+        RpcDeadlines(reattachableExecutePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+    try {
+      val iter = client.execute(buildPlan("select 1"))
+      iter.foreach(_ => ())
+    } finally {
+      latch.countDown()
+    }
+  }
+
+  test("SPARK-56538: RpcDeadlines.disabled has no configured deadlines in toString") {
+    assert(RpcDeadlines.disabled.toString === "RpcDeadlines(all disabled)")
+  }
+
+  test("SPARK-57336: access token is sent in the standard Authorization header") {
+    val token = "test-token-12345"
+    val creds = new SparkConnectClient.AccessTokenCallCredentials(token)
+
+    var captured: Option[Metadata] = None
+    var failure: Option[Status] = None
+    val applier = new CallCredentials.MetadataApplier {
+      override def apply(headers: Metadata): Unit = captured = Some(headers)
+      override def fail(status: Status): Unit = failure = Some(status)
+    }
+    val sameThreadExecutor = new Executor {
+      override def execute(command: Runnable): Unit = command.run()
+    }
+
+    creds.applyRequestMetadata(null, sameThreadExecutor, applier)
+
+    val authorizationKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
+    assert(failure.isEmpty, s"unexpected failure: ${failure.orNull}")
+    assert(captured.isDefined)
+    assert(captured.get.get(authorizationKey) === s"Bearer $token")
   }
 }
 

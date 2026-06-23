@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, ResolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{VariableDefinition, VariableManager}
+import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
@@ -47,13 +48,18 @@ class SqlScriptingLocalVariableManager(context: SqlScriptingExecutionContext)
     context.currentScope.variables.put(name, varDef)
   }
 
-  override def set(nameParts: Seq[String], varDef: VariableDefinition): Unit = {
+  override def set(
+      nameParts: Seq[String],
+      varDef: VariableDefinition,
+      origin: Origin): Unit = {
     val scope = findScopeOfVariable(nameParts)
       .getOrElse(
-        throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq))
+        throw unresolvedVariableError(
+          nameParts, Seq(varDef.identifier.namespace().toIndexedSeq), origin))
 
     if (!scope.variables.contains(nameParts.last)) {
-      throw unresolvedVariableError(nameParts, varDef.identifier.namespace().toIndexedSeq)
+      throw unresolvedVariableError(
+        nameParts, Seq(varDef.identifier.namespace().toIndexedSeq), origin)
     }
 
     scope.variables.put(nameParts.last, varDef)

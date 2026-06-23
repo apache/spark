@@ -459,6 +459,23 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
 
+      case c: CacheTableAsSelect if c.tempViewName.resolved =>
+        // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
+        // identifiers and `IDENTIFIER('literal')`) or an `ExpressionWithUnresolvedIdentifier`
+        // that resolves to such a Literal. Validate the post-analysis shape so any future
+        // construction path that violates the invariant fails loudly here, not deep inside
+        // execution via `tempViewNameString`. The `resolved` guard ensures that when the
+        // IDENTIFIER expression itself failed to resolve (e.g. `IDENTIFIER(<unresolved-col>)`),
+        // we fall through to the catch-all `LogicalPlan` case so the user sees the proper
+        // `UNRESOLVED_COLUMN` error rather than an internal error.
+        c.tempViewName match {
+          case Literal(value, _: StringType) if value != null => // OK
+          case other =>
+            throw SparkException.internalError(
+              "CacheTableAsSelect.tempViewName must be a non-null string literal after " +
+                s"analysis, but got: ${other.sql}")
+        }
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           case hof: HigherOrderFunction if hof.arguments.exists {
@@ -565,7 +582,29 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
-            checkSubqueryExpression(operator, s)
+            // A subquery inside a generation expression is unsupported. Surface a
+            // generated-column-specific error here, before the generic subquery validation below
+            // reports a less helpful message.
+            operator match {
+              case create: V2CreateTablePlan =>
+                create.columns.find { col =>
+                  col.generationExpression.exists(_.child.exists(_ eq s))
+                } match {
+                  case Some(col) =>
+                    throw new AnalysisException(
+                      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+                      messageParameters = Map(
+                        "fieldName" -> col.name,
+                        "expressionStr" -> col.generationExpression.get.originalSQL,
+                        "reason" -> "subquery expressions are not allowed for generated columns"
+                      )
+                    )
+                  case None =>
+                    checkSubqueryExpression(operator, s)
+                }
+              case _ =>
+                checkSubqueryExpression(operator, s)
+            }
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             e.failAnalysis(
@@ -656,6 +695,42 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
                 messageParameters = Map.empty)
             }
+
+          // Reject streaming inputs early. The optimizer rewrite is built around an
+          // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
+          // identifier (`__qid`). That shape doesn't compose cleanly with structured-streaming
+          // semantics: a stateful aggregate keyed by a freshly-generated identifier accumulates
+          // state indefinitely (every batch creates new keys, old keys never match again) and a
+          // cross-product against a streaming right side has no bounded state model today.
+          // Failing at analysis time is clearer than letting either fail at runtime. Streaming
+          // support is tracked as a follow-up; resolving it likely comes from a different
+          // grouping strategy or a dedicated physical operator.
+          case j: NearestByJoin if j.isStreaming =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+              messageParameters = Map.empty)
+
+          case j: NearestByJoin if !conf.crossJoinEnabled =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+              messageParameters = Map.empty)
+
+          case j @ NearestByJoin(_, _, _, _, _, rankingExpression, _)
+              if !RowOrdering.isOrderable(rankingExpression.dataType) =>
+            j.failAnalysis(
+              errorClass = "NEAREST_BY_JOIN.NON_ORDERABLE_RANKING_EXPRESSION",
+              messageParameters = Map(
+                "expression" -> toSQLExpr(rankingExpression),
+                "type" -> toSQLType(rankingExpression.dataType)))
+
+          case z: Zip =>
+            // ResolveZip succeeded for all valid inputs, so a surviving Zip means the two
+            // sides either don't share a base or contain a non-scalar Python UDF. Either way
+            // we surface ZIP_PLANS_NOT_MERGEABLE -- without this we'd fall through to the
+            // generic unresolved-operator INTERNAL_ERROR catch-all.
+            z.failAnalysis(
+              errorClass = "ZIP_PLANS_NOT_MERGEABLE",
+              messageParameters = Map.empty)
 
           case a: Aggregate =>
             a.groupingExpressions.foreach(
@@ -834,6 +909,35 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
+            // Validate generated column expressions
+            create.columns.foreach { col =>
+              col.generationExpression.foreach { genExpr =>
+                def unsupportedExpressionError(reason: String): AnalysisException = {
+                  new AnalysisException(
+                    errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+                    messageParameters = Map(
+                      "fieldName" -> col.name,
+                      "expressionStr" -> genExpr.originalSQL,
+                      "reason" -> reason
+                    )
+                  )
+                }
+                // Only built-in functions are allowed in generated columns. Functions that are
+                // not built-in already fail earlier in analysis: unknown functions with
+                // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
+                // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
+                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
+                // resolve successfully.
+                genExpr.child.foreach {
+                  case udf: UserDefinedExpression =>
+                    throw unsupportedExpressionError(
+                      s"failed to resolve `${udf.name}` to a built-in function")
+                  case _ =>
+                }
+                genExpr.validate(col.name, col.dataType, create.columns)
+              }
+            }
+
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
@@ -939,6 +1043,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               summary = e.origin.context.summary)
 
           case j: AsOfJoin if !j.duplicateResolved =>
+            val conflictingAttributes =
+              j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
+            throw SparkException.internalError(
+              msg = s"""
+                       |Failure when resolving conflicting references in ${j.nodeName}:
+                       |${planToString(plan)}
+                       |Conflicting attributes: $conflictingAttributes.""".stripMargin,
+              context = j.origin.getQueryContext,
+              summary = j.origin.context.summary)
+
+          case j: NearestByJoin if !j.duplicateResolved =>
             val conflictingAttributes =
               j.left.outputSet.intersect(j.right.outputSet).map(toSQLExpr(_)).mkString(", ")
             throw SparkException.internalError(

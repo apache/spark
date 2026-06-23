@@ -399,42 +399,57 @@ case class MakeInterval(
       hour: Any,
       min: Any,
       sec: Option[Any]): Any = {
-    try {
-      IntervalUtils.makeInterval(
+    val secs = sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6))
+    if (failOnError) {
+      DateTimeExpressionUtils.makeIntervalExact(
         year.asInstanceOf[Int],
         month.asInstanceOf[Int],
         week.asInstanceOf[Int],
         day.asInstanceOf[Int],
         hour.asInstanceOf[Int],
         min.asInstanceOf[Int],
-        sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
-    } catch {
-      case e: ArithmeticException =>
-        if (failOnError) {
-          throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
-        } else {
-          null
-        }
+        secs)
+    } else {
+      try {
+        IntervalUtils.makeInterval(
+          year.asInstanceOf[Int],
+          month.asInstanceOf[Int],
+          week.asInstanceOf[Int],
+          day.asInstanceOf[Int],
+          hour.asInstanceOf[Int],
+          min.asInstanceOf[Int],
+          secs)
+      } catch {
+        case _: ArithmeticException => null
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
-      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      val secFrac = sec.getOrElse("0")
-      val failOnErrorBranch = if (failOnError) {
-        """throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);"""
-      } else {
-        s"${ev.isNull} = true;"
-      }
-      s"""
-        try {
-          ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
-        } catch (java.lang.ArithmeticException e) {
-          $failOnErrorBranch
-        }
-      """
-    })
+    if (failOnError) {
+      val utils = classOf[DateTimeExpressionUtils].getName
+      nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
+        // `MakeInterval` always passes 7 children (auxiliary constructors fill
+        // missing slots with `Literal(0)` / `Literal(Decimal(0, ...))`), so the
+        // 7th codegen value is always present.
+        val secFrac = sec.get
+        s"${ev.value} = $utils.makeIntervalExact(" +
+          s"$year, $month, $week, $day, $hour, $min, $secFrac);"
+      })
+    } else {
+      nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        // `MakeInterval` always passes 7 children (see note above).
+        val secFrac = sec.get
+        s"""
+          try {
+            ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
+          } catch (java.lang.ArithmeticException e) {
+            ${ev.isNull} = true;
+          }
+        """
+      })
+    }
   }
 
   override def prettyName: String = "make_interval"

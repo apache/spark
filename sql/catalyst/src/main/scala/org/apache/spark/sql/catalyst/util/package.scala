@@ -187,10 +187,10 @@ package object util extends Logging {
   val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
   /**
-   * If set, this metadata column can only be accessed under [[AggregateExpression]]. This is
-   * important when resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]].
-   * In this case we can only reference attributes from grouping expressions, or attributes marked
-   * as "__aggregated_access_only" under [[AggregateExpression]].
+   * If set, this column can only be accessed under [[AggregateExpression]]. This is important when
+   * resolving columns in ORDER BY and HAVING clauses on top of [[Aggregate]]. In this case we can
+   * only reference attributes from grouping expressions, or attributes marked as
+   * "__aggregated_access_only" under [[AggregateExpression]].
    */
   val AGGREGATED_ACCESS_ONLY = "__aggregated_access_only"
 
@@ -202,8 +202,7 @@ package object util extends Logging {
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(QUALIFIED_ACCESS_ONLY)
 
-    def aggregatedAccessOnly: Boolean = attr.isMetadataCol &&
-      attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
+    def aggregatedAccessOnly: Boolean = attr.metadata.contains(AGGREGATED_ACCESS_ONLY) &&
       attr.metadata.getBoolean(AGGREGATED_ACCESS_ONLY)
 
     def markAsQualifiedAccessOnly(): Attribute = attr.withMetadata(
@@ -217,7 +216,6 @@ package object util extends Logging {
     def markAsAggregatedAccessOnly(): Attribute = attr.withMetadata(
       new MetadataBuilder()
         .withMetadata(attr.metadata)
-        .putString(METADATA_COL_ATTR_KEY, attr.name)
         .putBoolean(AGGREGATED_ACCESS_ONLY, true)
         .build()
     )

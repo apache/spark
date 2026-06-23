@@ -297,6 +297,94 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("types" -> dataTypes.mkString(", ")))
   }
 
+  def binByAlignToTypeMismatchError(
+      originType: DataType,
+      rangeType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_ALIGN_TO_TYPE_MISMATCH",
+      messageParameters = Map(
+        "originType" -> toSQLType(originType),
+        "rangeType" -> toSQLType(rangeType)))
+  }
+
+  def binByColumnNotFoundError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_COLUMN_NOT_FOUND",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def binByDisabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
+      messageParameters = Map.empty)
+  }
+
+  def binByRequiresTopLevelColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def binByDistributeTypeMismatchError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_DISTRIBUTE_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def binByDuplicateDistributeColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def binByInvalidAlignToError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_ALIGN_TO",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByInvalidBinWidthError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_BIN_WIDTH",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByMissingDistributeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_MISSING_DISTRIBUTE",
+      messageParameters = Map.empty)
+  }
+
+  def binByNonFoldableInputError(inputName: String, expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expr),
+        "inputName" -> toSQLId(inputName),
+        "inputType" -> toSQLType(expr.dataType),
+        "inputExpr" -> toSQLExpr(expr)))
+  }
+
+  def binByNullArgumentError(clause: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_NULL_ARGUMENT",
+      messageParameters = Map("clause" -> clause))
+  }
+
+  def binByRangeTypeMismatchError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_RANGE_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
@@ -392,13 +480,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def schemaLevelCollationsNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS",
-      messageParameters = Map.empty
-    )
-  }
-
-  def trimCollationNotEnabledError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
       messageParameters = Map.empty
     )
   }
@@ -916,23 +997,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedVariableError(name: Seq[String], searchPath: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNRESOLVED_VARIABLE",
-      messageParameters = Map(
-        "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)))
-  }
-
   def unresolvedVariableError(
       name: Seq[String],
-      searchPath: Seq[String],
+      pathEntries: Seq[Seq[String]],
       origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
         "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)),
+        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")),
       origin = origin)
   }
 
@@ -1671,6 +1744,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def cannotCreateJDBCTableUsingProviderError(): Throwable = {
     notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
+  }
+
+  def showPartitionsAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW PARTITIONS AS JSON")
   }
 
   def cannotCreateJDBCTableUsingLocationError(): Throwable = {
@@ -2545,10 +2622,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("sourceName" -> sourceName))
   }
 
+  def invalidStreamingSinkNameError(sinkName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SINK_NAME",
+      messageParameters = Map("sinkName" -> sinkName))
+  }
+
   def duplicateStreamingSourceNamesError(duplicateNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
       messageParameters = Map("names" -> duplicateNames.mkString(", ")))
+  }
+
+  def cannotEnableSourceEvolutionOnExistingCheckpointError(existingVersion: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+      messageParameters = Map("existingVersion" -> existingVersion.toString))
   }
 
   def columnNotFoundInExistingColumnsError(
@@ -2824,6 +2913,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1207",
       messageParameters = Map.empty)
+  }
+
+  def invalidMetricViewYamlError(message: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_METRIC_VIEW_YAML",
+      messageParameters = Map("message" -> message),
+      cause = Some(cause))
   }
 
   def noSuchStructFieldInGivenFieldsError(
@@ -3323,6 +3419,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(table)))
   }
 
+  def showCreateTableNotSupportedOnMetricViewError(table: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW",
+      messageParameters = Map("tableName" -> toSQLId(table)))
+  }
+
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
@@ -3432,6 +3534,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "viewIdent" -> toSQLId(viewIdent),
         "newPath" -> newPath.map(toSQLId).mkString(" -> ")))
+  }
+
+  def recursiveFileLookupNotSupportedForPartitionedDataSourceError(): Throwable = {
+    new AnalysisException(
+      errorClass = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+      messageParameters = Map.empty)
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
@@ -3894,12 +4002,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       changelogName: String): AnalysisException = {
     new AnalysisException(
       errorClass = "INVALID_CDC_OPTION.UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL",
-      messageParameters = Map("changelogName" -> changelogName))
-  }
-
-  def cdcStreamingPostProcessingNotSupported(changelogName: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "INVALID_CDC_OPTION.STREAMING_POST_PROCESSING_NOT_SUPPORTED",
       messageParameters = Map("changelogName" -> changelogName))
   }
 

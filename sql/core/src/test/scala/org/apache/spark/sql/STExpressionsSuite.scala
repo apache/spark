@@ -106,11 +106,11 @@ class STExpressionsSuite
     // Construct the input GEOGRAPHY expression.
     val geogExpr = ST_GeogFromWKB(wkbLiteral)
     assert(geogExpr.dataType.sameType(defaultGeographyType))
-    checkEvaluation(ST_AsBinary(geogExpr), wkb)
+    checkEvaluation(new ST_AsBinary(geogExpr), wkb)
     // Cast the GEOGRAPHY with fixed SRID to GEOGRAPHY with mixed SRID.
     val castExpr = Cast(geogExpr, mixedSridGeographyType)
     assert(castExpr.dataType.sameType(mixedSridGeographyType))
-    checkEvaluation(ST_AsBinary(castExpr), wkb)
+    checkEvaluation(new ST_AsBinary(castExpr), wkb)
 
     // Construct the input GEOGRAPHY SQL query, using WKB literal.
     val geogQueryLit: String = s"ST_GeogFromWKB(X'$wkbString')"
@@ -146,11 +146,11 @@ class STExpressionsSuite
     // Construct the input GEOMETRY expression.
     val geomExpr = new ST_GeomFromWKB(wkbLiteral)
     assert(geomExpr.dataType.sameType(defaultGeometryType))
-    checkEvaluation(ST_AsBinary(geomExpr), wkb)
+    checkEvaluation(new ST_AsBinary(geomExpr), wkb)
     // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
     val castExpr = Cast(geomExpr, mixedSridGeometryType)
     assert(castExpr.dataType.sameType(mixedSridGeometryType))
-    checkEvaluation(ST_AsBinary(castExpr), wkb)
+    checkEvaluation(new ST_AsBinary(castExpr), wkb)
 
     // Construct the input GEOMETRY SQL query, using WKB literal.
     val geomQueryLit: String = s"ST_GeomFromWKB(X'$wkbString')"
@@ -475,16 +475,42 @@ class STExpressionsSuite
 
   test("ST_AsBinary") {
     // Test data: WKB representation of POINT(1 2).
-    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
-    val wkbLiteral = Literal.create(wkb, BinaryType)
+    val wkbNdr = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbXdr = Hex.unhex("00000000013FF00000000000004000000000000000".getBytes())
+    val wkbLiteral = Literal.create(wkbNdr, BinaryType)
+    val endiannessNdr = Literal.create("NDR")
+    val endiannessXdr = Literal.create("XDR")
     // ST_GeogFromWKB and ST_AsBinary.
     val geographyExpression = ST_GeogFromWKB(wkbLiteral)
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
-    checkEvaluation(ST_AsBinary(geographyExpression), wkb)
+    checkEvaluation(new ST_AsBinary(geographyExpression), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create("nDr")), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessXdr), wkbXdr)
     // ST_GeomFromWKB and ST_AsBinary.
     val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
-    checkEvaluation(ST_AsBinary(geometryExpression), wkb)
+    checkEvaluation(new ST_AsBinary(geometryExpression), wkbNdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessXdr), wkbXdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create("XdR")), wkbXdr)
+    // Test NULL handling.
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeographyType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeographyType), endiannessNdr), null)
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeometryType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeometryType), endiannessXdr), null)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create(null, StringType)), null)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create(null, StringType)), null)
+    // Test invalid endianness.
+    Seq(geographyExpression, geometryExpression).foreach { expr =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          ST_AsBinary(expr, Literal.create("ABC")).eval()
+        },
+        condition = "ST_INVALID_ENDIANNESS_VALUE",
+        parameters = Map("endianness" -> "ABC")
+      )
+    }
   }
 
   test("ST_GeogFromWKB - expressions") {
@@ -494,7 +520,7 @@ class STExpressionsSuite
     // ST_GeogFromWKB with default SRID.
     val geographyExpression = ST_GeogFromWKB(wkbLiteral)
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
-    checkEvaluation(ST_AsBinary(geographyExpression), wkb)
+    checkEvaluation(new ST_AsBinary(geographyExpression), wkb)
     checkEvaluation(ST_Srid(geographyExpression), defaultGeographySrid)
     // ST_GeogFromWKB with NULL input.
     val nullLiteral = Literal.create(null, BinaryType)
@@ -523,11 +549,11 @@ class STExpressionsSuite
     // ST_GeomFromWKB with default SRID.
     val geometryExpressionNoSrid = new ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpressionNoSrid.dataType.sameType(defaultGeometryType))
-    checkEvaluation(ST_AsBinary(geometryExpressionNoSrid), wkb)
+    checkEvaluation(new ST_AsBinary(geometryExpressionNoSrid), wkb)
     // ST_GeomFromWKB with valid SRID.
     val geometryExpressionValidSrid = ST_GeomFromWKB(wkbLiteral, validSridLiteral)
     assert(geometryExpressionValidSrid.dataType.sameType(GeometryType(validSrid)))
-    checkEvaluation(ST_AsBinary(geometryExpressionValidSrid), wkb)
+    checkEvaluation(new ST_AsBinary(geometryExpressionValidSrid), wkb)
     // ST_GeomFromWKB with invalid SRID.
     val geometryExpressionInvalidSrid = ST_GeomFromWKB(wkbLiteral, invalidSridLiteral)
     checkError(
@@ -638,7 +664,7 @@ class STExpressionsSuite
     // ST_SetSrid on GEOGRAPHY expression.
     val geogLit = ST_SetSrid(geographyLiteral, sridLiteral)
     assert(geogLit.dataType.sameType(GeographyType(srid)))
-    checkEvaluation(ST_AsBinary(geogLit), wkb)
+    checkEvaluation(new ST_AsBinary(geogLit), wkb)
     val geogLitSrid = ST_Srid(geogLit)
     assert(geogLitSrid.dataType.sameType(IntegerType))
     checkEvaluation(geogLitSrid, srid)
@@ -662,7 +688,7 @@ class STExpressionsSuite
     // ST_SetSrid on GEOMETRY expression.
     val geomLit = ST_SetSrid(geometryLiteral, sridLiteral)
     assert(geomLit.dataType.sameType(GeometryType(srid)))
-    checkEvaluation(ST_AsBinary(geomLit), wkb)
+    checkEvaluation(new ST_AsBinary(geomLit), wkb)
     val geomLitSrid = ST_Srid(geomLit)
     assert(geomLitSrid.dataType.sameType(IntegerType))
     checkEvaluation(geomLitSrid, srid)

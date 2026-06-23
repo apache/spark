@@ -34,7 +34,8 @@ object VariantExpressionEvalUtils {
   def parseJson(
       input: UTF8String,
       allowDuplicateKeys: Boolean = false,
-      failOnError: Boolean = true): VariantVal = {
+      failOnError: Boolean = true,
+      validateUnicodeInJsonParsing: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -43,7 +44,8 @@ object VariantExpressionEvalUtils {
       }
     }
     try {
-      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys)
+      val v = VariantBuilder.parseJson(
+        input.toString, allowDuplicateKeys, validateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -69,6 +71,39 @@ object VariantExpressionEvalUtils {
       }
     }
   }
+
+  def isValidVariant(input: VariantVal): Boolean =
+    VariantUtil.isValidVariant(input.getValue, input.getMetadata)
+
+  /** Throws `INVALID_VARIANT_PATH` on a malformed path or on the empty (root `$`) path. */
+  def parseVariantDeletePath(pathValue: String): Array[VariantPathSegment] = {
+    val parsed = VariantPathParser.parse(pathValue).getOrElse {
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+    }
+    if (parsed.isEmpty) {
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+    }
+    parsed
+  }
+
+  def toJavaSegments(
+      segments: Array[VariantPathSegment]): Array[VariantBuilder.PathSegment] = {
+    segments.map {
+      case ObjectExtraction(key) => new VariantBuilder.ObjectKeySegment(key)
+      case ArrayExtraction(index) => new VariantBuilder.ArrayIndexSegment(index)
+    }
+  }
+
+  def deleteAtPath(
+      input: VariantVal,
+      javaSegments: Array[VariantBuilder.PathSegment]): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.deleteAtPath(v, javaSegments)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
+  def deleteAtPath(input: VariantVal, path: UTF8String): VariantVal =
+    deleteAtPath(input, toJavaSegments(parseVariantDeletePath(path.toString)))
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {

@@ -73,6 +73,15 @@ class InMemoryEnhancedPartitionFilterTable(
         InMemoryEnhancedPartitionFilterTable.AcceptDataPredicatesKey, "false")
         .toBoolean
 
+    // Default false. When true, first-pass partition predicates that are accepted (pushed) are
+    // also returned for post-scan evaluation, simulating a partial pushdown (e.g. a Parquet
+    // row group filter). Such predicates are reported by pushedPredicates() but still appear in
+    // the pushPredicates() return value.
+    private val returnAcceptedPartitionPredicates =
+      InMemoryEnhancedPartitionFilterTable.this.properties.getOrDefault(
+        InMemoryEnhancedPartitionFilterTable.ReturnAcceptedPartitionPredicatesKey, "false")
+        .toBoolean
+
     override def supportsIterativePushdown(): Boolean = true
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
@@ -95,6 +104,10 @@ class InMemoryEnhancedPartitionFilterTable(
             InMemoryTableWithV2Filter.supportsPredicates(Array(p)) =>
           if (acceptPartitionPredicates) {
             firstPassPushedPredicates += p
+            // Simulate partial pushdown: pushed, but still returned for post-scan.
+            if (returnAcceptedPartitionPredicates) {
+              returned += p
+            }
           } else {
             returned += p
           }
@@ -166,4 +179,12 @@ object InMemoryEnhancedPartitionFilterTable {
    * mocking a data source that can evaluate this particular data predicate).
    */
   private[catalog] val AcceptDataPredicatesKey = "accept-data-predicates"
+
+  /**
+   * Table property: when "true", first-pass partition predicates that are accepted (pushed) are
+   * also returned for post-scan evaluation, simulating a partial pushdown (e.g. a Parquet
+   * row group filter). Used to verify that already-pushed predicates are not re-derived as
+   * PartitionPredicates in the second pass.
+   */
+  private[catalog] val ReturnAcceptedPartitionPredicatesKey = "return-accepted-partition-predicates"
 }

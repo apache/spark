@@ -19,7 +19,6 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -33,19 +32,6 @@ case class UnresolvedDatasetException(identifier: TableIdentifier)
     extends AnalysisException(
       s"Failed to read dataset '${identifier.unquotedString}'. Dataset is defined in the " +
       s"pipeline but could not be resolved."
-    )
-
-/**
- * Exception raised when a flow fails to read from a table defined within the pipeline
- *
- * @param name The name of the table
- * @param cause The cause of the failure
- */
-case class LoadTableException(name: String, cause: Option[Throwable])
-    extends SparkException(
-      errorClass = "INTERNAL_ERROR",
-      messageParameters = Map("message" -> s"Failed to load table '$name'"),
-      cause = cause.orNull
     )
 
 object PipelinesErrors extends Logging {

@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -39,9 +40,38 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   private[this] var state: TransactionState = Active
   private[this] var closed: Boolean = false
 
+  // Records every batch of scans the connector accepted via registerScans. Tests assert on this
+  // to confirm cache substitution went through the txn path.
+  val registeredScans: ArrayBuffer[Seq[Scan]] = ArrayBuffer.empty
+
+  // Test-only switch. When true, `registerScans` unconditionally returns false, simulating
+  // a connector that rejects all cache reuse. Used to verify Spark's cache-bypass behavior.
+  var rejectRegisteredScansAttempt: Boolean = false
+
   def currentState: TransactionState = state
 
   def isClosed: Boolean = closed
+
+  // Accept the batch only if every scan can be routed to a TxnTable this catalog is tracking;
+  // otherwise refuse. Staleness is handled upstream: `loadTable` returns a snapshot pinned at
+  // load, and version-aware `Table.equals` rejects cache matches whose underlying table has
+  // moved on.
+  override def registerScans(scans: Array[Scan]): Boolean = {
+    if (rejectRegisteredScansAttempt) return false
+
+    val routed = scans.toSeq.map {
+      case s: InMemoryBaseTable#InMemoryBatchScan =>
+        catalog.txnTables.values.find(_.delegate == s.table).map(_ -> s)
+      case _ => None
+    }
+    if (routed.exists(_.isEmpty)) return false
+
+    registeredScans += scans.toSeq
+    routed.flatten.foreach { case (txnTable, s) =>
+      txnTable.scanEvents += s.pushedFilters
+    }
+    true
+  }
 
   override def commit(): Unit = {
     if (closed) throw new IllegalStateException("Can't commit, already closed")
@@ -85,6 +115,9 @@ class TxnTable(
   // Expose the same id as the delegate so that identity checks during transaction re-resolution
   // don't false-positive on the TxnTable wrapper having a different UUID.
   override val id: String = delegate.id
+
+  // The starting version should be the delegate version.
+  setVersion(delegate.version())
 
   // Preserve column IDs from the delegate so that column ID validation can correctly detect
   // drop-and-re-add scenarios (different IDs) and pass when columns are unchanged (same IDs).
@@ -157,7 +190,9 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   // table.
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
-      val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+      // Wrap the live underlying instance (not a snapshot copy from loadTable) so commits
+      // propagate back to the catalog's authoritative state.
+      val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table, table.schema(), this)
     })
   }
@@ -177,8 +212,8 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    // TODO: We need to pass all tracked predicates to the new TXN table.
     val newTxnTable = new TxnTable(txnTable.delegate, schema, this)
+    newTxnTable.scanEvents ++= txnTable.scanEvents
     tables.put(ident, newTxnTable)
     newTxnTable
   }
@@ -244,6 +279,11 @@ class SharedTablesInMemoryRowLevelOperationTableCatalog
     super.initialize(name, options)
     tables = SharedTablesInMemoryRowLevelOperationTableCatalog.sharedTables
   }
+
+  // Return the live table instance (not a snapshot copy) so that an in-place TRUNCATE --
+  // which resolves its target via the read-path loadTable -- mutates the shared catalog
+  // state instead of a discarded copy. (DROP bypasses loadTable, so it is unaffected.)
+  override def loadTable(ident: Identifier): Table = liveTable(ident)
 }
 
 object SharedTablesInMemoryRowLevelOperationTableCatalog {

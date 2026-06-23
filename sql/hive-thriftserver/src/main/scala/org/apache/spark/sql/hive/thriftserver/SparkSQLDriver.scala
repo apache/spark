@@ -66,7 +66,9 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
       val substitutorCommand = SQLConf.withExistingConf(sparkSession.sessionState.conf) {
         new VariableSubstitution().substitute(command)
       }
-      sparkSession.sparkContext.setJobDescription(substitutorCommand)
+      val redactedCommand =
+        Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, substitutorCommand)
+      sparkSession.sparkContext.setJobDescription(redactedCommand)
 
       // Parse with an empty parameter context to enable pre-parsing phase that scans for
       // parameter markers. If any parameter markers (:name or ?) are found in the SQL,

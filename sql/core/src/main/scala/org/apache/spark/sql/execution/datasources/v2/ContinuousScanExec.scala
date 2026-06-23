@@ -65,7 +65,7 @@ case class ContinuousScanExec(
       schema,
       readerFactory,
       customMetrics)
-    postDriverMetrics()
+    postDriverMetrics(scan.reportDriverMetrics())
     inputRDD
   }
 }

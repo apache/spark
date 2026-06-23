@@ -195,6 +195,9 @@ abstract class AlignAssignmentsSuiteBase extends AnalysisTest {
       .thenReturn(defaultPath)
     when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
       .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 

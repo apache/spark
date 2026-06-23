@@ -20,9 +20,36 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+## Scala Test Base Classes
+
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
+
+    SparkFunSuite                                                           (core)
+      <- PlanTest                                                           (sql/catalyst)
+        <- QueryTest                                                        (sql/core)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, `testRetry`, `gridTest`, thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`. |
+| Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
+| SQL/DataFrame tests — needs a `SparkSession` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. `spark: SparkSession` is abstract and must be supplied by a session-providing trait (see below). |
+
+### Providing a `SparkSession` for `QueryTest`
+
+`QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`, so it cannot be instantiated on its own. A concrete suite mixes in one of the session-providing traits below:
+
+    QueryTest                                                               (abstract `spark`)
+      + SharedSparkSession (sql/core)        -> classic in-process `TestSparkSession`
+      + TestHiveSingleton  (sql/hive)        -> Hive-backed `TestHive` session
+
+| Session provider | Module / location | Typical usage |
+|---|---|---|
+| `SharedSparkSession` | `sql/core` | Already extends `QueryTest` for historical reasons, but still mix in `QueryTest` explicitly, e.g. `class X extends QueryTest with SharedSparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
+
 ## Build and Test
 
-Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
+Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
 
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
@@ -42,6 +69,10 @@ Run test suites by wildcard or full class name:
 Run test cases matching a substring:
 
     build/sbt '<module>/testOnly *MySuite -- -z "test name"'
+
+Run test cases in an optional module:
+
+    build/sbt -P<maven-profiles> '<module>/testOnly *MySuite'
 
 For faster iteration, keep SBT open in interactive mode:
 
@@ -128,3 +159,26 @@ DO NOT push to the upstream repo. Always push to the personal fork. Open PRs aga
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+
+## Versioning and Branch Policy
+
+When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
+
+- **PR opened against a non-`master` base branch** (e.g. a maintenance line like `branch-4.2`): use that base branch's version -- when you're checked out on it, that's just the working tree's `pom.xml`. The helper below covers only the common `master`-base case.
+- **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
+  - breaking / binary-incompatible changes that can't ship in a minor release;
+  - dependency upgrades that don't fix a critical issue worth backporting.
+
+Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
+
+`dev/next_version_candidates.py` (no arguments) prints both candidate versions, reading from the local `apache/spark` remote (the `upstream` configured during pre-flight). It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
+
+    $ dev/next_version_candidates.py
+    master       5.0.0
+    branch-4.x   4.3.0
+
+## Security
+
+Security model: [SECURITY.md](./SECURITY.md)
+
+Agents that scan this repository should consult `SECURITY.md` for the project's threat model, in-scope / out-of-scope declarations, and known non-findings before reporting issues.

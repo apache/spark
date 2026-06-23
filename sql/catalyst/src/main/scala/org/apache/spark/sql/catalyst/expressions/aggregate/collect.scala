@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils, UnsafeRowUtils}
@@ -206,6 +207,10 @@ case class CollectSet(
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
+    // Float/double are keyed by their bit pattern (see convertToBufferElement), so the
+    // buffer holds the integral bits; eval() converts them back to float/double.
+    case DoubleType => LongType
+    case FloatType => IntegerType
     case other => other
   }
 
@@ -222,6 +227,12 @@ case class CollectSet(
     buffer
   }
 
+  @transient private lazy val complexNormalizer: Any => Any = {
+    val ref = BoundReference(0, child.dataType, nullable = true)
+    val proj = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
+    (value: Any) => InternalRow.copyValue(proj(InternalRow(value)).get(0, child.dataType))
+  }
+
   override def convertToBufferElement(value: Any): Any = child.dataType match {
     /*
      * collect_set() of BinaryType should not return duplicate elements,
@@ -229,6 +240,17 @@ case class CollectSet(
      * so we need to use a different catalyst value for arrays
      */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
+    // mutable.HashSet[Any] compares boxed Double/Float with IEEE equality, where NaN != NaN,
+    // so normalizing the value alone wouldn't collapse NaNs - keying on doubleToLongBits/
+    // floatToIntBits does (and the NORMALIZER step keeps -0.0/0.0 deduped). Complex types
+    // instead dedup on a normalized UnsafeRow's binary form.
+    case DoubleType =>
+      java.lang.Double.doubleToLongBits(
+        NormalizeFloatingNumbers.DOUBLE_NORMALIZER(value).asInstanceOf[Double])
+    case FloatType =>
+      java.lang.Float.floatToIntBits(
+        NormalizeFloatingNumbers.FLOAT_NORMALIZER(value).asInstanceOf[Float])
+    case dt if NormalizeFloatingNumbers.needNormalize(dt) => complexNormalizer(value)
     case _ => InternalRow.copyValue(value)
   }
 
@@ -238,6 +260,16 @@ case class CollectSet(
         buffer.iterator.map {
           case null => null
           case v => v.asInstanceOf[ArrayData].toByteArray()
+        }.toArray[Any]
+      case DoubleType =>
+        buffer.iterator.map {
+          case null => null
+          case v => java.lang.Double.longBitsToDouble(v.asInstanceOf[Long])
+        }.toArray[Any]
+      case FloatType =>
+        buffer.iterator.map {
+          case null => null
+          case v => java.lang.Float.intBitsToFloat(v.asInstanceOf[Int])
         }.toArray[Any]
       case _ => buffer.toArray
     }
@@ -394,7 +426,8 @@ case class ListAgg(
     inputAggBufferOffset: Int = 0)
   extends Collect[mutable.ArrayBuffer[Any]]
   with SupportsOrderingWithinGroup
-  with ImplicitCastInputTypes {
+  with ImplicitCastInputTypes
+  with AliasHelper {
 
   override def orderingFilled: Boolean = orderExpressions.nonEmpty
 
@@ -600,7 +633,8 @@ case class ListAgg(
     if (someOrder.isEmpty) {
       return true
     }
-    if (someOrder.size == 1 && someOrder.head.child.semanticEquals(child)) {
+    if (someOrder.size == 1 &&
+        trimAliases(someOrder.head.child).semanticEquals(trimAliases(child))) {
       return true
     }
     false
@@ -691,7 +725,7 @@ case class ListAgg(
     if (orderExpressions.size != 1) return OrderDeterminismResult.NonDeterministicMismatch
     child match {
       case Cast(castChild, castType, _, _)
-        if orderExpressions.head.child.semanticEquals(castChild) =>
+        if trimAliases(orderExpressions.head.child).semanticEquals(trimAliases(castChild)) =>
           if (isCastEqualityPreserving(castChild.dataType) &&
               isCastTargetEqualityPreserving(castType)) {
             OrderDeterminismResult.Deterministic

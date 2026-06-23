@@ -22,8 +22,9 @@ import java.io.File
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.functions.{st_asbinary, st_geogfromwkb, st_geomfromwkb}
+import org.apache.spark.sql.functions.{st_asbinary, st_geogfromwkb, st_geomfromwkb, st_srid}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{Geography, GeographyType, StructField, StructType}
 
 class ParquetGeoSuite
     extends ParquetCompatibilityTest
@@ -98,6 +99,32 @@ class ParquetGeoSuite
     testReadWrite(Seq(point1Wkb, line1Wkb, makePolygonWkb()))
   }
 
+  test("geography preserves non-default SRID through Parquet round-trip") {
+    // Geography supports a variety of geographic SRIDs beyond the default 4326. Verify that the
+    // SRID is preserved when written to and read back from Parquet, across the row-based reader
+    // (ParquetGeographyConverter) and the vectorized reader (WKBToGeographyConverter).
+    Seq(4267, 4269, 4326).foreach { srid =>
+      withTempDir { dir =>
+        val schema = StructType(Seq(
+          StructField("geog", GeographyType(srid), nullable = true)))
+        val wkbValues = Seq(point0Wkb, point1Wkb, line0Wkb)
+        val rdd = sparkContext.parallelize(
+          wkbValues.map(wkb => Row(Geography.fromWKB(wkb, srid))))
+        val df = spark.createDataFrame(rdd, schema)
+        withAllParquetWriters {
+          df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+          withAllParquetReaders {
+            // Verify both the WKB payload and the SRID round-trip correctly.
+            checkAnswer(
+              spark.read.parquet(dir.getAbsolutePath)
+                .select(st_asbinary($"geog"), st_srid($"geog")),
+              wkbValues.map(wkb => Row(wkb, srid)))
+          }
+        }
+      }
+    }
+  }
+
   test("dictionary encoding") {
     val wkbValues = Seq(
       point0Wkb,
@@ -116,6 +143,38 @@ class ParquetGeoSuite
     Seq(true, false).foreach { useDictionary =>
       withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
         testReadWrite(repeatedValues)
+      }
+    }
+  }
+
+  test("geography preserves non-default SRID with dictionary encoding") {
+    // Force dictionary encoding by repeating a small number of values many times. This exercises
+    // the setDictionary path of ParquetGeographyConverter and the dictionary path of
+    // WKBToGeographyConverter, both of which must materialize geographies with the column's SRID.
+    val srid = 4267
+    val wkbValues = Seq(point0Wkb, point1Wkb, line0Wkb)
+    val repeatedWkbs = List.fill(10000)(wkbValues).flatten
+    val schema = StructType(Seq(
+      StructField("geog", GeographyType(srid), nullable = true)))
+    val rdd = sparkContext.parallelize(
+      repeatedWkbs.map(wkb => Row(Geography.fromWKB(wkb, srid))))
+    val df = spark.createDataFrame(rdd, schema)
+
+    Seq(true, false).foreach { useDictionary =>
+      withSQLConf(ParquetOutputFormat.ENABLE_DICTIONARY -> useDictionary.toString) {
+        withTempDir { dir =>
+          withAllParquetWriters {
+            df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+            withAllParquetReaders {
+              // Aggregate-style assertion to keep the comparison cheap on 30K rows: every row
+              // should round-trip with the original SRID.
+              val readBack = spark.read.parquet(dir.getAbsolutePath)
+                .select(st_srid($"geog").as("srid"))
+              assert(readBack.count() === repeatedWkbs.length)
+              assert(readBack.where($"srid" =!= srid).count() === 0)
+            }
+          }
+        }
       }
     }
   }

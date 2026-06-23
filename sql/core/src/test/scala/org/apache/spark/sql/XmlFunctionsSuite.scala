@@ -22,6 +22,8 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -38,6 +40,33 @@ class XmlFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.select(from_xml($"value", schema)),
       Row(Row(1)) :: Nil)
+  }
+
+  test("SPARK-57164: from_xml with a nanos timestamp DDL schema string") {
+    val df = Seq("""<ROW><c>2020-01-01T00:00:00.123456789</c></ROW>""").toDF("value")
+    // FAILFAST so the value-converter rejection propagates instead of becoming a corrupt record.
+    val options = Map("mode" -> "FAILFAST").asJava
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            val parsed = df.select(from_xml($"value", s"c $spelling", options).as("v"))
+            // The schema string resolves to the nanos type ...
+            assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
+            // ... but the XML datasource does not support nanosecond timestamps yet, so the
+            // value converter rejects it at execution (surfaced as a malformed record in
+            // FAILFAST mode).
+            checkError(
+              exception = intercept[SparkException](parsed.collect()),
+              condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+              parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+        }
+      }
+    }
   }
 
   test("SPARK-48300: from_xml - Codegen Support") {
@@ -562,7 +591,10 @@ class XmlFunctionsSuite extends SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, time, timeStr) =>

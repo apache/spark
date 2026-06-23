@@ -1289,6 +1289,480 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7))):string>
+-- !query output
+timestamp_ltz(7)
+
+
+-- !query
+select cast('a' as timestamp_ntz(9)) is null
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_NTZ(9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "cast('a' as timestamp_ntz(9))"
+  } ]
+}
+
+
+-- !query
+select cast('a' as timestamp_ltz(9)) is null
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_LTZ(9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "cast('a' as timestamp_ltz(9))"
+  } ]
+}
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(8)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(8)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.12345678
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(7)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(7)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000000' as timestamp_ntz(9)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.000000000 AS TIMESTAMP_NTZ(9)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000999' as timestamp_ntz(9)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ(9)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.000000999
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000001' as timestamp_ntz(8)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(8)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING):string>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(cast('1960-01-01 00:00:00.000000001' as timestamp_ntz(9)) as string)
+-- !query schema
+struct<CAST(CAST(1960-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(9)) AS STRING):string>
+-- !query output
+1960-01-01 00:00:00.000000001
+
+
+-- !query
+select cast(cast('1960-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string)
+-- !query schema
+struct<CAST(CAST(1960-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING):string>
+-- !query output
+1960-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
+-- !query schema
+struct<CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING):string>
+-- !query output
+[2020-01-01 00:00:00.123456789, null]
+
+
+-- !query
+select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
+-- !query schema
+struct<CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING):string>
+-- !query output
+{k -> 2020-01-01 00:00:00.123456789}
+
+
+-- !query
+select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
+-- !query schema
+struct<CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING):string>
+-- !query output
+{2020-01-01 00:00:00.123456789}
+
+
+-- !query
+select cast(cast(null as timestamp_ntz(9)) as string)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS STRING):string>
+-- !query output
+NULL
+
+
+-- !query
+select concat('ts=', cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string))
+-- !query schema
+struct<concat(ts=, CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS STRING)):string>
+-- !query output
+ts=2020-01-01 00:00:00.123456789
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9))
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as timestamp_ntz)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as timestamp_ntz)
+-- !query schema
+struct<CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9))
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as timestamp)
+-- !query schema
+struct<CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)) AS TIMESTAMP):timestamp>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as timestamp)
+-- !query schema
+struct<CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9)) AS TIMESTAMP):timestamp>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7))):string>
+-- !query output
+timestamp_ntz(7)
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8))):string>
+-- !query output
+timestamp_ltz(8)
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8)
+-- !query schema
+struct<CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8)):timestamp_ltz(8)>
+-- !query output
+2020-01-01 00:00:00.12345678
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ntz(9)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ltz(7)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '1960-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
+-- !query output
+1960-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(null as timestamp_ntz(9))::timestamp_ntz(7)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ltz(8))::timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(8)) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7))):string>
+-- !query output
+timestamp_ntz(7)
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(9))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8))):string>
+-- !query output
+timestamp_ltz(8)
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(9))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(9))):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(9)::timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ntz(9)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ltz(7)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)) AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select timestamp_ntz'1960-01-01 00:00:00.123456789'::timestamp_ltz(7)::timestamp_ntz(7)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '1960-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(7)) AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+1960-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(null as timestamp_ltz(9))::timestamp_ntz(7)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ntz(8))::timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(8)) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+select typeof(timestamp'2020-01-01 00:00:00.123456'::timestamp_ntz(9))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP '2020-01-01 00:00:00.123456' AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456'::timestamp_ltz(9))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456' AS TIMESTAMP_LTZ(9))):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(6))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ)):string>
+-- !query output
+timestamp_ntz
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(6))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP)):string>
+-- !query output
+timestamp
+
+
+-- !query
+select timestamp'2020-01-01 00:00:00.123456'::timestamp_ntz(9)::timestamp
+-- !query schema
+struct<CAST(CAST(TIMESTAMP '2020-01-01 00:00:00.123456' AS TIMESTAMP_NTZ(9)) AS TIMESTAMP):timestamp>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456'::timestamp_ltz(9)::timestamp_ntz
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456' AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(6)::timestamp_ltz
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ) AS TIMESTAMP):timestamp>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(6)::timestamp_ntz
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+2020-01-01 00:00:00.123456
+
+
+-- !query
+select cast(null as timestamp)::timestamp_ntz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ntz)::timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ntz(9))::timestamp
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIMESTAMP):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ltz(9))::timestamp_ntz
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query schema
 struct<>
@@ -2279,17 +2753,17 @@ struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,6)):decimal(11,6)>
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,9)):decimal(14,9)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(14,9)):decimal(14,9)>
 -- !query output
-86399.999999000
+86399.999999999
 
 
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(20,10)):decimal(20,10)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(20,10)):decimal(20,10)>
 -- !query output
-86399.9999990000
+86399.9999999990
 
 
 -- !query
@@ -2394,6 +2868,6 @@ struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,5)):decimal(11,5)>
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,8)):decimal(14,8)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(14,8)):decimal(14,8)>
 -- !query output
-86399.99999900
+86400.00000000

@@ -36,7 +36,8 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     def noMissingInput(p: LogicalPlan) = !p.exists(_.missingInput.nonEmpty)
 
     newPlan.resolveOperatorsUpWithPruning(
-      _.containsAnyPattern(JOIN, LATERAL_JOIN, AS_OF_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
+      _.containsAnyPattern(
+        JOIN, LATERAL_JOIN, AS_OF_JOIN, NEAREST_BY_JOIN, INTERSECT, EXCEPT, UNION, COMMAND),
       ruleId) {
       case p: LogicalPlan if !p.childrenResolved => p
       // To resolve duplicate expression IDs for Join.
@@ -48,6 +49,10 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // Resolve duplicate output for AsOfJoin.
       case j @ AsOfJoin(left, right, _, _, _, _, _)
+          if !j.duplicateResolved && noMissingInput(right) =>
+        j.copy(right = dedupRight(left, right))
+      // Resolve duplicate output for NearestByJoin.
+      case j @ NearestByJoin(left, right, _, _, _, _, _)
           if !j.duplicateResolved && noMissingInput(right) =>
         j.copy(right = dedupRight(left, right))
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
@@ -191,6 +196,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         g,
         _.generatorOutput.map(_.exprId.id), newGenerate =>
           newGenerate.copy(generatorOutput = newGenerate.generatorOutput.map(_.newInstance())))
+
+    case b: BinBy =>
+      deduplicateAndRenew[BinBy](
+        existingRelations,
+        b,
+        _.producedAttributes.map(_.exprId.id).toSeq,
+        newBinBy => newBinBy.copy(appendedAttributes =
+          newBinBy.appendedAttributes.map(_.newInstance())))
 
     case e: Expand =>
       deduplicateAndRenew[Expand](
@@ -451,6 +464,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newOutput = oldVersion.generatorOutput.map(_.newInstance())
         val newVersion = oldVersion.copy(generatorOutput = newOutput)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion: BinBy
+          if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(
+          appendedAttributes = oldVersion.appendedAttributes.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 

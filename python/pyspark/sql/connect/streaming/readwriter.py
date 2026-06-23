@@ -90,6 +90,8 @@ class DataStreamReader(OptionUtils):
     schema.__doc__ = PySparkDataStreamReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamReader":
+        if value is None:
+            return self
         self._options[key] = str(value)
         return self
 
@@ -488,6 +490,8 @@ class DataStreamWriter:
     format.__doc__ = PySparkDataStreamWriter.format.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamWriter":
+        if value is None:
+            return self
         self._write_proto.options[key] = cast(str, to_str(value))
         return self
 

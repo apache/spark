@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.{StringBuilder => JStringBuilder}
 import java.nio.{ByteBuffer, CharBuffer}
 import java.nio.charset.CharacterCodingException
 import java.text.{DecimalFormat, DecimalFormatSymbols}
@@ -2722,6 +2721,42 @@ case class Levenshtein(
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2) - Returns the Jaro-Winkler similarity between the two given strings. The result is a double between 0 and 1, where 1 means identical.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MARTHA', 'MARHTA');
+       0.9611111111111111
+      > SELECT _FUNC_('kitten', 'sitting');
+       0.746031746031746
+      > SELECT _FUNC_('ABC', 'XYZ');
+       0.0
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class JaroWinkler(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    DoubleType,
+    "jaroWinklerSimilarity",
+    Seq(left, right),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    StringTypeWithCollation(supportsTrimCollation = true),
+    StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def prettyName: String = "jaro_winkler_similarity"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+}
+
 /**
  * A function that return Soundex code of the given string expression.
  */
@@ -2774,27 +2809,11 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  protected override def nullSafeEval(string: Any): Any = {
-    // only pick the first character to reduce the `toString` cost
-    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
-    if (firstCharStr.numChars > 0) {
-      firstCharStr.toString.codePointAt(0)
-    } else {
-      0
-    }
-  }
+  protected override def nullSafeEval(string: Any): Any =
+    ExpressionImplUtils.ascii(string.asInstanceOf[UTF8String])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      val firstCharStr = ctx.freshName("firstCharStr")
-      s"""
-        UTF8String $firstCharStr = $child.substring(0, 1);
-        if ($firstCharStr.numChars() > 0) {
-          ${ev.value} = $firstCharStr.toString().codePointAt(0);
-        } else {
-          ${ev.value} = 0;
-        }
-       """})
+    defineCodeGen(ctx, ev, c => s"${classOf[ExpressionImplUtils].getName}.ascii($c)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
@@ -2822,31 +2841,14 @@ case class Chr(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
-    val longVal = lon.asInstanceOf[Long]
-    if (longVal < 0) {
-      UTF8String.EMPTY_UTF8
-    } else if ((longVal & 0xFF) == 0) {
-      UTF8String.fromString(Character.MIN_VALUE.toString)
-    } else {
-      UTF8String.fromString((longVal & 0xFF).toChar.toString)
-    }
+    ExpressionImplUtils.chr(lon.asInstanceOf[Long])
   }
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, lon => {
-      s"""
-        if ($lon < 0) {
-          ${ev.value} = UTF8String.EMPTY_UTF8;
-        } else if (($lon & 0xFF) == 0) {
-          ${ev.value} = UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
-        } else {
-          char c = (char)($lon & 0xFF);
-          ${ev.value} = UTF8String.fromString(String.valueOf(c));
-        }
-      """
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    nullSafeCodeGen(ctx, ev, lon => s"${ev.value} = $utils.chr($lon);")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
@@ -3388,11 +3390,6 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private var lastDStringValue: Option[String] = None
 
-  // A cached DecimalFormat, for performance concern, we will change it
-  // only if the d value changed.
-  @transient
-  private lazy val pattern: JStringBuilder = new JStringBuilder()
-
   // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
   // as a decimal separator.
   @transient
@@ -3410,31 +3407,15 @@ case class FormatNumber(x: Expression, d: Expression)
           case Some(last) if last == dValue =>
           // use the current pattern
           case _ =>
-            // construct a new DecimalFormat only if a new dValue
-            pattern.delete(0, pattern.length)
-            pattern.append(defaultFormat)
-
-            // decimal place
-            if (dValue > 0) {
-              pattern.append(".")
-
-              var i = 0
-              while (i < dValue) {
-                i += 1
-                pattern.append("0")
-              }
-            }
-
+            // construct a new pattern only if a new dValue
             lastDIntValue = Some(dValue)
-
-            numberFormat.applyLocalizedPattern(pattern.toString)
+            ExpressionImplUtils.applyNumberFormatScale(numberFormat, defaultFormat, dValue)
         }
       case _: StringType =>
         val dValue = dObject.asInstanceOf[UTF8String].toString
         lastDStringValue match {
           case Some(last) if last == dValue =>
           case _ =>
-            pattern.delete(0, pattern.length)
             lastDStringValue = Some(dValue)
             if (dValue.isEmpty) {
               numberFormat.applyLocalizedPattern(defaultFormat)
@@ -3466,7 +3447,6 @@ case class FormatNumber(x: Expression, d: Expression)
         }
       }
 
-      val sb = classOf[JStringBuilder].getName
       val df = classOf[DecimalFormat].getName
       val dfs = classOf[DecimalFormatSymbols].getName
       val l = classOf[Locale].getName
@@ -3478,24 +3458,14 @@ case class FormatNumber(x: Expression, d: Expression)
 
       right.dataType match {
         case IntegerType =>
-          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
-          val i = ctx.freshName("i")
           val lastDValue =
             ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
+          val utils = classOf[ExpressionImplUtils].getName
           s"""
             if ($d >= 0) {
-              $pattern.delete(0, $pattern.length());
               if ($d != $lastDValue) {
-                $pattern.append("$defaultFormat");
-
-                if ($d > 0) {
-                  $pattern.append(".");
-                  for (int $i = 0; $i < $d; $i++) {
-                    $pattern.append("0");
-                  }
-                }
                 $lastDValue = $d;
-                $numberFormat.applyLocalizedPattern($pattern.toString());
+                $utils.applyNumberFormatScale($numberFormat, "$defaultFormat", $d);
               }
               ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
             } else {

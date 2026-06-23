@@ -46,18 +46,30 @@ case class ColumnDefinition(
     nullable: Boolean = true,
     comment: Option[String] = None,
     defaultValue: Option[DefaultValueExpression] = None,
-    generationExpression: Option[String] = None,
+    generationExpression: Option[GeneratedColumnExpression] = None,
     identityColumnSpec: Option[IdentityColumnSpec] = None,
     metadata: Metadata = Metadata.empty) extends Expression with Unevaluable {
   assert(
     generationExpression.isEmpty || identityColumnSpec.isEmpty,
     "A ColumnDefinition cannot contain both a generation expression and an identity column spec.")
 
-  override def children: Seq[Expression] = defaultValue.toSeq
+  override def children: Seq[Expression] = defaultValue.toSeq ++ generationExpression.toSeq
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): Expression = {
-    copy(defaultValue = newChildren.headOption.map(_.asInstanceOf[DefaultValueExpression]))
+    val hasDefault = defaultValue.isDefined
+    val hasGenExpr = generationExpression.isDefined
+    val newDefault = if (hasDefault) {
+      Some(newChildren.head.asInstanceOf[DefaultValueExpression])
+    } else {
+      None
+    }
+    val newGenExpr = if (hasGenExpr) {
+      Some(newChildren.last.asInstanceOf[GeneratedColumnExpression])
+    } else {
+      None
+    }
+    copy(defaultValue = newDefault, generationExpression = newGenExpr)
   }
 
   def toV2Column(statement: String): V2Column = {
@@ -67,7 +79,7 @@ case class ColumnDefinition(
       nullable,
       comment.orNull,
       defaultValue.map(_.toV2(statement, name)).orNull,
-      generationExpression.orNull,
+      generationExpression.map(_.toV2).orNull,
       identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json)
   }
@@ -86,8 +98,9 @@ case class ColumnDefinition(
       }
       metadataBuilder.putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsSQL)
     }
-    generationExpression.foreach { generationExpr =>
-      metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, generationExpr)
+    generationExpression.foreach { genExpr =>
+      metadataBuilder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY,
+        genExpr.originalSQL)
     }
     encodeIdentityColumnSpec(metadataBuilder)
     StructField(name, dataType, nullable, metadataBuilder.build())
@@ -146,7 +159,9 @@ object ColumnDefinition {
     } else {
       None
     }
-    val generationExpr = GeneratedColumn.getGenerationExpression(col)
+    val generationExpr = GeneratedColumn.getGenerationExpression(col).map { sql =>
+      GeneratedColumnExpression(parser.parseExpression(sql), sql)
+    }
     val identityColumnSpec = if (col.metadata.contains(IdentityColumn.IDENTITY_INFO_START)) {
       Some(new IdentityColumnSpec(
         col.metadata.getLong(IdentityColumn.IDENTITY_INFO_START),
@@ -217,7 +232,7 @@ object ColumnDefinition {
         messageParameters = Map(
           "colName" -> col.name,
           "defaultValue" -> col.defaultValue.get.originalSQL,
-          "genExpr" -> col.generationExpression.get
+          "genExpr" -> col.generationExpression.get.originalSQL
         )
       )
     }

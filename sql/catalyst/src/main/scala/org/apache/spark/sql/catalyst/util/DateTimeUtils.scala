@@ -29,7 +29,7 @@ import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentExcep
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -148,6 +148,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
   }
 
+  /**
+   * Returns the seconds part and its fractional part with nanoseconds, of a nanosecond-precision
+   * timestamp. The integral seconds and the six microsecond fraction digits come from the
+   * wall-clock fields of `epochMicros` in the given zone; `nanosWithinMicro` contributes the
+   * three sub-microsecond digits. The scale is fixed at the maximum nanosecond precision (9):
+   * digits below the value's type precision are always zero because values are floored to the
+   * type precision at the type boundary.
+   */
+  def getSecondsWithFractionNanos(ts: TimestampNanosVal, zoneId: ZoneId): Decimal = {
+    val nanosOfMinute =
+      getMicroseconds(ts.epochMicros, zoneId) * NANOS_PER_MICROS + ts.nanosWithinMicro
+    Decimal(nanosOfMinute, 11, 9)
+  }
 
   /**
    * Returns the second value with fraction from a given TIME (TimeType) value.
@@ -290,6 +303,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
+   * the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddDayTime(
+      start: TimestampNanosVal,
+      dayTime: Long,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
   /**
@@ -486,6 +511,47 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Fast path for truncating to MINUTE/HOUR/DAY using offset arithmetic instead of
+   * allocating a `ZonedDateTime` per row. The offset is resolved once for `micros`; the
+   * truncation then runs as `floorMod` in local time. We fall back to [[truncToUnit]] when
+   * the offset at the candidate truncated instant differs from the offset at `micros`,
+   * which means the truncation crosses a DST/historical transition and the local-time
+   * alignment we computed is no longer valid (see SPARK-30766/30857). The check is
+   * skipped for fixed-offset zones. Sub-minute offsets (e.g. America/Los_Angeles LMT
+   * -07:52:58, see SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu
+   * +05:45) are handled correctly by this path because the offset is applied as part of
+   * the arithmetic; no offset-alignment guard is needed.
+   *
+   * `unitMicros` must evenly divide `MICROS_PER_DAY`; otherwise wall-clock unit
+   * boundaries do not align to multiples of `unitMicros` in the shifted-local frame
+   * and the `floorMod` truncation is unsafe.
+   */
+  private def truncToUnitFast(
+      micros: Long, zoneId: ZoneId, unitMicros: Long, fallbackUnit: ChronoUnit): Long = {
+    val rules = zoneId.getRules
+    val originalSec = Math.floorDiv(micros, MICROS_PER_SECOND)
+    val originalOffsetSec =
+      rules.getOffset(Instant.ofEpochSecond(originalSec)).getTotalSeconds.toLong
+    val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
+    try {
+      val local = Math.addExact(micros, offsetMicros)
+      val truncatedLocal = Math.subtractExact(local, Math.floorMod(local, unitMicros))
+      val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
+      if (!rules.isFixedOffset) {
+        val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
+        val candidateOffsetSec =
+          rules.getOffset(Instant.ofEpochSecond(candidateSec)).getTotalSeconds.toLong
+        if (candidateOffsetSec != originalOffsetSec) {
+          return truncToUnit(micros, zoneId, fallbackUnit)
+        }
+      }
+      candidate
+    } catch {
+      case _: ArithmeticException => truncToUnit(micros, zoneId, fallbackUnit)
+    }
+  }
+
+  /**
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    */
@@ -496,12 +562,15 @@ object DateTimeUtils extends SparkDateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_MILLIS)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
       case TRUNC_TO_SECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_SECOND)
-      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
-      case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
-      case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
+      case TRUNC_TO_MINUTE =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
+      case TRUNC_TO_HOUR =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_HOUR, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY =>
+        truncToUnitFast(micros, zoneId, MICROS_PER_DAY, ChronoUnit.DAYS)
       case _ => // Try to truncate date levels
         val dDays = microsToDays(micros, zoneId)
         daysToMicros(truncDate(dDays, level), zoneId)
@@ -1058,5 +1127,86 @@ object DateTimeUtils extends SparkDateTimeUtils {
       throw QueryExecutionErrors.timeAddIntervalOverflowError(
         time, timePrecision, interval, intervalEndField)
     }
+  }
+
+  /**
+   * DayTimeInterval bucketing: bucket k starts at
+   * `timestampAddDayTime(originMicros, k * bucketMicros, zoneId)`, matching the instant that
+   * `originMicros + INTERVAL '<k * bucketSize>'` would produce. For sub-day buckets the
+   * calendar-day component is zero, so the result is pure UTC-microsecond floor division
+   * and `zoneId` has no effect.
+   *
+   * `bucketMicros` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
+   *
+   * @param bucketMicros bucket size in microseconds.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar-day arithmetic is performed.
+   */
+  def timeBucketDTInterval(
+      bucketMicros: Long, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val bucketDays = bucketMicros / MICROS_PER_DAY
+
+    val diff = MathUtils.subtractExact(tsMicros, originMicros)
+    var k = MathUtils.floorDiv(diff, bucketMicros)
+
+    if (bucketDays == 0) {
+      val bucketOffset = MathUtils.multiplyExact(k, bucketMicros)
+      MathUtils.addExact(originMicros, bucketOffset)
+    } else {
+      // bucketMicros >= MICROS_PER_DAY, so DST offset shifts (a few hours at most) can
+      // move candidate(k) within one bucket of `origin + k*bucketMicros` but no further.
+      // One +/-1 step recovers the correct k.
+      def candidate(kk: Long): Long =
+        timestampAddDayTime(originMicros, MathUtils.multiplyExact(kk, bucketMicros), zoneId)
+
+      var c = candidate(k)
+      if (c > tsMicros) {
+        k -= 1
+        c = candidate(k)
+      } else {
+        val cNext = candidate(MathUtils.addExact(k, 1L))
+        if (cNext <= tsMicros) c = cNext
+      }
+      c
+    }
+  }
+
+  /**
+   * YearMonthInterval bucketing: bucket k starts at
+   * `originZdt.plusMonths(k * bucketMonths)`, matching the instant that
+   * `originMicros + INTERVAL '<k * bucketMonths>' MONTH` would produce. The offset of
+   * bucket boundaries depends on which side of a DST fold the origin instant resolves to,
+   * mirroring `+ INTERVAL '<n>' MONTH` semantics.
+   *
+   * `bucketMonths` must be positive; `TimeBucket.checkInputDataTypes` enforces this at
+   * analysis time.
+   *
+   * @param bucketMonths bucket size in months.
+   * @param tsMicros     timestamp to bucket, in microseconds since the epoch (UTC).
+   * @param originMicros grid alignment anchor, in microseconds since the epoch (UTC).
+   * @param zoneId       zone in which calendar arithmetic is performed.
+   */
+  def timeBucketYMInterval(
+      bucketMonths: Int, tsMicros: Long, originMicros: Long, zoneId: ZoneId): Long = {
+    val originZdt = microsToInstant(originMicros).atZone(zoneId)
+    val tsZdt = microsToInstant(tsMicros).atZone(zoneId)
+    val rawMonthDiff = (tsZdt.getYear.toLong * 12 + tsZdt.getMonthValue) -
+      (originZdt.getYear.toLong * 12 + originZdt.getMonthValue)
+
+    def candidate(kk: Long): Long = instantToMicros(
+      originZdt.plusMonths(MathUtils.multiplyExact(kk, bucketMonths.toLong)).toInstant)
+
+    var k = MathUtils.floorDiv(rawMonthDiff, bucketMonths.toLong)
+    var c = candidate(k)
+    // candidate(k) may overshoot ts within the same calendar month -- either via
+    // end-of-month capping (Jan 31 -> Feb 28) or because origin's day/time exceeds ts's.
+    // plusMonths is monotonic, so a single step-back suffices.
+    if (c > tsMicros) {
+      k -= 1
+      c = candidate(k)
+    }
+    c
   }
 }

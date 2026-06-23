@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder, DYN_ALLOCATION_ENABLED}
 
 private[spark] object Config extends Logging {
 
@@ -120,12 +120,44 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver and executor " +
+        "containers' security context. When false (default), a container cannot gain " +
+        "more privileges than its parent process. Set to true to opt out of this " +
+        "restriction. Driver and executor can be configured individually via the " +
+        "container type-specific config.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.driver.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
+  val KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.executor.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the executor container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
   val KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP =
     ConfigBuilder("spark.kubernetes.executor.useDriverPodIP")
       .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -261,6 +293,33 @@ private[spark] object Config extends Logging {
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(0.1)
+
+  val PVC_RESIZE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
+      .doc("Interval between executor PVC resize operations, in minutes. " +
+        "Defaults to 5 minutes. Set to 0 to disable. " +
+        "Must be 0 or a positive multiple of 5 minutes.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(v => v >= 0 && v % 5 == 0,
+        "Interval must be 0 or a positive multiple of 5 minutes")
+      .createWithDefault(5)
+
+  val PVC_RESIZE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeThreshold")
+      .doc("The PVC usage ratio (used / capacity) above which the driver triggers a resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
+      .createWithDefault(0.5)
+
+  val PVC_RESIZE_FACTOR =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeFactor")
+      .doc("The factor to grow PVC storage by, relative to the current request.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
+      .createWithDefault(1.0)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"

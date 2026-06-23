@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -330,8 +331,22 @@ private[hive] trait HiveInspectors {
         withNullSafe(o =>
             DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: JavaTimestampObjectInspector =>
-        withNullSafe(o =>
-            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         withNullSafe(o => getDecimalWritable(o.asInstanceOf[Decimal]))
       case _: HiveDecimalObjectInspector =>
@@ -346,9 +361,39 @@ private[hive] trait HiveInspectors {
       case _: DateObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: TimestampObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getTimestampWritable(o))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _: TimestampNTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _ =>
+            getTimestampWritable(o)
+        })
       case _: TimestampObjectInspector =>
-        withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveIntervalDayTimeObjectInspector  if x.preferWritable() =>
         withNullSafe(o => getHiveIntervalDayTimeWritable(o))
       case _: HiveIntervalDayTimeObjectInspector =>
@@ -753,6 +798,73 @@ private[hive] trait HiveInspectors {
     }
 
   /**
+   * Returns an unwrapper that converts a Hive value into a Catalyst value, using the target
+   * Catalyst `dataType` to preserve nanosecond timestamp precision. The plain
+   * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
+   * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
+   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. Any other
+   * type is delegated to the `ObjectInspector`-only overload.
+   */
+  def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
+    (objectInspector, dataType) match {
+      case (ti: TimestampObjectInspector, t: TimestampNTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.localDateTimeToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toLocalDateTime, t.precision)
+          } else {
+            null
+          }
+        }
+      case (ti: TimestampObjectInspector, t: TimestampLTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.instantToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toInstant, t.precision)
+          } else {
+            null
+          }
+        }
+      case (li: ListObjectInspector, ArrayType(elementType, _)) =>
+        val unwrapper = unwrapperFor(li.getListElementObjectInspector, elementType)
+        data: Any => {
+          if (data != null) {
+            Option(li.getList(data))
+              .map(l => new GenericArrayData(l.asScala.map(unwrapper).toArray))
+              .orNull
+          } else {
+            null
+          }
+        }
+      case (mi: MapObjectInspector, MapType(keyType, valueType, _)) =>
+        val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector, keyType)
+        val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector, valueType)
+        data: Any => {
+          if (data != null) {
+            val map = mi.getMap(data)
+            if (map == null) null else ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+          } else {
+            null
+          }
+        }
+      case (si: StructObjectInspector, st: StructType) =>
+        val fields = si.getAllStructFieldRefs.asScala
+        val unwrappers = fields.zip(st.fields).map { case (field, structField) =>
+          val unwrapper = unwrapperFor(field.getFieldObjectInspector, structField.dataType)
+          data: Any => unwrapper(si.getStructFieldData(data, field))
+        }
+        data: Any => {
+          if (data != null) {
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
+          } else {
+            null
+          }
+        }
+      case _ =>
+        unwrapperFor(objectInspector)
+    }
+
+  /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
    *
@@ -839,8 +951,9 @@ private[hive] trait HiveInspectors {
       PrimitiveObjectInspectorFactory.javaHiveIntervalDayTimeObjectInspector
     case _: YearMonthIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalYearMonthObjectInspector
-    // TODO decimal precision?
-    case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case DecimalType.Fixed(precision, scale) =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        new DecimalTypeInfo(precision, scale))
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
@@ -880,8 +993,8 @@ private[hive] trait HiveInspectors {
       getDateWritableConstantObjectInspector(value)
     case Literal(value, TimestampType) =>
       getTimestampWritableConstantObjectInspector(value)
-    case Literal(value, DecimalType()) =>
-      getDecimalWritableConstantObjectInspector(value)
+    case Literal(value, DecimalType.Fixed(precision, scale)) =>
+      getDecimalWritableConstantObjectInspector(value, precision, scale)
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
     case Literal(_, _: DayTimeIntervalType) =>
@@ -1035,9 +1148,10 @@ private[hive] trait HiveInspectors {
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.timestampTypeInfo, getTimestampWritable(value))
 
-  private def getDecimalWritableConstantObjectInspector(value: Any): ObjectInspector =
+  private def getDecimalWritableConstantObjectInspector(
+      value: Any, precision: Int, scale: Int): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.decimalTypeInfo, getDecimalWritable(value))
+      new DecimalTypeInfo(precision, scale), getDecimalWritable(value))
 
   private def getPrimitiveNullWritableConstantObjectInspector: ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(

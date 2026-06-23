@@ -126,8 +126,7 @@ import org.apache.spark.scheduler.TaskInfo
 private class LastAttemptRDDVals[@specialized T](
     val rddId: Int,
     val rddScopeId: Option[String],
-    // Arrays of partial metric values, and the corresponding stage, stage attempt and task attempt,
-    // with index representing RDD partition id.
+    // Array of partial metric values, indexed by RDD partition id.
     // Metric updates to a given RDD partition can come from different stageAttempts if a retry
     // happens while a Job with the Stage is running (a downstream Stage within a Job detects
     // missing blocks and triggers recompute), or from different Stages, if a retry happens later
@@ -144,17 +143,18 @@ private class LastAttemptRDDVals[@specialized T](
     // in take/limit), or AQE task coalescing may be visible as an update of the partition id of
     // the first partition of the coalesced range. AQE guarantees that if these are retried, they
     // will be coalesced in the same ranges, so update the same values.
-    // Not computed partitions should have EMPTY_ID in all the Int Arrays.
+    // Whether a partition has been computed is tracked by [[computedBitmap]] below; the value at
+    // its slot in [[partitionPartialVals]] is undefined (typically the zero of T) for uncomputed
+    // partitions.
     //
     // Arrays of primitive types are more memory efficient than an array of objects due to
     // references, object headers and paddings overheads.
     // The `@specialized` annotation should make scala specialize it to use primitive array instead
     // of boxed objects.
-    val partitionPartialVals: Array[T],
-    val stageIds: Array[Int],
-    val stageAttemptIds: Array[Int],
-    val taskAttemptNumbers: Array[Int])
+    val partitionPartialVals: Array[T])
   {
+
+  import LastAttemptRDDVals.EMPTY_ID
 
   // In a case of repeated execution of the same QueryExecution and reuse of the SparkPlan
   // (for example multiple `collect()` on the same Dataset), a new RDD may be executed in the same
@@ -171,67 +171,184 @@ private class LastAttemptRDDVals[@specialized T](
   // however should not happen in practice and would likely produce other unexpected effects.
   var lastSqlExecutionId: Option[Long] = None
 
-  def numPartitions: Int = stageIds.length
+  // Common (stageId, stageAttemptId, taskAttemptNumber) shared by the majority of computed
+  // partitions. In the common case (no stage retries), every computed partition has the same
+  // attempt tuple, so we store it once at the RDD level instead of allocating three N-sized int
+  // arrays. The values are set on the first update and never changed; partitions whose attempt
+  // differs are recorded in the override arrays below.
+  // EMPTY_ID until the first update.
+  private var commonStageId: Int = EMPTY_ID
+  private var commonStageAttemptId: Int = EMPTY_ID
+  private var commonTaskAttemptNumber: Int = EMPTY_ID
+
+  // Bitmap of partitions that have been computed, one bit per partition packed into longs.
+  // A bit is set when a partition receives its first update; a partition with a clear bit has not
+  // been computed (e.g. early stop in take/limit, AQE task coalescing).
+  // Reads of an individual long are atomic on 64-bit JVMs, matching the loose concurrency
+  // semantics of the original per-partition int arrays.
+  private val computedBitmap: Array[Long] =
+    new Array[Long]((partitionPartialVals.length + 63) >>> 6)
+
+  // Per-partition override arrays for each component of the attempt tuple. Each is allocated
+  // lazily and independently the first time some partition's value for that component diverges
+  // from the common value; until then the field is null and no per-partition state is kept for
+  // that component. Once allocated, an array is sized [[numPartitions]]: entries equal to
+  // EMPTY_ID mean "match the common value" and any other value is the per-partition override.
+  // This way:
+  //  - RDDs without retries pay zero per-partition allocations (all three fields stay null).
+  //  - A pure stage retry (new stageAttemptId, same stageId, taskAttemptNumber resets to 0)
+  //    allocates only [[overrideStageAttemptIds]].
+  //  - A mid-stage retry (executor lost, some tasks restart with a higher taskAttemptNumber)
+  //    allocates only [[overrideTaskAttemptNumbers]].
+  //  - Whole-stage cross-Stage retry (new stageId) allocates [[overrideStageIds]] too.
+  //
+  // Concurrency: update() is called only from the DAGScheduler scheduler loop. Some readers of
+  // the state can run concurrently (e.g. logAccumulatorState formatting). The fields are
+  // declared @volatile, and the new array is fully populated before the field is assigned, so a
+  // reader either sees null (use common) or sees an array whose Array.fill initialization is
+  // visible. In-place element writes for subsequent overrides are plain ints; readers may see
+  // them eventually, matching the loose semantics of the original per-partition int arrays.
+  @volatile private var overrideStageIds: Array[Int] = null
+  @volatile private var overrideStageAttemptIds: Array[Int] = null
+  @volatile private var overrideTaskAttemptNumbers: Array[Int] = null
+
+  def numPartitions: Int = partitionPartialVals.length
 
   def isEmptyAt(partitionId: Int): Boolean = {
-    if (stageIds(partitionId) == LastAttemptRDDVals.EMPTY_ID) {
-      assert(stageAttemptIds(partitionId) == LastAttemptRDDVals.EMPTY_ID)
-      assert(taskAttemptNumbers(partitionId) == LastAttemptRDDVals.EMPTY_ID)
-      true
+    val word = computedBitmap(partitionId >>> 6)
+    ((word >>> (partitionId & 63)) & 1L) == 0L
+  }
+
+  private def setComputedBit(partitionId: Int): Unit = {
+    val idx = partitionId >>> 6
+    computedBitmap(idx) = computedBitmap(idx) | (1L << (partitionId & 63))
+  }
+
+  /**
+   * Records a new value for one component (stageId / stageAttemptId / taskAttemptNumber) of the
+   * attempt tuple at `partitionId`, allocating the override array on first divergence. Returns
+   * the array reference the caller should write back to the @volatile field - either a freshly
+   * allocated and populated array (first override for this component) or the existing array
+   * after an in-place update. Once the array exists, the value is always written, even when it
+   * matches the common value - lookupComponent returns it correctly either way.
+   */
+  private def setOverrideComponent(
+      array: Array[Int],
+      partitionId: Int,
+      value: Int,
+      common: Int): Array[Int] = {
+    if (array == null) {
+      if (value == common) null
+      else {
+        val newArr = Array.fill(partitionPartialVals.length)(EMPTY_ID)
+        newArr(partitionId) = value
+        newArr
+      }
     } else {
-      false
+      array(partitionId) = value
+      array
+    }
+  }
+
+  /** Reads one component's value at `partitionId`, falling back to `common` when the override
+   *  array is null or the entry is still EMPTY_ID (the slot was either not yet written, or was
+   *  initialized to EMPTY_ID and never overwritten because the partition's value matched the
+   *  common when the array was first allocated for a different partition). */
+  private def lookupComponent(array: Array[Int], partitionId: Int, common: Int): Int = {
+    if (array == null) common
+    else {
+      val v = array(partitionId)
+      if (v == EMPTY_ID) common else v
     }
   }
 
   def update(partialValue: AccumulatorPartialVal[T]): Unit = {
-    partitionPartialVals(partialValue.rddPartitionId) = partialValue.partialMergeVal
-    stageIds(partialValue.rddPartitionId) = partialValue.stageId
-    stageAttemptIds(partialValue.rddPartitionId) = partialValue.stageAttemptId
-    taskAttemptNumbers(partialValue.rddPartitionId) = partialValue.taskAttemptNumber
+    val partId = partialValue.rddPartitionId
+    if (commonStageId == EMPTY_ID) {
+      commonStageId = partialValue.stageId
+      commonStageAttemptId = partialValue.stageAttemptId
+      commonTaskAttemptNumber = partialValue.taskAttemptNumber
+    }
+    partitionPartialVals(partId) = partialValue.partialMergeVal
+    setComputedBit(partId)
+    overrideStageIds = setOverrideComponent(
+      overrideStageIds, partId, partialValue.stageId, commonStageId)
+    overrideStageAttemptIds = setOverrideComponent(
+      overrideStageAttemptIds, partId, partialValue.stageAttemptId, commonStageAttemptId)
+    overrideTaskAttemptNumbers = setOverrideComponent(
+      overrideTaskAttemptNumbers, partId, partialValue.taskAttemptNumber, commonTaskAttemptNumber)
     lastSqlExecutionId = partialValue.sqlExecutionId
   }
 
   def partialValueAt(partId: Int): AccumulatorPartialVal[T] = {
+    var sId = EMPTY_ID
+    var saId = EMPTY_ID
+    var tan = EMPTY_ID
+    if (!isEmptyAt(partId)) {
+      sId = lookupComponent(overrideStageIds, partId, commonStageId)
+      saId = lookupComponent(overrideStageAttemptIds, partId, commonStageAttemptId)
+      tan = lookupComponent(overrideTaskAttemptNumbers, partId, commonTaskAttemptNumber)
+    }
     AccumulatorPartialVal(
       partialMergeVal = partitionPartialVals(partId),
       rddId = rddId,
       rddPartitionId = partId,
-      rddNumPartitions = stageIds.length,
+      rddNumPartitions = partitionPartialVals.length,
       rddScopeId = rddScopeId,
-      stageId = stageIds(partId),
-      stageAttemptId = stageAttemptIds(partId),
-      taskAttemptNumber = taskAttemptNumbers(partId),
+      stageId = sId,
+      stageAttemptId = saId,
+      taskAttemptNumber = tan,
       sqlExecutionId = lastSqlExecutionId)
   }
 
   override def toString: String = {
+    val n = numPartitions
+    val partVals = new StringBuilder("[")
+    val sIds = new StringBuilder("[")
+    val saIds = new StringBuilder("[")
+    val tans = new StringBuilder("[")
+    var i = 0
+    while (i < n) {
+      if (i > 0) {
+        partVals.append(',')
+        sIds.append(',')
+        saIds.append(',')
+        tans.append(',')
+      }
+      partVals.append(partitionPartialVals(i))
+      val pv = partialValueAt(i)
+      sIds.append(pv.stageId)
+      saIds.append(pv.stageAttemptId)
+      tans.append(pv.taskAttemptNumber)
+      i += 1
+    }
+    partVals.append(']')
+    sIds.append(']')
+    saIds.append(']')
+    tans.append(']')
     s"""LastAttemptVal(
        |  rddId=$rddId,
        |  rddScopeId=$rddScopeId,
        |  lastSqlExecutionId=$lastSqlExecutionId,
-       |  partitionPartialVals=${partitionPartialVals.mkString("[", ",", "]")},
-       |  stageIds=${stageIds.mkString("[", ",", "]")},
-       |  stageAttemptIds=${stageAttemptIds.mkString("[", ",", "]")},
-       |  taskAttemptNumbers=${taskAttemptNumbers.mkString("[", ",", "]")}
+       |  partitionPartialVals=$partVals,
+       |  stageIds=$sIds,
+       |  stageAttemptIds=$saIds,
+       |  taskAttemptNumbers=$tans
        |)""".stripMargin
   }
 }
 
 private object LastAttemptRDDVals {
-  // EMPTY_ID in stageId means that the partition was not computed.
+  // EMPTY_ID indicates "no attempt recorded": used as the initial value of the common
+  // (stageId, stageAttemptId, taskAttemptNumber) before any update, and as the value returned
+  // by partialValueAt for partitions that have not been computed.
   val EMPTY_ID: Int = -1
 
   def apply[@specialized T](
       rddId: Int,
       rddScopeId: Option[String],
       numPartitions: Int)(implicit ct: ClassTag[T]): LastAttemptRDDVals[T] = {
-    new LastAttemptRDDVals[T](
-      rddId,
-      rddScopeId,
-      new Array[T](numPartitions),
-      Array.fill(numPartitions)(LastAttemptRDDVals.EMPTY_ID),
-      Array.fill(numPartitions)(LastAttemptRDDVals.EMPTY_ID),
-      Array.fill(numPartitions)(LastAttemptRDDVals.EMPTY_ID))
+    new LastAttemptRDDVals[T](rddId, rddScopeId, new Array[T](numPartitions))
   }
 
   def createFromFirstUpdate[@specialized T](

@@ -196,6 +196,105 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("variant_delete with literal paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_delete(parse_json('{\"a\": 1, \"b\": 2, \"c\": 3}'), " +
+        "'$.a', '$.missing', '$.c'))"),
+      rows("""{"b":2}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_delete(parse_json('{\"a\": 1, \"b\": 2}'), NULL, '$.a'))"),
+      rows("""{"b":2}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_delete(parse_json('[1, 2, 3]'), '$[1]'))"),
+      rows("[1,3]"))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_delete(CAST(NULL AS VARIANT), '$.a'))"),
+      rows(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_delete(parse_json('{\"a\": 1}'), '$')").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("variant_delete")))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT variant_delete(parse_json('{}'))").collect()
+      },
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> toSQLId("variant_delete"),
+        "expectedNum" -> "> 1",
+        "actualNum" -> "1",
+        "docroot" -> "https://spark.apache.org/docs/latest"))
+  }
+
+  test("non-literal variant_delete") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    val df = Seq(
+      ("""{"a": 1, "b": 2}""", "$.a", null, 2),
+      ("""{"a": 1, "b": 2, "c": 3}""", "$.a", "$.c", 2),
+      ("""{"a": 1}""", "$.missing", null, 2),
+      ("""{"a": 1, "b": 2}""", null, null, 2),
+      (null, "$.a", null, 2),
+      ("""{"a": 1}""", "$", null, 1),
+      ("""{"a": 1}""", "abc", null, 0)).toDF("json", "path", "path2", "valid")
+    val v = parse_json(col("json"))
+    val df1 = df.where($"valid" === 2).select(
+      to_json(variant_delete(v, col("path"), col("path2"))))
+    checkAnswer(
+      df1,
+      rows("""{"b":2}""", """{"b":2}""", """{"a":1}""", """{"a":1,"b":2}""", null))
+
+    val dfInvalidRoot = df.where($"valid" === 1).select(
+      to_json(variant_delete(v, col("path"))))
+    checkError(
+      exception = intercept[SparkRuntimeException] { dfInvalidRoot.collect() },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("variant_delete")))
+
+    val df2 = df.where($"valid" === 0).select(to_json(variant_delete(v, col("path"))))
+    checkError(
+      exception = intercept[SparkRuntimeException] { df2.collect() },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "abc", "functionName" -> toSQLId("variant_delete")))
+
+    withTable("t") {
+      df.withColumn("v", parse_json(col("json"))).write.saveAsTable("t")
+      checkAnswer(
+        sql("select to_json(variant_delete(v, path, path2)) from t where valid = 2"),
+        rows("""{"b":2}""", """{"b":2}""", """{"a":1}""", """{"a":1,"b":2}""", null))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("select to_json(variant_delete(v, path)) from t where valid = 0").collect()
+        },
+        condition = "INVALID_VARIANT_PATH",
+        parameters = Map("path" -> "abc", "functionName" -> toSQLId("variant_delete")))
+    }
+  }
+
+  test("variant_delete mixed literal and dynamic paths") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1, "b": 2, "c": 3}""", "$.c"),
+          ("""{"a": 1, "b": 2}""", "$.b"),
+          (null, "$.a")
+        ).toDF("json", "path")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(variant_delete(v, lit("$.a"), col("path"))).alias("r"))
+        checkAnswer(out, rows("""{"b":2}""", "{}", null))
+      }
+    }
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)

@@ -213,6 +213,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
+    // setReadable(false) is a no-op for root users since they bypass file
+    // permission checks. Skip the test in that case.
+    assume(!logFile2.canRead, "Test requires the file to be unreadable; " +
+      "skipping when running as root.")
 
     updateAndCheck(provider) { list =>
       list.size should be (1)
@@ -1030,6 +1034,83 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     assert(freshUI.isDefined)
     assert(freshUI != oldUI)
     freshUI.get.ui.store.job(0)
+  }
+
+  test("stale disk store is rebuilt after app completes when UI was evicted from cache") {
+    // Test for the following race condition:
+    //
+    // 1. An in-progress app's UI is loaded -> disk store built from the .inprogress snapshot.
+    // 2. ApplicationCache evicts the UI entry (LRU pressure) -> onUIDetached() is called with
+    //    loadedUI.valid == true (app not yet complete) -> dm.release(delete=false) -> disk store
+    //    is kept on disk, entry removed from activeUIs.
+    // 3. App completes, checkForLogs() detects the completed log, mergeApplicationListing() calls
+    //    invalidateUI() but finds nothing in activeUIs -> the stale disk store is never deleted.
+    // 4. Next getAppUI() reopens the stale disk store from the .inprogress snapshot, missing
+    //    events written after the snapshot (e.g. JobStart, ApplicationEnd).
+    //
+    // The fix: when mergeApplicationListing() processes a completed log and the UI is not in
+    // activeUIs, proactively call dm.release(delete=true) to delete the stale disk store.
+    withTempDir { storeDir =>
+      val conf = createTestConf().set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
+      val provider = new FsHistoryProvider(conf)
+      val appId = "new1"
+
+      // Step 1: Write an in-progress log containing only ApplicationStart (no job).
+      val inProgressLog = newLogFile(appId, None, inProgress = true)
+      writeFile(inProgressLog, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None)
+      )
+      provider.checkForLogs()
+
+      // Step 2: Load the app UI; this builds the disk store from the in-progress snapshot.
+      val firstUI = provider.getAppUI(appId, None)
+      assert(firstUI.isDefined)
+      // No job exists in the in-progress snapshot.
+      intercept[NoSuchElementException] { firstUI.get.ui.store.job(0) }
+
+      // Step 3: Simulate ApplicationCache LRU eviction BEFORE the app completes.
+      // onUIDetached() is called with loadedUI.valid == true -> dm.release(delete=false):
+      // the disk store is kept but the entry is removed from activeUIs.
+      provider.onUIDetached(appId, None, firstUI.get.ui)
+
+      // Key invariant: after LRU eviction, valid is still true because the app has not
+      // completed yet. This is the heart of the bug: onUIDetached called
+      // dm.release(delete=false) because valid==true at eviction time.
+      assert(firstUI.get.valid)
+
+      // Step 4: Complete the app. Write a new log file (without .inprogress suffix) that
+      // contains ApplicationStart + JobStart + ApplicationEnd, and delete the old one.
+      val completedLog = newLogFile(appId, None, inProgress = false)
+      writeFile(completedLog, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+        SparkListenerJobStart(0, 1L, Nil, null),
+        SparkListenerApplicationEnd(5L)
+      )
+      inProgressLog.delete()
+
+      // Step 5: checkForLogs() detects the completed log.
+      // With the fix, mergeApplicationListing() proactively deletes the stale disk store
+      // because activeUIs is empty (the entry was already evicted in step 3).
+      provider.checkForLogs()
+
+      // Step 6: Load the UI again.
+      // WITHOUT the fix: loadDiskStore() would find the old .ldb dir and reopen it ->
+      //   stale snapshot -> no job data -> ui.store.job(0) throws NoSuchElementException.
+      // WITH the fix: the old disk store was deleted in step 5 -> rebuilt from the completed
+      //   log -> job data is present.
+      val freshUI = provider.getAppUI(appId, None)
+      assert(freshUI.isDefined)
+
+      // The refreshed UI must contain job data from the completed log.
+      freshUI.get.ui.store.job(0)
+
+      // The attempt must be marked as completed in the listing.
+      val appInfo = provider.getListing().toSeq
+      assert(appInfo.size === 1)
+      assert(appInfo.head.attempts.head.completed)
+
+      provider.onUIDetached(appId, None, freshUI.get.ui)
+    }
   }
 
   test("clean up stale app information") {

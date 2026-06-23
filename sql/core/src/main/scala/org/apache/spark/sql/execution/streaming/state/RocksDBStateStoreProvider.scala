@@ -516,6 +516,11 @@ private[sql] class RocksDBStateStoreProvider
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
         rowPair
       }
 
@@ -575,6 +580,11 @@ private[sql] class RocksDBStateStoreProvider
       val iter = rocksDbIter.map { kv =>
         rowPair.withRows(kvEncoder._1.decodeKey(kv.key),
           kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
         rowPair
       }
 
@@ -1488,22 +1498,27 @@ object RocksDBStateStoreProvider {
   val CUSTOM_METRIC_FLUSH_WRITTEN_BYTES = StateStoreCustomSizeMetric(
     "rocksdbTotalBytesWrittenByFlush",
     "RocksDB: flush - total bytes written by flush")
+  // Snapshot metrics: read current RocksDB state, preserved on no-data trigger events.
   val CUSTOM_METRIC_PINNED_BLOCKS_MEM_USAGE = StateStoreCustomSizeMetric(
     "rocksdbPinnedBlocksMemoryUsage",
-    "RocksDB: memory usage for pinned blocks")
+    "RocksDB: memory usage for pinned blocks",
+    isSnapshot = true)
   val CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES_KEYS = StateStoreCustomSizeMetric(
     "rocksdbNumInternalColFamiliesKeys",
-    "RocksDB: number of internal keys for internal column families")
+    "RocksDB: number of internal keys for internal column families",
+    isSnapshot = true)
   val CUSTOM_METRIC_NUM_EXTERNAL_COL_FAMILIES = StateStoreCustomSizeMetric(
     "rocksdbNumExternalColumnFamilies",
-    "RocksDB: number of external column families")
+    "RocksDB: number of external column families",
+    isSnapshot = true)
   val CUSTOM_METRIC_NUM_INTERNAL_COL_FAMILIES = StateStoreCustomSizeMetric(
     "rocksdbNumInternalColumnFamilies",
-    "RocksDB: number of internal column families")
+    "RocksDB: number of internal column families",
+    isSnapshot = true)
 
-  // Total SST file size
+  // Total SST file size (snapshot).
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
-    "rocksdbSstFileSize", "RocksDB: size of all SST files")
+    "rocksdbSstFileSize", "RocksDB: size of all SST files", isSnapshot = true)
   val CUSTOM_METRIC_NUM_SNAPSHOTS_AUTO_REPAIRED = StateStoreCustomSumMetric(
     "rocksdbNumSnapshotsAutoRepaired",
     "RocksDB: number of snapshots that were automatically repaired during store load")

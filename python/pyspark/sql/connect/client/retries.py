@@ -368,6 +368,11 @@ class DefaultPolicy(RetryPolicy):
             # All errors messages containing `RetryInfo` should be retried.
             return True
 
+        # DEADLINE_EXCEEDED on the reattachable execute path is handled directly in
+        # ExecutePlanResponseReattachableIterator, which converts it to RetryException so the
+        # server-side operation continues and a fresh ReattachExecute is issued. We do not retry
+        # other RPCs on deadline: those are non-idempotent or the deadline signals a genuine
+        # timeout that retrying won't fix. Keep this in sync with RetryPolicy.scala.
         return False
 
 

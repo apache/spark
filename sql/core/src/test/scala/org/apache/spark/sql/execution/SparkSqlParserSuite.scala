@@ -421,13 +421,11 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
     assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
 
-    val errMsg1 =
-      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths"
     val sql1 = "REFRESH a b"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -436,8 +434,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "REFRESH a\tb"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -446,8 +444,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "REFRESH a\nb"
     checkError(
       exception = parseException(sql3),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql3,
         start = 0,
@@ -456,8 +454,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "REFRESH a\rb"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
         start = 0,
@@ -466,8 +464,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "REFRESH a\r\nb"
     checkError(
       exception = parseException(sql5),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
         start = 0,
@@ -476,19 +474,18 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "REFRESH @ $a$"
     checkError(
       exception = parseException(sql6),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg1),
+      condition = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
         start = 0,
         stop = 12))
 
-    val errMsg2 = "Resource paths cannot be empty in REFRESH statements. Use / to match everything"
     val sql7 = "REFRESH  "
     checkError(
       exception = parseException(sql7),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg2),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "REFRESH",
         start = 0,
@@ -497,8 +494,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "REFRESH"
     checkError(
       exception = parseException(sql8),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg2),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_REFRESH_RESOURCE_PATH",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
         start = 0,
@@ -691,8 +688,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
                   UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
                   WindowSpecReference("w")), None)
             ),
-            UnresolvedRelation(TableIdentifier("testData"))),
-          forPipeSQL = false
+            UnresolvedRelation(TableIdentifier("testData")))
         ),
         ioSchema))
 
@@ -746,7 +742,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   test("SPARK-32607: Script Transformation ROW FORMAT DELIMITED" +
     " `TOK_TABLEROWFORMATLINES` only support '\\n'") {
 
-    val errMsg = "LINES TERMINATED BY only supports newline '\\n' right now: @"
     // test input format TOK_TABLEROWFORMATLINES
     val sql1 =
       s"""SELECT TRANSFORM(a, b, c, d, e)
@@ -762,8 +757,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
          |FROM v""".stripMargin
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg),
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY",
+      parameters = Map("value" -> "@"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -784,8 +779,8 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
          |FROM v""".stripMargin
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> errMsg),
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY",
+      parameters = Map("value" -> "@"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -1035,7 +1030,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
     checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
     // Window
-    def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
+    def checkWindow(query: String): Unit = check(query, Seq(WINDOW_EXPRESSION))
     checkWindow(
       """
         |TABLE windowTestData

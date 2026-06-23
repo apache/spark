@@ -646,7 +646,14 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> ParentDataFrame: ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> ParentDataFrame: ...
+
+    @overload
+    def sample(
+        self, withReplacement: float, fraction: Optional[int] = ..., /
+    ) -> ParentDataFrame: ...
 
     @overload
     def sample(
@@ -656,7 +663,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         seed: Optional[int] = ...,
     ) -> ParentDataFrame: ...
 
-    def sample(  # type: ignore[misc]
+    def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
         fraction: Optional[Union[int, float]] = None,
@@ -769,6 +776,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.crossJoin(other._jdf)
         return DataFrame(jdf, self.sparkSession)
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        return DataFrame(self._jdf.zip(other._jdf), self.sparkSession)
+
     def join(
         self,
         other: ParentDataFrame,
@@ -811,6 +821,21 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.lateralJoin(other._jdf, on._jc)
         else:
             jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
+        return DataFrame(jdf, self.sparkSession)
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        jdf = self._jdf.nearestByJoin(
+            other._jdf, rankingExpression._jc, int(numResults), mode, direction, joinType
+        )
         return DataFrame(jdf, self.sparkSession)
 
     # TODO(SPARK-22947): Fix the DataFrame API.
@@ -1413,6 +1438,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
@@ -1424,7 +1450,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         subset: Optional[List[str]] = ...,
     ) -> ParentDataFrame: ...
 
-    def replace(  # type: ignore[misc]
+    def replace(
         self,
         to_replace: Union[
             "LiteralType", List["LiteralType"], Dict["LiteralType", "OptionalPrimitiveType"]

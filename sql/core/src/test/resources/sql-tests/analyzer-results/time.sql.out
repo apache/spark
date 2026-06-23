@@ -959,35 +959,35 @@ Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIM
 -- !query
 SELECT time_trunc('HOUR', time'12:34:56.123456789')
 -- !query analysis
-Project [time_trunc(HOUR, 12:34:56.123456) AS time_trunc(HOUR, TIME '12:34:56.123456')#x]
+Project [time_trunc(HOUR, 12:34:56.123456789) AS time_trunc(HOUR, TIME '12:34:56.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MINUTE', time'12:34:56.123456789')
 -- !query analysis
-Project [time_trunc(MINUTE, 12:34:56.123456) AS time_trunc(MINUTE, TIME '12:34:56.123456')#x]
+Project [time_trunc(MINUTE, 12:34:56.123456789) AS time_trunc(MINUTE, TIME '12:34:56.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('SECOND', time'12:34:56.123456789')
 -- !query analysis
-Project [time_trunc(SECOND, 12:34:56.123456) AS time_trunc(SECOND, TIME '12:34:56.123456')#x]
+Project [time_trunc(SECOND, 12:34:56.123456789) AS time_trunc(SECOND, TIME '12:34:56.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MILLISECOND', time'12:34:56.123456789')
 -- !query analysis
-Project [time_trunc(MILLISECOND, 12:34:56.123456) AS time_trunc(MILLISECOND, TIME '12:34:56.123456')#x]
+Project [time_trunc(MILLISECOND, 12:34:56.123456789) AS time_trunc(MILLISECOND, TIME '12:34:56.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MICROSECOND', time'12:34:56.123456789')
 -- !query analysis
-Project [time_trunc(MICROSECOND, 12:34:56.123456) AS time_trunc(MICROSECOND, TIME '12:34:56.123456')#x]
+Project [time_trunc(MICROSECOND, 12:34:56.123456789) AS time_trunc(MICROSECOND, TIME '12:34:56.123456789')#x]
 +- OneRowRelation
 
 
@@ -1064,70 +1064,70 @@ Project [time_trunc(MICROSECOND, 00:00:00) AS time_trunc(MICROSECOND, TIME '00:0
 -- !query
 SELECT time_trunc('HOUR', time'00:00:00.000000001')
 -- !query analysis
-Project [time_trunc(HOUR, 00:00:00) AS time_trunc(HOUR, TIME '00:00:00')#x]
+Project [time_trunc(HOUR, 00:00:00.000000001) AS time_trunc(HOUR, TIME '00:00:00.000000001')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MINUTE', time'00:00:00.000000001')
 -- !query analysis
-Project [time_trunc(MINUTE, 00:00:00) AS time_trunc(MINUTE, TIME '00:00:00')#x]
+Project [time_trunc(MINUTE, 00:00:00.000000001) AS time_trunc(MINUTE, TIME '00:00:00.000000001')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('SECOND', time'00:00:00.000000001')
 -- !query analysis
-Project [time_trunc(SECOND, 00:00:00) AS time_trunc(SECOND, TIME '00:00:00')#x]
+Project [time_trunc(SECOND, 00:00:00.000000001) AS time_trunc(SECOND, TIME '00:00:00.000000001')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MILLISECOND', time'00:00:00.000000001')
 -- !query analysis
-Project [time_trunc(MILLISECOND, 00:00:00) AS time_trunc(MILLISECOND, TIME '00:00:00')#x]
+Project [time_trunc(MILLISECOND, 00:00:00.000000001) AS time_trunc(MILLISECOND, TIME '00:00:00.000000001')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MICROSECOND', time'00:00:00.000000001')
 -- !query analysis
-Project [time_trunc(MICROSECOND, 00:00:00) AS time_trunc(MICROSECOND, TIME '00:00:00')#x]
+Project [time_trunc(MICROSECOND, 00:00:00.000000001) AS time_trunc(MICROSECOND, TIME '00:00:00.000000001')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('HOUR', time'23:59:59.999999999')
 -- !query analysis
-Project [time_trunc(HOUR, 23:59:59.999999) AS time_trunc(HOUR, TIME '23:59:59.999999')#x]
+Project [time_trunc(HOUR, 23:59:59.999999999) AS time_trunc(HOUR, TIME '23:59:59.999999999')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MINUTE', time'23:59:59.999999999')
 -- !query analysis
-Project [time_trunc(MINUTE, 23:59:59.999999) AS time_trunc(MINUTE, TIME '23:59:59.999999')#x]
+Project [time_trunc(MINUTE, 23:59:59.999999999) AS time_trunc(MINUTE, TIME '23:59:59.999999999')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('SECOND', time'23:59:59.999999999')
 -- !query analysis
-Project [time_trunc(SECOND, 23:59:59.999999) AS time_trunc(SECOND, TIME '23:59:59.999999')#x]
+Project [time_trunc(SECOND, 23:59:59.999999999) AS time_trunc(SECOND, TIME '23:59:59.999999999')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MILLISECOND', time'23:59:59.999999999')
 -- !query analysis
-Project [time_trunc(MILLISECOND, 23:59:59.999999) AS time_trunc(MILLISECOND, TIME '23:59:59.999999')#x]
+Project [time_trunc(MILLISECOND, 23:59:59.999999999) AS time_trunc(MILLISECOND, TIME '23:59:59.999999999')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_trunc('MICROSECOND', time'23:59:59.999999999')
 -- !query analysis
-Project [time_trunc(MICROSECOND, 23:59:59.999999) AS time_trunc(MICROSECOND, TIME '23:59:59.999999')#x]
+Project [time_trunc(MICROSECOND, 23:59:59.999999999) AS time_trunc(MICROSECOND, TIME '23:59:59.999999999')#x]
 +- OneRowRelation
 
 
@@ -1533,35 +1533,35 @@ Project [time_diff(MICROSECOND, 00:00:00, 12:34:56.123456) AS time_diff(MICROSEC
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56.123456789')
 -- !query analysis
-Project [time_diff(HOUR, 00:00:00, 12:34:56.123456) AS time_diff(HOUR, TIME '00:00:00', TIME '12:34:56.123456')#xL]
+Project [time_diff(HOUR, 00:00:00, 12:34:56.123456789) AS time_diff(HOUR, TIME '00:00:00', TIME '12:34:56.123456789')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'12:34:56.123456789')
 -- !query analysis
-Project [time_diff(MINUTE, 00:00:00, 12:34:56.123456) AS time_diff(MINUTE, TIME '00:00:00', TIME '12:34:56.123456')#xL]
+Project [time_diff(MINUTE, 00:00:00, 12:34:56.123456789) AS time_diff(MINUTE, TIME '00:00:00', TIME '12:34:56.123456789')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query analysis
-Project [time_diff(SECOND, 00:00:00, 12:34:56.123456) AS time_diff(SECOND, TIME '00:00:00', TIME '12:34:56.123456')#xL]
+Project [time_diff(SECOND, 00:00:00, 12:34:56.123456789) AS time_diff(SECOND, TIME '00:00:00', TIME '12:34:56.123456789')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query analysis
-Project [time_diff(MILLISECOND, 00:00:00, 12:34:56.123456) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '12:34:56.123456')#xL]
+Project [time_diff(MILLISECOND, 00:00:00, 12:34:56.123456789) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '12:34:56.123456789')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'12:34:56.123456789')
 -- !query analysis
-Project [time_diff(MICROSECOND, 00:00:00, 12:34:56.123456) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '12:34:56.123456')#xL]
+Project [time_diff(MICROSECOND, 00:00:00, 12:34:56.123456789) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '12:34:56.123456789')#xL]
 +- OneRowRelation
 
 
@@ -1638,70 +1638,70 @@ Project [time_diff(MICROSECOND, 00:00:00, 00:00:00) AS time_diff(MICROSECOND, TI
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'00:00:00.000000001')
 -- !query analysis
-Project [time_diff(HOUR, 00:00:00, 00:00:00) AS time_diff(HOUR, TIME '00:00:00', TIME '00:00:00')#xL]
+Project [time_diff(HOUR, 00:00:00, 00:00:00.000000001) AS time_diff(HOUR, TIME '00:00:00', TIME '00:00:00.000000001')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'00:00:00.000000001')
 -- !query analysis
-Project [time_diff(MINUTE, 00:00:00, 00:00:00) AS time_diff(MINUTE, TIME '00:00:00', TIME '00:00:00')#xL]
+Project [time_diff(MINUTE, 00:00:00, 00:00:00.000000001) AS time_diff(MINUTE, TIME '00:00:00', TIME '00:00:00.000000001')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query analysis
-Project [time_diff(SECOND, 00:00:00, 00:00:00) AS time_diff(SECOND, TIME '00:00:00', TIME '00:00:00')#xL]
+Project [time_diff(SECOND, 00:00:00, 00:00:00.000000001) AS time_diff(SECOND, TIME '00:00:00', TIME '00:00:00.000000001')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query analysis
-Project [time_diff(MILLISECOND, 00:00:00, 00:00:00) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '00:00:00')#xL]
+Project [time_diff(MILLISECOND, 00:00:00, 00:00:00.000000001) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '00:00:00.000000001')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'00:00:00.000000001')
 -- !query analysis
-Project [time_diff(MICROSECOND, 00:00:00, 00:00:00) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00')#xL]
+Project [time_diff(MICROSECOND, 00:00:00, 00:00:00.000000001) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '00:00:00.000000001')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('HOUR', time'00:00:00', time'23:59:59.999999999')
 -- !query analysis
-Project [time_diff(HOUR, 00:00:00, 23:59:59.999999) AS time_diff(HOUR, TIME '00:00:00', TIME '23:59:59.999999')#xL]
+Project [time_diff(HOUR, 00:00:00, 23:59:59.999999999) AS time_diff(HOUR, TIME '00:00:00', TIME '23:59:59.999999999')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MINUTE', time'00:00:00', time'23:59:59.999999999')
 -- !query analysis
-Project [time_diff(MINUTE, 00:00:00, 23:59:59.999999) AS time_diff(MINUTE, TIME '00:00:00', TIME '23:59:59.999999')#xL]
+Project [time_diff(MINUTE, 00:00:00, 23:59:59.999999999) AS time_diff(MINUTE, TIME '00:00:00', TIME '23:59:59.999999999')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('SECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query analysis
-Project [time_diff(SECOND, 00:00:00, 23:59:59.999999) AS time_diff(SECOND, TIME '00:00:00', TIME '23:59:59.999999')#xL]
+Project [time_diff(SECOND, 00:00:00, 23:59:59.999999999) AS time_diff(SECOND, TIME '00:00:00', TIME '23:59:59.999999999')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MILLISECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query analysis
-Project [time_diff(MILLISECOND, 00:00:00, 23:59:59.999999) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '23:59:59.999999')#xL]
+Project [time_diff(MILLISECOND, 00:00:00, 23:59:59.999999999) AS time_diff(MILLISECOND, TIME '00:00:00', TIME '23:59:59.999999999')#xL]
 +- OneRowRelation
 
 
 -- !query
 SELECT time_diff('MICROSECOND', time'00:00:00', time'23:59:59.999999999')
 -- !query analysis
-Project [time_diff(MICROSECOND, 00:00:00, 23:59:59.999999) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '23:59:59.999999')#xL]
+Project [time_diff(MICROSECOND, 00:00:00, 23:59:59.999999999) AS time_diff(MICROSECOND, TIME '00:00:00', TIME '23:59:59.999999999')#xL]
 +- OneRowRelation
 
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary, TableViewCatalog, V1Table, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
@@ -39,7 +39,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * [[org.apache.spark.sql.execution.PersistedViewTestSuite]] body against the v2 path for full
  * parity with the v1 persisted-view coverage.
  */
-class DataSourceV2MetadataViewSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf

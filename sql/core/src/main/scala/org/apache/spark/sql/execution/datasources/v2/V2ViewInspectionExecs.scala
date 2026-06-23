@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, TableSummary, ViewInfo}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
@@ -146,17 +146,19 @@ case class ShowV2ViewColumnsExec(
 
 /**
  * Physical plan node for DESCRIBE TABLE on a v2 view. Schema rows first; when EXTENDED is
- * specified, an additional `# Detailed View Information` block emits the v2-native fields
- * (catalog, identifier, view text, captured creation context, schema-binding mode, query
- * column names, user TBLPROPERTIES). v2 views are unpartitioned by definition, so the
- * partition-spec branch from v1 `DescribeTableCommand` is unreachable here.
+ * specified, an additional `# Detailed View Information` block emits the v2-native fields:
+ * the resolved-identifier components via [[DescribeIdentifierRows#addIdentifierRows]] (which
+ * also surfaces a v1-compat `Database` row for single-segment namespaces), followed by view
+ * text, captured creation context, schema-binding mode, query column names, and user
+ * TBLPROPERTIES. v2 views are unpartitioned by definition, so the partition-spec branch from
+ * v1 `DescribeTableCommand` is unreachable here.
  */
 case class DescribeV2ViewExec(
     output: Seq[Attribute],
     catalogName: String,
     identifier: Identifier,
     viewInfo: ViewInfo,
-    isExtended: Boolean) extends LeafV2CommandExec with SQLConfHelper {
+    isExtended: Boolean) extends DescribeIdentifierRows with SQLConfHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val result = new ArrayBuffer[InternalRow]
@@ -166,10 +168,16 @@ case class DescribeV2ViewExec(
     if (isExtended) {
       result += toCatalystRow("", "", "")
       result += toCatalystRow("# Detailed View Information", "", "")
-      result += toCatalystRow("Catalog", catalogName, "")
-      val qualified = (identifier.namespace() :+ identifier.name())
-        .map(quoteIfNeeded).mkString(".")
-      result += toCatalystRow("Identifier", qualified, "")
+      addIdentifierRows(result, catalogName, identifier, entityLabel = "View")
+      // Surface the view sub-kind so users see whether they're looking at a plain VIEW
+      // or a sub-kind like METRIC_VIEW. `ViewInfo`'s constructor unconditionally stamps
+      // `PROP_TABLE_TYPE` (defaulting to `VIEW`), so this row is always present and
+      // matches v1 `CatalogTable.toJsonLinkedHashMap`'s `Type` row for parity.
+      result += toCatalystRow(
+        "Type",
+        Option(viewInfo.properties.get(TableCatalog.PROP_TABLE_TYPE))
+          .getOrElse(TableSummary.VIEW_TABLE_TYPE),
+        "")
       // Promote first-class reserved fields (Owner / Comment / Collation) to top-level rows
       // before the EXTENDED Properties block, mirroring v1 `CatalogTable.toJsonLinkedHashMap`
       // which renders these as their own rows rather than burying them in `Table Properties`.

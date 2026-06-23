@@ -206,7 +206,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row("_partition", "string", "Partition key used to store the row"),
           Row("", "", ""),
           Row("# Detailed Table Information", "", ""),
-          Row("Name", tbl, ""),
+          Row("Catalog", catalog, ""),
+          Row("Namespace", "ns", ""),
+          Row("Database", "ns", ""),
+          Row("Table", "table", ""),
           Row("Type", "MANAGED", ""),
           Row("Comment", "this is a test table", ""),
           Row("Location", "file:/tmp/testcat/table_name", ""),
@@ -214,6 +217,45 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
           Row(TableCatalog.PROP_OWNER.capitalize, Utils.getCurrentUserName(), ""),
           Row("Table Properties", "[bar=baz]", ""),
           Row("Statistics", "0 bytes, 0 rows", null)))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED emits structured Catalog/Namespace/Table rows") {
+    // Pin that DescribeTableExec emits the resolved-identifier components as separate
+    // rows under the `# Detailed Table Information` block, so consumers can read each
+    // part programmatically rather than splitting a concatenated identifier string. Also
+    // pin that for a single-segment namespace, an additional `Database` row is emitted
+    // alongside `Namespace` for v1 compatibility (mirroring v1 `CatalogTable` output).
+    withNamespaceAndTable("ns", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
+      val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
+      def findRowValue(name: String): String = rows
+        .find(_.getString(0) == name)
+        .getOrElse(fail(s"DESCRIBE output missing the `$name` row"))
+        .getString(1)
+      assert(findRowValue("Catalog") == catalog)
+      assert(findRowValue("Namespace") == "ns")
+      assert(findRowValue("Database") == "ns",
+        "single-segment namespace must also surface as a `Database` row for v1 parity")
+      assert(findRowValue("Table") == "table")
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED with a multi-segment namespace surfaces the leaf " +
+      "segment in `Database` and joins `Namespace` with dots") {
+    // Multi-segment v2 namespaces still emit a `Database` row for v1 compatibility,
+    // carrying the trailing namespace segment. `Namespace` carries the full dot-joined
+    // form for consumers that need the complete path (with `quoteIfNeeded` applied per
+    // segment -- not exercised here because both segments are valid bare identifiers).
+    withNamespaceAndTable("ns1.ns2", "table") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint) $defaultUsing")
+      val rows = sql(s"DESCRIBE TABLE EXTENDED $tbl").collect()
+      val byName = rows.map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(byName.get("Catalog").contains(catalog))
+      assert(byName.get("Namespace").contains("ns1.ns2"))
+      assert(byName.get("Database").contains("ns2"),
+        "multi-segment namespace must surface the trailing segment as `Database`")
+      assert(byName.get("Table").contains("table"))
     }
   }
 

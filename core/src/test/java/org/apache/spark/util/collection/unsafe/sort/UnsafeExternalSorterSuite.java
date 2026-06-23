@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.LinkedList;
 import java.util.UUID;
 
@@ -36,6 +37,8 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.internal.config.package$;
+import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
@@ -847,6 +850,86 @@ public class UnsafeExternalSorterSuite {
     UnsafeSorterIterator iter = sorter.getSortedIterator();
     verifyIntIterator(iter, 0, totalRecords);
     assertFalse(iter.hasNext());
+
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testBoundedMergeSnapshotIsolatedFromConcurrentSpill() throws Exception {
+    // Verifies the prepareBoundedMerge() seam contract: ctx.snapshot is a defensive
+    // copy frozen at prepare-time, isolated from any later mutation of the live
+    // spillWriters list. The test drives the worst-case scenario by direct sequencing:
+    // an external-trigger spill() (the route a sibling MemoryConsumer takes under
+    // memory pressure) appends a writer to live spillWriters AND rebinds
+    // readingIterator.upstream to read it -- the merger must consume that file exactly
+    // once via readingIterator, not twice via the snapshot.
+    final UnsafeExternalSorter sorter = newSorter();
+    sorter.setSpillMergeFactor(2);
+
+    final int numSpills = 4;
+    final int recordsPerSpill = 8;
+    final int totalSpilled = numSpills * recordsPerSpill;
+    final int inMemRecords = 5;
+    final int totalRecords = totalSpilled + inMemRecords;
+
+    // Build numSpills spills with disjoint, interleaved keys.
+    for (int spill = 0; spill < numSpills; spill++) {
+      for (int j = 0; j < recordsPerSpill; j++) {
+        insertNumber(sorter, spill + j * numSpills);
+      }
+      sorter.spill();
+    }
+    // Leave a few records in memory so readingIterator has unread data that a
+    // concurrent spill() can drain into a new spill file.
+    for (int j = 0; j < inMemRecords; j++) {
+      insertNumber(sorter, totalSpilled + j);
+    }
+
+    // Phase 1: snapshot + publish readingIterator (production order).
+    UnsafeExternalSorter.BoundedMergerContext ctx = sorter.prepareBoundedMerge();
+    assertNotNull(ctx.inMemIter,
+        "readingIterator should be published when inMemSorter has data");
+    final int snapshotSizeBefore = ctx.snapshot.size();
+    final int spillFilesBefore = spillFilesCreated.size();
+
+    // Phase 2: external-trigger spill. Routes through readingIterator.spill():
+    // appends a writer to the live spillWriters AND rebinds readingIterator.upstream.
+    final MemoryConsumer externalTrigger =
+        new MemoryConsumer(taskMemoryManager, MemoryMode.ON_HEAP) {
+          @Override
+          public long spill(long size, MemoryConsumer trigger) {
+            return 0;
+          }
+        };
+    long bytesSpilled = sorter.spill(Long.MAX_VALUE, externalTrigger);
+    assertTrue(bytesSpilled > 0L,
+        "external-trigger spill must fire to exercise the seam contract");
+    // Exactly one new spill file should have been produced by the external-trigger spill.
+    assertEquals(spillFilesBefore + 1, spillFilesCreated.size(),
+        "external-trigger spill should produce exactly one new spill file");
+    // Defensive-copy invariant: the post-spill snapshot is unchanged. A future
+    // refactor that aliases ctx.snapshot to the live spillWriters field instead of
+    // copying it would fail this assertion.
+    assertEquals(snapshotSizeBefore, ctx.snapshot.size(),
+        "ctx.snapshot must be isolated from live spillWriters mutation");
+
+    // Phase 3: merge using the frozen snapshot.
+    UnsafeSorterIterator iter = ctx.merger.merge(ctx.snapshot, ctx.inMemIter);
+
+    // Each input record must appear exactly once: no duplicates, no losses.
+    BitSet seen = new BitSet(totalRecords);
+    int count = 0;
+    while (iter.hasNext()) {
+      iter.loadNext();
+      int v = Platform.getInt(iter.getBaseObject(), iter.getBaseOffset());
+      assertTrue(v >= 0 && v < totalRecords, "record out of range: " + v);
+      assertFalse(seen.get(v), "duplicate record observed: " + v);
+      seen.set(v);
+      count++;
+    }
+    assertEquals(totalRecords, count, "wrong record count");
+    assertEquals(totalRecords, seen.cardinality(), "missing records");
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();

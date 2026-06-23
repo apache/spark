@@ -516,6 +516,29 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     left.crossJoin(right)
   }
 
+  test("nearestByJoin inner_approx_similarity") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 1,
+        mode = "approx",
+        direction = "similarity")
+  }
+
+  test("nearestByJoin leftouter_exact_distance") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 5,
+        mode = "exact",
+        direction = "distance",
+        joinType = "leftouter")
+  }
+
   test("sortWithinPartitions strings") {
     simple.sortWithinPartitions("a", "id")
   }
@@ -713,6 +736,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = new MetadataBuilder
     builder.putString("description", "unique identifier")
     simple.withMetadata("id", builder.build())
+  }
+
+  test("zip") {
+    left.select("id").zip(left.select("a"))
   }
 
   test("zipWithIndex") {
@@ -2726,6 +2753,14 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_variant_null") {
     fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("is_valid_variant") {
+    fn.is_valid_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_delete") {
+    fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
   }
 
   functionTest("variant_get") {

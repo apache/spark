@@ -83,6 +83,11 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
   }
 
   /** @inheritdoc */
+  private[sql] def name(sinkName: String): this.type = {
+    throw new UnsupportedOperationException("Sink naming is not supported in Spark Connect")
+  }
+
+  /** @inheritdoc */
   def format(source: String): this.type = {
     sinkBuilder.setFormat(source)
     this

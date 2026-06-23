@@ -26,9 +26,12 @@ import {
 
 export {setTaskThreadDumpEnabled};
 
-function setTooltip(selector, text) {
-  $(selector).attr("data-bs-toggle", "tooltip")
+function setTooltip(selector, text, trigger) {
+  var tooltip = $(selector).attr("data-bs-toggle", "tooltip")
     .attr("title", text);
+  if (trigger) {
+    tooltip.attr("data-bs-trigger", trigger);
+  }
 }
 
 var shouldBlockUI = true;
@@ -362,18 +365,18 @@ $(document).ready(function () {
     "</div>");
 
   setTooltip('#scheduler_delay', "Scheduler delay includes time to ship the task from the scheduler to the executor, and time to send " +
-    "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.");
-  setTooltip('#task_deserialization_time', "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.");
-  setTooltip('#shuffle_read_fetch_wait_time', "Time that the task spent blocked waiting for shuffle data to be read from remote machines.");
-  setTooltip('#shuffle_remote_reads', "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ");
-  setTooltip('#shuffle_write_time', "Time that the task spent writing shuffle data.");
-  setTooltip('#result_serialization_time', "Time spent serializing the task result on the executor before sending it back to the driver.");
-  setTooltip('#getting_result_time', "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.");
+    "the task result from the executor to the scheduler. If scheduler delay is large, consider decreasing the size of tasks or decreasing the size of task results.", "hover");
+  setTooltip('#task_deserialization_time', "Time spent deserializing the task closure on the executor, including the time to read the broadcasted task.", "hover");
+  setTooltip('#shuffle_read_fetch_wait_time', "Time that the task spent blocked waiting for shuffle data to be read from remote machines.", "hover");
+  setTooltip('#shuffle_remote_reads', "Total shuffle bytes read from remote executors. This is a subset of the shuffle read bytes; the remaining shuffle data is read locally. ", "hover");
+  setTooltip('#shuffle_write_time', "Time that the task spent writing shuffle data.", "hover");
+  setTooltip('#result_serialization_time', "Time spent serializing the task result on the executor before sending it back to the driver.", "hover");
+  setTooltip('#getting_result_time', "Time that the driver spends fetching task results from workers. If this is large, consider decreasing the amount of data returned from each task.", "hover");
   setTooltip('#peak_execution_memory', "Execution memory refers to the memory used by internal data structures created during " +
     "shuffles, aggregations and joins when Tungsten is enabled. The value of this accumulator " +
     "should be approximately the sum of the peak sizes across all such data structures created " +
     "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
-    "external sort.");
+    "external sort.", "hover");
   var tasksSummary = $("#parent-container");
   getStandAloneAppId(function (appId) {
     // rendering the UI page

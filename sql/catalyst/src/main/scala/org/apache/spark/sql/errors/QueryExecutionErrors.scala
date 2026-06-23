@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -448,6 +448,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
+  def lambdaVariableAlreadyDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $id cannot be redefined")
+  }
+
+  def lambdaVariableNotDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(
+      s"Lambda variable $id is not defined in the current codegen scope")
+  }
+
   def cannotGenerateCodeForIncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
     SparkException.internalError(
@@ -666,6 +675,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def stInvalidArgumentErrorInvalidEndiannessValue(
+      endianness: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_ENDIANNESS_VALUE",
+      messageParameters = Map("endianness" -> endianness)
+    )
+  }
+
   def stInvalidSridValueError(srid: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "ST_INVALID_SRID_VALUE",
@@ -684,6 +701,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
     wkbParseError(msg, pos.toString)
+  }
+
+  def cannotMutateReadOnlyGeoValueError(): SparkRuntimeException = {
+    // This guards an internal invariant: setSrid mutates the backing buffer in place, which only
+    // works when the value owns a tight on-heap array. It is never reachable from user input (the
+    // only caller copies first), so a misuse here is a Spark bug, hence INTERNAL_ERROR.
+    new SparkRuntimeException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        ("setSrid requires a value that owns its backing buffer; call copy() before mutating a " +
+          "value read directly from an UnsafeRow / ColumnVector buffer.")))
   }
 
   def withSuggestionIntervalArithmeticOverflowError(
@@ -1194,6 +1222,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new java.util.HashMap[String, String]())
   }
 
+  def aggregateOutOfMemoryError(): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "AGGREGATE_OUT_OF_MEMORY",
+      new java.util.HashMap[String, String]())
+  }
+
+  def cannotAcquireMemoryForWindowAggregateError(
+      requestedBytes: Long,
+      receivedBytes: Long): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "UNABLE_TO_ACQUIRE_MEMORY",
+      java.util.Map.of(
+        "requestedBytes", requestedBytes.toString,
+        "receivedBytes", receivedBytes.toString))
+  }
+
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2108")
   }
@@ -1690,6 +1734,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "version" -> version,
         "key" -> key))
+  }
+
+  def unsupportedHiveMetastoreVersionForJavaError(
+      version: String,
+      requiredJavaVersion: Int,
+      currentJavaVersion: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA",
+      messageParameters = Map(
+        "version" -> version,
+        "requiredJavaVersion" -> requiredJavaVersion.toString,
+        "currentJavaVersion" -> currentJavaVersion.toString))
   }
 
   def loadHiveClientCausesNoClassDefFoundError(
@@ -2499,6 +2555,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "toType" -> toSQLType(TimestampType)))
   }
 
+  def cannotCastOrcTimestampError(orcType: DataType, toType: DataType): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+      messageParameters = Map(
+        "orcType" -> toSQLType(orcType),
+        "toType" -> toSQLType(toType)))
+  }
+
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
       numWrittenParts: Int,
       maxDynamicPartitions: Int,
@@ -2561,6 +2625,33 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def parquetTimestampNanosOverflowError(
+      value: TimestampNanosVal, isNtz: Boolean): SparkArithmeticException = {
+    // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
+    // values are absolute instants and render as UTC with a trailing `Z`.
+    val rendered =
+      if (isNtz) DateTimeUtils.timestampNanosToLocalDateTime(value).toString
+      else DateTimeUtils.timestampNanosToInstant(value).toString
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"write the timestamp value $rendered as Parquet INT64 " +
+          "epoch-nanoseconds " +
+          "(supported range: 1677-09-21T00:12:43.145224192Z to 2262-04-11T23:47:16.854775807Z)")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def timestampNanosOverflowError(nanos: java.math.BigInteger): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"create a TIMESTAMP_LTZ(9) from $nanos nanoseconds since the epoch"),
       context = Array.empty,
       summary = "")
   }
@@ -2992,6 +3083,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
 
+  def invalidVariantPath(path: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VARIANT_PATH",
+      messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
+  }
+
   def malformedVariant(): Throwable = new SparkRuntimeException(
     "MALFORMED_VARIANT",
     Map.empty
@@ -3330,5 +3427,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function),
         "expectedFamily" -> expectedFamily,
         "actualFamily" -> actualFamily))
+  }
+
+  def lineSepCannotBeNullError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.NULL")
+  }
+
+  def lineSepCannotBeEmptyError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.EMPTY")
+  }
+
+  def lineSepTooLongError(length: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
+      messageParameters = Map("length" -> length.toString))
   }
 }

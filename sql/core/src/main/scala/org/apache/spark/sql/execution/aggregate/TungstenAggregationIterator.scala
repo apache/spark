@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import java.util
-
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.KVIterator
@@ -211,9 +209,7 @@ class TungstenAggregationIterator(
           buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
           if (buffer == null) {
             // failed to allocate the first page
-            // scalastyle:off throwerror
-            throw new SparkOutOfMemoryError("AGGREGATE_OUT_OF_MEMORY", new util.HashMap())
-            // scalastyle:on throwerror
+            throw QueryExecutionErrors.aggregateOutOfMemoryError()
           }
         }
         processRow(buffer, newInput)

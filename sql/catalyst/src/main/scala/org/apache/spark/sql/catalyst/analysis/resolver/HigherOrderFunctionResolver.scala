@@ -33,7 +33,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  */
 class HigherOrderFunctionResolver(
     protected val expressionResolver: ExpressionResolver,
-    functionResolution: FunctionResolution)
+    protected val functionResolution: FunctionResolution)
     extends TreeNodeResolver[UnresolvedFunction, Expression]
     with ProducesUnresolvedSubtree
     with CoercesExpressionTypes

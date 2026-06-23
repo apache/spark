@@ -232,7 +232,10 @@ class PartitionedWriteSuite extends SharedSparkSession {
       "00:01:02.999999" -> TimeType(6),
       "12:00:00" -> TimeType(1),
       "23:59:59.000001" -> TimeType(),
-      "23:59:59.999999" -> TimeType(6)
+      "23:59:59.999999" -> TimeType(6),
+      "00:00:00.0000019" -> TimeType(7),
+      "12:34:56.12345678" -> TimeType(8),
+      "23:59:59.999999999" -> TimeType(9)
     ).foreach { case (timeStr, timeType) =>
       withTempPath { f =>
         val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")

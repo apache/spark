@@ -7,6 +7,7 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
+ALIGN	false
 ALL	true
 ALTER	false
 ALWAYS	false
@@ -15,6 +16,7 @@ AND	true
 ANTI	false
 ANY	true
 ANY_VALUE	false
+APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	true
@@ -24,10 +26,15 @@ AT	false
 ATOMIC	false
 AUTHORIZATION	true
 BEGIN	false
+BERNOULLI	false
 BETWEEN	false
 BIGINT	false
+BIN	false
 BINARY	false
 BINDING	false
+BIN_DISTRIBUTE_RATIO	false
+BIN_END	false
+BIN_START	false
 BOOLEAN	false
 BOTH	true
 BUCKET	false
@@ -110,6 +117,7 @@ DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
+DISTANCE	false
 DISTINCT	true
 DISTRIBUTE	false
 DIV	false
@@ -123,6 +131,7 @@ ENFORCED	false
 ESCAPE	true
 ESCAPED	false
 EVOLUTION	false
+EXACT	false
 EXCEPT	true
 EXCHANGE	false
 EXCLUDE	false
@@ -243,6 +252,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	true
+NEAREST	false
 NEXT	false
 NO	false
 NONE	false
@@ -331,6 +341,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SIMILARITY	false
 SINGLE	false
 SKEWED	false
 SMALLINT	false
@@ -353,6 +364,7 @@ STRUCT	false
 SUBSTR	false
 SUBSTRING	false
 SYNC	false
+SYSTEM	false
 SYSTEM_PATH	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
@@ -385,6 +397,7 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNIFORM	false
 UNION	true
 UNIQUE	true
 UNKNOWN	true
@@ -412,6 +425,7 @@ WEEKS	false
 WHEN	true
 WHERE	true
 WHILE	false
+WIDTH	false
 WINDOW	false
 WITH	true
 WITHIN	true

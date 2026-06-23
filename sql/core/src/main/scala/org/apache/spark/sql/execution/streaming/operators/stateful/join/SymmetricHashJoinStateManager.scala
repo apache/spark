@@ -2045,8 +2045,6 @@ object SymmetricHashJoinStateManager {
       joinStoreGenerator: JoinStateManagerStoreGenerator,
       joinKeyOrdinalForWatermark: Option[Int] = None): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
-      require(SQLConf.get.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_V4_ENABLED),
-        "State format version 4 is under development.")
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,

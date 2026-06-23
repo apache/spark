@@ -64,7 +64,7 @@ public class HiveServer2 extends CompositeService {
     cliService = new CLIService(this);
     addService(cliService);
     if (isHTTPTransportMode(hiveConf)) {
-      thriftCLIService = new ThriftHttpCLIService(cliService);
+      thriftCLIService = new ThriftHttpCLIService(cliService, false);
     } else {
       thriftCLIService = new ThriftBinaryCLIService(cliService);
     }

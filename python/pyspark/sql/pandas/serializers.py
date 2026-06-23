@@ -35,10 +35,7 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
     PandasToArrowConversion,
 )
-from pyspark.sql.pandas.types import (
-    from_arrow_schema,
-    to_arrow_type,
-)
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -251,113 +248,6 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
 
     def load_stream(self, stream):
         return ArrowStreamSerializer.load_stream(self, stream)
-
-
-class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
-    """
-    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
-    """
-
-    def __init__(self, *, table_arg_offsets=None):
-        super().__init__()
-        self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
-
-    def load_stream(self, stream):
-        """
-        Flatten the struct into Arrow's record batches.
-        """
-        for batch in super().load_stream(stream):
-            # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
-            # keep other columns as Array
-            yield [
-                (
-                    ArrowBatchTransformer.flatten_struct(batch, column_index=i)
-                    if i in self.table_arg_offsets
-                    else batch.column(i)
-                )
-                for i in range(batch.num_columns)
-            ]
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override to handle type coercion for ArrowUDTF outputs.
-        ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
-        """
-        import pyarrow as pa
-
-        def apply_type_coercion():
-            for batch, arrow_return_type in iterator:
-                assert isinstance(arrow_return_type, pa.StructType), (
-                    f"Expected pa.StructType, got {type(arrow_return_type)}"
-                )
-                coerced_batch = ArrowBatchTransformer.enforce_schema(
-                    batch, pa.schema(arrow_return_type), safecheck=True
-                )
-                yield coerced_batch, arrow_return_type
-
-        return super().dump_stream(apply_type_coercion(), stream)
-
-
-class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
-    """
-    Serializer for grouped Arrow UDFs.
-
-    Deserializes:
-        ``Iterator[Iterator[pa.RecordBatch]]`` - one inner iterator per group.
-        Each batch contains a single struct column.
-
-    Serializes:
-        ``Iterator[Tuple[Iterator[pa.RecordBatch], pa.DataType]]``
-        Each tuple contains iterator of flattened batches and their Arrow type.
-
-    Used by:
-        - SQL_GROUPED_MAP_ARROW_UDF
-        - SQL_GROUPED_MAP_ARROW_ITER_UDF
-
-    Parameters
-    ----------
-    assign_cols_by_name : bool
-        If True, reorder serialized columns by schema name.
-    """
-
-    def __init__(self, *, assign_cols_by_name):
-        super().__init__()
-        self._assign_cols_by_name = assign_cols_by_name
-
-    def load_stream(self, stream):
-        """
-        Load grouped Arrow record batches from stream.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            yield batches
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in batches:
-                pass
-
-    def dump_stream(self, iterator, stream):
-        import pyarrow as pa
-
-        # flatten inner list [([pa.RecordBatch], arrow_type)] into [(pa.RecordBatch, arrow_type)]
-        # so strip off inner iterator induced by ArrowStreamUDFSerializer.load_stream
-        batch_iter = (
-            (batch, arrow_type)
-            for batches, arrow_type in iterator  # tuple constructed in wrap_grouped_map_arrow_udf
-            for batch in batches
-        )
-
-        if self._assign_cols_by_name:
-            batch_iter = (
-                (
-                    pa.RecordBatch.from_arrays(
-                        [batch.column(field.name) for field in arrow_type],
-                        names=[field.name for field in arrow_type],
-                    ),
-                    arrow_type,
-                )
-                for batch, arrow_type in batch_iter
-            )
-
-        super().dump_stream(batch_iter, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
@@ -597,8 +487,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamPandasUDTFSerializer"
 
 
-# Serializer for SQL_GROUPED_AGG_PANDAS_UDF, SQL_WINDOW_AGG_PANDAS_UDF,
-# and SQL_GROUPED_AGG_PANDAS_ITER_UDF
+# Serializer for SQL_GROUPED_AGG_PANDAS_ITER_UDF
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
@@ -652,106 +541,6 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def __repr__(self):
         return "ArrowStreamAggPandasUDFSerializer"
-
-
-# Serializer for SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_PANDAS_ITER_UDF
-class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def __init__(
-        self,
-        *,
-        timezone,
-        safecheck,
-        assign_cols_by_name,
-        prefer_int_ext_dtype,
-        int_to_decimal_coercion_enabled,
-    ):
-        super().__init__(
-            timezone=timezone,
-            safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
-            df_for_struct=False,
-            struct_in_pandas="dict",
-            ndarray_as_list=False,
-            prefer_int_ext_dtype=prefer_int_ext_dtype,
-            arrow_cast=True,
-            input_type=None,
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-        )
-
-    def load_stream(self, stream):
-        """
-        Deserialize Grouped ArrowRecordBatches and yield raw Iterator[pa.RecordBatch].
-        Each outer iterator element represents a group.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            yield batches
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in batches:
-                pass
-
-    def dump_stream(self, iterator, stream):
-        """
-        Flatten the grouped iterator structure.
-        """
-        # Flatten: Iterator[Iterator[[(df, spark_type)]]] -> Iterator[[(df, spark_type)]]
-        flattened_iter = (batch for generator in iterator for batch in generator)
-        super().dump_stream(flattened_iter, stream)
-
-    def __repr__(self):
-        return "GroupPandasUDFSerializer"
-
-
-class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
-    """
-    Serializes pyarrow.RecordBatch data with Arrow streaming format.
-
-    Loads Arrow record batches as `[([pa.RecordBatch], [pa.RecordBatch])]` (one tuple per group)
-    and serializes `[([pa.RecordBatch], arrow_type)]`.
-
-    Parameters
-    ----------
-    assign_cols_by_name : bool
-        If True, then DataFrames will get columns by name
-    """
-
-    def load_stream(self, stream):
-        """
-        Deserialize Cogrouped ArrowRecordBatches and yield as two `pyarrow.RecordBatch`es.
-        """
-        yield from ArrowStreamCoGroupSerializer.load_stream(self, stream)
-
-
-class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def load_stream(self, stream):
-        """
-        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
-        lists of pandas.Series.
-        """
-        import pyarrow as pa
-
-        for left_batches, right_batches in ArrowStreamCoGroupSerializer.load_stream(self, stream):
-            left_table = pa.Table.from_batches(left_batches)
-            right_table = pa.Table.from_batches(right_batches)
-            yield (
-                ArrowBatchTransformer.to_pandas(
-                    left_table,
-                    timezone=self._timezone,
-                    schema=from_arrow_schema(left_table.schema),
-                    struct_in_pandas=self._struct_in_pandas,
-                    ndarray_as_list=self._ndarray_as_list,
-                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
-                    df_for_struct=self._df_for_struct,
-                ),
-                ArrowBatchTransformer.to_pandas(
-                    right_table,
-                    timezone=self._timezone,
-                    schema=from_arrow_schema(right_table.schema),
-                    struct_in_pandas=self._struct_in_pandas,
-                    ndarray_as_list=self._ndarray_as_list,
-                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
-                    df_for_struct=self._df_for_struct,
-                ),
-            )
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):

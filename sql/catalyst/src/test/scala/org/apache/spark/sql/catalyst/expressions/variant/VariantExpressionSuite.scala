@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1051,6 +1052,263 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         val array = CreateArray(Seq(elem1, elem2))
         checkEvaluation(SchemaOfVariant(Cast(array, VariantType)).replacement, s"ARRAY<$expected>")
       }
+    }
+  }
+
+  test("is_valid_variant") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+
+    // The row cannot be converted to string because the `VariantVal` may be malformed (toString
+    // will throw an exception).
+    class NoDisplayGenericInternalRow(values: Array[Any]) extends GenericInternalRow(values) {
+      override def toString: String = "NoDisplayGenericInternalRow"
+    }
+
+    def valid(value: Array[Byte], metadata: Array[Byte] = emptyMetadata): Unit = {
+      val row = new NoDisplayGenericInternalRow(Array(new VariantVal(value, metadata)))
+      val v = BoundReference(0, VariantType, nullable = true)
+      checkEvaluation(IsValidVariant(v), true, row)
+    }
+
+    def invalid(value: Array[Byte], metadata: Array[Byte] = emptyMetadata): Unit = {
+      val row = new NoDisplayGenericInternalRow(Array(new VariantVal(value, metadata)))
+      val v = BoundReference(0, VariantType, nullable = true)
+      checkEvaluation(IsValidVariant(v), false, row)
+    }
+
+    // Valid primitives.
+    valid(Array(primitiveHeader(NULL)))
+    valid(Array(primitiveHeader(TRUE)))
+    valid(Array(primitiveHeader(FALSE)))
+    valid(Array(primitiveHeader(INT1), 1))
+    valid(Array(primitiveHeader(INT2), 1, 0))
+    valid(Array(primitiveHeader(INT4), 1, 0, 0, 0))
+    valid(Array(primitiveHeader(INT8), 1, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DOUBLE), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DECIMAL4), 0, 1, 0, 0, 0))
+    valid(Array(primitiveHeader(FLOAT), 0, 0, 0, 0))
+    valid(Array(primitiveHeader(DATE), 0, 0, 0, 0))
+    valid(Array(primitiveHeader(TIMESTAMP), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(primitiveHeader(TIMESTAMP_NTZ), 0, 0, 0, 0, 0, 0, 0, 0))
+    valid(Array(shortStrHeader(3), 'a', 'b', 'c'))
+    valid(Array(primitiveHeader(LONG_STR), 2, 0, 0, 0, 'a', 'b'))
+    valid(Array(primitiveHeader(BINARY), 2, 0, 0, 0, 1, 2))
+    valid(Array(primitiveHeader(UUID)) ++ createArray[Byte](16, 0.toByte))
+
+    // Malformed primitives: truncated content.
+    invalid(Array(primitiveHeader(INT8), 0, 0, 0, 0, 0, 0, 0))
+    invalid(Array(primitiveHeader(DECIMAL4)))
+    invalid(Array(primitiveHeader(DECIMAL8)))
+    invalid(Array(primitiveHeader(DECIMAL16)))
+    invalid(Array(primitiveHeader(DECIMAL16)) ++ createArray[Byte](16, 0.toByte))
+    invalid(Array(shortStrHeader(2), 'x'))
+    invalid(Array(primitiveHeader(LONG_STR), 0, 0, 0))
+    invalid(Array(primitiveHeader(LONG_STR), 1, 0, 0, 0))
+
+    // Valid array.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 2,
+      /* offset list */ 0, 1, 2,
+      /* element data */ primitiveHeader(TRUE), primitiveHeader(FALSE)))
+
+    // Valid empty array.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed array: size is 1 but no content.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0))
+
+    // Malformed array: requires 4-byte size but only one byte given.
+    invalid(Array(arrayHeader(true, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed array: offset out of bound.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 1, 1))
+
+    // Malformed array: nested element is malformed.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: INT8 with only 1 byte */ primitiveHeader(INT8), 0))
+
+    // Valid object.
+    val metadata = Array[Byte](VERSION, 2, 0, 1, 2) ++ Array[Byte]('a', 'b')
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 2,
+      /* id list */ 0, 1,
+      /* offset list */ 0, 2, 4,
+      /* field data */ primitiveHeader(INT1), 1, primitiveHeader(INT1), 2), metadata)
+
+    // Valid empty object.
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 0,
+      /* offset list */ 0))
+
+    // Malformed object: id out of bound.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1))
+
+    // Malformed object: offset out of bound.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 5, 0,
+      /* field data */ primitiveHeader(INT1), 1), metadata)
+
+    // Malformed object: nested value is malformed.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data: INT8 with only 1 byte */ primitiveHeader(INT8), 0), metadata)
+
+    // Unknown primitive type (type info 17 is not defined).
+    invalid(Array(primitiveHeader(17)))
+
+    // Malformed metadata: version is not 1.
+    invalid(Array(primitiveHeader(INT1), 0), Array[Byte](3, 0, 0))
+    invalid(Array(primitiveHeader(INT1), 0), Array[Byte](2, 0, 0))
+
+    // Malformed metadata: offset > nextOffset for key id 0.
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 2, 1) ++ Array[Byte]('a', 'b'))
+
+    // Malformed metadata: truncated offset list (declares dict size 1 but is missing nextOffset).
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 2,
+      /* field data */ primitiveHeader(INT1), 1),
+      Array[Byte](VERSION, 1, 0))
+
+    // Valid metadata formats: extra bits are ignored.
+    valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 4, 0, 0))
+    valid(Array(primitiveHeader(TRUE)), Array[Byte](VERSION | 1 << 5, 0, 0))
+
+    // Null input.
+    checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
+  }
+
+  test("variant_delete") {
+    def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantDelete(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"b":2}""")
+    checkDelete("""{"a": 1}""", Seq("$.missing"), """{"a":1}""")
+    checkDelete("[1, 2, 3]", Seq("$[1]"), "[1,3]")
+    checkDelete("[1, 2, 3]", Seq("$[10]"), "[1,2,3]")
+
+    // Cascading deletes propagate state across paths.
+    checkDelete("[1, 2, 3]", Seq("$[0]", "$[0]", "$[0]"), "[]")
+    checkDelete("""{"a":[1,2,3]}""", Seq("$.a[0]", "$.a[0]", "$.a[0]"), """{"a":[]}""")
+
+    checkDelete("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b"), """{"a":{"c":2}}""")
+    checkDelete("""[{"b": 1, "c": 2}]""", Seq("$[0].b"), """[{"c":2}]""")
+
+    // Empty containers are preserved; the parent is never collapsed to NULL.
+    checkDelete("""{"a": 1}""", Seq("$.a"), "{}")
+    checkDelete("[1]", Seq("$[0]"), "[]")
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a.b"), """{"a":{}}""")
+    checkDelete("""{"a": []}""", Seq("$.a[0]"), """{"a":[]}""")
+
+    checkDelete(
+      """{"a": {"b": {"c": {"d": 1}}}}""",
+      Seq("$.a.b.c.d"),
+      """{"a":{"b":{"c":{}}}}""")
+
+    checkDelete("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[10,30]}""")
+    checkDelete(
+      """{"a": [{"b": 1, "c": 2}, {"b": 3}]}""",
+      Seq("$.a[0].b"),
+      """{"a":[{"c":2},{"b":3}]}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2}""", Seq("""$["a"]"""), """{"b":2}""")
+
+    // Pure deep-array nesting: only `ArrayIndexSegment`s, never visits the `OBJECT` branch.
+    checkDelete("[[[1, 2, 3]]]", Seq("$[0][0][1]"), "[[[1,3]]]")
+    checkDelete("[[10, 20], [30, 40]]", Seq("$[0][1]"), "[[10],[30,40]]")
+
+    // All three key notations (`.k`, `['k']`, `["k"]`) alternating within a single path.
+    checkDelete(
+      """{"a": {"b": {"c": 1, "d": 2}}}""",
+      Seq("""$['a'].b["c"]"""),
+      """{"a":{"b":{"d":2}}}""")
+
+    checkDelete("""{"": 1, "a": 2}""", Seq("$['']"), """{"a":2}""")
+    checkDelete("""{"?": 1, "a": 2}""", Seq("$['?']"), """{"a":2}""")
+    checkDelete(
+      """{"key with spaces": 1, "a": 2}""", Seq("$['key with spaces']"), """{"a":2}""")
+    checkDelete("""{"fb:testid": 1, "a": 2}""", Seq("$.fb:testid"), """{"a":2}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"b":2}""")
+
+    // After a deletion empties the parent, a subsequent nested path is a silent no-op.
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a", "$.a.b"), "{}")
+
+    // Type mismatches between segment and value are silent no-ops.
+    checkDelete("""{"a": 5}""", Seq("$.a.b"), """{"a":5}""")
+    checkDelete("[1, 2, 3]", Seq("$.a"), "[1,2,3]")
+    checkDelete("""{"a": 1}""", Seq("$[0]"), """{"a":1}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq[String](null), """{"a":1,"b":2}""")
+
+    // All literal-NULL paths: `flatMap` leaves `pathArgs` empty; input is returned unchanged.
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, null, null), """{"a":1,"b":2}""")
+
+    checkDelete("""{"a": null, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("[null, 1, null]", Seq("$[0]"), "[1,null]")
+
+    // Mixed literal + dynamic path exercises both `ParsedDeletePath` and `DynamicDeletePath`
+    // arms of `eval` in a single call.
+    val mixedLitDyn = VariantDelete(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"b":2}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(
+        Cast(VariantDelete(Seq(Literal.create(null, VariantType), Literal("$.a"))), StringType)),
+      null)
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("$")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal(".a")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> ".a", "functionName" -> "`variant_delete`"))
+
+    val noPaths = VariantDelete(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
     }
   }
 }

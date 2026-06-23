@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.ByteBuffer
+import java.util.PrimitiveIterator
+import java.util.stream.LongStream
 
 import scala.util.Random
 
@@ -40,6 +42,20 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType}
  *      path used when the caller needs materialized definition levels (e.g., nested columns).
  *   D. readBatch nullable without def-level materialization -- the `readBatchInternal` path used
  *      for flat nullable columns where only null/non-null disposition matters.
+ *   E. readBatch with row-index filtering -- exercises the with-filter code path through
+ *      `readBatchInternal{WithDefLevels}`'s range checks when Parquet column-index filtering is
+ *      active. Sweep over two filter shapes (single contiguous range, alternating windows) and
+ *      the same null ratios as C/D.
+ *   F. Single-value reads -- per-call overhead of `readBoolean`, `readInteger`,
+ *      `readValueDictionaryId` looped NUM_ROWS times. Establishes baseline against the bulk
+ *      Group A/B paths.
+ *   G. skipBooleans / skipIntegers -- forward-skip path used by row-index filtering and
+ *      pushdown. RLE + PACKED across the same parameter sweeps as A/B.
+ *
+ * Not yet covered (deferred): `readBatchRepeated` and `readIntegersRepeated` for nested
+ * columns require setting up a `ParquetReadState` with `maxRepetitionLevel > 0`, a separate
+ * def-levels reader, and encoded rep-level streams; better added together with the matching
+ * suite-level coverage in a focused follow-up.
  *
  * Cold = fresh reader per iteration (exercises cold `currentBuffer` growth).
  * Reused = reader pre-warmed outside the timed region; inside is only `initFromPage` + read.
@@ -68,10 +84,24 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
   // --------------- ReadState helpers (delegate to shared reflection bridge) ---------------
 
   private def newReadState(maxDef: Int, valuesInPage: Int): AnyRef = {
-    val state = ParquetReadStateTestAccess.newState(
+    val state = ParquetTestAccess.newState(
       intColumnDescriptor(maxDef), maxDef == 0)
-    ParquetReadStateTestAccess.resetForNewBatch(state, BATCH_SIZE)
-    ParquetReadStateTestAccess.resetForNewPage(state, valuesInPage, 0L)
+    ParquetTestAccess.resetForNewBatch(state, BATCH_SIZE)
+    ParquetTestAccess.resetForNewPage(state, valuesInPage, 0L)
+    state
+  }
+
+  // State variant with a fresh row-index iterator. `rowRanges` inside ParquetReadState is
+  // iterated forward and never reset, so Group E measurements must construct a new state per
+  // benchmark iteration. The iterator is built from `indexFactory` on each call.
+  private def newReadStateWithRowIndexes(
+      maxDef: Int,
+      valuesInPage: Int,
+      indexFactory: () => PrimitiveIterator.OfLong): AnyRef = {
+    val state = ParquetTestAccess.newState(
+      intColumnDescriptor(maxDef), maxDef == 0, indexFactory())
+    ParquetTestAccess.resetForNewBatch(state, BATCH_SIZE)
+    ParquetTestAccess.resetForNewPage(state, valuesInPage, 0L)
     state
   }
 
@@ -258,7 +288,7 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
           benchmark.addCase(
               f"nullRatio=${nullRatio}%.1f, $clusterTag") { _ =>
             reader.initFromPage(NUM_ROWS, toInputStream(bytes))
-            ParquetReadStateTestAccess.resetForNewPage(
+            ParquetTestAccess.resetForNewPage(
               state, NUM_ROWS, 0L)
             runBatches(reader, state, values, defLevelsVec, factory())
           }
@@ -277,11 +307,186 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
     var produced = 0
     while (produced < NUM_ROWS) {
       val toRead = math.min(BATCH_SIZE, NUM_ROWS - produced)
-      ParquetReadStateTestAccess.resetForNewBatch(state, toRead)
-      ParquetReadStateTestAccess.readBatch(
+      ParquetTestAccess.resetForNewBatch(state, toRead)
+      ParquetTestAccess.readBatch(
         reader, state, values, defLevelsVec, valueReader, integerUpdater)
       produced += toRead
     }
+  }
+
+  // --------------- Group E: readBatch with row-index filtering ---------------
+
+  /** Kept row indices: contiguous range `[keptStart, keptStart + keptCount)`. */
+  private def contiguousIndexFactory(
+      keptStart: Long,
+      keptCount: Long): () => PrimitiveIterator.OfLong =
+    () => LongStream.range(keptStart, keptStart + keptCount).iterator()
+
+  /** Kept row indices: every other `windowSize`-row window starting at index 0. */
+  private def alternatingWindowsIndexFactory(
+      totalRows: Long,
+      windowSize: Long): () => PrimitiveIterator.OfLong = { () =>
+    new PrimitiveIterator.OfLong {
+      private var i = 0L
+      override def hasNext: Boolean = i < totalRows
+      override def nextLong(): Long = {
+        // Advance through only the "kept" windows. Window k in [k*windowSize, (k+1)*windowSize)
+        // is kept when k is even.
+        while ((i / windowSize) % 2 != 0 && i < totalRows) i += 1
+        if (i >= totalRows) throw new NoSuchElementException
+        val out = i
+        i += 1
+        out
+      }
+    }
+  }
+
+  private def runRowRangeFilterBenchmark(
+      label: String,
+      buildValueReader: Int => ValueReaderFactory,
+      materializeDefLevels: Boolean): Unit = {
+    val benchmark = new Benchmark(
+      label, NUM_ROWS.toLong, NUM_ITERS, output = output)
+    val values = new OnHeapColumnVector(NUM_ROWS, IntegerType)
+    val defLevelsVec: WritableColumnVector =
+      if (materializeDefLevels) new OnHeapColumnVector(NUM_ROWS, IntegerType)
+      else null
+
+    // One contiguous range covering the middle 50% of rows; and alternating 1000-row windows
+    // (50% kept, but with many skip/read transitions inside each batch).
+    val filterShapes: Seq[(String, () => PrimitiveIterator.OfLong)] = Seq(
+      "contiguous 50%" -> contiguousIndexFactory(NUM_ROWS / 4L, NUM_ROWS / 2L),
+      "alt 1000-row windows" -> alternatingWindowsIndexFactory(NUM_ROWS.toLong, 1000L)
+    )
+
+    val nullRatios = Seq(0.0, 0.3, 0.9)
+
+    filterShapes.foreach { case (shapeTag, indexFactory) =>
+      nullRatios.foreach { nullRatio =>
+        val defLevels =
+          packedFriendlyDefLevels(NUM_ROWS, nullRatio, clustered = false)
+        val nonNullCount = defLevels.count(_ == 1)
+        val bytes = encodeRle(defLevels, bitWidth = 1)
+        val factory = buildValueReader(nonNullCount)
+
+        // Pre-warm the full pipeline with a fresh state so JIT has seen the with-filter path.
+        val reader = new VectorizedRleValuesReader(1, false)
+        reader.initFromPage(NUM_ROWS, toInputStream(bytes))
+        val warmState =
+          newReadStateWithRowIndexes(maxDef = 1, valuesInPage = NUM_ROWS, indexFactory)
+        runBatches(reader, warmState, values, defLevelsVec, factory())
+
+        benchmark.addCase(
+            f"nullRatio=${nullRatio}%.1f, $shapeTag") { _ =>
+          reader.initFromPage(NUM_ROWS, toInputStream(bytes))
+          // `rowRanges` in ParquetReadState is iterated forward and not reset by
+          // resetForNewPage/Batch, so we must construct a fresh state per measurement
+          // iteration. Iterator construction cost is small compared to decoding NUM_ROWS.
+          val state =
+            newReadStateWithRowIndexes(maxDef = 1, valuesInPage = NUM_ROWS, indexFactory)
+          runBatches(reader, state, values, defLevelsVec, factory())
+        }
+      }
+    }
+    benchmark.run()
+  }
+
+  // --------------- Group F: single-value reads ---------------
+
+  private def runSingleValueBenchmark(): Unit = {
+    val benchmark = new Benchmark(
+      "Single-value reads", NUM_ROWS.toLong, NUM_ITERS, output = output)
+
+    // Boolean - bitWidth=1, alternating values (forces PACKED).
+    val boolBytes = encodeRle(packedFriendlyBooleans(NUM_ROWS, 0.5), bitWidth = 1)
+    val boolWarm = new VectorizedRleValuesReader(1, false)
+    boolWarm.initFromPage(NUM_ROWS, toInputStream(boolBytes))
+    var i = 0
+    while (i < NUM_ROWS) { boolWarm.readBoolean(); i += 1 }
+
+    benchmark.addCase("readBoolean") { _ =>
+      val r = new VectorizedRleValuesReader(1, false)
+      r.initFromPage(NUM_ROWS, toInputStream(boolBytes))
+      var j = 0
+      while (j < NUM_ROWS) { r.readBoolean(); j += 1 }
+    }
+
+    // readInteger / readValueDictionaryId across bitWidths. Use random PACKED data so each
+    // call reads a fresh value (RLE-only data would short-circuit too aggressively).
+    Seq(4, 8, 12, 20).foreach { bitWidth =>
+      val bytes = encodeRle(packedFriendlyDictIds(NUM_ROWS, bitWidth), bitWidth)
+
+      val warmInt = new VectorizedRleValuesReader(bitWidth, false)
+      warmInt.initFromPage(NUM_ROWS, toInputStream(bytes))
+      var k = 0
+      while (k < NUM_ROWS) { warmInt.readInteger(); k += 1 }
+
+      benchmark.addCase(s"readInteger, bitWidth=$bitWidth") { _ =>
+        val r = new VectorizedRleValuesReader(bitWidth, false)
+        r.initFromPage(NUM_ROWS, toInputStream(bytes))
+        var j = 0
+        while (j < NUM_ROWS) { r.readInteger(); j += 1 }
+      }
+
+      benchmark.addCase(s"readValueDictionaryId, bitWidth=$bitWidth") { _ =>
+        val r = new VectorizedRleValuesReader(bitWidth, false)
+        r.initFromPage(NUM_ROWS, toInputStream(bytes))
+        var j = 0
+        while (j < NUM_ROWS) { r.readValueDictionaryId(); j += 1 }
+      }
+    }
+    benchmark.run()
+  }
+
+  // --------------- Group G: skip paths ---------------
+
+  private def runSkipBenchmark(): Unit = {
+    val benchmark = new Benchmark(
+      "Skip", NUM_ROWS.toLong, NUM_ITERS, output = output)
+
+    // skipBooleans across the same true-ratio sweep as Group A.
+    Seq(0.0, 0.5, 1.0).foreach { trueRatio =>
+      val bytes = encodeRle(
+        packedFriendlyBooleans(NUM_ROWS, trueRatio), bitWidth = 1)
+
+      val warm = new VectorizedRleValuesReader(1, false)
+      warm.initFromPage(NUM_ROWS, toInputStream(bytes))
+      warm.skipBooleans(NUM_ROWS)
+
+      benchmark.addCase(f"skipBooleans, trueRatio=${trueRatio}%.1f") { _ =>
+        val r = new VectorizedRleValuesReader(1, false)
+        r.initFromPage(NUM_ROWS, toInputStream(bytes))
+        r.skipBooleans(NUM_ROWS)
+      }
+    }
+
+    // skipIntegers across the same bitWidth sweep as Group B; PACKED + RLE shapes.
+    Seq(4, 8, 12, 20).foreach { bitWidth =>
+      val packedBytes = encodeRle(
+        packedFriendlyDictIds(NUM_ROWS, bitWidth), bitWidth)
+      val rleBytes = encodeRle(Array.fill(NUM_ROWS)(0), bitWidth)
+
+      val warmPacked = new VectorizedRleValuesReader(bitWidth, false)
+      warmPacked.initFromPage(NUM_ROWS, toInputStream(packedBytes))
+      warmPacked.skipIntegers(NUM_ROWS)
+
+      benchmark.addCase(s"skipIntegers PACKED, bitWidth=$bitWidth") { _ =>
+        val r = new VectorizedRleValuesReader(bitWidth, false)
+        r.initFromPage(NUM_ROWS, toInputStream(packedBytes))
+        r.skipIntegers(NUM_ROWS)
+      }
+
+      val warmRle = new VectorizedRleValuesReader(bitWidth, false)
+      warmRle.initFromPage(NUM_ROWS, toInputStream(rleBytes))
+      warmRle.skipIntegers(NUM_ROWS)
+
+      benchmark.addCase(s"skipIntegers RLE, bitWidth=$bitWidth") { _ =>
+        val r = new VectorizedRleValuesReader(bitWidth, false)
+        r.initFromPage(NUM_ROWS, toInputStream(rleBytes))
+        r.skipIntegers(NUM_ROWS)
+      }
+    }
+    benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
@@ -302,6 +507,24 @@ object VectorizedRleValuesReaderBenchmark extends BenchmarkBase {
         "Nullable batch without def-levels",
         plainIntFactory,
         materializeDefLevels = false)
+    }
+    runBenchmark("Nullable batch decode with row-index filtering (with def-levels)") {
+      runRowRangeFilterBenchmark(
+        "Nullable batch with def-levels, row-index filtered",
+        plainIntFactory,
+        materializeDefLevels = true)
+    }
+    runBenchmark("Nullable batch decode with row-index filtering (without def-levels)") {
+      runRowRangeFilterBenchmark(
+        "Nullable batch without def-levels, row-index filtered",
+        plainIntFactory,
+        materializeDefLevels = false)
+    }
+    runBenchmark("Single-value reads") {
+      runSingleValueBenchmark()
+    }
+    runBenchmark("Skip") {
+      runSkipBenchmark()
     }
   }
 }

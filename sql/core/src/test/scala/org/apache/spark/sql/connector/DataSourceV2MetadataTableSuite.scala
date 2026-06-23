@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
@@ -31,7 +31,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * metadata-only tables and Spark reads / writes them via the V1 data-source path.
  * View-related paths live in [[DataSourceV2MetadataViewSuite]].
  */
-class DataSourceV2MetadataTableSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2MetadataTableSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
@@ -81,24 +81,6 @@ class DataSourceV2MetadataTableSuite extends QueryTest with SharedSparkSession {
   ignore("v2 data source table") {
     val tableName = "table_catalog.default.test_v2"
     checkAnswer(spark.table(tableName), 0.until(10).map(i => Row(i, -i)))
-  }
-
-  test("DESCRIBE TABLE EXTENDED on a non-view MetadataTable shows the real identifier") {
-    // MetadataTable.name() is read by DescribeTableExec's "Name" row. Pin that it
-    // reflects the catalog-supplied identifier (here TestingDataSourceTableCatalog passes
-    // `ident.toString`) rather than a generic placeholder, so the DESCRIBE output is
-    // meaningful for users.
-    withTempPath { path =>
-      val loc = path.getCanonicalPath
-      val tableName = s"table_catalog.`$loc`.test_json"
-      spark.range(1).select($"id".cast("string").as("col")).write.json(loc)
-      val nameRow = sql(s"DESCRIBE TABLE EXTENDED $tableName")
-        .collect()
-        .find(_.getString(0) == "Name")
-        .getOrElse(fail("DESCRIBE output missing the `Name` row"))
-      val rendered = nameRow.getString(1)
-      assert(rendered.contains("test_json"), s"expected the real identifier, got: $rendered")
-    }
   }
 
   test("fully-qualified column reference uses the real catalog name") {

@@ -20,16 +20,29 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, MapData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, DoubleType, FloatType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.OpenHashMap
+
+private[aggregate] object ModeKeyNormalizer {
+  def forType(dataType: DataType): Any => Any = dataType match {
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case dt if NormalizeFloatingNumbers.needNormalize(dt) =>
+      val ref = BoundReference(0, dt, nullable = true)
+      val proj = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
+      (value: Any) => InternalRow.copyValue(proj(InternalRow(value)).get(0, dt))
+    case _ => (value: Any) => InternalRow.copyValue(value)
+  }
+}
 
 case class Mode(
     child: Expression,
@@ -54,13 +67,16 @@ case class Mode(
 
   override def prettyName: String = "mode"
 
+  @transient private lazy val keyNormalizer: Any => Any =
+    ModeKeyNormalizer.forType(child.dataType)
+
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
     }
     buffer
   }
@@ -299,13 +315,16 @@ case class PandasMode(
 
   override def prettyName: String = "pandas_mode"
 
+  @transient private lazy val keyNormalizer: Any => Any =
+    ModeKeyNormalizer.forType(child.dataType)
+
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(keyNormalizer(key).asInstanceOf[AnyRef], 1L, _ + 1L)
     } else if (!ignoreNA) {
       buffer.changeValue(null, 1L, _ + 1L)
     }

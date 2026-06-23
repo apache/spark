@@ -94,6 +94,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cos | cos | SELECT cos(0) | struct<COS(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cosh | cosh | SELECT cosh(0) | struct<COSH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cot | cot | SELECT cot(1) | struct<COT(1):double> |
+| org.apache.spark.sql.catalyst.expressions.CounterDiffExpressionBuilder | counter_diff | SELECT m, t, c, counter_diff(c) OVER (PARTITION BY m ORDER BY t) AS diff FROM VALUES ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:00:00', 100), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:01:00', 200), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:02:00', 400), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:03:00', 50), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:04:00', 100) AS tab(m, t, c) ORDER BY t | struct<m:string,t:timestamp_ntz,c:int,diff:int> |
 | org.apache.spark.sql.catalyst.expressions.Crc32 | crc32 | SELECT crc32('Spark') | struct<crc32(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |
@@ -180,6 +181,7 @@
 | org.apache.spark.sql.catalyst.expressions.IsNotNull | isnotnull | SELECT isnotnull(1) | struct<(1 IS NOT NULL):boolean> |
 | org.apache.spark.sql.catalyst.expressions.IsNull | isnull | SELECT isnull(1) | struct<(1 IS NULL):boolean> |
 | org.apache.spark.sql.catalyst.expressions.IsValidUTF8 | is_valid_utf8 | SELECT is_valid_utf8('Spark') | struct<is_valid_utf8(Spark):boolean> |
+| org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |
 | org.apache.spark.sql.catalyst.expressions.JsonTuple | json_tuple | SELECT json_tuple('{"a":1, "b":2}', 'a', 'b') | struct<c0:string,c1:string> |
@@ -253,6 +255,7 @@
 | org.apache.spark.sql.catalyst.expressions.Murmur3Hash | hash | SELECT hash('Spark', array(123), 2) | struct<hash(Spark, array(123), 2):int> |
 | org.apache.spark.sql.catalyst.expressions.NTile | ntile | SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,ntile(2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.NaNvl | nanvl | SELECT nanvl(cast('NaN' as double), 123) | struct<nanvl(CAST(NaN AS DOUBLE), 123):double> |
+| org.apache.spark.sql.catalyst.expressions.NanosToTimestamp | timestamp_nanos | SELECT timestamp_nanos(1230219000123456789) | struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)> |
 | org.apache.spark.sql.catalyst.expressions.NextDay | next_day | SELECT next_day('2015-01-14', 'TU') | struct<next_day(2015-01-14, TU):date> |
 | org.apache.spark.sql.catalyst.expressions.Not | ! | SELECT ! true | struct<(NOT true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Not | not | SELECT not true | struct<(NOT true):boolean> |
@@ -363,6 +366,7 @@
 | org.apache.spark.sql.catalyst.expressions.ThetaIntersection | theta_intersection | SELECT theta_sketch_estimate(theta_intersection(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2) | struct<theta_sketch_estimate(theta_intersection(theta_sketch_agg(col1, 12), theta_sketch_agg(col2, 12))):bigint> |
 | org.apache.spark.sql.catalyst.expressions.ThetaSketchEstimate | theta_sketch_estimate | SELECT theta_sketch_estimate(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<theta_sketch_estimate(theta_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.ThetaUnion | theta_union | SELECT theta_sketch_estimate(theta_union(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<theta_sketch_estimate(theta_union(theta_sketch_agg(col1, 12), theta_sketch_agg(col2, 12), 12)):bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimeBucketExpressionBuilder | time_bucket | SELECT time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-01 11:27:00', TIMESTAMP '1970-01-01 00:00:00') | struct<time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-01 11:27:00', TIMESTAMP '1970-01-01 00:00:00'):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.TimeDiff | time_diff | SELECT time_diff('HOUR', TIME'20:30:29', TIME'21:30:28') | struct<time_diff(HOUR, TIME '20:30:29', TIME '21:30:28'):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromMicros | time_from_micros | SELECT time_from_micros(0) | struct<time_from_micros(0):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromMillis | time_from_millis | SELECT time_from_millis(0) | struct<time_from_millis(0):time(6)> |
@@ -432,6 +436,7 @@
 | org.apache.spark.sql.catalyst.expressions.UnixDate | unix_date | SELECT unix_date(DATE("1970-01-02")) | struct<unix_date(1970-01-02):int> |
 | org.apache.spark.sql.catalyst.expressions.UnixMicros | unix_micros | SELECT unix_micros(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_micros(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixMillis | unix_millis | SELECT unix_millis(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_millis(1970-01-01 00:00:01Z):bigint> |
+| org.apache.spark.sql.catalyst.expressions.UnixNanos | unix_nanos | SELECT unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789') | struct<unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789'):decimal(21,0)> |
 | org.apache.spark.sql.catalyst.expressions.UnixSeconds | unix_seconds | SELECT unix_seconds(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_seconds(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixTimestamp | unix_timestamp | SELECT unix_timestamp() | struct<unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Upper | ucase | SELECT ucase('SparkSql') | struct<ucase(SparkSql):string> |
@@ -536,11 +541,12 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.VariancePop | var_pop | SELECT var_pop(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_pop(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | var_samp | SELECT var_samp(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_samp(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | variance | SELECT variance(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<variance(col):double> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary | st_asbinary | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_GeogFromWKB | st_geogfromwkb | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_GeomFromWKB | st_geomfromwkb | SELECT hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0))):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary | st_asbinary | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeogFromWKB | st_geogfromwkb | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeomFromWKB | st_geomfromwkb | SELECT hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR)):string> |
 | org.apache.spark.sql.catalyst.expressions.st.ST_SetSrid | st_setsrid | SELECT st_srid(st_setsrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 4326)) | struct<st_srid(st_setsrid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), 4326)):int> |
 | org.apache.spark.sql.catalyst.expressions.st.ST_Srid | st_srid | SELECT st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')) | struct<st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):int> |
+| org.apache.spark.sql.catalyst.expressions.variant.IsValidVariant | is_valid_variant | SELECT is_valid_variant(parse_json('null')) | struct<is_valid_variant(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsVariantNull | is_variant_null | SELECT is_variant_null(parse_json('null')) | struct<is_variant_null(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJsonExpressionBuilder | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariant | schema_of_variant | SELECT schema_of_variant(parse_json('null')) | struct<schema_of_variant(parse_json(null)):string> |
@@ -548,6 +554,7 @@
 | org.apache.spark.sql.catalyst.expressions.variant.ToVariantObject | to_variant_object | SELECT to_variant_object(named_struct('a', 1, 'b', 2)) | struct<to_variant_object(named_struct(a, 1, b, 2)):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryParseJsonExpressionBuilder | try_parse_json | SELECT try_parse_json('{"a":1,"b":0.8}') | struct<try_parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.TryVariantGetExpressionBuilder | try_variant_get | SELECT try_variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<try_variant_get(parse_json({"a": 1}), $.a):int> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantDelete | variant_delete | SELECT variant_delete(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), NULL, '$.a', '$.c') | struct<variant_delete(parse_json({"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}), NULL, $.a, $.c):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_double | SELECT xpath_double('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_double(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |

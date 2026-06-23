@@ -20,7 +20,7 @@ TakeOrderedAndProject (40)
                :     :     :           :  +- Scan parquet spark_catalog.default.store_sales (4)
                :     :     :           +- ReusedExchange (6)
                :     :     +- BroadcastExchange (22)
-               :     :        +- Union (21)
+               :     :        +- * Union (21)
                :     :           :- * Project (15)
                :     :           :  +- * BroadcastHashJoin Inner BuildRight (14)
                :     :           :     :- * ColumnarToRow (12)
@@ -48,10 +48,10 @@ Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
 
-(2) ColumnarToRow [codegen id : 9]
+(2) ColumnarToRow [codegen id : 8]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
-(3) Filter [codegen id : 9]
+(3) Filter [codegen id : 8]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Condition : (isnotnull(c_current_addr_sk#3) AND isnotnull(c_current_cdemo_sk#2))
 
@@ -82,7 +82,7 @@ Input [3]: [ss_customer_sk#4, ss_sold_date_sk#5, d_date_sk#7]
 Input [1]: [ss_customer_sk#4]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
 
-(10) BroadcastHashJoin [codegen id : 9]
+(10) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [ss_customer_sk#4]
 Join type: LeftSemi
@@ -95,19 +95,19 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#9), dynamicpruningexpression(ws_sold_date_sk#9 IN dynamicpruning#6)]
 ReadSchema: struct<ws_bill_customer_sk:int>
 
-(12) ColumnarToRow [codegen id : 4]
+(12) ColumnarToRow [codegen id : 5]
 Input [2]: [ws_bill_customer_sk#8, ws_sold_date_sk#9]
 
 (13) ReusedExchange [Reuses operator id: 45]
 Output [1]: [d_date_sk#10]
 
-(14) BroadcastHashJoin [codegen id : 4]
+(14) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ws_sold_date_sk#9]
 Right keys [1]: [d_date_sk#10]
 Join type: Inner
 Join condition: None
 
-(15) Project [codegen id : 4]
+(15) Project [codegen id : 5]
 Output [1]: [ws_bill_customer_sk#8 AS customsk#11]
 Input [3]: [ws_bill_customer_sk#8, ws_sold_date_sk#9, d_date_sk#10]
 
@@ -118,35 +118,35 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#13), dynamicpruningexpression(cs_sold_date_sk#13 IN dynamicpruning#6)]
 ReadSchema: struct<cs_ship_customer_sk:int>
 
-(17) ColumnarToRow [codegen id : 6]
+(17) ColumnarToRow
 Input [2]: [cs_ship_customer_sk#12, cs_sold_date_sk#13]
 
 (18) ReusedExchange [Reuses operator id: 45]
 Output [1]: [d_date_sk#14]
 
-(19) BroadcastHashJoin [codegen id : 6]
+(19) BroadcastHashJoin
 Left keys [1]: [cs_sold_date_sk#13]
 Right keys [1]: [d_date_sk#14]
 Join type: Inner
 Join condition: None
 
-(20) Project [codegen id : 6]
+(20) Project
 Output [1]: [cs_ship_customer_sk#12 AS customsk#15]
 Input [3]: [cs_ship_customer_sk#12, cs_sold_date_sk#13, d_date_sk#14]
 
-(21) Union
+(21) Union [codegen id : 5]
 
 (22) BroadcastExchange
 Input [1]: [customsk#11]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
-(23) BroadcastHashJoin [codegen id : 9]
+(23) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_customer_sk#1]
 Right keys [1]: [customsk#11]
 Join type: LeftSemi
 Join condition: None
 
-(24) Project [codegen id : 9]
+(24) Project [codegen id : 8]
 Output [2]: [c_current_cdemo_sk#2, c_current_addr_sk#3]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
@@ -157,10 +157,10 @@ Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
-(26) ColumnarToRow [codegen id : 7]
+(26) ColumnarToRow [codegen id : 6]
 Input [2]: [ca_address_sk#16, ca_state#17]
 
-(27) Filter [codegen id : 7]
+(27) Filter [codegen id : 6]
 Input [2]: [ca_address_sk#16, ca_state#17]
 Condition : isnotnull(ca_address_sk#16)
 
@@ -168,13 +168,13 @@ Condition : isnotnull(ca_address_sk#16)
 Input [2]: [ca_address_sk#16, ca_state#17]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=3]
 
-(29) BroadcastHashJoin [codegen id : 9]
+(29) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_current_addr_sk#3]
 Right keys [1]: [ca_address_sk#16]
 Join type: Inner
 Join condition: None
 
-(30) Project [codegen id : 9]
+(30) Project [codegen id : 8]
 Output [2]: [c_current_cdemo_sk#2, ca_state#17]
 Input [4]: [c_current_cdemo_sk#2, c_current_addr_sk#3, ca_address_sk#16, ca_state#17]
 
@@ -185,10 +185,10 @@ Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
 
-(32) ColumnarToRow [codegen id : 8]
+(32) ColumnarToRow [codegen id : 7]
 Input [6]: [cd_demo_sk#18, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 
-(33) Filter [codegen id : 8]
+(33) Filter [codegen id : 7]
 Input [6]: [cd_demo_sk#18, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Condition : isnotnull(cd_demo_sk#18)
 
@@ -196,17 +196,17 @@ Condition : isnotnull(cd_demo_sk#18)
 Input [6]: [cd_demo_sk#18, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=4]
 
-(35) BroadcastHashJoin [codegen id : 9]
+(35) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#18]
 Join type: Inner
 Join condition: None
 
-(36) Project [codegen id : 9]
+(36) Project [codegen id : 8]
 Output [6]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Input [8]: [c_current_cdemo_sk#2, ca_state#17, cd_demo_sk#18, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 
-(37) HashAggregate [codegen id : 9]
+(37) HashAggregate [codegen id : 8]
 Input [6]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Keys [6]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Functions [10]: [partial_count(1), partial_avg(cd_dep_count#21), partial_max(cd_dep_count#21), partial_sum(cd_dep_count#21), partial_avg(cd_dep_employed_count#22), partial_max(cd_dep_employed_count#22), partial_sum(cd_dep_employed_count#22), partial_avg(cd_dep_college_count#23), partial_max(cd_dep_college_count#23), partial_sum(cd_dep_college_count#23)]
@@ -217,7 +217,7 @@ Results [19]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21,
 Input [19]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23, count#37, sum#38, count#39, max#40, sum#41, sum#42, count#43, max#44, sum#45, sum#46, count#47, max#48, sum#49]
 Arguments: hashpartitioning(ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
-(39) HashAggregate [codegen id : 10]
+(39) HashAggregate [codegen id : 9]
 Input [19]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23, count#37, sum#38, count#39, max#40, sum#41, sum#42, count#43, max#44, sum#45, sum#46, count#47, max#48, sum#49]
 Keys [6]: [ca_state#17, cd_gender#19, cd_marital_status#20, cd_dep_count#21, cd_dep_employed_count#22, cd_dep_college_count#23]
 Functions [10]: [count(1), avg(cd_dep_count#21), max(cd_dep_count#21), sum(cd_dep_count#21), avg(cd_dep_employed_count#22), max(cd_dep_employed_count#22), sum(cd_dep_employed_count#22), avg(cd_dep_college_count#23), max(cd_dep_college_count#23), sum(cd_dep_college_count#23)]

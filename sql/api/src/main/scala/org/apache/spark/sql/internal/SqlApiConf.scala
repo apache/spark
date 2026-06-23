@@ -21,7 +21,7 @@ import java.util.TimeZone
 import scala.util.Try
 
 import org.apache.spark.sql.types.{AtomicType, TimestampType}
-import org.apache.spark.util.SparkClassUtils
+import org.apache.spark.util.{SparkClassUtils, SparkEnvUtils}
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
@@ -53,7 +53,7 @@ private[sql] trait SqlApiConf {
   def parserDfaCacheFlushRatio: Double
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
-  def typesFrameworkEnabled: Boolean
+  def timestampNanosTypesEnabled: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -111,5 +111,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def parserDfaCacheFlushRatio: Double = -1.0
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
-  override def typesFrameworkEnabled: Boolean = false
+  override def timestampNanosTypesEnabled: Boolean = SparkEnvUtils.isTesting
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.time.Instant
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpressions, NamedReference, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
-import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -79,6 +78,32 @@ class InMemoryRowLevelOperationTable private (
   // used in row-level operation tests to verify passed records
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
+
+  override def copy(): Table = {
+    val copied = InMemoryRowLevelOperationTable.withColumns(
+      name = name,
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = id)
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copied.dataMap.put(key, copiedSplits)
+      }
+    }
+    copied.commits ++= commits.map(_.copy())
+    copied.setVersionAndValidatedVersionFrom(this)
+    copied.replacedPartitions = replacedPartitions
+    copied.lastWriteInfo = lastWriteInfo
+    copied.lastWriteLog = lastWriteLog
+    copied
+  }
 
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
@@ -143,18 +168,11 @@ class InMemoryRowLevelOperationTable private (
     override def description(): String = "InMemoryPartitionReplaceOperation"
   }
 
-  abstract class RowLevelOperationBatchWrite extends TestBatchWrite {
-
-    override def commit(messages: Array[WriterCommitMessage], metrics: WriteSummary): Unit = {
-      commit(messages)
-      commits += Commit(Instant.now().toEpochMilli, Some(metrics))
-    }
-  }
-
   private case class PartitionBasedReplaceData(scan: InMemoryBatchScan)
-    extends RowLevelOperationBatchWrite {
+    extends TestBatchWrite {
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
       val readPartitions = readRows.map(r => getKey(r, schema)).distinct
@@ -216,12 +234,12 @@ class InMemoryRowLevelOperationTable private (
     }
   }
 
-  private object TestDeltaBatchWrite extends RowLevelOperationBatchWrite with DeltaBatchWrite{
+  private object TestDeltaBatchWrite extends TestBatchWrite with DeltaBatchWrite {
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DeltaWriterFactory = {
       new DeltaBufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    override protected def doCommit(messages: Array[WriterCommitMessage]): Unit = {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       withDeletes(newData)
       withData(newData, columns())

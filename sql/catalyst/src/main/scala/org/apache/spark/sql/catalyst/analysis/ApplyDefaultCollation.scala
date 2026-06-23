@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, V1ViewInfo, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
 /**
@@ -206,46 +206,6 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateView.copyTagsFrom(createView)
           newCreateView
 
-        // We match against ResolvedPersistentView because temporary views don't have a
-        // schema/catalog. The rewrite covers both v1 (session-catalog, [[V1ViewInfo]]) and
-        // non-session v2 views: when the existing view has no `PROP_COLLATION` and the
-        // namespace supplies a default, fold that default into the resolved `ViewInfo`. For
-        // v1, `V1ViewInfo` is rebuilt around a `CatalogTable` whose typed `collation` field
-        // holds the new value; `V1ViewInfo.builderFrom` bridges that into the v2
-        // `properties()` bag, so downstream consumers (`fetchDefaultCollation`,
-        // `AlterV2ViewExec`'s `existingProp(PROP_COLLATION)`) see it under either surface.
-        // For v2, we rebuild the existing `ViewInfo` with `PROP_COLLATION` set so the same
-        // downstream consumers see it on the regular `info.properties` path.
-        case alterViewAs @ AlterViewAs(rpv @ ResolvedPersistentView(
-        catalog: SupportsNamespaces, identifier, info), _, _, _, _)
-            if Option(info.properties.get(TableCatalog.PROP_COLLATION)).isEmpty =>
-          // Only rewrite when the namespace actually supplies a default. [[ViewInfo]] /
-          // [[V1ViewInfo]] are non-case classes, so a copy with structurally-identical fields
-          // still reads as a different reference -- if we rewrote unconditionally, the
-          // resolution batch would see the plan change every iteration and never reach
-          // fixed point. Looking up the namespace default takes one `loadNamespaceMetadata`
-          // round trip, so do it once here and bail out before rewriting if the namespace has
-          // no default.
-          getCollationFromSchemaMetadata(catalog, identifier.namespace()) match {
-            case Some(newCollation) =>
-              val newInfo: ViewInfo = info match {
-                case v1Info: V1ViewInfo =>
-                  new V1ViewInfo(v1Info.v1Table.copy(collation = Some(newCollation)))
-                case _ =>
-                  CatalogV2Util.viewInfoBuilderFrom(info)
-                    .withCollation(newCollation)
-                    .build()
-              }
-              val newRpv = rpv.copy(info = newInfo)
-              val newAlterViewAs = CurrentOrigin.withOrigin(alterViewAs.origin) {
-                alterViewAs.copy(child = newRpv)
-              }
-              newAlterViewAs.copyTagsFrom(alterViewAs)
-              newAlterViewAs
-            case None =>
-              alterViewAs
-          }
-
         case createUserDefinedFunction@CreateUserDefinedFunction(
         ResolvedIdentifier(catalog: SupportsNamespaces, identifier),
         _, _, _, _, _, collation, _, _, _, _, _, _) if collation.isEmpty =>
@@ -285,6 +245,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def transform(plan: LogicalPlan, collation: String): LogicalPlan = {
     plan resolveOperators {
+      // The ResolvedIdentifier child of CreateTable/ReplaceTable exposes the resolved table
+      // columns as output attributes. Re-point any default string/char/varchar typed ones to the
+      // default collation so the resolved schema stays consistent with the column definitions.
+      // Matched before the generic case below so it is not routed through transformPlan, which
+      // does not rewrite bare output attributes.
+      case ri: ResolvedIdentifier
+          if ri.output.exists(a => hasDefaultStringCharOrVarcharType(a.dataType)) =>
+        ri.copy(output = ri.output.map {
+          case a if hasDefaultStringCharOrVarcharType(a.dataType) =>
+            a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
+          case a => a
+        })
+
       case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
         transformPlan(p, collation)
 
@@ -388,9 +361,24 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    * collated types.
    */
   private def transformExpression: PartialFunction[Expression, String => Expression] = {
-    case columnDef: ColumnDefinition if hasDefaultStringCharOrVarcharType(columnDef.dataType) =>
-      collation => columnDef.copy(dataType =
-        replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation))
+    case columnDef: ColumnDefinition
+        if hasDefaultStringCharOrVarcharType(columnDef.dataType) ||
+          generationExpressionNeedsCollation(columnDef) =>
+      collation =>
+        // Re-point any default string/char/varchar typed references inside the generation
+        // expression to the default collation, matching the collation applied to the columns
+        // they reference. Other nodes (e.g. literals and casts) are handled by the dedicated
+        // cases below as part of the bottom-up traversal.
+        val newGenExpr = columnDef.generationExpression.map { genExpr =>
+          val newChild = genExpr.child.transform {
+            case a: AttributeReference if hasDefaultStringCharOrVarcharType(a.dataType) =>
+              a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
+          }
+          if (newChild eq genExpr.child) genExpr else genExpr.copy(child = newChild)
+        }
+        columnDef.copy(
+          dataType = replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation),
+          generationExpression = newGenExpr)
 
     case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) &&
       cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
@@ -409,6 +397,20 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
             .applyOrElse(expression, identity[Expression])
         }
         subquery.withNewPlan(newPlan)
+  }
+
+  /**
+   * Returns true if the column's generation expression references a default string/char/varchar
+   * type.
+   */
+  private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
+    columnDef.generationExpression.exists { genExpr =>
+      // Only inspect AttributeReferences, avoiding calling dataType on unresolved nodes.
+      genExpr.child.exists {
+        case a: AttributeReference => hasDefaultStringCharOrVarcharType(a.dataType)
+        case _ => false
+      }
+    }
   }
 
   /**

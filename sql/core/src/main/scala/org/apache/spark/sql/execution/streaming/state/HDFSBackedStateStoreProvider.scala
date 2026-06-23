@@ -566,7 +566,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
     StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
-      "estimated size of state only on current version")
+      "estimated size of state only on current version",
+      isSnapshot = true)
 
   private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheHitCount",

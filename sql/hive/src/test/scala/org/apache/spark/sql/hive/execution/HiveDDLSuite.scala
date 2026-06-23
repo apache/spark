@@ -1141,7 +1141,7 @@ class HiveDDLSuite
           "alternative" -> "DROP TABLE",
           "operation" -> "DROP VIEW",
           "foundType" -> "MANAGED",
-          "requiredType" -> "VIEW",
+          "requiredType" -> "VIEW or METRIC_VIEW",
           "objectName" -> s"$SESSION_CATALOG_NAME.default.tab1"
         )
       )

@@ -1584,8 +1584,32 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.4.0</td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
+  <td><code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code></td>
   <td><code>false</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the driver and executor containers' security context. When <code>false</code> (default), a container cannot gain more privileges than its parent process. Set to <code>true</code> to opt out of this restriction. Driver and executor can be configured individually via the container type-specific config below.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.securityContext.allowPrivilegeEscalation</code></td>
+  <td><code>(value of spark.kubernetes.securityContext.allowPrivilegeEscalation)</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the driver container's security context. Falls back to <code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code> if not set.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.securityContext.allowPrivilegeEscalation</code></td>
+  <td><code>(value of spark.kubernetes.securityContext.allowPrivilegeEscalation)</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the executor container's security context. Falls back to <code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code> if not set.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
+  <td><code>true</code></td>
   <td>
     If true, executor pods use Driver pod IP directly instead of Driver Service.
   </td>
@@ -1816,6 +1840,37 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>4.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
+  <td><code>5min</code></td>
+  <td>
+    Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
+    Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeThreshold</code></td>
+  <td><code>0.5</code></td>
+  <td>
+    The PVC usage ratio (used / capacity) above which the driver triggers a resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeFactor</code></td>
+  <td><code>1.0</code></td>
+  <td>
+    The factor to grow PVC storage by, relative to the current request.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
 </table>
 
 #### Pod template properties
@@ -2022,10 +2077,10 @@ Spark allows users to specify a custom Kubernetes schedulers.
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.1:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.2:
 
   ```bash
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
   ```
 
 ##### Build

@@ -63,6 +63,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     ArrayType,
+    MapType,
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
@@ -1539,6 +1540,15 @@ bit_xor.__doc__ = pysparkfuncs.bit_xor.__doc__
 # Window Functions
 
 
+def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = None) -> Column:
+    if startTime is None:
+        return _invoke_function_over_columns("counter_diff", value)
+    return _invoke_function_over_columns("counter_diff", value, startTime)
+
+
+counter_diff.__doc__ = pysparkfuncs.counter_diff.__doc__
+
+
 def cume_dist() -> Column:
     return _invoke_function("cume_dist")
 
@@ -1965,7 +1975,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
@@ -2187,6 +2197,26 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
+
+
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_valid_variant", _to_col(v))
+
+
+is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
+
+
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function("variant_delete", _to_col(v), *cols)
+
+
+variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -2687,6 +2717,13 @@ def levenshtein(
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
 
 
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
+
+
+jaro_winkler_similarity.__doc__ = pysparkfuncs.jaro_winkler_similarity.__doc__
+
+
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     return _invoke_function("locate", lit(substr), _to_col(str), lit(pos))
 
@@ -2798,9 +2835,26 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    string: "ColumnOrName",
+    pattern: Union[str, Column],
+    replacement: Union[str, Column],
+    position: Optional[Union[int, Column]] = None,
 ) -> Column:
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    if position is None:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+        )
+    else:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+            lit(position),
+        )
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -3726,6 +3780,19 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
+
+
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+time_bucket.__doc__ = pysparkfuncs.time_bucket.__doc__
 
 
 def window(
@@ -5397,8 +5464,12 @@ bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
 # Geospatial ST Functions
 
 
-def st_asbinary(geo: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("st_asbinary", geo)
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
+    if endianness is None:
+        return _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__
@@ -5517,6 +5588,64 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
+
+
+# ---------------------- Vector Functions ----------------------
+
+
+def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_cosine_similarity", left, right)
+
+
+vector_cosine_similarity.__doc__ = pysparkfuncs.vector_cosine_similarity.__doc__
+
+
+def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_inner_product", left, right)
+
+
+vector_inner_product.__doc__ = pysparkfuncs.vector_inner_product.__doc__
+
+
+def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_l2_distance", left, right)
+
+
+vector_l2_distance.__doc__ = pysparkfuncs.vector_l2_distance.__doc__
+
+
+def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_norm", vector)
+    else:
+        return _invoke_function_over_columns("vector_norm", vector, degree)
+
+
+vector_norm.__doc__ = pysparkfuncs.vector_norm.__doc__
+
+
+def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_normalize", vector)
+    else:
+        return _invoke_function_over_columns("vector_normalize", vector, degree)
+
+
+vector_normalize.__doc__ = pysparkfuncs.vector_normalize.__doc__
+
+
+def vector_avg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_avg", col)
+
+
+vector_avg.__doc__ = pysparkfuncs.vector_avg.__doc__
+
+
+def vector_sum(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_sum", col)
+
+
+vector_sum.__doc__ = pysparkfuncs.vector_sum.__doc__
 
 
 def _test() -> None:

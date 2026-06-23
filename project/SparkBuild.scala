@@ -59,8 +59,8 @@ object BuildCommons {
     Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
-  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore) =
-    Seq("udf-worker-proto", "udf-worker-core").map(ProjectRef(buildLocation, _))
+  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore, udfWorkerGrpc) =
+    Seq("udf-worker-proto", "udf-worker-core", "udf-worker-grpc").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -124,6 +124,11 @@ object SparkBuild extends PomBuild {
         throw new MessageOnlyException(
           "The Java version used to build the project is outdated. " +
             s"Please use Java $minimumVersion or later.")
+      }
+      if (currentVersionFeature == 25 && currentVersionUpdate < 3) {
+        throw new MessageOnlyException(
+          s"Java 25 requires update 3 or later due to JDK-8377811. " +
+            s"Current version: $currentVersion. Please use Java 25.0.3 or later.")
       }
     },
     (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
@@ -299,6 +304,8 @@ object SparkBuild extends PomBuild {
       .orElse(sys.props.get("java.home"))
       .map(file),
     publishMavenStyle := true,
+    packageDoc / publishArtifact := false,
+    packageSrc / publishArtifact := (if (sys.env.contains("PUBLISH_PACKAGE_SRC")) true else false),
     unidocGenjavadocVersion := "0.19",
 
     // Override SBT's default resolvers:
@@ -409,7 +416,7 @@ object SparkBuild extends PomBuild {
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava,
-      udfWorkerProto, udfWorkerCore
+      udfWorkerProto, udfWorkerCore, udfWorkerGrpc
     ).contains(x)
   }
 
@@ -464,6 +471,9 @@ object SparkBuild extends PomBuild {
 
   /* UDF Worker Proto settings */
   enable(UDFWorkerProto.settings)(udfWorkerProto)
+
+  /* UDF Worker gRPC settings */
+  enable(UDFWorkerGrpc.settings)(udfWorkerGrpc)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -1085,25 +1095,13 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  import BuildCommons.protoVersion
-  lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
-
-    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-sources"
-    ),
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Include only the proto module jar and protobuf-java in the assembly.
+  // Reuses SparkConnectCommon for proto codegen wiring; overrides the assembly
+  // fields that need the UDF-worker namespace and restricts code generation to
+  // protobuf-java messages only. The gRPC service stubs are generated in the
+  // separate udf-worker-grpc module, so this module (and its consumers) carry
+  // no gRPC dependency.
+  lazy val settings = SparkConnectCommon.settings ++ Seq(
+    // Include only this module's jar and protobuf-java in the assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
@@ -1114,25 +1112,59 @@ object UDFWorkerProto {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
     ),
 
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
-        MergeStrategy.filterDistinctLines
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
+    // Generate only protobuf-java messages here (overrides the java + grpc-java
+    // targets inherited from SparkConnectCommon).
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java"
+    )
+  )
+}
+
+object UDFWorkerGrpc {
+  import BuildCommons.protoVersion
+
+  // Generates only the gRPC service stubs, reading the .proto definitions from
+  // the udf-worker-proto module (whose protobuf-java messages the stubs compile
+  // against). Confines the gRPC runtime to this module.
+  lazy val settings = Seq(
+    PB.protocVersion := protoVersion,
+
+    libraryDependencies ++= {
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
+    // Read the shared .proto sources from the proto module.
+    (Compile / PB.protoSources) := Seq(
+      baseDirectory.value / ".." / "proto" / "src" / "main" / "protobuf")
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
-      Seq.empty
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.plugin("grpc-java") ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        )
+      )
     }
   }
 }
@@ -1246,7 +1278,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.2")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.4")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1288,7 +1320,8 @@ object ExcludedDependencies {
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
       ExclusionRule("io.netty", "netty-codec-protobuf"),
-      ExclusionRule("io.netty", "netty-codec-marshalling"))
+      ExclusionRule("io.netty", "netty-codec-marshalling"),
+      ExclusionRule("junit", "junit"))
   )
 }
 
@@ -1624,6 +1657,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/kafka010")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/types/variant")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ui/flamegraph")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/udf/worker")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
@@ -1655,6 +1689,59 @@ object Unidoc {
       .map(_.filterNot(_.data.getCanonicalPath.contains("connect-shims")))
   }
 
+  // genjavadoc emits top-level package-private Scala types (`private` or `private[x]`, e.g.
+  // `private[spark] trait Foo` or a bare `private class Bar`) as *public* Java stubs even with
+  // `-P:genjavadoc:strictVisibility=true`, because a top-level package-private type compiles to a
+  // JVM-public symbol, and the Javadoc `-public` option cannot drop a stub that really is public.
+  // ScalaDoc honors the qualifier and hides such types, so we drop their stubs here to keep the
+  // published Java API doc aligned with the Scala one. A stub `<module>/target/java/<pkg>/<Name>.java`
+  // is dropped iff EVERY top-level Scala declaration of `<Name>` in that package is `private` or
+  // `private[...]`; a public class with a private companion object (e.g. `SparkConf`) is kept, since
+  // the class itself is public. The private regex tolerates other modifiers around the access
+  // qualifier (e.g. `final private[x] class`).
+  private val publicTopTypeRe =
+    """(?m)^(?:@\w+(?:\([^\n)]*\))?\s+)*(?:(?:final|sealed|abstract|implicit|case)\s+)*(?:class|trait|object)\s+(\w+)""".r
+  private val privateTopTypeRe =
+    """(?m)^(?:@\w+(?:\([^\n)]*\))?\s+)*(?:(?:final|sealed|abstract|implicit|case)\s+)*private(?:\[[^\]]+\])?\s+(?:(?:final|sealed|abstract|implicit|case)\s+)*(?:class|trait|object)\s+(\w+)""".r
+
+  private def dropPackagePrivateJavaStubs(sources: Seq[Seq[File]]): Seq[Seq[File]] = {
+    val cache = scala.collection.mutable.Map.empty[String, (Set[String], Set[String])]
+    def scanPkg(dir: String): (Set[String], Set[String]) = cache.getOrElseUpdate(dir, {
+      val d = new File(dir)
+      val scalaFiles =
+        if (d.isDirectory) d.listFiles.filter(_.getName.endsWith(".scala")) else Array.empty[File]
+      val text = scalaFiles
+        .map(f => new String(java.nio.file.Files.readAllBytes(f.toPath), "UTF-8"))
+        .mkString("\n")
+      (publicTopTypeRe.findAllMatchIn(text).map(_.group(1)).toSet,
+        privateTopTypeRe.findAllMatchIn(text).map(_.group(1)).toSet)
+    })
+    val marker = "/target/java/"
+    sources.map(_.filterNot { f =>
+      val path = f.getCanonicalPath.replace('\\', '/')
+      val idx = path.indexOf(marker)
+      if (idx < 0 || !path.endsWith(".java")) {
+        false
+      } else {
+        val rel = path.substring(idx + marker.length) // <pkg>/<Name>.java
+        val slash = rel.lastIndexOf('/')
+        if (slash < 0) {
+          false
+        } else {
+          val moduleRoot = path.substring(0, idx)
+          val pkgPath = rel.substring(0, slash)
+          val name = f.getName.stripSuffix(".java")
+          val (pub, priv) = Seq("src/main/scala", "src/main/scala-2.13")
+            .map(d => scanPkg(s"$moduleRoot/$d/$pkgPath"))
+            .foldLeft((Set.empty[String], Set.empty[String])) {
+              case ((p, q), (a, b)) => (p ++ a, q ++ b)
+            }
+          priv.contains(name) && !pub.contains(name)
+        }
+      }
+    })
+  }
+
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
 
   lazy val settings = BaseUnidocPlugin.projectSettings ++
@@ -1679,8 +1766,9 @@ object Unidoc {
 
     // Skip class names containing $ and some internal packages in Javadocs
     (JavaUnidoc / unidoc / unidocAllSources) := {
-      ignoreUndocumentedPackages((JavaUnidoc / unidoc / unidocAllSources).value)
-        .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
+      dropPackagePrivateJavaStubs(
+        ignoreUndocumentedPackages((JavaUnidoc / unidoc / unidocAllSources).value)
+          .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop"))))
     },
 
     (JavaUnidoc / unidoc / javacOptions) := {
@@ -1725,7 +1813,8 @@ object Unidoc {
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
-        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore),
+        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore,
+        udfWorkerGrpc),
   )
 }
 
@@ -1946,8 +2035,9 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
-        "-Dio.netty.noUnsafe=false",
-        "--enable-native-access=ALL-UNNAMED").mkString(" ")
+        "--sun-misc-unsafe-memory-access=allow",
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

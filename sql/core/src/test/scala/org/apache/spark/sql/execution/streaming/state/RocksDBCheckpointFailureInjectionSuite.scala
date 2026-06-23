@@ -30,15 +30,13 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.OutputMode.Update
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 
 @SlowSQLTest
 /** Test suite to inject some failures in RocksDB checkpoint */
-class RocksDBCheckpointFailureInjectionSuite extends StreamTest
-  with SharedSparkSession {
+class RocksDBCheckpointFailureInjectionSuite extends StreamTest {
 
   private val fileManagerClassName = classOf[FailureInjectionCheckpointFileManager].getName
 
