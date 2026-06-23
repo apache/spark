@@ -431,7 +431,7 @@ class ConstraintPropagationSuite extends PlanTest {
 
   test("infer range constraints by substituting attr=literal bindings") {
     // When a.pt = '20260610' (modeled as a.k = 5) and b.v >= a.k are both present,
-    // inferAdditionalConstraints should emit b.v >= 5.
+    // inferConstraintsFromLiteralBindings should emit b.v >= 5.
     val tr = LocalRelation($"k".int, $"v".int)
     val a = resolveColumn(tr, "k")
     val b = resolveColumn(tr, "v")
@@ -506,7 +506,8 @@ class ConstraintPropagationSuite extends PlanTest {
     val b = resolveColumn(tr, "v")
 
     // b >= a.k + Rand(); after substituting a.k=5 the result is non-deterministic.
-    // inferAdditionalConstraints may emit it, but the plan-level constraints filter must drop it.
+    // inferConstraintsFromLiteralBindings may emit it, but the plan-level constraints
+    // filter must drop it.
     val randExpr = Add(a, Cast(Rand(0L), IntegerType))
     val condition = EqualTo(a, Literal(5)) && GreaterThanOrEqual(b, randExpr)
     val plan = Filter(condition, tr.analyze)
@@ -531,7 +532,7 @@ class ConstraintPropagationSuite extends PlanTest {
       GreaterThanOrEqual(b, a)))
 
     val helper = new ConstraintHelper {}
-    val inferred = helper.inferAdditionalConstraints(constraints)
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
 
     assert(!inferred.exists {
       case GreaterThanOrEqual(attr: Attribute, lit: Literal) =>
