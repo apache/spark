@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.expressions.json
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, StringWriter}
 
+import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -582,9 +583,7 @@ case class MultiGetJsonObjectEvaluator(
     namedPaths: Seq[Seq[String]]) {
   import SharedFactory._
 
-  require(
-    fallbackPaths.nonEmpty &&
-      namedPaths.length == fallbackPaths.length)
+  require(fallbackPaths.nonEmpty && namedPaths.length == fallbackPaths.length)
 
   @transient
   private lazy val useTopLevelFastPath: Boolean =
@@ -794,10 +793,8 @@ case class MultiGetJsonObjectEvaluator(
 
 object MultiGetJsonObjectEvaluator {
   private final class MutablePathTrieNode {
-    val terminalOrdinals: scala.collection.mutable.ArrayBuffer[Int] =
-      scala.collection.mutable.ArrayBuffer.empty
-    val children: scala.collection.mutable.LinkedHashMap[String, MutablePathTrieNode] =
-      scala.collection.mutable.LinkedHashMap.empty
+    val terminalOrdinals: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer.empty
+    val children: mutable.LinkedHashMap[String, MutablePathTrieNode] = mutable.LinkedHashMap.empty
 
     def freeze(): PathTrieNode = {
       require(
