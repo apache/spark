@@ -1283,7 +1283,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
-    def test_permission_denied_budget_replenishes_after_successful_response(self):
+    def test_permission_denied_counter_resets_after_successful_response(self):
         counter = itertools.count(1)
 
         def provider():
@@ -1314,7 +1314,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
-    def test_permission_denied_budget_resets_after_operation_not_found(self):
+    def test_permission_denied_recovers_across_operation_not_found(self):
         def permission_denied():
             raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
 
@@ -1329,9 +1329,10 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
                 ),
             )
 
-        # ExecutePlan #1 hits PERMISSION_DENIED before any response, the reattach attempt
-        # observes OPERATION_NOT_FOUND so a fresh ExecutePlan is started. The fresh stream
-        # is logically new, so a second PERMISSION_DENIED on it must be retried again.
+        # ExecutePlan #1 hits PERMISSION_DENIED before any response, the reattach attempt observes
+        # OPERATION_NOT_FOUND so a fresh ExecutePlan starts. The retry counter carries over (no
+        # reset on OPERATION_NOT_FOUND) but stays under the cap, so a second PERMISSION_DENIED is
+        # still retried and the stream then recovers.
         stub = self._stub_with(
             [permission_denied, permission_denied],
             [not_found, self.response, self.finished],
@@ -1346,7 +1347,7 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
-    def test_permission_denied_propagates_after_single_retry(self):
+    def test_permission_denied_propagates_after_max_retries(self):
         provider_calls = itertools.count(1)
 
         def provider():
@@ -1355,9 +1356,11 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         def permission_denied():
             raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
 
+        # One response makes forward progress (resetting the counter), then PERMISSION_DENIED
+        # repeats with no further progress until the per-iterator cap is exhausted and propagates.
         stub = self._stub_with(
             [self.response, permission_denied],
-            [permission_denied],
+            [permission_denied, permission_denied, permission_denied],
         )
         with self.assertRaises(TestException) as cm:
             ite = ExecutePlanResponseReattachableIterator(
@@ -1366,6 +1369,43 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             for _ in ite:
                 pass
         self.assertEqual(cm.exception.code(), grpc.StatusCode.PERMISSION_DENIED)
+        self.assertEqual(
+            stub.attach_calls,
+            ExecutePlanResponseReattachableIterator._MAX_PERMISSION_DENIED_RETRIES,
+        )
+
+    def test_permission_denied_spin_fails_fast_across_operation_not_found(self):
+        """SPARK-57425: a token that never refreshes to a valid one must fail fast instead of
+        spinning forever through PERMISSION_DENIED -> OPERATION_NOT_FOUND -> fresh ExecutePlan.
+        The counter is not reset on OPERATION_NOT_FOUND, so the cap stops the loop."""
+
+        def permission_denied():
+            raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
+
+        def not_found():
+            raise TestException(
+                "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                grpc.StatusCode.UNAVAILABLE,
+                trailing_status=status_pb2.Status(
+                    code=14,
+                    message="INVALID_HANDLE.OPERATION_NOT_FOUND",
+                    details="",
+                ),
+            )
+
+        stub = self._stub_with(
+            [permission_denied, permission_denied, permission_denied, permission_denied],
+            [not_found, not_found, not_found],
+        )
+        with self.assertRaises(TestException) as cm:
+            ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+            for _ in ite:
+                pass
+        self.assertEqual(cm.exception.code(), grpc.StatusCode.PERMISSION_DENIED)
+        self.assertEqual(
+            stub.attach_calls,
+            ExecutePlanResponseReattachableIterator._MAX_PERMISSION_DENIED_RETRIES,
+        )
 
     def test_metadata_callable_failure_in_release_does_not_break_iteration(self):
         calls = itertools.count(1)
@@ -1521,12 +1561,13 @@ class SparkConnectClientReattachGrpcEndToEndTestCase(unittest.TestCase):
 
         eventually(timeout=2, catch_assertions=True)(check)()
 
-    def test_permission_denied_propagates_after_one_retry_over_grpc(self):
+    def test_permission_denied_propagates_after_max_retries_over_grpc(self):
         def provider():
             return [("authorization", "bearer static")]
 
+        cap = ExecutePlanResponseReattachableIterator._MAX_PERMISSION_DENIED_RETRIES
         self.servicer.execute_plans = [[self.response, grpc.StatusCode.PERMISSION_DENIED]]
-        self.servicer.reattach_plans = [[grpc.StatusCode.PERMISSION_DENIED]]
+        self.servicer.reattach_plans = [[grpc.StatusCode.PERMISSION_DENIED]] * cap
 
         with self.assertRaises(grpc.RpcError) as cm:
             ite = ExecutePlanResponseReattachableIterator(
@@ -1535,6 +1576,7 @@ class SparkConnectClientReattachGrpcEndToEndTestCase(unittest.TestCase):
             for _ in ite:
                 pass
         self.assertEqual(cm.exception.code(), grpc.StatusCode.PERMISSION_DENIED)
+        self.assertEqual(len(self.servicer.metadata_seen["ReattachExecute"]), cap)
 
 
 if __name__ == "__main__":

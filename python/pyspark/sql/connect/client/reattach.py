@@ -57,11 +57,15 @@ class ExecutePlanResponseReattachableIterator(Generator):
     ``metadata`` may be a static iterable or a zero-arg callable; the callable is invoked
     before every RPC (so short-TTL credentials refresh across reattach) and must be thread-safe
     because ``ReleaseExecute`` runs in a background thread pool. A ``PERMISSION_DENIED`` mid-
-    stream is retried once per iterator so the next ``ReattachExecute`` can use a refreshed
-    credential; a second one propagates as a genuine auth failure.
+    stream is retried so the next ``ReattachExecute`` can use a refreshed credential. The retry
+    counter resets only on forward progress (a returned response), so a token that never refreshes
+    to a valid one fails fast after ``_MAX_PERMISSION_DENIED_RETRIES`` consecutive denials instead
+    of spinning, while a long-lived stream can recover from token expiry any number of times.
     """
 
     _lock: ClassVar[RLock] = RLock()
+
+    _MAX_PERMISSION_DENIED_RETRIES: ClassVar[int] = 3
     _release_thread_pool_instance: Optional[ThreadPoolExecutor] = None
     _instances: ClassVar[weakref.WeakSet["ExecutePlanResponseReattachableIterator"]] = (
         weakref.WeakSet()
@@ -115,8 +119,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # finishes without producing one, another iterator needs to be reattached.
         self._result_complete = False
 
-        # PERMISSION_DENIED budget: one reattach between successful responses.
-        self._permission_denied_retried = False
+        # Consecutive PERMISSION_DENIED reattaches since the last returned response; capped so a
+        # token that never refreshes to a valid one fails fast instead of spinning forever.
+        self._permission_denied_retries = 0
 
         self._metadata_provider: Callable[[], Iterable[Tuple[str, str]]]
         if callable(metadata):
@@ -327,7 +332,6 @@ class ExecutePlanResponseReattachableIterator(Generator):
                         timeout=self._reattachable_execute_plan_timeout,
                     )
                 )
-                self._permission_denied_retried = False
                 raise RetryException()
             elif e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
                 # The per-RPC deadline fired. The server-side operation is still alive; clear
@@ -341,15 +345,17 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 raise RetryException() from e
             elif (
                 e.code() == grpc.StatusCode.PERMISSION_DENIED
-                and not self._permission_denied_retried
+                and self._permission_denied_retries < self._MAX_PERMISSION_DENIED_RETRIES
             ):
-                # Treat the first mid-stream PERMISSION_DENIED as a token-expiry signal; reattach
-                # once so the metadata provider can produce a fresh credential.
+                # Treat mid-stream PERMISSION_DENIED as a token-expiry signal; reattach so the
+                # metadata provider can produce a fresh credential.
                 logger.debug(
                     f"PERMISSION_DENIED on stream for operation {self._operation_id}; "
-                    f"allowing one reattach with refreshed metadata."
+                    f"reattaching with refreshed metadata "
+                    f"({self._permission_denied_retries + 1}/"
+                    f"{self._MAX_PERMISSION_DENIED_RETRIES})."
                 )
-                self._permission_denied_retried = True
+                self._permission_denied_retries += 1
                 self._iterator = None
                 raise RetryException() from e
             else:
@@ -360,7 +366,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             # Remove the iterator, so that a new one will be created after retry.
             self._iterator = None
             raise e
-        self._permission_denied_retried = False
+        self._permission_denied_retries = 0
         return result
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
