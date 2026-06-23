@@ -176,12 +176,6 @@ object ResolveHints {
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     import CoalesceHintUtils._
 
-    private def createRebalance(hint: UnresolvedHint): LogicalPlan = {
-      val (numPartitionsOption, partitionExprs) = getNumOfPartitions(hint)
-      validateParameters(hint.name, partitionExprs)
-      RebalancePartitions(partitionExprs, hint.child, numPartitionsOption)
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
       case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {

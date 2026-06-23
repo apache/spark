@@ -20,16 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, ShortLiteral, SortOrder, StringLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition, RepartitionByExpression, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, Repartition, RepartitionByExpression, UnresolvedHint}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Helper functions used to build the logical plans for the "COALESCE", "REPARTITION",
  * "REPARTITION_BY_RANGE" and "REBALANCE" hints.
- *
- * These are pure functions that only depend on the provided [[UnresolvedHint]] (and the OSS
- * logical plan / expression classes), so they can be reused outside of the
- * [[ResolveHints.ResolveCoalesceHints]] rule.
  */
 object CoalesceHintUtils {
 
@@ -104,6 +100,15 @@ object CoalesceHintUtils {
       case (None, partitionExprs) =>
         createRepartitionByExpression(None, partitionExprs)
     }
+  }
+
+  /**
+   * This function handles hints for "REBALANCE".
+   */
+  def createRebalance(hint: UnresolvedHint): LogicalPlan = {
+    val (numPartitionsOption, partitionExprs) = getNumOfPartitions(hint)
+    validateParameters(hint.name, partitionExprs)
+    RebalancePartitions(partitionExprs, hint.child, numPartitionsOption)
   }
 
   def transformStringToAttribute(hint: UnresolvedHint): UnresolvedHint = {
