@@ -1225,14 +1225,10 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
                 pd.testing.assert_series_equal(legacy, numpy)
 
     def test_array_int_with_null_differs_from_legacy(self):
-        """Documented difference: integer arrays with nulls.
+        """Accepted difference: integer arrays with nulls.
 
         convert_numpy widens to float64 (null -> NaN), matching its own scalar-integer
-        behavior, whereas convert_legacy keeps object dtype with Python ints and None.
-        This is a value-level difference inherited from the scalar path, not introduced
-        by the array path.
-
-        TODO: Reconcile (or formally accept) when convert_legacy is removed.
+        behavior, while convert_legacy keeps object dtype with Python ints and None.
         """
         import numpy as np
         import pyarrow as pa
@@ -1253,15 +1249,11 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
                 self.assertEqual(numpy[2], 3.0)
 
     def test_array_timestamp_repr_differs_from_legacy(self):
-        """Documented difference: timestamp arrays carry identical instants but
+        """Accepted difference: timestamp arrays carry identical instants but
         different element representation.
 
         convert_legacy boxes elements into an object ndarray of pd.Timestamp/NaT,
-        while convert_numpy keeps a native datetime64[ns] ndarray. Timezone/instant
-        handling itself is done upstream by preprocess_time, so it is not re-done in
-        the array path -- hence the instants match.
-
-        TODO: Reconcile (or formally accept) when convert_legacy is removed.
+        while convert_numpy keeps a native datetime64[ns] ndarray.
         """
         import numpy as np
         import pandas as pd
