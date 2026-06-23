@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -326,6 +326,38 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
       }
     }
+  }
+
+  test("SPARK-57575: DateFormat with TimeType (to_char/to_varchar)") {
+    // 12:13:14 = (12*3600 + 13*60 + 14) seconds, stored as nanoseconds
+    val timeNanos = (12L * 3600 + 13 * 60 + 14) * 1000000000L
+    val timeLit = Literal.create(timeNanos, TimeType(TimeType.DEFAULT_PRECISION))
+
+    checkEvaluation(DateFormatClass(timeLit, Literal("HH:mm:ss"), UTC_OPT), "12:13:14")
+    checkEvaluation(DateFormatClass(timeLit, Literal("HH"), UTC_OPT), "12")
+    checkEvaluation(DateFormatClass(timeLit, Literal("mm"), UTC_OPT), "13")
+    checkEvaluation(DateFormatClass(timeLit, Literal("ss"), UTC_OPT), "14")
+
+    // Non-default precision (TIME(0)) should also work
+    val timeNanosLowPrec = (9L * 3600 + 30 * 60 + 0) * 1000000000L
+    val timeLitLowPrec = Literal.create(timeNanosLowPrec, TimeType(0))
+    checkEvaluation(DateFormatClass(timeLitLowPrec, Literal("HH:mm:ss"), UTC_OPT), "09:30:00")
+
+    // Null handling
+    checkEvaluation(
+      DateFormatClass(Literal.create(null, TimeType(TimeType.DEFAULT_PRECISION)),
+        Literal("HH:mm:ss"), UTC_OPT), null)
+
+    // Date-only pattern fields should error for TIME input with Spark error
+    val datePatternExpr = DateFormatClass(timeLit, Literal("yyyy-MM-dd"), UTC_OPT)
+    checkErrorInExpression[SparkRuntimeException](
+      datePatternExpr,
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> "`format`",
+        "functionName" -> "`date_format`",
+        "value" -> "'yyyy-MM-dd'")
+    )
   }
 
   test("Hour") {
