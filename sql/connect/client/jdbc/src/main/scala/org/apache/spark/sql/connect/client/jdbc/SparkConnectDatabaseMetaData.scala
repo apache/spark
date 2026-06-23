@@ -598,8 +598,9 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       catalog: String, schema: String, table: String): ResultSet =
     throw new SQLFeatureNotSupportedException
 
-  // Spark has no primary keys, so return an empty result set with the JDBC schema
-  // instead of throwing, because JDBC clients call this during schema introspection.
+  // Spark supports informational PRIMARY KEY constraints on DSv2 tables (SPARK-51207), but the
+  // Spark Connect JDBC client cannot retrieve them in a structured way yet, so return an empty
+  // result set instead of throwing. JDBC clients call this during schema introspection.
   override def getPrimaryKeys(catalog: String, schema: String, table: String): ResultSet = {
     conn.checkOpen()
 
@@ -613,8 +614,10 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     new SparkConnectResultSet(df.collectResult())
   }
 
-  // getImportedKeys and getExportedKeys share the JDBC foreign-key result schema.
-  // Spark has no foreign keys, so both return an empty result set instead of throwing.
+  // getImportedKeys and getExportedKeys share the JDBC foreign-key result schema. Spark supports
+  // informational FOREIGN KEY constraints on DSv2 tables (SPARK-51207), but the Spark Connect JDBC
+  // client cannot retrieve them in a structured way yet, so both return an empty result set
+  // instead of throwing.
   private def emptyForeignKeys: ResultSet = {
     val df = conn.spark.emptyDataFrame
       .withColumn("PKTABLE_CAT", lit(""))
