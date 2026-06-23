@@ -459,8 +459,9 @@ class MetricsFailureInjectionSuite
           val result = finalDf.collect()
           assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
 
-          // The non-leaf stage 2 gets its first successful attempt corrupted and re-runs, so its
-          // raw counter overcounts. SLAM reports only the last successful attempt per RDD.
+          // Both the leaf stage 1 and the non-leaf stage 2 get their first successful attempt
+          // corrupted and re-run, so their raw counters overcount. SLAM reports only the last
+          // successful attempt per RDD.
           assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
           assert(stage2Metric.value > 300, s"stage2Metric=${stage2Metric.value}")
           assert(stage3Metric.value === 5)
