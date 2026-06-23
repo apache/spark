@@ -21,7 +21,7 @@ import java.util
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{SessionQueryTestBase, SparkSession}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Identifier, InMemoryBaseTable, TableCatalog, TableWritePrivilege}
 
@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  * [[DSv2TempViewWithStoredPlanTests]], [[DSv2RepeatedTableAccessTests]],
  * [[DSv2IncrementallyConstructedQueryTests]], or [[DSv2CacheTableReadTests]].
  */
-trait DSv2ExternalMutationTestBase extends SessionQueryTestBase {
+trait DSv2ExternalMutationTestBase extends QueryTest {
 
   /** Fully qualified table name under the non-caching test catalog. */
   protected val testTable: String = "testcat.ns1.ns2.tbl"
@@ -51,12 +51,29 @@ trait DSv2ExternalMutationTestBase extends SessionQueryTestBase {
   /** Prefix for test names, e.g. "" or "[connect] ". */
   protected def testPrefix: String
 
+  /** Whether this suite runs under Spark Connect. */
+  protected def isConnect: Boolean
+
+  /** Execute a test body with a session. */
+  protected def withTestSession(fn: SparkSession => Unit): Unit
+
+  /**
+   * Assert that a DataFrame's rows match the expected rows (order-agnostic).
+   */
+  protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit
+
   /**
    * Get a [[TableCatalog]] by name from the underlying session.
    */
   protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C
+
+  /** Cleanup wrapper: drop views and the table after the test body, even on failure. */
+  protected def withTestTableAndViews(
+      session: SparkSession,
+      table: String,
+      views: Seq[String] = Seq.empty)(fn: => Unit): Unit
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   protected def externalAppend(
