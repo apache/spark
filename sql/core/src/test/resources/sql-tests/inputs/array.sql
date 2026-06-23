@@ -95,6 +95,9 @@ from primitive_arrays;
 select element_at(array(1, 2, 3), 5);
 select element_at(array(1, 2, 3), -5);
 select element_at(array(1, 2, 3), 0);
+select element_at(array(1, 2, 3), -2147483648);
+-- non-literal index: avoids constant folding so the codegen path is exercised end-to-end
+select element_at(array(1, 2, 3), idx) from values (-2147483648) as t(idx);
 
 select elt(4, '123', '456');
 select elt(0, '123', '456');

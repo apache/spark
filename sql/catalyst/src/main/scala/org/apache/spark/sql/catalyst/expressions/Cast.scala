@@ -965,9 +965,11 @@ case class Cast(
   private[this] def castToTime(from: DataType, to: TimeType): Any => Any = from match {
     case _: StringType =>
       if (ansiEnabled) {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToTimeAnsi(s, getContextOrNull()))
+        buildCast[UTF8String](_, s => DateTimeUtils.truncateTimeToPrecision(
+          DateTimeUtils.stringToTimeAnsi(s, to.precision, getContextOrNull()), to.precision))
       } else {
-        buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s).orNull)
+        buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s)
+          .map(DateTimeUtils.truncateTimeToPrecision(_, to.precision)).orNull)
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
@@ -1670,13 +1672,16 @@ case class Cast(
           if (ansiEnabled) {
             val errorContext = getContextOrNullCode(ctx)
             code"""
-              $evPrim = $dateTimeUtilsCls.stringToTimeAnsi($c, $errorContext);
+              $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
+                $dateTimeUtilsCls.stringToTimeAnsi($c, ${to.precision}, $errorContext),
+                ${to.precision});
             """
           } else {
             code"""
               scala.Option<Long> $longOpt = $dateTimeUtilsCls.stringToTime($c);
               if ($longOpt.isDefined()) {
-                $evPrim = ((Long) $longOpt.get()).longValue();
+                $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
+                  ((Long) $longOpt.get()).longValue(), ${to.precision});
               } else {
                 $evNull = true;
               }

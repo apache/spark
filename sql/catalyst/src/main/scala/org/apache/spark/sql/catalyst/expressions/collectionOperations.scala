@@ -2701,9 +2701,11 @@ case class ElementAt(
   }
 
   private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    // Widen `ordinal` to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+    // wraps back to a negative value and would bypass the out-of-bounds guard below.
     if (ordinal == 0) {
       false
-    } else if (elements.length < math.abs(ordinal)) {
+    } else if (elements.length < math.abs(ordinal.toLong)) {
       !failOnError
     } else {
       if (ordinal < 0) {
@@ -2735,7 +2737,9 @@ case class ElementAt(
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
-        val index = ordinal.asInstanceOf[Int]
+        // Widen the index to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+        // wraps back to a negative value and would bypass this out-of-bounds guard.
+        val index = ordinal.asInstanceOf[Int].toLong
         if (array.numElements() < math.abs(index)) {
           defaultValueOutOfBound match {
             case Some(value) => value.eval()
@@ -2745,9 +2749,9 @@ case class ElementAt(
           val idx = if (index == 0) {
             throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
           } else if (index > 0) {
-            index - 1
+            (index - 1).toInt
           } else {
-            array.numElements() + index
+            (array.numElements() + index).toInt
           }
           if (arrayElementNullable && array.isNullAt(idx)) {
             null
@@ -2790,9 +2794,10 @@ case class ElementAt(
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
+          val intIndex = ctx.freshName("elementAtIntIndex")
           val nullCheck = if (arrayElementNullable) {
             s"""
-               |if ($eval1.isNullAt($index)) {
+               |if ($eval1.isNullAt($intIndex)) {
                |  ${ev.isNull} = true;
                |} else
              """.stripMargin
@@ -2811,8 +2816,10 @@ case class ElementAt(
             case None => s"${ev.isNull} = true;"
           }
 
+          // Widen the index to long before Math.abs to avoid overflow: Math.abs(Int.MinValue)
+          // wraps back to a negative value and would bypass this out-of-bounds guard.
           s"""
-             |int $index = (int) $eval2;
+             |long $index = (long) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
              |  $indexOutOfBoundBranch
              |} else {
@@ -2823,9 +2830,10 @@ case class ElementAt(
              |  } else {
              |    $index += $eval1.numElements();
              |  }
+             |  int $intIndex = (int) $index;
              |  $nullCheck
              |  {
-             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, intIndex)};
              |  }
              |}
            """.stripMargin

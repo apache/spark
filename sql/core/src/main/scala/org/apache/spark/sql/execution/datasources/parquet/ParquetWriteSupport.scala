@@ -307,6 +307,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           recordConsumer.addLong(
             timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal), isNtz = true))
 
+      case t: TimeType if t.precision > TimeType.MICROS_PRECISION =>
+        // Precision 7..9 is stored as TIME(NANOS); internal storage is already nanos.
+        (row: SpecializedGetters, ordinal: Int) =>
+          recordConsumer.addLong(row.getLong(ordinal))
+
       case _: TimeType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(DateTimeUtils.nanosToMicros(row.getLong(ordinal)))

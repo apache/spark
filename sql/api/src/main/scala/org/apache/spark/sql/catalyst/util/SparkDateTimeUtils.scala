@@ -169,7 +169,7 @@ trait SparkDateTimeUtils {
    * @param nanos
    *   The original time in nanoseconds.
    * @param p
-   *   The fractional second precision (range 0 to 6).
+   *   The fractional second precision (range 0 to 9).
    * @return
    *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
@@ -178,10 +178,15 @@ trait SparkDateTimeUtils {
       TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
         s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
-    val scale = TimeType.NANOS_PRECISION - p
-    val factor = math.pow(10, scale).toLong
+    val factor = timeTruncationFactors(TimeType.NANOS_PRECISION - p)
     (nanos / factor) * factor
   }
+
+  // Precomputed 10^k for k in [0, NANOS_PRECISION], indexed by the truncation scale
+  // (NANOS_PRECISION - p). `truncateTimeToPrecision` runs per value on hot read/cast paths, so the
+  // factor is looked up here instead of recomputed with `math.pow` on every call.
+  private val timeTruncationFactors: Array[Long] =
+    (0 to TimeType.NANOS_PRECISION).map(k => math.pow(10, k).toLong).toArray
 
   /**
    * Converts the timestamp `micros` from one timezone to another.
@@ -1080,8 +1085,10 @@ trait SparkDateTimeUtils {
         return None
       }
 
-      // Unpack the segments.
-      var (hr, min, sec, ms) = (segments(3), segments(4), segments(5), segments(6))
+      // Unpack the segments. `segments(6)` holds microseconds and `segments(9)` holds the
+      // sub-microsecond nanosecond remainder (digits 7-9), in [0, 999].
+      var (hr, min, sec, ms, subMicroNanos) =
+        (segments(3), segments(4), segments(5), segments(6), segments(9))
 
       // Handle AM/PM conversion in separate cases.
       if (!hasSuffix) {
@@ -1108,16 +1115,20 @@ trait SparkDateTimeUtils {
         }
       }
 
-      val localTime = LocalTime.of(hr, min, sec, MICROSECONDS.toNanos(ms).toInt)
+      val nanoOfSecond = (MICROSECONDS.toNanos(ms) + subMicroNanos).toInt
+      val localTime = LocalTime.of(hr, min, sec, nanoOfSecond)
       Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None
     }
   }
 
-  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long =
+    stringToTimeAnsi(s, TimeType.DEFAULT_PRECISION, context)
+
+  def stringToTimeAnsi(s: UTF8String, precision: Int, context: QueryContext): Long = {
     stringToTime(s).getOrElse {
-      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(precision), context)
     }
   }
 

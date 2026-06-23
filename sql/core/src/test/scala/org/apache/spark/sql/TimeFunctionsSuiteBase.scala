@@ -87,7 +87,7 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
   }
 
   test("SPARK-52882: current_time function with specified precision") {
-    (0 to 6).foreach { precision: Int =>
+    (0 to TimeType.MAX_PRECISION).foreach { precision: Int =>
       // Create a dummy DataFrame with a single row to test the current_time(precision) function.
       val df = spark.range(1)
 

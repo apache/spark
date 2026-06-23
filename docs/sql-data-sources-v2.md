@@ -94,7 +94,7 @@ A catalog adds capabilities by mixing in additional
 | `TableCatalog` | List, load, create, alter, and drop tables |
 | `StagingTableCatalog` | Atomic create-table-as-select / replace-table-as-select |
 | `SupportsNamespaces` | Create, alter, drop, and list namespaces |
-| `ViewCatalog` | List, load, create, alter, and drop views *(work in progress &mdash; not yet integrated into query resolution)* |
+| `ViewCatalog` | List, load, create, replace, rename, and drop views |
 | `FunctionCatalog` | List and load functions |
 | `ProcedureCatalog` | Load and list stored procedures |
 
@@ -141,21 +141,30 @@ adds namespace (database/schema) management:
 
 ### ViewCatalog
 
-> **Note:** `ViewCatalog` is a work in progress. The interface is defined but is not yet
-> integrated into Spark's query resolution or planning.
-
 [`ViewCatalog`](api/java/org/apache/spark/sql/connector/catalog/ViewCatalog.html) extends
-`CatalogPlugin` and provides methods for view lifecycle management:
+`CatalogPlugin` and provides methods for view lifecycle management. View DDL
+(`CREATE`/`REPLACE`/`ALTER`/`DROP`/`SHOW VIEWS`) and reading from a view (`SELECT`) are resolved
+and executed against the catalog. Connectors that expose both
+tables and views in a single shared namespace implement
+[`TableViewCatalog`](api/java/org/apache/spark/sql/connector/catalog/TableViewCatalog.html),
+which extends both `TableCatalog` and `ViewCatalog`. A view's metadata is represented by
+[`ViewInfo`](#view).
 
 | Method | Description |
 |--------|-------------|
 | `listViews(namespace)` | List views in a namespace |
-| `loadView(ident)` | Load a view by identifier |
-| `createView(viewInfo)` | Create a new view |
-| `replaceView(viewInfo, orCreate)` | Replace (or create) a view |
-| `alterView(ident, changes...)` | Alter a view's properties or schema |
+| `loadView(ident)` | Load a view's `ViewInfo` by identifier |
+| `viewExists(ident)` | Test whether a view exists (has a default implementation) |
+| `invalidateView(ident)` | Invalidate cached metadata for a view (has a default implementation) |
+| `createView(ident, info)` | Create a new view |
+| `replaceView(ident, info)` | Atomically replace an existing view (`ALTER VIEW ... AS`) |
+| `createOrReplaceView(ident, info)` | Create a view, or atomically replace it if it exists (`CREATE OR REPLACE VIEW`; has a default implementation) |
 | `dropView(ident)` | Drop a view |
 | `renameView(oldIdent, newIdent)` | Rename a view |
+
+> **Note:** The built-in session catalog (`V2SessionCatalog`) is not a `ViewCatalog`; views in
+> the session catalog continue to use the v1 (Hive-compatible) code path. DSV2 view support
+> applies to custom catalogs registered via `spark.sql.catalog.<name>`.
 
 ### FunctionCatalog
 
@@ -216,6 +225,31 @@ Additional mix-ins enable further capabilities:
 | `TruncatableTable` | `TRUNCATE TABLE` |
 | `SupportsPartitionManagement` | Partition DDL (`ADD`/`DROP`/`RENAME PARTITION`) |
 | `SupportsMetadataColumns` | Expose hidden metadata columns (e.g.&nbsp;file name, row position) |
+
+## View
+
+[`ViewInfo`](api/java/org/apache/spark/sql/connector/catalog/ViewInfo.html) is the metadata
+abstraction for a view &mdash; a named SQL query managed through a [`ViewCatalog`](#viewcatalog).
+Unlike a [`Table`](#table), a view has no data of its own: it stores a SQL query along with the
+context needed to resolve and expand that query consistently whenever the view is referenced.
+
+A `ViewInfo` provides:
+
+| Method | Description |
+|--------|-------------|
+| `queryText()` | The SQL text of the view |
+| `columns()` | The view's output columns |
+| `currentCatalog()` | The current catalog captured at creation time, used to resolve unqualified identifiers in the query text |
+| `currentNamespace()` | The current namespace captured at creation time, used alongside `currentCatalog()` |
+| `sqlConfigs()` | The SQL configs captured at creation time, applied when parsing and analyzing the view body |
+| `schemaMode()` | The view's [schema binding mode](sql-ref-syntax-ddl-create-view.html) (`BINDING`, `COMPENSATION`, `TYPE EVOLUTION`, or `EVOLUTION`) |
+| `queryColumnNames()` | Output column names of the query, used to map the query output to the view's declared columns |
+| `viewDependencies()` | The structured list of objects (source tables and functions) the view depends on |
+| `properties()` | A string map of view properties |
+
+When a view is read (`SELECT`), Spark resolves and expands `queryText()` using the captured
+catalog, namespace, and SQL configs, so the view behaves consistently regardless of the session
+state at query time.
 
 ## Read Path
 

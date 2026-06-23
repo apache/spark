@@ -4236,6 +4236,21 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-57572: infer TimeType from JSON via spark.read.json") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/time_infer.json"
+        Seq("""{"time": "12:13:14"}""", """{"time": "23:59:59.123456"}""")
+          .toDF("value").coalesce(1).write.text(path)
+        val df = spark.read
+          .option("inferTimestamp", "true")
+          .json(path)
+        assert(df.schema("time").dataType === TimeType(TimeType.DEFAULT_PRECISION))
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {
