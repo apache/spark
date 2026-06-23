@@ -171,6 +171,7 @@ case class MultiGetJsonObject(
   extends UnaryExpression
   with ExpectsInputTypes {
 
+  // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
   require(fallbackPaths.nonEmpty)
 
   override def child: Expression = json

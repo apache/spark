@@ -704,6 +704,8 @@ case class MultiGetJsonObjectEvaluator(
       node: MultiGetJsonObjectEvaluator.PathTrieNode,
       values: Array[Any],
       matched: Array[Boolean]): Boolean = {
+    // Optimizer-generated paths are deduplicated. Multiple ordinals defensively support
+    // directly constructed internal expressions with duplicate paths.
     if (node.terminalOrdinals.nonEmpty) {
       node.terminalOrdinals.foreach { ordinal => matched(ordinal) = true }
       val value = copyCurrentStructure(parser)
