@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.connect
 
+import scala.util.matching.Regex
+
 import org.apache.spark.sql
 
 /**
@@ -33,11 +35,13 @@ import org.apache.spark.sql
  */
 trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
 
+  private val sortOperator: Regex = "\b(?:Photon)?Sort\b".r
+
   /**
    * Approximates [[sql.SessionQueryTest.isDfSorted]] by inspecting the explain string.
    */
   override def isDfSorted(df: sql.DataFrame): Boolean = df match {
-    case df: DataFrame => df.explainString(extended = true).contains("Sort")
+    case df: DataFrame => sortOperator.matches(df.explainString(extended = true))
     case df => super.isDfSorted(df)
   }
 
