@@ -39,7 +39,7 @@ trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
    * Thus we always return `false` for now.
    */
   override def isDfSorted(df: sql.DataFrame): Boolean = df match {
-      case df: DataFrame => df.explainString(true).contains("sort")
+      case df: DataFrame => df.explainString(true).contains("Sort")
       case df => super.isDfSorted(df)
     }
 
