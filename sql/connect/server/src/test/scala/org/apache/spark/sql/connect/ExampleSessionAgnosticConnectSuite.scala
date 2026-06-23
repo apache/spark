@@ -19,6 +19,6 @@ package org.apache.spark.sql.connect
 
 import org.apache.spark.sql
 
-class ExampleConnectSessionAgnosticSuite
+class ExampleSessionAgnosticConnectSuite
   extends sql.ExampleSessionAgnosticSuite
     with SessionQueryTest
