@@ -3869,7 +3869,7 @@ object SQLConf {
     buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
       .internal()
       .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
-        "replaces repeated simple top-level get_json_object expressions over the same input " +
+        "replaces repeated simple named get_json_object paths over the same input " +
         "with one shared parse.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)

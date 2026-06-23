@@ -46,9 +46,78 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private case class SharedJsonFields(
       json: Expression,
-      fieldNames: Seq[String],
+      paths: Seq[Seq[String]],
       alias: Alias) {
-    val ordinalMapping: Map[String, Int] = fieldNames.zipWithIndex.toMap
+    val ordinalMapping: Map[Seq[String], Int] = paths.zipWithIndex.toMap
+  }
+
+  private final class SelectedJsonPathTrieNode {
+    var isTerminal: Boolean = false
+    var hasSelectedPathInSubtree: Boolean = false
+    val children: mutable.HashMap[String, SelectedJsonPathTrieNode] = mutable.HashMap.empty
+  }
+
+  private final class SelectedJsonPathGroup {
+    val root = new SelectedJsonPathTrieNode
+    val paths = mutable.ArrayBuffer.empty[(Seq[String], String)]
+
+    def tryAdd(candidate: (Seq[String], String)): Boolean = {
+      val added = addIfNoPrefixConflict(root, candidate._1)
+      if (added) {
+        paths += candidate
+      }
+      added
+    }
+  }
+
+  // Keep the recursive shared-path traversal comfortably below executor stack limits. Deeper
+  // paths retain their existing independent GetJsonObject evaluation.
+  private val maxSharedJsonPathDepth = 64
+
+  /** Inserts a path unless a previously selected path is its ancestor or descendant. */
+  private def addIfNoPrefixConflict(
+      root: SelectedJsonPathTrieNode,
+      path: Seq[String]): Boolean = {
+    var node = root
+    val visited = mutable.ArrayBuffer(root)
+    var index = 0
+    var hasSelectedPrefix = false
+    while (index < path.length && !hasSelectedPrefix) {
+      if (node.isTerminal) {
+        hasSelectedPrefix = true
+      } else {
+        node = node.children.getOrElseUpdate(path(index), new SelectedJsonPathTrieNode)
+        visited += node
+        index += 1
+      }
+    }
+
+    val conflicts = hasSelectedPrefix || node.hasSelectedPathInSubtree
+    if (!conflicts) {
+      node.isTerminal = true
+      visited.foreach(_.hasSelectedPathInSubtree = true)
+    }
+    !conflicts
+  }
+
+  // First-fit produces the same groups as repeated greedy optimizer passes, but does so in one
+  // invocation so parallel prefix chains do not consume one fixed-point iteration per depth.
+  private def groupNonConflictingPaths(
+      paths: Iterable[(Seq[String], String)]): Seq[Seq[(Seq[String], String)]] = {
+    val groups = mutable.ArrayBuffer.empty[SelectedJsonPathGroup]
+    paths.foreach { candidate =>
+      var added = false
+      val iterator = groups.iterator
+      while (!added && iterator.hasNext) {
+        added = iterator.next().tryAdd(candidate)
+      }
+      if (!added) {
+        val group = new SelectedJsonPathGroup
+        require(group.tryAdd(candidate))
+        groups += group
+      }
+    }
+    groups.map(_.paths.toSeq).toSeq
   }
 
   private def evaluatesLeftFirst(binary: BinaryArithmetic): Boolean = binary match {
@@ -85,42 +154,48 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   }
 
   /**
-   * Share simple top-level GetJsonObject paths without changing the Hive-compatible semantics of
-   * nested paths, wildcards, or array subscripts. [[MultiGetJsonObject]] preserves the first
-   * non-null duplicate-key match used by GetJsonObject, unlike JsonTuple.
+   * Share simple named GetJsonObject paths without changing the Hive-compatible semantics of
+   * wildcards or array subscripts. [[MultiGetJsonObject]] preserves the first non-null
+   * duplicate-key match used by GetJsonObject, unlike JsonTuple. Prefix-conflicting paths are
+   * placed in separate shared parses so each path retains independent legacy evaluation.
    */
   private def shareGetJsonObjects(project: Project): Project = {
     val candidates = project.projectList.flatMap(collectGetJsonObjectFields)
     val groups = mutable.ArrayBuffer.empty[
-      (Expression, mutable.ArrayBuffer[(String, String)])]
+      (Expression, mutable.ArrayBuffer[(Seq[String], String)])]
     val groupsByHash = mutable.HashMap.empty[
-      Int, mutable.ArrayBuffer[(Expression, mutable.ArrayBuffer[(String, String)])]]
+      Int, mutable.ArrayBuffer[(Expression, mutable.ArrayBuffer[(Seq[String], String)])]]
 
-    candidates.foreach { case (getJsonObject, fieldName, path) =>
+    candidates.foreach { case (getJsonObject, pathSegments, path) =>
       val bucket = groupsByHash.getOrElseUpdate(
         getJsonObject.json.semanticHash(), mutable.ArrayBuffer.empty)
       bucket.find(_._1.semanticEquals(getJsonObject.json)) match {
-        case Some((_, fields)) => fields += fieldName -> path
+        case Some((_, fields)) => fields += pathSegments -> path
         case None =>
-          val group = getJsonObject.json -> mutable.ArrayBuffer(fieldName -> path)
+          val group = getJsonObject.json -> mutable.ArrayBuffer(pathSegments -> path)
           bucket += group
           groups += group
       }
     }
 
     val sharedFields = groups.flatMap { case (json, requestedFields) =>
-      val fieldsByName = mutable.LinkedHashMap.empty[String, String]
-      requestedFields.foreach { case (fieldName, path) =>
-        fieldsByName.getOrElseUpdate(fieldName, path)
+      val paths = mutable.LinkedHashMap.empty[Seq[String], String]
+      requestedFields.foreach { case (pathSegments, path) =>
+        paths.getOrElseUpdate(pathSegments, path)
       }
-      val fieldNames = fieldsByName.keys.toSeq
-      if (fieldNames.length > 1) {
-        val alias = Alias(
-          MultiGetJsonObject(json, fieldNames, fieldsByName.values.toSeq),
-          "_shared_json_paths")()
-        Some(SharedJsonFields(json, fieldNames, alias))
-      } else {
-        None
+      groupNonConflictingPaths(paths).flatMap { nonConflictingPaths =>
+        if (nonConflictingPaths.length > 1) {
+          val pathSegments = nonConflictingPaths.map(_._1)
+          val alias = Alias(
+            MultiGetJsonObject(
+              json,
+              pathSegments.map(_.last),
+              nonConflictingPaths.map(_._2)),
+            "_shared_json_paths")()
+          Some(SharedJsonFields(json, pathSegments, alias))
+        } else {
+          None
+        }
       }
     }.toSeq
 
@@ -138,12 +213,13 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   }
 
   private def collectGetJsonObjectFields(
-      expression: Expression): Seq[(GetJsonObject, String, String)] = {
+      expression: Expression): Seq[(GetJsonObject, Seq[String], String)] = {
     expression match {
       case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType))
           if getJsonObject.deterministic =>
-        GetJsonObject.simpleTopLevelField(path)
-          .map(fieldName => (getJsonObject, fieldName, path.toString)).toSeq
+        GetJsonObject.simpleNamedPath(path)
+          .filter(_.length <= maxSharedJsonPathDepth)
+          .map(pathSegments => (getJsonObject, pathSegments, path.toString)).toSeq
 
       case _: GetJsonObject =>
         Nil
@@ -159,11 +235,11 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     expression match {
       case getJsonObject @ GetJsonObject(json, Literal(path: UTF8String, StringType)) =>
         val replacement = for {
-          fieldName <- GetJsonObject.simpleTopLevelField(path)
+          pathSegments <- GetJsonObject.simpleNamedPath(path)
           shared <- sharedFieldsByHash.getOrElse(json.semanticHash(), Nil).find { candidate =>
-            candidate.json.semanticEquals(json) && candidate.ordinalMapping.contains(fieldName)
+            candidate.json.semanticEquals(json) && candidate.ordinalMapping.contains(pathSegments)
           }
-        } yield GetStructField(shared.alias.toAttribute, shared.ordinalMapping(fieldName))
+        } yield GetStructField(shared.alias.toAttribute, shared.ordinalMapping(pathSegments))
         replacement.getOrElse(getJsonObject)
 
       case _: GetJsonObject =>

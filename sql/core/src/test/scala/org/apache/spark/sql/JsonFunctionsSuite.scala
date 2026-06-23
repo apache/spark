@@ -120,6 +120,76 @@ class JsonFunctionsSuite extends SharedSparkSession {
     assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
   }
 
+  test("SPARK-57626: share simple nested get_json_object paths") {
+    val malformed = """{"a":{"b":1,"c":"\q"},"d":2}"""
+    val input = Seq[String](
+      """{"a":{"b":1,"c":"x"},"a.b":{"c.d":"dot"},"d":2}""",
+      """{"a":{"b":"first"},"a":{"b":"second","c":"later"},"d":3}""",
+      """{"a":null,"a":{"b":"after-null","c":null,"c":"after-c-null"},""" +
+        """"a.b":{"c.d":4},"d":5}""",
+      """{"a":"not-object","a":{"b":{"nested":1},"c":[1,2]},""" +
+        """"a.b":{"c.d":"dot"},"d":null,"d":6}""",
+      malformed,
+      """{'a':{'b':'single','c':7},'a.b':{'c.d':8},'d':9}""",
+      """[1,2,3]""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$['a']['c']"),
+          get_json_object($"json", "$['a.b']['c.d']"),
+          get_json_object($"json", "$.d"))
+        if (jsonOptimization && sharedParsing) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(6) == Seq(
+      Row("1", "x", "dot", "2"),
+      Row("first", "later", null, "3"),
+      Row("after-null", "after-c-null", "4", "5"),
+      Row("{\"nested\":1}", "[1,2]", "dot", "6"),
+      Row(null, null, null, null),
+      Row("single", "7", "8", "9")))
+  }
+
+  test("SPARK-57626: shared nested get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":{"b":"before","c":"$invalidSurrogate","d":"after"},"z":"root"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$.a.c"),
+          get_json_object($"json", "$.a.d"),
+          get_json_object($"json", "$.z")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(Row("before", null, "after", "root")))
+  }
+
   test("SPARK-47670: shared get_json_object isolates value rendering failures") {
     val invalidSurrogate = "\\" + "uD800"
     val input = Seq(
@@ -233,11 +303,11 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-47670: shared get_json_object supports project code generation") {
+  test("SPARK-57626: shared nested get_json_object supports project code generation") {
     withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
-      val df = Seq("""{"a":1,"b":2}""").toDF("json").select(
-        get_json_object($"json", "$.a"),
-        get_json_object($"json", "$.b"))
+      val df = Seq("""{"a":{"x":1,"y":2}}""").toDF("json").select(
+        get_json_object($"json", "$.a.x"),
+        get_json_object($"json", "$.a.y"))
 
       checkAnswer(df, Row("1", "2"))
       def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {
