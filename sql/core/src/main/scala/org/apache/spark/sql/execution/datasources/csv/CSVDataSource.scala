@@ -120,8 +120,8 @@ abstract class CSVDataSource extends Serializable with Logging {
    *
    * @param getParser builds a fresh [[UnivocityParser]].
    * @param getHeaderChecker builds a fresh [[CSVHeaderChecker]] for `(isStartOfFile, source)`.
-   * @param ignoredPathSegmentRegex the compiled effective `ignoredPathSegmentRegex` option, so hidden
-   *                           entries are skipped exactly like Spark's file listing would.
+   * @param ignoredPathSegmentRegex the compiled effective `ignoredPathSegmentRegex` option, so
+   *                           hidden entries are skipped exactly like Spark's file listing would.
    */
   def readArchive(
       conf: Configuration,

@@ -61,8 +61,8 @@ abstract class ArchiveReader(path: Path) {
    * one entry's bytes are read at a time. The archive stream is closed when the returned iterator
    * is exhausted, when [[Closeable.close]] is called on it, and (defensively) on task completion.
    * Entry skipping mirrors Spark's file listing: `ignoredPathSegmentRegex` is the effective filter
-   * (the `ignoredPathSegmentRegex` data source option), so callers reading with a custom filter must
-   * pass its compiled form here for archive entries to be filtered like loose files.
+   * (the `ignoredPathSegmentRegex` data source option), so callers reading with a custom filter
+   * must pass its compiled form here for archive entries to be filtered like loose files.
    */
   def readEntries[T](
       conf: Configuration,

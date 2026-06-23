@@ -38,15 +38,16 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[spark] object HadoopFSUtils extends Logging {
   /**
-   * The default value of the `ignoredPathSegmentRegex` option: a regex evaluated with find semantics
-   * against each individual directory and file name during file listing. It hides names that
-   * start with '_' or '.'; see `shouldFilterOutPathName` for the carve-outs that apply
+   * The default value of the `ignoredPathSegmentRegex` option: a regex evaluated with find
+   * semantics against each individual directory and file name during file listing. It hides names
+   * that start with '_' or '.'; see `shouldFilterOutPathName` for the carve-outs that apply
    * regardless of the regex.
    */
   val DEFAULT_IGNORED_PATH_SEGMENT_REGEX = "^[._]"
 
   /** The compiled form of [[DEFAULT_IGNORED_PATH_SEGMENT_REGEX]]. */
-  val defaultIgnoredPathSegmentRegexPattern: Pattern = Pattern.compile(DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
+  val defaultIgnoredPathSegmentRegexPattern: Pattern =
+    Pattern.compile(DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
 
   /**
    * Lists a collection of paths recursively. Picks the listing strategy adaptively depending
@@ -85,7 +86,8 @@ private[spark] object HadoopFSUtils extends Logging {
     parallelismThreshold: Int,
     parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
     parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
-      ignoreMissingFiles, ignoredPathSegmentRegex, ignoreLocality, parallelismThreshold, parallelismMax)
+      ignoreMissingFiles, ignoredPathSegmentRegex, ignoreLocality, parallelismThreshold,
+      parallelismMax)
   }
 
   /**
@@ -116,7 +118,8 @@ private[spark] object HadoopFSUtils extends Logging {
         def next(): LocatedFileStatus = remoteIter.next
         def hasNext: Boolean = remoteIter.hasNext
       }.filterNot(status =>
-        shouldFilterOutPath(status.getPath.toString.substring(prefixLength), ignoredPathSegmentRegex))
+        shouldFilterOutPath(
+          status.getPath.toString.substring(prefixLength), ignoredPathSegmentRegex))
         .filter(f => filter.accept(f.getPath))
         .toArray
       Seq((path, statues.toImmutableArraySeq))

@@ -755,7 +755,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex: ignoredPathSegmentRegex with a hidden directory next to partition dirs") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex with a hidden dir next to partition dirs") {
     withTempDir { dir =>
       // A hidden directory holding files next to 'part=1' becomes a leaf data dir when the
       // regex never matches, so partition discovery sees conflicting base paths.
@@ -812,7 +812,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex: ignoredPathSegmentRegex option overrides the ignoredPathSegmentRegex SQL conf") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex option overrides the SQL conf") {
     withTempDir { dir =>
       stringToFile(new File(dir, "data.txt"), "data")
       stringToFile(new File(dir, "_hidden"), "hidden")

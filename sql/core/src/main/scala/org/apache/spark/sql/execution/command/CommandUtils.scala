@@ -203,7 +203,8 @@ object CommandUtils extends Logging {
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession,
       parameters = Map(
-        FileSourceOptions.IGNORED_PATH_SEGMENT_REGEX -> HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
+        FileSourceOptions.IGNORED_PATH_SEGMENT_REGEX ->
+          HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
     ).map {
       case (_, files) => files.map(_.getLen).sum
     }
