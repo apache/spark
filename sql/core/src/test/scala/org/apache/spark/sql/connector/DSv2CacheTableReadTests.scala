@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, InMemoryTableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.IntegerType
@@ -49,223 +49,209 @@ import org.apache.spark.sql.types.IntegerType
  * (via the CacheManager), making a session drop+recreate scenario trivially different from
  * the external variant.
  *
- * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
+ * NOTE: All `spark.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
  * DDL / DML is a no-op (these execute eagerly), so this is harmless.
  */
 trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
 
-  private def assertTableCached(session: SparkSession, tableName: String): Unit =
-    assert(session.catalog.isCached(tableName))
+  private def assertTableCached(tableName: String): Unit =
+    assert(spark.catalog.isCached(tableName))
 
   test(s"${testPrefix}SPARK-54022: cached table pinned against external data write") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200)))
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100), Row(2, 200)))
     }
   }
 
   test(s"${testPrefix}SPARK-54022: connector w/ cache: cached table pinned, " +
       "REFRESH clears both layers") {
-    withTestSession { session =>
-      withTestTableAndViews(session, cachingTestTable) {
-        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
+    withTable(cachingTestTable) {
+      spark.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
 
-        session.table(cachingTestTable).cache()
-        assertTableCached(session, cachingTestTable)
-        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+      spark.table(cachingTestTable).cache()
+      assertTableCached(cachingTestTable)
+      checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100)))
 
-        val catalog =
-          getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
+      val catalog =
+        getTableCatalog[CachingInMemoryTableCatalog](spark, "cachingcat")
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        // Both CacheManager and connector cache are stale: external write invisible
-        assertTableCached(session, cachingTestTable)
-        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+      // Both CacheManager and connector cache are stale: external write invisible
+      assertTableCached(cachingTestTable)
+      checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100)))
 
-        // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
-        // the CacheManager entry, so the external write becomes visible.
-        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
-        assertTableCached(session, cachingTestTable)
-        checkRows(session.table(cachingTestTable), Seq(Row(1, 100), Row(2, 200)))
-      }
+      // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
+      // the CacheManager entry, so the external write becomes visible.
+      spark.sql(s"REFRESH TABLE $cachingTestTable").collect()
+      assertTableCached(cachingTestTable)
+      checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100), Row(2, 200)))
     }
   }
 
   test(s"${testPrefix}SPARK-54022: session write invalidates cache, " +
       "then external write invisible") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200)))
+      spark.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100), Row(2, 200)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(3, 300))
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(3, 300))
 
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200)))
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100), Row(2, 200)))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100), Row(2, 200), Row(3, 300)))
     }
   }
 
   test(s"${testPrefix}SPARK-54022: cached table pinned against external schema change") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
-        catalog.alterTable(testIdent, addCol)
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      catalog.alterTable(testIdent, addCol)
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100, null), Row(2, 200, -1)))
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100, null), Row(2, 200, -1)))
     }
   }
 
   test(s"${testPrefix}SPARK-54022: session schema change invalidates cache, " +
       "external write invisible") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        session.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100, null)))
+      spark.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100, null)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100, null)))
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100, null)))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100, null), Row(2, 200, -1)))
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100, null), Row(2, 200, -1)))
     }
   }
 
   test(s"${testPrefix}SPARK-54022: cached table after external drop and " +
       "recreate sees empty table") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        val originalTableId = catalog.loadTable(testIdent).id
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      val originalTableId = catalog.loadTable(testIdent).id
 
-        catalog.dropTable(testIdent)
-        catalog.createTable(
-          testIdent,
-          new TableInfo.Builder()
-            .withColumns(Array(
-              Column.create("id", IntegerType),
-              Column.create("salary", IntegerType)))
-            .build())
+      catalog.dropTable(testIdent)
+      catalog.createTable(
+        testIdent,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
 
-        val newTableId = catalog.loadTable(testIdent).id
-        assert(originalTableId != newTableId)
+      val newTableId = catalog.loadTable(testIdent).id
+      assert(originalTableId != newTableId)
 
-        val result = session.table(testTable)
-        assert(result.schema.fieldNames.toSeq == Seq("id", "salary"))
-        checkRows(result, Seq.empty)
+      val result = spark.table(testTable)
+      assert(result.schema.fieldNames.toSeq == Seq("id", "salary"))
+      checkAnswer(result, Seq.empty)
 
-        // External drop+recreate produces a new table identity, so the prior cache entry
-        // is unreachable via name lookup (unlike external write/schema change where the
-        // cache stays pinned).
-        assert(!session.catalog.isCached(testTable))
+      // External drop+recreate produces a new table identity, so the prior cache entry
+      // is unreachable via name lookup (unlike external write/schema change where the
+      // cache stays pinned).
+      assert(!spark.catalog.isCached(testTable))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        checkRows(session.table(testTable), Seq.empty)
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      checkAnswer(spark.table(testTable), Seq.empty)
     }
   }
 
   test(s"${testPrefix}SPARK-54022: connector w/ cache: cached table stale after " +
       "external drop and recreate") {
-    withTestSession { session =>
-      withTestTableAndViews(session, cachingTestTable) {
-        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
+    withTable(cachingTestTable) {
+      spark.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
 
-        session.table(cachingTestTable).cache()
-        assertTableCached(session, cachingTestTable)
-        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+      spark.table(cachingTestTable).cache()
+      assertTableCached(cachingTestTable)
+      checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100)))
 
-        val catalog =
-          getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
-        val originalTableId = catalog.loadTable(testIdent).id
+      val catalog =
+      getTableCatalog[CachingInMemoryTableCatalog](spark, "cachingcat")
+      val originalTableId = catalog.loadTable(testIdent).id
 
-        catalog.dropTable(testIdent)
-        catalog.createTable(
-          testIdent,
-          new TableInfo.Builder()
-            .withColumns(Array(
-              Column.create("id", IntegerType),
-              Column.create("salary", IntegerType)))
-            .build())
+      catalog.dropTable(testIdent)
+      catalog.createTable(
+      testIdent,
+      new TableInfo.Builder()
+        .withColumns(Array(
+          Column.create("id", IntegerType),
+          Column.create("salary", IntegerType)))
+        .build())
 
-        // CachingInMemoryTableCatalog does not invalidate on drop/create, so loadTable
-        // still returns the old cached table object. CacheManager still matches and
-        // serves the stale cached data.
-        assertTableCached(session, cachingTestTable)
-        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+      // CachingInMemoryTableCatalog does not invalidate on drop/create, so loadTable
+      // still returns the old cached table object. CacheManager still matches and
+      // serves the stale cached data.
+      assertTableCached(cachingTestTable)
+      checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100)))
 
-        // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
-        // the CacheManager entry, so the new empty table becomes visible.
-        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
-        checkRows(session.table(cachingTestTable), Seq.empty)
-      }
+      // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
+      // the CacheManager entry, so the new empty table becomes visible.
+      spark.sql(s"REFRESH TABLE $cachingTestTable").collect()
+      checkAnswer(spark.table(cachingTestTable), Seq.empty)
     }
   }
 }

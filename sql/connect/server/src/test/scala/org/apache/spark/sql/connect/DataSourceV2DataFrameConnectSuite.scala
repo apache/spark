@@ -20,7 +20,8 @@ package org.apache.spark.sql.connect
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{classic, connect, SparkSession}
+import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2IncrementallyConstructedQueryTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
 
@@ -34,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
  * this class only provides the Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
-    extends SparkConnectServerTest
+    extends SessionQueryTest
     with DSv2TempViewWithStoredPlanTests
     with DSv2RepeatedTableAccessTests
     with DSv2IncrementallyConstructedQueryTests
@@ -53,45 +54,26 @@ class DataSourceV2DataFrameConnectSuite
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
   override protected def testPrefix: String = "[connect] "
-  override protected def isConnect: Boolean = true
 
-  override protected def withTestSession(fn: SparkSession => Unit): Unit =
-    withSession(fn)
-
-  // Cannot use QueryTest.checkAnswer directly because it accesses df.logicalPlan,
-  // df.queryExecution, and df.materializedRdd, which are not available on Connect *client*
-  // DataFrames (they throw ConnectClientUnsupportedErrors). Note: checkAnswer IS usable from
-  // Connect server tests that operate on classic server-side DataFrames, but in this suite
-  // `df` is a Connect client DataFrame returned by session.table() / session.sql().
-  // Instead, collect the rows and delegate to QueryTest.sameRows, which is the same
-  // value-based, order-agnostic comparison that checkAnswer uses internally.
-  override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
-    QueryTest.sameRows(expected, df.collect().toSeq).foreach(msg => fail(msg))
+  protected def getServerSession(clientSession: SparkSession): classic.SparkSession = {
+    val connectSession = clientSession.asInstanceOf[connect.SparkSession]
+    val userId = connectSession.client.userId
+    val sessionId = connectSession.sessionId
+    val key = SessionKey(userId, sessionId)
+    SparkConnectService.sessionManager
+      .getIsolatedSessionIfPresent(key)
+      .get
+      .session
+  }
 
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C = {
-    val serverSession = getServerSession(session)
-    val catalog = serverSession.sessionState.catalogManager.catalog(catalogName)
+    val catalog = getServerSession(session).sessionState.catalogManager.catalog(catalogName)
     val ct = implicitly[ClassTag[C]]
     require(
       ct.runtimeClass.isInstance(catalog),
       s"Expected ${ct.runtimeClass.getName} but got ${catalog.getClass.getName}")
     catalog.asInstanceOf[C]
-  }
-
-  // No explicit clearCache() for cachingcat is needed here, unlike the classic suite.
-  // Each withSession call creates a freshly isolated SparkSession on the server side
-  // (via SparkConnectSessionManager.newIsolatedSession), and afterEach invalidates all
-  // sessions, so the CachingInMemoryTableCatalog instance is per-test.
-  override protected def withTestTableAndViews(
-      session: SparkSession,
-      table: String,
-      views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
-    try { fn }
-    finally {
-      views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v").collect())
-      session.sql(s"DROP TABLE IF EXISTS $table").collect()
-    }
   }
 }
