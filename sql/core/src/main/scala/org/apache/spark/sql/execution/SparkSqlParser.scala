@@ -104,6 +104,22 @@ class SparkSqlParser extends AbstractSqlParser {
   }
 
   /**
+   * Split a SQL string into individual statements after expanding any `${...}`
+   * variable references. Variable substitution has to happen *before* splitting
+   * because a substituted value may itself contain `;`, comments, or
+   * `BEGIN ... END` structure that affect statement boundaries.
+   *
+   * Parameter substitution is intentionally NOT applied here: the splitter
+   * runs at the top level of an interactive session / batch input, where there
+   * is no parameter context bound. If a caller does have a parameter context,
+   * they should pre-substitute the input and call this with the result.
+   */
+  override def splitStatements(sqlText: String): SqlStatementSplitResult = {
+    val variableSubstituted = substitutor.substitute(sqlText)
+    SqlStatementSplitter.split(variableSubstituted)
+  }
+
+  /**
    * Internal parse method that handles both parameter substitution and regular parsing.
    *
    * @param command The SQL text to parse

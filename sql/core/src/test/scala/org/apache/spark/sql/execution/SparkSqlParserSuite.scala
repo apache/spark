@@ -1206,4 +1206,31 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     parser.parsePlan(
       "SELECT CAST(null AS STRUCT<>), CAST(null AS MAP<STRING, ARRAY<INT>>), 2 >> 1")
   }
+
+  test("splitStatements applies variable substitution before splitting") {
+    // A `${spark.x.stmt}` value that itself contains a `;` should be expanded
+    // *before* the splitter walks the token stream, so the embedded `;`
+    // becomes a real statement boundary.
+    withSQLConf("spark.x.stmt" -> "SELECT 1; SELECT 2") {
+      val result = parser.splitStatements("${spark.x.stmt}; SELECT 3;")
+      assert(result.completeStatements.map(_.statement) ===
+        Seq("SELECT 1", "SELECT 2", "SELECT 3"))
+      assert(result.partialStatement.isEmpty)
+    }
+  }
+
+  test("splitStatements does not split when variable substitution is disabled") {
+    // When variable substitution is off, `${...}` is left untouched, so the
+    // splitter sees the literal token sequence and may report the input as a
+    // partial / broken statement depending on the parser's verdict.
+    withSQLConf(
+      SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false",
+      "spark.x.stmt" -> "SELECT 1; SELECT 2") {
+      val result = parser.splitStatements("${spark.x.stmt}; SELECT 3;")
+      // The first chunk `${spark.x.stmt}` is not a valid statement, so the
+      // splitter falls back to per-`;` splitting.
+      assert(result.completeStatements.map(_.statement) ===
+        Seq("${spark.x.stmt}", "SELECT 3"))
+    }
+  }
 }

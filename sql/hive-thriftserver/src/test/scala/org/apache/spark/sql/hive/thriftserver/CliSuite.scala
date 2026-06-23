@@ -628,15 +628,32 @@ class CliSuite extends SparkFunSuite {
   }
 
   testRetry("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
+    // Historical note: the original test also exercised the input
+    //   `/* SELECT /*+ HINT() 4; */;`
+    // expecting `Syntax error at or near ';'`. That case was a false-positive
+    // from the old regex-based `StringUtils.splitSemiColon` scanner, which
+    // mistakenly counted `/*+` as opening a *nested* bracketed comment and so
+    // treated the whole input as unclosed -- the scanner then forwarded the
+    // (incorrectly-flagged) input to the backend, which rejected the lone
+    // trailing `;`. The new parser-based [[SqlStatementSplitter]] uses the
+    // actual ANTLR lexer, which correctly treats `/*+` as a hint marker (NOT a
+    // nested comment opener), so the comment IS properly closed and the input
+    // collapses to an empty statement. The case was therefore removed because
+    // the old behavior was a bug, not a feature. The remaining cases still
+    // verify that genuinely-unclosed comments are surfaced to the backend.
     runCliWithin(1.minute)(
-      // Only unclosed comment.
-      "/* SELECT /*+ HINT() 4; */;".stripMargin -> "Syntax error at or near ';'",
-      // Unclosed nested bracketed comment.
+      // A closed bracketed comment whose `/*+` looks like a hint marker but
+      // does NOT open a nested comment, followed by a real query. The
+      // splitter recognises the comment and the query correctly.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
-      // Unclosed comment with query.
+      // Genuinely unclosed comment with a query inside it. The splitter
+      // detects the un-terminated bracketed comment and flushes the partial
+      // input to the backend so the parser reports the error rather than the
+      // CLI buffering forever.
       "/* Here is a unclosed bracketed comment SELECT 1;"->
         "Found an unclosed bracketed comment. Please, append */ at the end of the comment.",
-      // Whole comment.
+      // Whole comment with `/*+` hint marker inside, followed by trailing
+      // tokens that are not a valid statement -- backend reports the error.
       "/* SELECT /*+ HINT() */ 4; */;".stripMargin -> ""
     )
   }
@@ -658,25 +675,27 @@ class CliSuite extends SparkFunSuite {
     val sessionState = new CliSessionState(cliConf)
     SessionState.setCurrentSessionState(sessionState)
     val cli = new SparkSQLCLIDriver
+    // SPARK-56147: the parser-based splitter trims surrounding whitespace from
+    // each chunk and drops chunks that contain only comments / whitespace.
     Seq("SELECT 1; --comment" -> Seq("SELECT 1"),
       "SELECT 1; /* comment */" -> Seq("SELECT 1"),
-      "SELECT 1; /* comment" -> Seq("SELECT 1", " /* comment"),
-      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", " /* comment select 1;"),
+      "SELECT 1; /* comment" -> Seq("SELECT 1", "/* comment"),
+      "SELECT 1; /* comment select 1;" -> Seq("SELECT 1", "/* comment select 1;"),
       "/* This is a comment without end symbol SELECT 1;" ->
         Seq("/* This is a comment without end symbol SELECT 1;"),
       "SELECT 1; --comment\n" -> Seq("SELECT 1"),
       "SELECT 1; /* comment */\n" -> Seq("SELECT 1"),
-      "SELECT 1; /* comment\n" -> Seq("SELECT 1", " /* comment\n"),
-      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", " /* comment select 1;\n"),
+      "SELECT 1; /* comment\n" -> Seq("SELECT 1", "/* comment"),
+      "SELECT 1; /* comment select 1;\n" -> Seq("SELECT 1", "/* comment select 1;"),
       "/* This is a comment without end symbol SELECT 1;\n" ->
-        Seq("/* This is a comment without end symbol SELECT 1;\n"),
+        Seq("/* This is a comment without end symbol SELECT 1;"),
       "/* comment */ SELECT 1;" -> Seq("/* comment */ SELECT 1"),
       "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
       "-- comment " -> Seq(),
       "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
       "/*  comment */  " -> Seq(),
       // SPARK-54876: statement after semicolon ending with block comment should not be dropped
-      "SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", " SELECT 2 /* comment */"),
+      "SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", "SELECT 2 /* comment */"),
       // SPARK-54876: line comment followed by block comment should produce empty result
       "-- foo\n/* bar */" -> Seq(),
       "SELECT 1; -- foo\n /* bar */" -> Seq("SELECT 1"),
@@ -685,9 +704,9 @@ class CliSuite extends SparkFunSuite {
       // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
       "/* a */ -- foo\n/* b */" -> Seq(),
       // SPARK-54876: semicolons inside backtick-quoted identifiers are not split points
-      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", " SELECT 1")
+      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", "SELECT 1")
     ).foreach { case (query, ret) =>
-      assert(cli.splitSemiColon(query).asScala === ret)
+      assert(cli.splitStatements(query) === ret)
     }
     sessionState.close()
     SparkSQLEnv.stop()

@@ -80,4 +80,24 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to routine parameters")
   def parseRoutineParam(sqlText: String): StructType
+
+  /**
+   * Split a SQL string into individual statements at `;` boundaries.
+   *
+   * Designed for tooling such as the `spark-sql` CLI that needs to feed multiple
+   * statements to the parser one at a time, while correctly handling quoted
+   * strings, single-line and bracketed comments, and SQL scripting compound blocks
+   * (`BEGIN ... END`) so that semicolons inside them do not split the surrounding
+   * statement.
+   *
+   * The method is fault-tolerant: it does not throw on incomplete or malformed
+   * input. Trailing text that does not yet form a complete statement is returned
+   * in [[SqlStatementSplitResult.partialStatement]] so callers can buffer it and
+   * read more input.
+   *
+   * Implementations are expected to apply the same input preprocessing (variable
+   * substitution, etc.) as their `parsePlan` so that the splitter sees the same
+   * stream of tokens the parser would.
+   */
+  def splitStatements(sqlText: String): SqlStatementSplitResult
 }

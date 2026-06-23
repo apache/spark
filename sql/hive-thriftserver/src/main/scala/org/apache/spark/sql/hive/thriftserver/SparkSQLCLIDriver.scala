@@ -41,7 +41,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.util.{SQLKeywordUtils, StringUtils}
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
@@ -239,7 +239,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     var ret = 0
-    var prefix = ""
+    // Accumulated input that has not yet formed a complete statement. The new
+    // parser-based [[SqlStatementSplitter]] tells us when the buffered text is
+    // complete (and may be executed) vs. partial (must wait for more input).
+    var buffer = ""
 
     def currentDB = {
       if (!SparkSQLEnv.sparkSession.sessionState.conf
@@ -255,6 +258,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
       classOf[CliDriver], "spacesForString", classOf[String] -> currentDB)
 
+    val sqlParser = SparkSQLEnv.sparkSession.sessionState.sqlParser
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
@@ -262,21 +266,34 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
       // this keeps the behavior align with HIVE-8396
       if (!line.trim.startsWith("--")) {
-        if (prefix.nonEmpty) {
-          prefix += '\n'
+        val candidate = if (buffer.isEmpty) line else buffer + "\n" + line
+        // Use the parser-based splitter to find complete statements and any trailing
+        // partial. This correctly handles `;` inside quoted strings, comments, and
+        // SQL scripting compound blocks (`BEGIN ... END`), so multi-line interactive
+        // input like `BEGIN ... END;` works without any `\;` escape.
+        val splitResult = sqlParser.splitStatements(candidate)
+        // An un-terminated bracketed comment cannot be completed by appending more
+        // SQL; flush it to the backend so the user sees a parse error rather than
+        // staying stuck on the continuation prompt forever (SPARK-37555).
+        val flushPartial =
+          splitResult.hasUnclosedComment && splitResult.partialStatement.nonEmpty
+        if (splitResult.completeStatements.nonEmpty || flushPartial) {
+          val parts =
+            splitResult.completeStatements.iterator.map(s => s.statement + s.terminator).toBuffer
+          if (flushPartial) parts += splitResult.partialStatement
+          ret = cli.processLine(parts.mkString("\n"), true)
         }
-
-        if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-          line = prefix + line
-          ret = cli.processLine(line, true)
-          prefix = ""
-          currentPrompt = promptWithCurrentDB
-        } else {
-          prefix = prefix + line
-          currentPrompt = continuedPromptWithDBSpaces
-        }
+        buffer = if (flushPartial) "" else splitResult.partialStatement
+        currentPrompt =
+          if (buffer.isEmpty) promptWithCurrentDB else continuedPromptWithDBSpaces
       }
       line = reader.readLine(currentPrompt + "> ")
+    }
+
+    // Stdin closed with un-terminated trailing input. Pass it to the backend so the
+    // user gets a parse error rather than silently dropping their input.
+    if (buffer.nonEmpty) {
+      ret = cli.processLine(buffer, true)
     }
 
     closeHiveSessionStateIfStarted(sessionState)
@@ -583,7 +600,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       var lastRet: Int = 0
 
       // we can not use "split" function directly as ";" may be quoted
-      val commands = splitSemiColon(line).asScala
+      val commands = splitStatements(line)
       var command: String = ""
       for (oneCmd <- commands) {
         if (oneCmd.endsWith("\\")) {
@@ -613,9 +630,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     }
   }
 
-  // Splits SQL into individual statements by top-level semicolons. See
-  // [[StringUtils.splitSemiColon]] for the implementation.
+  // Splits SQL into individual statements via the parser-based
+  // [[org.apache.spark.sql.catalyst.parser.SqlStatementSplitter]]. The returned
+  // list contains the text of every complete statement (without its terminator)
+  // followed by the trailing partial statement, if any. This matches the legacy
+  // shape that [[processLine]] expects.
   // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
-  private[hive] def splitSemiColon(line: String): JList[String] =
-    StringUtils.splitSemiColon(line, enableSqlScripting = false).asJava
+  private[hive] def splitStatements(line: String): List[String] = {
+    val result = SparkSQLEnv.sparkSession.sessionState.sqlParser.splitStatements(line)
+    val complete = result.completeStatements.iterator.map(_.statement).toList
+    if (result.partialStatement.isEmpty) complete else complete :+ result.partialStatement
+  }
 }

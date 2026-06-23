@@ -112,6 +112,16 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
   }
 
   /**
+   * Default splitter implementation that defers directly to [[SqlStatementSplitter]].
+   * Subclasses that perform additional input preprocessing (e.g. variable
+   * substitution) should override this to apply that preprocessing before
+   * splitting so the splitter sees the same tokens the parser would.
+   */
+  override def splitStatements(sqlText: String): SqlStatementSplitResult = {
+    SqlStatementSplitter.split(sqlText)
+  }
+
+  /**
    * Parse the right-hand side of `SET PATH = ...` (a comma-separated list of path elements).
    * Used by [[org.apache.spark.sql.connector.catalog.CatalogManager]] to honor the
    * [[SQLConf.DEFAULT_PATH]] conf without re-implementing the SET PATH grammar.
