@@ -745,11 +745,6 @@ function setupZoomAndPan(svg, zoomLayer) {
       // (foreignObject) so text inside metrics tables remains selectable.
       // Also ignore right-click to leave the browser context menu intact.
       if (event.button === 2) return false;
-      // Require Ctrl (or Cmd on Mac) for wheel-zoom so that unmodified
-      // scroll gestures pass through to the page for normal scrolling.
-      // Note: trackpad pinch gestures fire as wheel events with ctrlKey=true,
-      // so pinch-to-zoom still works as expected.
-      if (event.type === "wheel" && !event.ctrlKey && !event.metaKey) return false;
       var target = event.target;
       while (target && target !== svgNode) {
         if (target.nodeName === "foreignObject") return false;
@@ -778,8 +773,10 @@ function setupZoomAndPan(svg, zoomLayer) {
   svg.on("wheel.zoom", null);
   svgNode.addEventListener("wheel", function (e) {
     if (e.ctrlKey || e.metaKey) {
-      // Forward to d3-zoom's original handler for zoom behavior
-      d3WheelHandler.call(this, e);
+      // Forward to d3-zoom's original handler for zoom behavior.
+      // Note: trackpad pinch gestures fire as wheel events with ctrlKey=true,
+      // so pinch-to-zoom still works as expected.
+      if (d3WheelHandler) d3WheelHandler.call(this, e);
     } else {
       // Let the event propagate naturally for page scrolling and show hint
       showZoomHint();
