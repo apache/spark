@@ -359,3 +359,11 @@ SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ);
 SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6));
+
+-- SPARK-57618: TIME and TIMESTAMP_NTZ have no common type, so implicit coercion is rejected; an
+-- explicit CAST (as above) is required. This guards `findWiderDateTimeType` against ever widening
+-- TIME, which would silently inject CURRENT_DATE into UNION / coalesce / CASE.
+SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56';
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56');
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9));
+SELECT CASE WHEN true THEN time'12:34:56' ELSE timestamp_ntz'2020-05-17 12:34:56' END;

@@ -1879,3 +1879,94 @@ SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6))
 -- !query analysis
 Project [cast(cast(null as timestamp_ntz(9)) as time(6)) AS CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56'
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP_NTZ\"",
+    "dataType2" : "\"TIME(6)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 73,
+    "fragment" : "SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56'"
+  } ]
+}
+
+
+-- !query
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"TIME(6)\" or \"TIMESTAMP_NTZ\")",
+    "functionName" : "`coalesce`",
+    "sqlExpr" : "\"coalesce(TIME '12:34:56', TIMESTAMP_NTZ '2020-05-17 12:34:56')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 67,
+    "fragment" : "coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56')"
+  } ]
+}
+
+
+-- !query
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"TIME(6)\" or \"TIMESTAMP_NTZ(9)\")",
+    "functionName" : "`coalesce`",
+    "sqlExpr" : "\"coalesce(TIME '12:34:56', CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 95,
+    "fragment" : "coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9))"
+  } ]
+}
+
+
+-- !query
+SELECT CASE WHEN true THEN time'12:34:56' ELSE timestamp_ntz'2020-05-17 12:34:56' END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "[\"TIME(6)\", \"TIMESTAMP_NTZ\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN TIME '12:34:56' ELSE TIMESTAMP_NTZ '2020-05-17 12:34:56' END\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 85,
+    "fragment" : "CASE WHEN true THEN time'12:34:56' ELSE timestamp_ntz'2020-05-17 12:34:56' END"
+  } ]
+}
