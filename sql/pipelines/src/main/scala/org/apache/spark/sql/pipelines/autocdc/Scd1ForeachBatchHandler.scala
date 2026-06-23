@@ -57,9 +57,6 @@ case class Scd1ForeachBatchHandler(
       )
     )
 
-    // Both merges run through [[rewrapTargetMergeUnsupported]] so that a MERGE-incapable target
-    // surfaces as a user-facing AutoCDC error naming the declared target, rather than leaking the
-    // raw planner failure that names the internal auxiliary table (merged first, below).
     rewrapTargetMergeUnsupported {
       batchProcessor.mergeMicrobatchOntoAuxiliaryTable(
         reconciledMicrobatchDf = reconciledMicrobatch,
@@ -79,9 +76,10 @@ case class Scd1ForeachBatchHandler(
   }
 
   /**
-   * Re-wrap the planner's MERGE-unsupported failure so it names the user's declared target rather
-   * than the internal auxiliary table that happens to be merged first. By construction the
-   * auxiliary table must be using the same table format and catalog as the target table.
+   * Run `block` and re-wrap a "MERGE not supported" planner failure into an AutoCDC error that
+   * names the user's declared target. AutoCDC's MERGEs (against both the target and its auxiliary
+   * table) all require the target's format/connector to support MERGE, so this surfaces a single,
+   * user-actionable error.
    */
   private def rewrapTargetMergeUnsupported[T](block: => T): T = {
     try block
