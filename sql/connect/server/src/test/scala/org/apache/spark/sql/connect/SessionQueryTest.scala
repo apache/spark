@@ -34,12 +34,10 @@ import org.apache.spark.sql
 trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
 
   /**
-   * TODO add required test-only API to Spark Connect
-   * This method is used by [[checkAnswer]] internally but cannot yet be implemented in connect.
-   * Thus we always return `false` for now.
+   * Approximates [[sql.SessionQueryTest.isDfSorted]] by inspecting the explain string.
    */
   override def isDfSorted(df: sql.DataFrame): Boolean = df match {
-      case df: DataFrame => df.explainString(true).contains("Sort")
+      case df: DataFrame => df.explainString(extended = true).contains("Sort")
       case df => super.isDfSorted(df)
     }
 
