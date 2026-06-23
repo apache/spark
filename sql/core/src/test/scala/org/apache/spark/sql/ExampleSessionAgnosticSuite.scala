@@ -17,10 +17,18 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+
 /**
  * Example for
  */
 class ExampleSessionAgnosticSuite extends SessionQueryTest {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf
+      .set("spark.sql.catalog.testcat", classOf[InMemoryPartitionTableCatalog].getName)
+      .set("spark.sql.defaultCatalog", "testcat")
 
   test("Example classic/connect-agnostic testcase") {
     withTable("t") {
@@ -47,6 +55,17 @@ class ExampleSessionAgnosticSuite extends SessionQueryTest {
           s"Expected 5 columns (2 + 3) but got: ${selfJoin.columns.mkString(", ")}")
         checkAnswer(selfJoin,
           Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
+      }
+    }
+  }
+
+  test("testcase that uses withConf") {
+    withConf("spark.sql.charAsVarchar" -> "true") {
+      withTable("t") {
+        spark.sql(s"CREATE TABLE t(col CHAR(5)) USING foo")
+        checkAnswer(
+          spark.sql(s"desc t").selectExpr("data_type"),
+          Seq(Row("varchar(5)")))
       }
     }
   }
