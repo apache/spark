@@ -22,7 +22,6 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.CheckErrorHelper
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.internal.SQLConf
 // scalastyle:on
 
 /**
@@ -39,8 +38,28 @@ trait SessionQueryTestBase
     with SQLConfHelper
     with QueryCleanupHelper {
 
-  override def conf: SQLConf =
-    throw new UnsupportedOperationException("TODO: SessionQueryTestBase should not provide conf")
+  /**
+   * Sets all configurations specified in `pairs`, calls `f`, and then restores all configurations.
+   */
+  protected def withConf[T](pairs: (String, String)*)(f: => T): T = {
+    val (keys, values) = pairs.unzip
+    val currentValues = keys.map { key =>
+      if (spark.conf.contains(key)) {
+        Some(spark.conf.get(key))
+      } else {
+        None
+      }
+    }
+    keys.lazyZip(values).foreach { (k, v) =>
+      spark.conf.set(k, v)
+    }
+    try f finally {
+      keys.zip(currentValues).foreach {
+        case (key, Some(value)) => spark.conf.set(key, value)
+        case (key, None) => spark.conf.unset(key)
+      }
+    }
+  }
 
   /**
    * Documents used session so that tests can handle and document session-specific behaviour
