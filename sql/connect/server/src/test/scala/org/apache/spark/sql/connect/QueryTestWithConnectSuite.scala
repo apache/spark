@@ -28,4 +28,4 @@ import org.apache.spark.sql.QueryTestSuite
  */
 class QueryTestWithConnectSuite
   extends QueryTestSuite
-    with SparkSessionBinder
+    with SessionQueryTest
