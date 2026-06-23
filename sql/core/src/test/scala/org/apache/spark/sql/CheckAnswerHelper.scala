@@ -71,7 +71,11 @@ trait CheckAnswerHelper extends Assertions {
     df match {
       case df: classic.DataFrame =>
         df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
-      case _ => throw new RuntimeException(s"Cannot determine whether df is sorted: $df")
+      case _ =>
+        // isDfSorted should be overriden by connect so that this case can't be reached.
+        throw new RuntimeException(
+          s"""Cannot determine whether df is sorted: $df.
+             |Maybe the suite is missing the connect.SessionQueryTest mixin?""".stripMargin)
     }
   }
 
