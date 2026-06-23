@@ -3042,6 +3042,30 @@ NULL
 
 
 -- !query
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x)
+-- !query schema
+struct<(CAST(x AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x)
+-- !query schema
+struct<x:time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9))) t(x)
+-- !query schema
+struct<x:time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
 SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56'
 -- !query schema
 struct<>

@@ -360,6 +360,13 @@ SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6));
 SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6));
 
+-- SPARK-57618: inside an inline table the TIME -> TIMESTAMP_NTZ cast is foldable and carries no
+-- CURRENT_LIKE pattern, so it is early-evaluated before ComputeCurrentTime. Coverage stays
+-- deterministic: the date anchor still equals current_date() and the value round-trips back to TIME.
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x);
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x);
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9))) t(x);
+
 -- SPARK-57618: TIME and TIMESTAMP_NTZ have no common type, so implicit coercion is rejected; an
 -- explicit CAST (as above) is required. This guards `findWiderDateTimeType` against ever widening
 -- TIME, which would silently inject CURRENT_DATE into UNION / coalesce / CASE.

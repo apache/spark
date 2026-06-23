@@ -119,6 +119,13 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
+    // The CAST bit is included so this rule can find TIME -> TIMESTAMP_NTZ casts (which depend on
+    // CURRENT_DATE) and stabilize them below. CAST is a broad pattern, so this widens the rule's
+    // traversal to most plans; the precise `Cast.isTimeToTimestampNTZ` guard keeps the rewrite
+    // scoped. We intentionally do not tag these casts with CURRENT_LIKE instead: inline-table
+    // validation treats CURRENT_LIKE as safe to defer, so tagging would let unrelated non-foldable
+    // NTZ-target casts (e.g. CAST(rand() AS TIMESTAMP_NTZ)) bypass that validation (see SPARK-57618
+    // and ResolveInlineTablesSuite).
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
       treePatternbits.containsPattern(CURRENT_LIKE) || treePatternbits.containsPattern(CAST)
     }

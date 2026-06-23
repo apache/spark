@@ -1729,6 +1729,28 @@ Project [cast(cast(null as timestamp_ntz(9)) as time(6)) AS CAST(CAST(NULL AS TI
 
 
 -- !query
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x)
+-- !query analysis
+Project [cast(x#x as time(6)) AS x#x]
++- SubqueryAlias t
+   +- LocalRelation [x#x]
+
+
+-- !query
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9))) t(x)
+-- !query analysis
+Project [cast(x#x as time(9)) AS x#x]
++- SubqueryAlias t
+   +- LocalRelation [x#x]
+
+
+-- !query
 SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
