@@ -22,6 +22,7 @@ from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     Row,
     ArrayType,
+    MapType,
     StringType,
     IntegerType,
     StructType,
@@ -438,7 +439,14 @@ class DataFrameCollectionTests(
     DataFrameCollectionTestsMixin,
     ReusedSQLTestCase,
 ):
-    pass
+    def test_collect_map_with_array_key(self):
+        # SPARK-52382: MapType with ArrayType key should not raise TypeError on collect()
+        schema = StructType([StructField("m", MapType(ArrayType(StringType()), StringType()))])
+        data = [Row(m={("A", "B"): "foo", ("X", "Y", "Z"): "bar"})]
+        df = self.spark.createDataFrame(data, schema)
+        result = df.collect()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].m, {("A", "B"): "foo", ("X", "Y", "Z"): "bar"})
 
 
 if __name__ == "__main__":
