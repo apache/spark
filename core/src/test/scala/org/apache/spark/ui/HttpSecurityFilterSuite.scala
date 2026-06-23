@@ -153,7 +153,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
   }
 
-  test("frame-ancestors is set even when full CSP is disabled (frameAncestors enabled by default)") {
+  test("frame-ancestors is set when full CSP is disabled but frameAncestors is enabled") {
     val conf = new SparkConf(false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
