@@ -36,6 +36,7 @@ import org.apache.spark.sql.types.{
   StringType,
   StructField,
   StructType,
+  TimestampType,
   TimeType
 }
 
@@ -660,8 +661,8 @@ class XmlInferSchemaSuite
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
       val xmlString = Seq("""<ROW><t>13:31:24</t></ROW>""")
       val df = readData(xmlString)
-      // Falls through to date/timestamp or string
-      assert(df.schema.fields.head.dataType != TimeType(TimeType.DEFAULT_PRECISION))
+      // Falls through to TimestampType when TIME inference is disabled
+      assert(df.schema.fields.head.dataType === TimestampType)
     }
   }
 
@@ -691,6 +692,13 @@ class XmlInferSchemaSuite
       """<ROW><t>not-a-time</t></ROW>""")
     val dfMixed = readData(xmlMixed)
     assert(dfMixed.schema.fields.head.dataType === StringType)
+
+    // TIME + Date -> StringType (incompatible types widen)
+    val xmlTimeDate = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>2024-01-15</t></ROW>""")
+    val dfTimeDate = readData(xmlTimeDate)
+    assert(dfTimeDate.schema.fields.head.dataType === StringType)
   }
 }
 
