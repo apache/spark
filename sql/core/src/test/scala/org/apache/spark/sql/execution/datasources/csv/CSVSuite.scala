@@ -3619,13 +3619,14 @@ abstract class CSVSuite
   test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns and explicit schema " +
     "surfaces MALFORMED_CSV_RECORD") {
     // With an explicit schema, inference is skipped and the read-time header check in
-    // CSVHeaderChecker.checkHeaderColumnNames(lines, tokenizer) runs. That guard must surface
-    // MALFORMED_CSV_RECORD rather than a raw TextParsingException.
+    // CSVHeaderChecker.checkHeaderColumnNames(lines, tokenizer) runs inside a Spark task, so the
+    // SparkRuntimeException(MALFORMED_CSV_RECORD) is wrapped in SparkException(FAILED_READ_FILE).
+    // Verify the cause chain surfaces the MALFORMED_CSV_RECORD condition.
     withTempPath { path =>
       Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
       val schema = StructType(Seq(
         StructField("a", StringType), StructField("b", StringType)))
-      val e = intercept[SparkRuntimeException] {
+      val e = intercept[SparkException] {
         spark.read
           .schema(schema)
           .option("header", "true")
@@ -3633,8 +3634,14 @@ abstract class CSVSuite
           .csv(path.getAbsolutePath)
           .collect()
       }
-      checkError(
+      checkErrorMatchPVals(
         exception = e,
+        condition = "FAILED_READ_FILE.NO_HINT",
+        parameters = Map("path" -> ".*"))
+      val cause = e.getCause
+      assert(cause.isInstanceOf[SparkRuntimeException])
+      checkError(
+        exception = cause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
         sqlState = Some("KD000"),
         parameters = Map("badRecord" -> "a,b,c"),
