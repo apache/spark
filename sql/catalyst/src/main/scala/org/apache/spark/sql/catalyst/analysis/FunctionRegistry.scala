@@ -983,6 +983,7 @@ object FunctionRegistry {
     expression[ToVariantObject]("to_variant_object"),
     expression[IsValidVariant]("is_valid_variant"),
     expression[VariantDelete]("variant_delete"),
+    expression[VariantInsert]("variant_insert"),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),

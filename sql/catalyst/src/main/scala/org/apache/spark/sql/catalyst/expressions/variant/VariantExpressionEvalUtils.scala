@@ -75,15 +75,28 @@ object VariantExpressionEvalUtils {
   def isValidVariant(input: VariantVal): Boolean =
     VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
-  /** Throws `INVALID_VARIANT_PATH` on a malformed path or on the empty (root `$`) path. */
-  def parseVariantDeletePath(pathValue: String): Array[VariantPathSegment] = {
+  /**
+   * Parse a JSONPath for a variant manipulation function. Throws `INVALID_VARIANT_PATH` on a
+   * malformed path or on the empty (root `$`) path.
+   */
+  def parseVariantPath(pathValue: String, functionName: String): Array[VariantPathSegment] = {
     val parsed = VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     if (parsed.isEmpty) {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     parsed
+  }
+
+  /** Render a parsed path prefix back to a JSONPath string for error messages. */
+  private def renderVariantPath(segments: Array[VariantPathSegment]): String = {
+    val sb = new StringBuilder("$")
+    segments.foreach {
+      case ObjectExtraction(key) => sb.append('.').append(key)
+      case ArrayExtraction(index) => sb.append('[').append(index).append(']')
+    }
+    sb.toString
   }
 
   def toJavaSegments(
@@ -103,7 +116,45 @@ object VariantExpressionEvalUtils {
   }
 
   def deleteAtPath(input: VariantVal, path: UTF8String): VariantVal =
-    deleteAtPath(input, toJavaSegments(parseVariantDeletePath(path.toString)))
+    deleteAtPath(input, toJavaSegments(parseVariantPath(path.toString, "variant_delete")))
+
+  /**
+   * Insert `value` into `input` at `segments`. `path` is the source string
+   * used in error messages. The cast and insert share one try, so any size overflow maps to
+   * `VARIANT_SIZE_LIMIT` and a type mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`.
+   */
+  def insertAtPath(
+      input: VariantVal,
+      segments: Array[VariantPathSegment],
+      path: String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    try {
+      val valVal = castToVariant(value, valueDataType)
+      val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
+      val out = VariantBuilder.insertAtPath(v, toJavaSegments(segments), valVariant)
+      new VariantVal(out.getValue, out.getMetadata)
+    } catch {
+      case e: VariantBuilder.VariantPathTypeMismatchException =>
+        throw QueryExecutionErrors.variantPathTypeMismatch(
+          path, renderVariantPath(segments.take(e.depth)), functionName)
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+    }
+  }
+
+  def insertAtPath(
+      input: VariantVal,
+      path: UTF8String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String): VariantVal = {
+    val pathStr = path.toString
+    insertAtPath(
+      input, parseVariantPath(pathStr, functionName), pathStr, value, valueDataType, functionName)
+  }
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {

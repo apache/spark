@@ -1311,4 +1311,120 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       noPaths.checkInputDataTypes()
     }
   }
+
+  test("variant_insert") {
+    def checkInsert(input: String, path: String, value: Expression, expected: String): Unit = {
+      val expr = VariantInsert(
+        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Object inserts.
+    checkInsert("""{"a": 1}""", "$.b", Literal(2), """{"a":1,"b":2}""")
+    checkInsert("{}", "$.a", Literal(1), """{"a":1}""")
+    checkInsert("""{"a": {"b": 1}}""", "$.a.c", Literal(3), """{"a":{"b":1,"c":3}}""")
+
+    // Missing intermediate keys are created; the next segment's kind picks the container.
+    checkInsert("{}", "$.a.b.c", Literal(99), """{"a":{"b":{"c":99}}}""")
+    checkInsert("{}", "$.a[0]", Literal(1), """{"a":[1]}""")
+
+    // Array inserts shift existing elements right.
+    checkInsert("""["a","b","c"]""", "$[1]", Literal("z"), """["a","z","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[0]", Literal("z"), """["z","a","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[3]", Literal("z"), """["a","b","c","z"]""")
+    checkInsert("""["a","b"]""", "$[5]", Literal("z"), """["a","b",null,null,null,"z"]""")
+
+    // A missing intermediate created as an array is also padded with nulls up to the index.
+    checkInsert("""{"a": []}""", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+    checkInsert("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
+    checkInsert("{}", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+
+    // Descending through an existing container, then inserting into it.
+    checkInsert("""[{"a": 1}]""", "$[0].b", Literal(2), """[{"a":1,"b":2}]""")
+    checkInsert("""{"a": [1, 2, 3]}""", "$.a[1]", Literal(9), """{"a":[1,9,2,3]}""")
+
+    // Bracket and dot notations are interchangeable: `['k']`, `["k"]`, and `.k` in one path.
+    checkInsert(
+      """{"a": {"b": {}}}""", """$['a'].b["c"]""", Literal(1), """{"a":{"b":{"c":1}}}""")
+
+    // Special / edge-case keys.
+    checkInsert("""{"a": 1}""", "$['']", Literal(2), """{"":2,"a":1}""")
+    checkInsert("""{"a": 1}""", "$['?']", Literal(2), """{"?":2,"a":1}""")
+    checkInsert(
+      """{"a": 1}""", "$['key with spaces']", Literal(2), """{"a":1,"key with spaces":2}""")
+    checkInsert("""{"a": 1}""", "$.fb:testid", Literal(2), """{"a":1,"fb:testid":2}""")
+
+    // Insert a variant null (the JSON null literal) vs. a verbatim string vs. structured JSON.
+    checkInsert("""{"a": 1}""", "$.b", Literal(parseJson("null")), """{"a":1,"b":null}""")
+    checkInsert("{}", "$.a", Literal("""{"x":1}"""), """{"a":"{\"x\":1}"}""")
+    checkInsert("{}", "$.a", Literal(parseJson("""{"x":1}""")), """{"a":{"x":1}}""")
+
+    // NULL-intolerant: any NULL argument yields NULL.
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(
+        VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1)), StringType)),
+      null)
+    checkInsert("""{"a": 1}""", null, Literal(1), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, NullType), null)
+
+    val dynamic = VariantInsert(
+      Literal(parseJson("""{"a": 1}""")),
+      BoundReference(0, StringType, nullable = true),
+      Literal(2))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+      """{"a":1,"b":2}""",
+      InternalRow(UTF8String.fromString("$.b")))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2))),
+      "VARIANT_DUPLICATE_KEY",
+      Map("key" -> "a"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    val uncastableValue = VariantInsert(
+      Literal(parseJson("{}")),
+      Literal("$.a"),
+      Literal.create(null, MapType(IntegerType, IntegerType)))
+    assert(uncastableValue.checkInputDataTypes().isFailure)
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("{}")), Literal("abc"), Literal(1))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "abc", "functionName" -> "`variant_insert`"))
+
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig))),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
+  }
 }

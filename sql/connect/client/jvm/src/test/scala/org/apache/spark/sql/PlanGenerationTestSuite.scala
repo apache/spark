@@ -2763,6 +2763,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
   }
 
+  functionTest("variant_insert") {
+    fn.variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
+  }
+
   functionTest("variant_get") {
     fn.variant_get(fn.parse_json(fn.col("g")), "$", "int")
   }

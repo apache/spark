@@ -2219,6 +2219,14 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
 variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
 
 
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+variant_insert.__doc__ = pysparkfuncs.variant_insert.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
