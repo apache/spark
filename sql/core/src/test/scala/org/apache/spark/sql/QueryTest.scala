@@ -177,7 +177,7 @@ trait QueryTestBase
       assertEmptyMissingInput(analyzedDF)
 
       SQLExecution.withSQLConfPropagated(analyzedDF.sparkSession) {
-        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+        analyzedDF.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }
 
