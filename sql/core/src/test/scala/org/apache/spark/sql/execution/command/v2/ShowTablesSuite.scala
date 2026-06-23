@@ -62,6 +62,17 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("show table extended omits empty table properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+
+      val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+        .collect()(0)(3).toString
+
+      assert(!information.split("\n").exists(_.startsWith("Table Properties")))
+    }
+  }
+
   override protected def extendedPartInNonPartedTableError(
       catalog: String,
       namespace: String,
