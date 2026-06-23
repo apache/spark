@@ -60,8 +60,8 @@ class StringSubstitutorSuite extends AnyFunSuite { // scalastyle:ignore funsuite
   }
 
   test("a default-value substitution is followed by a further substitution") {
-    // After a default-value replacement the buffer shifts, so the scan length must be adjusted
-    // for the later ${b} to still be expanded.
+    // After a default-value replacement the buffer shifts; this checks the scan continues
+    // past it and still expands the later ${b}.
     val sub = new StringSubstitutor(Map("b" -> "Y"))
     assert(sub.replace("${a:-LONG_DEFAULT}${b}") === "LONG_DEFAULTY")
   }
