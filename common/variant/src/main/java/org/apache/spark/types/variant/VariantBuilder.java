@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.*;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonToken;
@@ -70,7 +69,7 @@ public class VariantBuilder {
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys,
       boolean validateUnicodeInJsonParsing) throws IOException {
-    try (JsonParser parser = new JsonFactory().createParser(json)) {
+    try (JsonParser parser = JSON_FACTORY.createParser(json)) {
       parser.nextToken();
       return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing);
     }
