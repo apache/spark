@@ -29,14 +29,14 @@ The `CREATE TABLE` statement defines a new table using a Data Source.
 CREATE TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
     USING data_source
-    [ OPTIONS ( key1=val1, key2=val2, ... ) ]
+    [ OPTIONS ( key1[=]val1, key2[=]val2, ... ) ]
     [ PARTITIONED BY ( col_name1, col_name2, ... ) ]
     [ CLUSTERED BY ( col_name3, col_name4, ... ) 
         [ SORTED BY ( col_name [ ASC | DESC ], ... ) ] 
         INTO num_buckets BUCKETS ]
     [ LOCATION path ]
     [ COMMENT table_comment ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES ( key1[=]val1, key2[=]val2, ... ) ]
     [ AS select_statement ]
 ```
 
@@ -57,7 +57,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **OPTIONS**
 
-    Options of data source which will be injected to storage properties.
+    Options of data source which will be injected to storage properties. Each option is a key-value pair. The equals sign (`=`) separating the key and value is optional; whitespace can be used instead.
 
 * **PARTITIONED BY**
 
@@ -88,7 +88,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **TBLPROPERTIES**
 
-    A list of key-value pairs that is used to tag the table definition.
+    A list of key-value pairs that is used to tag the table definition. The equals sign (`=`) separating each key and value is optional; whitespace can be used instead.
 
 * **AS select_statement**
 
@@ -136,6 +136,11 @@ CREATE TABLE student_parquet(id INT, name STRING, age INT) USING PARQUET
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV
     COMMENT 'this is a comment'
     TBLPROPERTIES ('foo'='bar');
+
+--The equals sign is optional in OPTIONS and TBLPROPERTIES; whitespace can be used instead
+CREATE TABLE student (id INT, name STRING, age INT) USING CSV
+    OPTIONS ('header' 'true')
+    TBLPROPERTIES ('foo' 'bar');
 
 --Specify table comment and properties with different clauses order
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV
