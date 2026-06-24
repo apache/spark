@@ -857,6 +857,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             name: String,
             dataType: Int,
             precision: Int,
+            literalPrefix: String,
+            literalSuffix: String,
             caseSensitive: Boolean,
             nullable: Short,
             searchable: Short,
@@ -868,6 +870,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             name = rs.getString("TYPE_NAME"),
             dataType = rs.getInt("DATA_TYPE"),
             precision = rs.getInt("PRECISION"),
+            literalPrefix = rs.getString("LITERAL_PREFIX"),
+            literalSuffix = rs.getString("LITERAL_SUFFIX"),
             caseSensitive = rs.getBoolean("CASE_SENSITIVE"),
             nullable = rs.getShort("NULLABLE"),
             searchable = rs.getShort("SEARCHABLE"),
@@ -895,6 +899,19 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         assert(types.forall(_.searchable == DatabaseMetaData.typeSearchable))
         // only STRING is case-sensitive
         assert(types.filter(_.caseSensitive).map(_.name) === Seq("STRING"))
+
+        // string-like types are quoted with a single quote on both sides, except BINARY,
+        // whose literals use the hex syntax X'...'. Numeric types carry no literal quote.
+        val quoted = Map(
+          "STRING" -> ("'", "'"),
+          "DATE" -> ("'", "'"),
+          "TIMESTAMP" -> ("'", "'"),
+          "BINARY" -> ("X'", "'"))
+        types.foreach { t =>
+          val (prefix, suffix) = quoted.getOrElse(t.name, (null, null))
+          assert(t.literalPrefix === prefix, s"unexpected LITERAL_PREFIX for ${t.name}")
+          assert(t.literalSuffix === suffix, s"unexpected LITERAL_SUFFIX for ${t.name}")
+        }
 
         // DECIMAL carries precision and scale
         val decimal = types.find(_.name == "DECIMAL").get

@@ -908,23 +908,25 @@ object SparkConnectDatabaseMetaData {
 
   // Fills the columns that are constant across all Spark atomic types: every type is
   // nullable and searchable, and none are unsigned, fixed-prec-scale, or auto-increment.
-  // `literalQuote` is used as both the literal prefix and suffix.
+  // `literalPrefix` is also used as the literal suffix unless `literalSuffix` is given;
+  // BINARY is the exception, whose literals use the hex syntax X'...'.
   private def typeRow(
       typeName: String,
       dataType: Int,
       precision: Int,
-      literalQuote: String,
+      literalPrefix: String,
       createParams: String,
       caseSensitive: Boolean,
       minScale: Short,
       maxScale: Short,
-      numPrecRadix: Int): TypeInfoRow =
+      numPrecRadix: Int,
+      literalSuffix: String = null): TypeInfoRow =
     (
       typeName,
       dataType,
       precision,
-      literalQuote,
-      literalQuote,
+      literalPrefix,
+      if (literalSuffix != null) literalSuffix else literalPrefix,
       createParams,
       typeNullable.toShort,
       caseSensitive,
@@ -952,7 +954,8 @@ object SparkConnectDatabaseMetaData {
     typeRow("DOUBLE", Types.DOUBLE, 15, null, null, false, 0, 0, 10),
     typeRow("DECIMAL", Types.DECIMAL, 38, null, "precision,scale", false, 0, 38, 10),
     typeRow("STRING", Types.VARCHAR, Int.MaxValue, "'", null, true, 0, 0, 0),
-    typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "'", null, false, 0, 0, 0),
+    typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "X'", null, false, 0, 0, 0,
+      literalSuffix = "'"),
     typeRow("DATE", Types.DATE, 10, "'", null, false, 0, 0, 0),
     typeRow("TIMESTAMP", Types.TIMESTAMP, 29, "'", null, false, 0, 6, 0))
 }
