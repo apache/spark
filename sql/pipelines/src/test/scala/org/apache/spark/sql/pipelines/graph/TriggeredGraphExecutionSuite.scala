@@ -1072,7 +1072,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     TriggeredFailureInfo(ts, numFailures = 2, lastException = cause, lastExceptionAction = action)
   }
 
-  test("getRunTerminationReason surfaces the earliest non-retryable failure deterministically") {
+  test("chooseRunTerminationReason surfaces the earliest non-retryable failure deterministically") {
     val earliestCause = new RuntimeException("earliest")
     // A retryable failure with an earlier timestamp must be ignored: it does not stop the run.
     val retryable = {
@@ -1096,7 +1096,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     }
   }
 
-  test("getRunTerminationReason breaks ties between equal timestamps by flow name") {
+  test("chooseRunTerminationReason breaks ties between equal timestamps by flow name") {
     val aCause = new RuntimeException("a")
     val entries = Seq(
       TableIdentifier("flow_z") -> stopFailure(100, "flow_z", new RuntimeException("z")),
@@ -1106,7 +1106,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
         .contains(QueryExecutionFailure("flow_a", 1, Some(aCause))))
   }
 
-  test("getRunTerminationReason has no reason when no flow stopped the run") {
+  test("chooseRunTerminationReason has no reason when no flow stopped the run") {
     assert(TriggeredGraphExecution.chooseRunTerminationReason(Iterator.empty).isEmpty)
   }
 }
