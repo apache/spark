@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only"
+name: "Build / Python-only (Python 3.9)"
 
 on:
   workflow_dispatch:
@@ -32,11 +32,6 @@ jobs:
     with:
       java: 8
       hadoop: hadoop3
-      envs: >-
-        {
-          "PYSPARK_IMAGE_TO_TEST": "",
-          "PYTHON_TO_TEST": ""
-        }
       jobs: >-
         {
           "pyspark": "true",
