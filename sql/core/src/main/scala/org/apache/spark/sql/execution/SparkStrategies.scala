@@ -51,6 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{StreamingExecutionRelat
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -181,6 +182,40 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 
+    private def canEvaluateAsJoinGuard(condition: Expression): Boolean = condition match {
+      case _: AttributeReference | _: Literal => true
+      case in: In =>
+        in.list.forall(_.isInstanceOf[Literal]) && in.children.forall(canEvaluateAsJoinGuard)
+      case _: And | _: Or | _: Not | _: IsNull | _: IsNotNull | _: EqualTo |
+          _: EqualNullSafe | _: InSet | _: Coalesce | _: GetStructField =>
+        condition.children.forall(canEvaluateAsJoinGuard)
+      case _ => false
+    }
+
+    private def addUnmatchableRowGuard(
+        joinType: JoinType,
+        leftKeys: Seq[Expression],
+        rightKeys: Seq[Expression],
+        nonEquiCond: Option[Expression],
+        left: LogicalPlan): (Seq[Expression], Seq[Expression]) = {
+      nonEquiCond match {
+        case Some(condition)
+            if conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
+              joinType == LeftOuter &&
+              condition.deterministic &&
+              condition.references.subsetOf(left.outputSet) &&
+              canEvaluateAsJoinGuard(condition) =>
+          // A left-side residual that is not TRUE proves that this left row cannot match. Turn
+          // that fact into a nullable physical join key so the existing null-aware shuffle can
+          // spread the row. Keep the residual condition as a defensive correctness check.
+          val leftGuard = If(condition, Literal.TrueLiteral, Literal(null, BooleanType))
+          leftGuard.setTagValue(joins.ShuffledJoinTags.UNMATCHABLE_ROW_GUARD, ())
+          (leftKeys :+ leftGuard, rightKeys :+ Literal.TrueLiteral)
+        case _ =>
+          (leftKeys, rightKeys)
+      }
+    }
+
     private def checkHintBuildSide(
         onlyLookingAtHint: Boolean,
         buildSide: Option[BuildSide],
@@ -238,6 +273,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond,
           _, left, right, hint) =>
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
+        lazy val (shuffledLeftKeys, shuffledRightKeys) = addUnmatchableRowGuard(
+          joinType, leftKeys, rightKeys, nonEquiCond, left)
+
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
             val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf)
@@ -265,8 +303,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             buildSide.map {
               buildSide =>
                 Seq(joins.ShuffledHashJoinExec(
-                  leftKeys,
-                  rightKeys,
+                  shuffledLeftKeys,
+                  shuffledRightKeys,
                   joinType,
                   buildSide,
                   nonEquiCond,
@@ -286,7 +324,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createSortMergeJoin() = {
           if (canMerge(joinType) && RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
-              leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
+              shuffledLeftKeys,
+              shuffledRightKeys,
+              joinType,
+              nonEquiCond,
+              planLater(left),
+              planLater(right))))
           } else {
             None
           }

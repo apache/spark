@@ -1006,9 +1006,11 @@ object SQLConf {
     buildConf("spark.sql.shuffle.spreadNullJoinKeys.enabled")
       .doc("When true, Spark may spread rows with NULL equi-join keys across shuffle partitions " +
         "for shuffled LEFT, RIGHT, and FULL OUTER equi-joins and LEFT ANTI equi-joins on " +
-        "nullable keys to reduce shuffle skew. Null-aware join output partitioning does not " +
-        "satisfy a strict ClusteredDistribution, so downstream grouping, windowing, or " +
-        "equi-joins may require an extra shuffle. If one input is already hash partitioned, " +
+        "nullable keys to reduce shuffle skew. For LEFT OUTER joins, Spark may also derive a " +
+        "nullable physical join key from a safe left-side residual predicate so rows that " +
+        "cannot match do not collapse onto one reducer. Null-aware join output partitioning " +
+        "does not satisfy a strict ClusteredDistribution, so downstream grouping, windowing, " +
+        "or equi-joins may require an extra shuffle. If one input is already hash partitioned, " +
         "only the other input may be reshuffled into the null-aware layout, so the pre-shuffled " +
         "input can keep its NULL skew.")
       .version("4.3.0")

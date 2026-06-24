@@ -26,9 +26,10 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, If, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, NullAwareHashPartitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
@@ -56,6 +57,117 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
     val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
+  }
+
+  test("SPARK-57648: spread rows rejected by a safe left outer join residual") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val left = Seq(
+        (1, java.lang.Boolean.TRUE, "match"),
+        (1, java.lang.Boolean.FALSE, "false"),
+        (2, null.asInstanceOf[java.lang.Boolean], "null")).toDF("k", "eligible", "lv").as("l")
+      val right = Seq((1, "right-1"), (2, "right-2")).toDF("k", "rv").as("r")
+      val joined = left.join(
+        right, $"l.k" === $"r.k" && $"l.eligible", "left_outer")
+
+      val sortMergeJoin = joined.queryExecution.sparkPlan.collectFirst {
+        case join: SortMergeJoinExec => join
+      }.getOrElse(fail("Expected a sort-merge join"))
+      assert(sortMergeJoin.leftKeys.size == 2)
+      assert(sortMergeJoin.rightKeys.size == 2)
+      assert(sortMergeJoin.leftKeys.last.isInstanceOf[If])
+      assert(sortMergeJoin.rightKeys.last == Literal.TrueLiteral)
+      assert(sortMergeJoin.condition.nonEmpty)
+      assert(sortMergeJoin.requiredChildDistribution.forall {
+        case ClusteredDistribution(_, true, _, _) => true
+        case _ => false
+      })
+
+      val compoundPredicate = !($"l.lv".isin("false")) ||
+        (functions.coalesce($"l.eligible", functions.lit(false)) && $"l.lv".isNotNull)
+      val compoundJoin = left.join(
+        right, $"l.k" === $"r.k" && compoundPredicate, "left_outer")
+      val compoundSortMergeJoin = compoundJoin.queryExecution.sparkPlan.collectFirst {
+        case join: SortMergeJoinExec => join
+      }.getOrElse(fail("Expected a sort-merge join"))
+      assert(compoundSortMergeJoin.leftKeys.size == 2)
+      assert(compoundSortMergeJoin.leftKeys.last.isInstanceOf[If])
+
+      checkAnswer(joined, Seq(
+        Row(1, true, "match", 1, "right-1"),
+        Row(1, false, "false", null, null),
+        Row(2, null, "null", null, null)))
+
+      val shufflePartitionings = joined.queryExecution.executedPlan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(shufflePartitionings.size == 2)
+      assert(shufflePartitionings.forall {
+        case NullAwareHashPartitioning(expressions, _) => expressions.size == 2
+        case _ => false
+      })
+    }
+  }
+
+  test("SPARK-57648: spread unmatchable rows for shuffled hash join") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      val left = Seq((1, true), (1, false)).toDF("k", "eligible").as("l")
+      val right = Seq((1, "right-1")).toDF("k", "rv").as("r").hint("SHUFFLE_HASH")
+      val joined = left.join(
+        right, $"l.k" === $"r.k" && $"l.eligible", "left_outer")
+
+      val shuffledHashJoin = joined.queryExecution.sparkPlan.collectFirst {
+        case join: ShuffledHashJoinExec => join
+      }.getOrElse(fail("Expected a shuffled hash join"))
+      assert(shuffledHashJoin.leftKeys.size == 2)
+      assert(shuffledHashJoin.rightKeys.size == 2)
+      assert(shuffledHashJoin.condition.nonEmpty)
+
+      checkAnswer(joined, Seq(
+        Row(1, true, 1, "right-1"),
+        Row(1, false, null, null)))
+    }
+  }
+
+  test("SPARK-57648: do not add an unmatchable-row guard outside its safe scope") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val left = Seq((1, true, "match")).toDF("k", "eligible", "lv").as("l")
+      val right = Seq((1, "right-1")).toDF("k", "rv").as("r")
+
+      withSQLConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "false") {
+        val joined = left.join(
+          right, $"l.k" === $"r.k" && $"l.eligible", "left_outer")
+        val sortMergeJoin = joined.queryExecution.sparkPlan.collectFirst {
+          case join: SortMergeJoinExec => join
+        }.getOrElse(fail("Expected a sort-merge join"))
+        assert(sortMergeJoin.leftKeys.size == 1)
+      }
+
+      withSQLConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+        val unsupportedPredicate = left.join(
+          right, $"l.k" === $"r.k" && $"l.lv".contains("match"), "left_outer")
+        val sortMergeJoin = unsupportedPredicate.queryExecution.sparkPlan.collectFirst {
+          case join: SortMergeJoinExec => join
+        }.getOrElse(fail("Expected a sort-merge join"))
+        assert(sortMergeJoin.leftKeys.size == 1)
+
+        val broadcastJoin = left.join(
+          right.hint("BROADCAST"), $"l.k" === $"r.k" && $"l.eligible", "left_outer")
+        val broadcastHashJoin = broadcastJoin.queryExecution.sparkPlan.collectFirst {
+          case join: BroadcastHashJoinExec => join
+        }.getOrElse(fail("Expected a broadcast hash join"))
+        assert(broadcastHashJoin.leftKeys.size == 1)
+      }
+    }
   }
 
   def assertJoin(pair: (String, Class[_ <: BinaryExecNode])): Any = {
