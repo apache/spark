@@ -1072,10 +1072,14 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             eventually(timeout(60.seconds), interval(100.milliseconds)) {
               Seq(1, 4).foreach { partition =>
                 val partitionDir = new File(opStateDir, partition.toString)
-                val snapshotUploaded = Option(partitionDir.listFiles())
-                  .exists(_.exists(f => f.getName.matches("2(_.*)?\\.zip")))
+                val files = Option(partitionDir.listFiles())
+                  .map(_.map(_.getName).sorted.toSeq).getOrElse(Seq.empty)
+                val snapshotUploaded = files.exists(_.matches("2(_.*)?\\.zip"))
+                // On timeout, surface the actual directory contents so a recurrence in scheduled
+                // jobs can be diagnosed (e.g. snapshot still pending vs. cleaned up vs. wrong dir).
                 assert(snapshotUploaded,
-                  s"Snapshot (version 2) for partition $partition was not uploaded in time")
+                  s"Snapshot (version 2) for partition $partition was not uploaded in time. " +
+                    s"Contents of $partitionDir: ${files.mkString("[", ", ", "]")}")
               }
             }
           },
