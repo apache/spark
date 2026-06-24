@@ -1791,7 +1791,8 @@ package object config {
         "When enabled, the writer computes the checksum and embeds it in the DataMessage header; " +
         "the reader recomputes and compares. A mismatch fails the task, providing early " +
         "detection of data corruption in transit.")
-      .version("4.0.0")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
