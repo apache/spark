@@ -1826,6 +1826,29 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("RocksDBFileManager: missing snapshot during load reports the available versions") {
+    // Loading a snapshot version that has not been uploaded yet (e.g. the asynchronous
+    // maintenance thread has not finished uploading it when reading state with
+    // snapshotStartBatchId) should fail with a FileNotFoundException whose message lists the
+    // snapshot/changelog files that ARE present, so intermittent failures in scheduled jobs are
+    // diagnosable straight from the logs.
+    val hadoopConf = new Configuration()
+    val remoteDir = Utils.createTempDir().toString
+    val fileManager = new RocksDBFileManager(remoteDir, Utils.createTempDir(), hadoopConf)
+    val fileMapping = new RocksDBFileMapping()
+    // Upload only snapshot version 1, leaving version 2 absent.
+    saveCheckpointFiles(
+      fileManager, Seq("001.sst" -> 10, "002.sst" -> 20), version = 1, numKeys = 10, fileMapping)
+
+    val ex = intercept[FileNotFoundException] {
+      fileManager.loadCheckpointFromDfs(2, Utils.createTempDir(), fileMapping)
+    }
+    assert(ex.getMessage.contains("Failed to load the snapshot file for version 2"))
+    assert(ex.getMessage.contains("Files currently present"))
+    // The version-1 snapshot that does exist must be surfaced in the diagnostic.
+    assert(ex.getMessage.contains("snapshots=[1.zip]"))
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
