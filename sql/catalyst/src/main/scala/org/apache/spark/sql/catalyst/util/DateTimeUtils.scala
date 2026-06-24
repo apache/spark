@@ -318,6 +318,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Packs a [[TimestampNanosVal]] (epoch micros + nanos within the micro) into a single int64 of
+   * nanoseconds since the epoch, the representation used by the Arrow nanosecond timestamp vectors
+   * and the Parquet INT64 epoch-nanoseconds physical type. Throws [[ArithmeticException]] when the
+   * value falls outside the int64 epoch-nanosecond range; callers translate that into a
+   * `DATETIME_OVERFLOW` error naming their sink (see
+   * [[org.apache.spark.sql.errors.QueryExecutionErrors.timestampNanosEpochNanosOverflowError]]).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
+    Math.addExact(
+      Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
+      value.nanosWithinMicro.toLong)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
