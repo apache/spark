@@ -768,7 +768,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(isFailed)
   }
 
-  test("SPARK-33235: invokePostStatusUpdateListeners triggers PostStatusUpdateListener") {
+  test("SPARK-57491: invokePostStatusUpdateListeners triggers PostStatusUpdateListener") {
     // Basic invocation - listener is called when invokePostStatusUpdateListeners is invoked
     val context1 = TaskContext.empty()
     var invoked = false

@@ -2078,7 +2078,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(!iterator.hasNext)
   }
 
-  test("SPARK-33235: fallback behavior when stale mapIndex is in/not in merged block") {
+  test("SPARK-57491: fallback behavior when stale mapIndex is in/not in merged block") {
     val blockManager = createMockBlockManager()
     val localHost = "test-local-host"
     val localBmId = BlockManagerId("test-client", localHost, 1)

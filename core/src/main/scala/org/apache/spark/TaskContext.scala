@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Closeable
 import java.util.Properties
 
-import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -204,8 +204,7 @@ abstract class TaskContext extends Serializable {
    *
    * The callback runs on the same executor thread that sends the status update.
    */
-  @Experimental
-  def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext
+  private[spark] def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext
 
   /**
    * Invokes all registered post-status-update listeners. Called by Executor after sending
