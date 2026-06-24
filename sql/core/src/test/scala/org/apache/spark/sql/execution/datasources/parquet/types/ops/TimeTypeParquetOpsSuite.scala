@@ -145,6 +145,21 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     assert(ParquetTypeOps.getVectorUpdaterOrNull(timeMicros, timeColumn(TimeUnit.MICROS)) != null)
   }
 
+  test("getVectorUpdater returns None for incompatible encodings (clean reject, vectorized path)") {
+    val int32Millis = Types.primitive(INT32, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MILLIS)).named("c")
+    val rawInt64 = Types.primitive(INT64, REQUIRED).named("c")
+    val int64Timestamp = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named("c")
+    // None -> the factory falls through to a clean SchemaColumnConvertNotSupportedException,
+    // matching the row-path reject set (requireCompatibleParquetType), instead of silently
+    // mis-decoding (e.g. readLongs over an INT32 column).
+    Seq(int32Millis, rawInt64, int64Timestamp).foreach { field =>
+      val descriptor = new ColumnDescriptor(Array("c"), field, 0, 0)
+      assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(descriptor).isEmpty)
+    }
+  }
+
   test("getVectorUpdaterOrNull returns null for non-framework types") {
     assert(ParquetTypeOps.getVectorUpdaterOrNull(IntegerType, null) == null)
   }

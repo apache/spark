@@ -107,11 +107,19 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
   override def isBatchReadSupported(sqlConf: SQLConf): Boolean = true
 
-  // The on-disk unit (MICROS vs NANOS) comes from the file column's annotation; the requested
-  // precision comes from the Spark type. Mirrors the row-based newConverter path above.
+  // Only a canonical INT64 TIME(MICROS)/TIME(NANOS) column can be vectorized-decoded as TimeType.
+  // Return None for anything else (INT32 TIME(MILLIS), raw INT64, INT64 TIMESTAMP, ...) so the
+  // factory falls through to its clean SchemaColumnConvertNotSupportedException instead of silently
+  // mis-reading. This is the same compatibility check the row path uses
+  // (requireCompatibleParquetType), unifying the read guard across both readers. The on-disk unit
+  // (MICROS vs NANOS) and the requested precision drive the conversion + truncation.
   override def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = {
-    val fileStoresNanos = TimeTypeParquetOps.isNanosTime(descriptor.getPrimitiveType)
-    Some(new TimeVectorUpdater(t.precision, fileStoresNanos))
+    val parquetType = descriptor.getPrimitiveType
+    if (TimeTypeParquetOps.isCompatibleParquetType(parquetType)) {
+      Some(new TimeVectorUpdater(t.precision, TimeTypeParquetOps.isNanosTime(parquetType)))
+    } else {
+      None
+    }
   }
 }
 
@@ -141,31 +149,31 @@ private[ops] object TimeTypeParquetOps {
     timeTruncationFactors(timeTruncationFactors.length - 1 - precision)
 
   /**
-   * Validates that a Parquet field can be decoded as TimeType. TimeType is written as INT64 with
-   * TIME(MICROS, isAdjustedToUTC=false) for precision 0..6 and TIME(NANOS, isAdjustedToUTC=false)
-   * for precision 7..9. On read, any INT64 TIME(MICROS) or TIME(NANOS) column is accepted
-   * regardless of the isAdjustedToUTC flag: Spark's zone-less TimeType decodes the raw
-   * time-of-day identically either way, matching the legacy ParquetRowConverter guard (see
-   * SPARK-57416). Any other encoding (raw INT64, INT32 TIME(MILLIS), INT64 TIMESTAMP(_),
-   * decimal-annotated, etc.) cannot be decoded as TimeType - throw the same error as the legacy
-   * ParquetRowConverter path so reads fail loudly instead of silently misinterpreting bytes.
+   * Whether a Parquet field is a canonical INT64 TIME(MICROS) (precision 0..6) or TIME(NANOS)
+   * (precision 7..9) column - the only encodings Spark can decode as TimeType. The isAdjustedToUTC
+   * flag is intentionally ignored: Spark's TimeType is zone-less local time, so the raw
+   * time-of-day decodes identically either way, matching the legacy ParquetRowConverter guard
+   * (see SPARK-57416). Any other encoding (raw INT64, INT32 TIME(MILLIS), INT64 TIMESTAMP(_),
+   * decimal-annotated, etc.) is incompatible. Shared by both the row-based and vectorized read
+   * paths so they accept/reject the same set.
    */
-  private[ops] def requireCompatibleParquetType(
-      sparkType: TimeType, parquetType: Type): Unit = {
-    val ok = parquetType.isPrimitive &&
+  private[ops] def isCompatibleParquetType(parquetType: Type): Boolean =
+    parquetType.isPrimitive &&
       parquetType.asPrimitiveType.getPrimitiveTypeName == INT64 &&
       (parquetType.getLogicalTypeAnnotation match {
         case t: LogicalTypeAnnotation.TimeLogicalTypeAnnotation =>
-          // Accept both MICROS (precision 0..6) and NANOS (precision 7..9), and both
-          // isAdjustedToUTC=false and =true. Spark's TimeType is zone-less local time, so the
-          // UTC-adjustment flag carries no extra information on read: the raw time-of-day value
-          // decodes identically either way. Mirroring the legacy ParquetRowConverter guard keeps
-          // the framework row-based read path consistent with the legacy and vectorized readers.
-          // SPARK-57416.
           t.getUnit == TimeUnit.MICROS || t.getUnit == TimeUnit.NANOS
         case _ => false
       })
-    if (!ok) {
+
+  /**
+   * Validates that a Parquet field can be decoded as TimeType on the row-based path, throwing the
+   * same error as the legacy ParquetRowConverter so incompatible reads fail loudly instead of
+   * silently misinterpreting bytes. See [[isCompatibleParquetType]] for the accepted encodings.
+   */
+  private[ops] def requireCompatibleParquetType(
+      sparkType: TimeType, parquetType: Type): Unit = {
+    if (!isCompatibleParquetType(parquetType)) {
       throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
         sparkType, parquetType.toString)
     }
