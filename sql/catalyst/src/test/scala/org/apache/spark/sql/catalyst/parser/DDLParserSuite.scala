@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransfo
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType, TimeType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -2251,6 +2252,50 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql,
         start = 0,
         stop = 70))
+  }
+
+  test("update table: with options") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
+        |SET a='Robert', b=32
+      """.stripMargin,
+      UpdateTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+          new CaseInsensitiveStringMap(
+            java.util.Map.of("write.split-size", "10"))),
+        Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("b"), Literal(32))),
+        None))
+  }
+
+  test("update table: with options and alias") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl WITH (`k` = 'v') AS t
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTable(
+        SubqueryAlias("t",
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(
+              java.util.Map.of("k", "v")))),
+        Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("t.b"), Literal(32))),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
+  }
+
+  test("update table: options without values are not allowed") {
+    val sql = "UPDATE testcat.ns1.ns2.tbl WITH (`split-size`) SET a = 1"
+    checkError(
+      exception = parseException(sql),
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" -> "Values must be specified for key(s): [split-size]"),
+      context = ExpectedContext(
+        fragment = "testcat.ns1.ns2.tbl",
+        start = 7,
+        stop = 25))
   }
 
   test("merge into table: basic") {
