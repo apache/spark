@@ -21620,7 +21620,10 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     >>> xobj = parse_json(lit('{"x":1}'))
     >>> df.select(to_json(variant_insert(empty, "$.a", xobj)).alias("r")).collect()
     [Row(r='{"a":{"x":1}}')]
-    >>> df.select(to_json(variant_insert(lit(None), "$.a", lit(1))).alias("r")).collect()
+    >>> vnull = parse_json(lit('null'))
+    >>> df.select(to_json(variant_insert(empty, "$.a", vnull)).alias("r")).collect()
+    [Row(r='{"a":null}')]
+    >>> df.select(to_json(variant_insert(empty, "$.a", lit(None))).alias("r")).collect()
     [Row(r=None)]
     """
     from pyspark.sql.classic.column import _to_java_column

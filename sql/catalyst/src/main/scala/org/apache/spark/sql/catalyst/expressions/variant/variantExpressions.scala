@@ -830,7 +830,9 @@ object VariantDelete {
        ["a","b",null,null,null,"z"]
       > SELECT _FUNC_(parse_json('{}'), '$.a', parse_json('{"x":1}'));
        {"a":{"x":1}}
-      > SELECT _FUNC_(NULL, '$.a', 1);
+      > SELECT _FUNC_(parse_json('{}'), '$.a', parse_json('null'));
+       {"a":null}
+      > SELECT _FUNC_(parse_json('{}'), '$.a', null);
        NULL
   """,
   since = "4.3.0",

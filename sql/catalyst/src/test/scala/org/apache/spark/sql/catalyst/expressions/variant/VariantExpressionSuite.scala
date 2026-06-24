@@ -1338,11 +1338,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // A missing intermediate created as an array is also padded with nulls up to the index.
     checkInsert("""{"a": []}""", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+    checkInsert("""{"a": [1, 2]}""", "$.a[3].b", Literal(2), """{"a":[1,2,null,{"b":2}]}""")
     checkInsert("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
     checkInsert("{}", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
 
     // Descending through an existing container, then inserting into it.
     checkInsert("""[{"a": 1}]""", "$[0].b", Literal(2), """[{"a":1,"b":2}]""")
+    checkInsert("""[{"x": 0}, {"a": 1}]""", "$[1].b", Literal(2), """[{"x":0},{"a":1,"b":2}]""")
     checkInsert("""{"a": [1, 2, 3]}""", "$.a[1]", Literal(9), """{"a":[1,9,2,3]}""")
 
     // Bracket and dot notations are interchangeable: `['k']`, `["k"]`, and `.k` in one path.
@@ -1360,6 +1362,16 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsert("""{"a": 1}""", "$.b", Literal(parseJson("null")), """{"a":1,"b":null}""")
     checkInsert("{}", "$.a", Literal("""{"x":1}"""), """{"a":"{\"x\":1}"}""")
     checkInsert("{}", "$.a", Literal(parseJson("""{"x":1}""")), """{"a":{"x":1}}""")
+
+    // Values of various castable types exercise the corresponding `castToVariant` branches.
+    checkInsert("{}", "$.a", Literal(true), """{"a":true}""")
+    checkInsert("{}", "$.a", Literal(7L), """{"a":7}""")
+    checkInsert("{}", "$.a", Literal(2.5), """{"a":2.5}""")
+    checkInsert(
+      "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
+    checkInsert(
+      "{}", "$.a", Literal.create(Map("x" -> 1), MapType(StringType, IntegerType)),
+      """{"a":{"x":1}}""")
 
     // NULL-intolerant: any NULL argument yields NULL.
     checkEvaluation(
@@ -1402,6 +1414,12 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2))),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantInsert(Literal(parseJson("""{"a": 5}""")), Literal("$.a[0]"), Literal(2))),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
       ResolveTimeZone.resolveTimeZones(

@@ -311,11 +311,19 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       rows("""{"a":{"x":1}}"""))
 
     checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{}'), '$.a', parse_json('null')))"),
+      rows("""{"a":null}"""))
+
+    checkAnswer(
       sql("SELECT to_json(variant_insert(CAST(NULL AS VARIANT), '$.a', 1))"),
       rows(null))
 
     checkAnswer(
       sql("SELECT to_json(variant_insert(parse_json('{\"a\": 1}'), '$.b', NULL))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{\"a\": 1}'), NULL, 1))"),
       rows(null))
 
     checkError(
@@ -363,6 +371,10 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         val objV = parse_json(objDf("json"))
         val out2 = objDf.select(to_json(variant_insert(objV, lit("$.z"), col("val"))).alias("r"))
         checkAnswer(out2, rows("""{"a":1,"z":2}""", """{"x":5,"z":9}""", null))
+
+        // String-path overload of the DataFrame API.
+        val out3 = objDf.select(to_json(variant_insert(objV, "$.z", col("val"))).alias("r"))
+        checkAnswer(out3, rows("""{"a":1,"z":2}""", """{"x":5,"z":9}""", null))
       }
     }
   }
