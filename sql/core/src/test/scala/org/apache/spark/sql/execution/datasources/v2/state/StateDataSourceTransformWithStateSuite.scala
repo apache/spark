@@ -20,6 +20,7 @@ import java.io.File
 import java.time.Duration
 
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
@@ -1062,8 +1063,22 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           ProcessAllAvailable(),
           AddData(inputData, (17, 1L), (18, 2L), (19, 3L), (20, 4L)),
           ProcessAllAvailable(),
-          // Ensure that we get a chance to upload created snapshots
-          Execute { _ => Thread.sleep(5000) },
+          // Wait deterministically for the maintenance thread to upload the snapshot files the
+          // snapshotStartBatchId reader needs (snapshot version 2 for the partitions read below),
+          // instead of a fixed sleep which is flaky under CI load (the snapshot upload is
+          // asynchronous, so a too-short sleep leaves `2.zip` missing -> FileNotFoundException).
+          Execute { _ =>
+            val opStateDir = new File(tmpDir, "state/0")
+            eventually(timeout(60.seconds), interval(100.milliseconds)) {
+              Seq(1, 4).foreach { partition =>
+                val partitionDir = new File(opStateDir, partition.toString)
+                val snapshotUploaded = Option(partitionDir.listFiles())
+                  .exists(_.exists(f => f.getName.matches("2(_.*)?\\.zip")))
+                assert(snapshotUploaded,
+                  s"Snapshot (version 2) for partition $partition was not uploaded in time")
+              }
+            }
+          },
           StopStream
         )
       }
