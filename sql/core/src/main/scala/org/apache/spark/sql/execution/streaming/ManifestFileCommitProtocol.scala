@@ -83,13 +83,14 @@ class ManifestFileCommitProtocol(jobId: String, path: String)
       // to the same output path: they share a single `_spark_metadata` log and cannot coexist.
       // Log the path + batchId at ERROR so a recurrence in scheduled jobs is diagnosable from the
       // logs alone, without re-reproducing the race.
-      logError(log"Race while writing batch ${MDC(BATCH_ID, batchId)} to the file sink metadata " +
-        log"log at ${MDC(PATH, path)}: another writer already committed this batch. This usually " +
-        log"means multiple concurrent streaming queries are writing to the same output path.")
-      throw new IllegalStateException(
-        s"Race while writing batch $batchId to the file sink metadata log at '$path'. Another " +
-        "writer already committed this batch, which usually means multiple concurrent streaming " +
-        "queries are writing to the same output path (they share one _spark_metadata log).")
+      // Build the message once and reuse it for both the log and the exception so they stay in
+      // sync (see review on SPARK-57651).
+      val errorMsg = log"Race while writing batch ${MDC(BATCH_ID, batchId)} to the file sink " +
+        log"metadata log at ${MDC(PATH, path)}: another writer already committed this batch. " +
+        log"This usually means multiple concurrent streaming queries are writing to the same " +
+        log"output path (they share one _spark_metadata log)."
+      logError(errorMsg)
+      throw new IllegalStateException(errorMsg.message)
     }
   }
 
