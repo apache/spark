@@ -35,8 +35,6 @@ jobs:
       envs: >-
         {
           "SCALA_PROFILE": "scala2.13",
-          "PYSPARK_IMAGE_TO_TEST": "",
-          "PYTHON_TO_TEST": "",
           "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-xe:21.3.0"
         }
       jobs: >-
@@ -46,5 +44,5 @@ jobs:
           "tpcds-1g": "true",
           "docker-integration-tests": "true",
           "k8s-integration-tests": "true",
-          "lint" : "true"
+          "lint": "true"
         }
