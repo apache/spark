@@ -64,6 +64,7 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       scan: SupportsRuntimeV2Filtering): Boolean = {
     conf.runtimeRowLevelOperationGroupFilterEnabled &&
       cond != TrueLiteral &&
+      cond.deterministic &&
       scan.filterAttributes.nonEmpty
   }
 

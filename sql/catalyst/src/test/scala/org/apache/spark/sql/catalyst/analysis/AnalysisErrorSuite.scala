@@ -1404,5 +1404,17 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
       deleteDeltaRelation, Literal(true), dummyQuery, deleteDeltaRelation, deltaProjections)
     assert(!writeDeltaDelete.allowNonDeterministicExpression,
       "WriteDelta should not allow non-deterministic expressions for DELETE")
+
+    // UPDATE should NOT allow non-deterministic expressions
+    val updateRelation = buildRelation(inMemoryTable, Command.UPDATE)
+    val replaceDataUpdate = ReplaceData(
+      updateRelation, Literal(true), dummyQuery, updateRelation, replaceProjections)
+    assert(!replaceDataUpdate.allowNonDeterministicExpression,
+      "ReplaceData should not allow non-deterministic expressions for UPDATE")
+    val updateDeltaRelation = buildRelation(deltaTable, Command.UPDATE)
+    val writeDeltaUpdate = WriteDelta(
+      updateDeltaRelation, Literal(true), dummyQuery, updateDeltaRelation, deltaProjections)
+    assert(!writeDeltaUpdate.allowNonDeterministicExpression,
+      "WriteDelta should not allow non-deterministic expressions for UPDATE")
   }
 }

@@ -370,7 +370,7 @@ case class ReplaceData(
     write: Option[Write] = None)
     extends RowLevelWrite with SupportsNonDeterministicExpression {
 
-  override def allowNonDeterministicExpression: Boolean = operation.command() == MERGE
+  override def allowNonDeterministicExpression: Boolean = operation.command == MERGE
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
@@ -461,7 +461,7 @@ case class WriteDelta(
     write: Option[DeltaWrite] = None)
     extends RowLevelWrite with SupportsNonDeterministicExpression {
 
-  override def allowNonDeterministicExpression: Boolean = operation.command() == MERGE
+  override def allowNonDeterministicExpression: Boolean = operation.command == MERGE
 
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
