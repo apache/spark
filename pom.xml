@@ -222,7 +222,7 @@
      -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.15.Final</netty.version>
-    <netty-tcnative.version>2.0.78.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.79.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
