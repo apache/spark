@@ -138,16 +138,6 @@ private[ops] object TimeTypeParquetOps {
       case _ => false
     }
 
-  // 10^k for k in [0, NANOS_PRECISION], indexed by (NANOS_PRECISION - precision); truncates a
-  // nanos-of-day value to the requested fractional-second precision. Mirrors the former
-  // ParquetVectorUpdaterFactory.TIME_TRUNCATION_FACTORS (the vectorized hot loop hoists it).
-  private val timeTruncationFactors: Array[Long] = Array(
-    1L, 10L, 100L, 1000L, 10000L, 100000L,
-    1000000L, 10000000L, 100000000L, 1000000000L)
-
-  private[ops] def timeTruncationFactor(precision: Int): Long =
-    timeTruncationFactors(timeTruncationFactors.length - 1 - precision)
-
   /**
    * Whether a Parquet field is a canonical INT64 TIME(MICROS) (precision 0..6) or TIME(NANOS)
    * (precision 7..9) column - the only encodings Spark can decode as TimeType. The isAdjustedToUTC
@@ -190,13 +180,11 @@ private[ops] object TimeTypeParquetOps {
  */
 private[ops] class TimeVectorUpdater(precision: Int, fileStoresNanos: Boolean)
     extends ParquetVectorUpdater {
-  // Precision is constant per column, so hoist the truncation factor instead of recomputing it
-  // per value (this is the vectorized hot loop).
-  private val truncationFactor: Long = TimeTypeParquetOps.timeTruncationFactor(precision)
-
   private def toTruncatedNanos(value: Long): Long = {
     val nanos = if (fileStoresNanos) value else DateTimeUtils.microsToNanos(value)
-    (nanos / truncationFactor) * truncationFactor
+    // Same conversion + truncation as the row-based newConverter path, via the shared
+    // (table-backed) DateTimeUtils.truncateTimeToPrecision, so both readers stay in lock-step.
+    DateTimeUtils.truncateTimeToPrecision(nanos, precision)
   }
 
   override def readValues(
