@@ -390,7 +390,9 @@ object DatasetManager extends Logging {
    *                                execution (the user-specified or inferred schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
-   * @param properties              the table properties to (re)set on evolve.
+   * @param properties              the declared table properties to (re)set on the table. Note
+   *                                that properties absent here are NOT removed from the table (see
+   *                                the TODO in the body).
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
@@ -411,11 +413,19 @@ object DatasetManager extends Logging {
     val columnChanges = diffSchemas(currentSchema, targetSchema)
 
     val existingProperties = existingTable.properties()
-    val propertyChanges = properties.collect {
+
+    // TODO (SPARK-57670): Property removal is intentionally not handled here: a property dropped
+    // from the table definition between runs is left in place rather than actually removed from the
+    // corresponding catalog table entry. Removing it reliably is hard because we cannot distinguish
+    // a user-declared property the user dropped from a catalog/engine-managed property (e.g. the
+    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) that must never be
+    // removed, and there is no record of which keys the pipeline previously set.
+    val propertiesToSet = properties.collect {
       case (k, v) if !Option(existingProperties.get(k)).contains(v) =>
         TableChange.setProperty(k, v)
     }
-    val allTableChanges = columnChanges ++ propertyChanges
+
+    val allTableChanges = columnChanges ++ propertiesToSet
 
     // If there are no table changes to evolve with, avoid the no-op round-trip alter altogether.
     if (allTableChanges.nonEmpty) {
