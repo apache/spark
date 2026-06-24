@@ -703,6 +703,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
   public byte getByte(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
+      return 0;
+    }
     return Platform.getByte(base, offset + byteIndex);
   }
 
