@@ -64,8 +64,26 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   /** Schema used to read the sample data produced by [[sampleDf]]. */
   protected def readSchema: String
 
-  /** Encodes `df` as the bytes of a single data file of [[format]], honoring `writeOptions`. */
-  protected def encodeFile(df: DataFrame, writeOptions: Map[String, String]): Array[Byte]
+  /**
+   * Encodes `df` as the bytes of a single data file of [[format]], honoring `writeOptions` (plus
+   * [[readOptions]], so e.g. CSV writes with the same `header` mode it reads). Coalesces to one
+   * partition and returns that single part file's bytes.
+   */
+  protected def encodeFile(df: DataFrame, writeOptions: Map[String, String]): Array[Byte] = {
+    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
+    try {
+      df.coalesce(1).write.format(format)
+        .options(readOptions ++ writeOptions)
+        .mode("overwrite").save(dir.getCanonicalPath)
+      val parts = dir.listFiles().filter { f =>
+        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
+          !f.getName.endsWith(".crc")
+      }
+      assert(parts.length == 1,
+        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
+      Files.readAllBytes(parts.head.toPath)
+    } finally Utils.deleteRecursively(dir)
+  }
 
   /** Encodes `df` as a single data file using only the format's default write options. */
   protected final def encodeFile(df: DataFrame): Array[Byte] = encodeFile(df, Map.empty)
@@ -107,11 +125,10 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
     spark.read.format(format).options(readOptions ++ extraOptions).schema(schema).load(path)
 
   /**
-   * Whether this format infers its read schema from the textual content of the files (CSV, JSON,
-   * XML), as opposed to carrying an embedded schema (Avro, Parquet) or none (text). Gates the
-   * shared schema-inference tests. A format that needs an option to trigger inference (e.g. CSV's
-   * `inferSchema`) also overrides [[inferenceOptions]]; a format that does not infer overrides this
-   * to false.
+   * Whether this format can infer a read schema from the files (content or an embedded header).
+   * Gates the shared schema-inference tests; a format that cannot infer (e.g. ORC) sets it false.
+   * A format that infers but does not widen types across entries excludes that one test via
+   * [[excluded]] (see Avro). CSV-style inference triggers also override [[inferenceOptions]].
    */
   protected def supportsSchemaInference: Boolean = true
 
