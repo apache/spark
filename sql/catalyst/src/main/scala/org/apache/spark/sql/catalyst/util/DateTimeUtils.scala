@@ -1144,6 +1144,42 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` (precision in [7, 9]) from a date and
+   * a local time interpreted in the time zone `zoneId`, preserving the time's sub-microsecond
+   * digits up to `precision`. This is the nanosecond counterpart of
+   * [[makeTimestamp(days:Int,nanos:Long,zoneId:java\.time\.ZoneId)*]].
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_LTZ(precision)`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
+    instantToTimestampNanos(ldt.atZone(zoneId).toInstant, precision)
+  }
+
+  /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` from a date and a local time with a
+   * time zone string. Used by the `CAST(time AS TIMESTAMP_LTZ(precision))` rewrite, which embeds
+   * the resolved session time zone as a string literal.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      timezone: UTF8String): TimestampNanosVal = {
+    makeTimestampLTZNanos(days, nanos, precision, getZoneId(timezone.toString))
+  }
+
+  /**
    * Adds a day-time interval to a time.
    *
    * @param time A time in nanoseconds.

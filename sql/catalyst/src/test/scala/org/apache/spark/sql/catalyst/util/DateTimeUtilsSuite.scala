@@ -1673,6 +1673,47 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       localTime(23, 59, 59, 123456, 789))
   }
 
+  test("makeTimestampLTZNanos") {
+    // At UTC the local date-time coincides with the instant, so the result matches the NTZ builder.
+    val nanos = localTime(23, 59, 59, 999999, 999)
+    val microsOfDay = localTime(23, 59, 59, 999999) / NANOS_PER_MICROS
+    assert(makeTimestampLTZNanos(0, nanos, 9, ZoneOffset.UTC) ===
+      TimestampNanosVal.fromParts(microsOfDay, 999.toShort))
+    assert(makeTimestampLTZNanos(0, nanos, 8, ZoneOffset.UTC) ===
+      TimestampNanosVal.fromParts(microsOfDay, 990.toShort))
+    assert(makeTimestampLTZNanos(0, nanos, 7, ZoneOffset.UTC) ===
+      TimestampNanosVal.fromParts(microsOfDay, 900.toShort))
+    // Pre-epoch date at UTC.
+    assert(makeTimestampLTZNanos(
+      days(1969, 12, 31), localTime(23, 59, 59, 123456, 789), 9, ZoneOffset.UTC) ===
+      TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort))
+    // A non-UTC zone shifts the epoch-micros part by the zone offset; sub-micro digits survive.
+    val zone = getZoneId("America/Los_Angeles")
+    val inst = LocalDateTime.of(2020, 5, 17, 12, 34, 56, 789012345).atZone(zone).toInstant
+    assert(makeTimestampLTZNanos(days(2020, 5, 17), localTime(12, 34, 56, 789012, 345), 9, zone) ===
+      TimestampNanosVal.fromParts(instantToMicros(inst), 345.toShort))
+  }
+
+  test("timestampLTZ time-of-day extraction") {
+    val zone = getZoneId("America/Los_Angeles")
+    // Micro TimestampLTZ: time-of-day is the local wall clock observed in the zone.
+    val microInst = LocalDateTime.of(2020, 5, 17, 12, 34, 56, 789012000).atZone(zone).toInstant
+    assert(timestampToNanosOfDay(instantToMicros(microInst), zone) ===
+      localTime(12, 34, 56, 789012))
+    // At UTC the time-of-day equals the value modulo one day, including pre-epoch values.
+    assert(timestampToNanosOfDay(0, ZoneOffset.UTC) === 0)
+    assert(timestampToNanosOfDay(date(1969, 12, 31, 23, 59, 59, 123456), ZoneOffset.UTC) ===
+      localTime(23, 59, 59, 123456))
+
+    // Nanosecond TimestampLTZ preserves the sub-microsecond digits.
+    val nanoInst = LocalDateTime.of(2020, 5, 17, 12, 34, 56, 789012345).atZone(zone).toInstant
+    val v = TimestampNanosVal.fromParts(instantToMicros(nanoInst), 345.toShort)
+    assert(timestampLTZNanosToNanosOfDay(v, zone) === localTime(12, 34, 56, 789012, 345))
+    val vPre = TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort)
+    assert(timestampLTZNanosToNanosOfDay(vPre, ZoneOffset.UTC) ===
+      localTime(23, 59, 59, 123456, 789))
+  }
+
   test("instant to nanos of day") {
     assert(instantToNanosOfDay(Instant.parse("1970-01-01T00:00:01.001002003Z"), "UTC") ==
       1001002003)
