@@ -86,8 +86,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   protected override def extendedTableInfo: String =
     s"""Type: MANAGED
        |Provider: _
-       |Owner: ${Utils.getCurrentUserName()}
-       |Table Properties: <table properties>""".stripMargin
+       |Owner: ${Utils.getCurrentUserName()}""".stripMargin
 
   protected override def extendedTableSchema: String =
     s"""Schema: root
