@@ -99,41 +99,73 @@ private[sql] class SparkConnectListenerBusListener(
     with Logging {
 
   val sessionHolder = serverSideListenerHolder.sessionHolder
+
+  // Number of attempts to transmit an event to the client before giving up. A single transient
+  // failure (e.g. a momentary gRPC flow-control / response-observer hiccup) should not permanently
+  // remove the listener and silently drop all subsequent events for the session, including the
+  // terminal QueryTerminatedEvent. Only tear down the listener when sending keeps failing across
+  // retries (which is what actually indicates an unresponsive client).
+  private val maxSendAttempts = 3
+  private val sendRetryBackoffMs = 200L
+
   // The method used to stream back the events to the client.
   // The event is serialized to json and sent to the client.
-  // If any exception is thrown while transmitting back the event, the listener is removed,
+  // It is retried a few times on a transient failure; if it keeps failing, the listener is removed,
   // all related sources are cleaned up, and the long-running thread will proceed to send
   // the final ResultComplete response.
   private def send(eventJson: String, eventType: StreamingQueryEventType): Unit = {
-    try {
-      val event = StreamingQueryListenerEvent
-        .newBuilder()
-        .setEventJson(eventJson)
-        .setEventType(eventType)
-        .build()
+    val event = StreamingQueryListenerEvent
+      .newBuilder()
+      .setEventJson(eventJson)
+      .setEventType(eventType)
+      .build()
 
-      val respBuilder = StreamingQueryListenerEventsResult.newBuilder()
-      val eventResult = respBuilder
-        .addAllEvents(Array[StreamingQueryListenerEvent](event).toImmutableArraySeq.asJava)
-        .build()
+    val eventResult = StreamingQueryListenerEventsResult
+      .newBuilder()
+      .addAllEvents(Array[StreamingQueryListenerEvent](event).toImmutableArraySeq.asJava)
+      .build()
 
-      responseObserver.onNext(
-        ExecutePlanResponse
-          .newBuilder()
-          .setSessionId(sessionHolder.sessionId)
-          .setServerSideSessionId(sessionHolder.serverSessionId)
-          .setStreamingQueryListenerEventsResult(eventResult)
-          .build())
-    } catch {
-      case NonFatal(e) =>
-        logError(log"[SessionId: ${MDC(LogKeys.SESSION_ID, sessionHolder.sessionId)}]" +
-          log"[UserId: ${MDC(LogKeys.USER_ID, sessionHolder.userId)}] " +
-          log"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
-          log"because of exception: ${MDC(LogKeys.EXCEPTION, e)}")
-        // This likely means that the client is not responsive even with retry, we should
-        // remove this listener and cleanup resources.
-        serverSideListenerHolder.cleanUp()
+    val response = ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(sessionHolder.sessionId)
+      .setServerSideSessionId(sessionHolder.serverSessionId)
+      .setStreamingQueryListenerEventsResult(eventResult)
+      .build()
+
+    var attempt = 1
+    var lastError: Option[Throwable] = None
+    while (attempt <= maxSendAttempts) {
+      try {
+        responseObserver.onNext(response)
+        return
+      } catch {
+        case NonFatal(e) =>
+          lastError = Some(e)
+          logWarning(
+            s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+              s"Failed to send $eventType to client (attempt $attempt/$maxSendAttempts).",
+            e)
+          if (attempt < maxSendAttempts) {
+            try {
+              Thread.sleep(sendRetryBackoffMs)
+            } catch {
+              case _: InterruptedException =>
+                Thread.currentThread().interrupt()
+                attempt = maxSendAttempts // stop retrying
+            }
+          }
+      }
+      attempt += 1
     }
+    // All attempts failed: this likely means the client is not responsive even with retry, so we
+    // remove this listener and cleanup resources. The long-running thread will then proceed to send
+    // the final ResultComplete response.
+    logError(
+      s"[SessionId: ${sessionHolder.sessionId}][UserId: ${sessionHolder.userId}] " +
+        s"Removing SparkConnectListenerBusListener and terminating the long-running thread " +
+        s"because sending $eventType failed $maxSendAttempts times.",
+      lastError.orNull)
+    serverSideListenerHolder.cleanUp()
   }
 
   def sendResultComplete(): Unit = {

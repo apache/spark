@@ -568,18 +568,28 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       .format("console")
       .start()
 
+    // Diagnostic context attached to assertion failures so that, if this test ever flakes again in
+    // a scheduled job, the log pinpoints which event was missing and the surrounding client state
+    // (e.g. whether the client-side listener is still registered, whether the query errored). The
+    // server-side listener can silently self-remove on a send failure, dropping later events.
+    def diag(stage: String): String =
+      s"[$stage] q.isActive=${q.isActive}, q.exception=${q.exception}, " +
+        s"start=${listener.start.size}, progress=${listener.progress.size}, " +
+        s"terminate=${listener.terminate.size}, " +
+        s"clientListeners=${spark.streams.listListeners().length}"
+
     try {
       q.processAllAvailable()
       eventually(timeout(30.seconds)) {
-        assert(q.isActive)
-        assert(listener.start.length == 1)
-        assert(listener.progress.nonEmpty)
+        assert(q.isActive, diag("active"))
+        assert(listener.start.length == 1, diag("start"))
+        assert(listener.progress.nonEmpty, diag("progress"))
       }
     } finally {
       q.stop()
       eventually(timeout(60.seconds), interval(1.seconds)) {
-        assert(!q.isActive)
-        assert(listener.terminate.nonEmpty)
+        assert(!q.isActive, diag("stopped"))
+        assert(listener.terminate.nonEmpty, diag("terminate"))
       }
     }
   }
@@ -746,9 +756,10 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   class MyListener extends StreamingQueryListener {
-    var start: Seq[String] = Seq.empty
-    var progress: Seq[String] = Seq.empty
-    var terminate: Seq[String] = Seq.empty
+    // @volatile so the test thread reliably observes updates made on the listener dispatch thread.
+    @volatile var start: Seq[String] = Seq.empty
+    @volatile var progress: Seq[String] = Seq.empty
+    @volatile var terminate: Seq[String] = Seq.empty
 
     override def onQueryStarted(event: QueryStartedEvent): Unit = {
       start = start :+ event.json
