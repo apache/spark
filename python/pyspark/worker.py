@@ -1678,7 +1678,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                             check_output_row_against_schema(row)
                     yield row
 
-        def convert_to_arrow(data: Iterable, method_name: str) -> list[pa.RecordBatch]:
+        def convert_rows_to_arrow(data: Iterable, method_name: str) -> list[pa.RecordBatch]:
             data = list(check_return_value(data, method_name))
             if len(data) == 0:
                 # Return one empty RecordBatch to match the left side of the lateral join
@@ -1715,7 +1715,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
 
             return verify_result(table, method_name).to_batches()
 
-        def evaluate(method: Callable, *args: list, num_rows: int = 1) -> Iterator[pa.RecordBatch]:
+        def evaluate_rows(
+            method: Callable, *args: list, num_rows: int = 1
+        ) -> Iterator[pa.RecordBatch]:
             rows = itertools.repeat((), num_rows) if len(args) == 0 else zip(*args)
             for row in rows:
                 # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -1728,7 +1730,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         errorClass="UDTF_EXEC_ERROR",
                         messageParameters={"method_name": method.__name__, "error": str(e)},
                     )
-                for batch in convert_to_arrow(res, method.__name__):
+                for batch in convert_rows_to_arrow(res, method.__name__):
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         eval_method, args_kwargs_offsets = wrap_kwargs_support(
@@ -1759,16 +1761,16 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         )
                         for column, conv in zip(batch.columns, converters)
                     ]
-                    yield from evaluate(
+                    yield from evaluate_rows(
                         eval_method,
                         *[pylist[o] for o in args_kwargs_offsets],
                         num_rows=batch.num_rows,
                     )
                 if terminate is not None:
-                    yield from evaluate(terminate)
+                    yield from evaluate_rows(terminate)
             except SkipRestOfInputTableException:
                 if terminate is not None:
-                    yield from evaluate(terminate)
+                    yield from evaluate_rows(terminate)
             finally:
                 if cleanup is not None:
                     cleanup()
