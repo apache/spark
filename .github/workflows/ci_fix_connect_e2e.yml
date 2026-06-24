@@ -83,3 +83,12 @@ jobs:
             ./build/sbt -Phive -Phadoop-3 \
               "connect-client-jvm/testOnly org.apache.spark.sql.connect.SparkSessionE2ESuite"
           done
+      - name: Repeat ClientStreamingQuerySuite "listener events" (flakiness check)
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          export TERM=vt100
+          for i in $(seq 1 8); do
+            echo "============== ClientStreamingQuerySuite listener events iteration $i =============="
+            ./build/sbt -Phive -Phadoop-3 \
+              "connect-client-jvm/testOnly org.apache.spark.sql.connect.streaming.ClientStreamingQuerySuite -- -z \"listener events\""
+          done
