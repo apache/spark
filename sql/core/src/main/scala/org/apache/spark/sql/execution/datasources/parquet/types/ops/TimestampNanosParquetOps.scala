@@ -156,12 +156,20 @@ case class TimestampNTZNanosParquetOps(t: TimestampNTZNanosType) extends Timesta
 
 private[ops] object TimestampNanosParquetOps {
 
-  /** Whether the Parquet field is an INT64 TIMESTAMP(NANOS) column. */
+  /**
+   * Whether the Parquet field is an INT64 TIMESTAMP(NANOS) column. The physical type is checked
+   * (isPrimitive && INT64) in addition to the logical annotation so a malformed file that carries
+   * a TIMESTAMP(NANOS) annotation on a non-INT64 physical type is rejected by the read guard with
+   * the clean cannotCreateParquetConverterForDataTypeError rather than failing later in the
+   * primitive converter. Mirrors TimeTypeParquetOps.requireCompatibleParquetType.
+   */
   private[ops] def isNanosTimestamp(parquetType: Type): Boolean =
-    parquetType.getLogicalTypeAnnotation match {
-      case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
-      case _ => false
-    }
+    parquetType.isPrimitive &&
+      parquetType.asPrimitiveType.getPrimitiveTypeName == INT64 &&
+      (parquetType.getLogicalTypeAnnotation match {
+        case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
+        case _ => false
+      })
 
   /**
    * Combines the `(epochMicros, nanosWithinMicro)` pair into a single INT64 epoch-nanoseconds

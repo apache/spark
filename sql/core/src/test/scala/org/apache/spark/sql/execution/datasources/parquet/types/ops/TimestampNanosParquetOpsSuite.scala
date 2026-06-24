@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import org.apache.parquet.io.api.PrimitiveConverter
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.{TimestampLogicalTypeAnnotation, TimeUnit}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
@@ -80,13 +81,20 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     assert(ex.getCondition === "PARQUET_CONVERSION_FAILURE.UNSUPPORTED")
   }
 
-  test("newConverter accepts an INT64 TIMESTAMP(NANOS) column") {
-    val nanosField = Types.primitive(INT64, REQUIRED)
-      .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS))
-      .named("c")
-    // Must not throw and must produce a converter wired to the given updater.
-    val converter = ltz.newConverter(nanosField, new ParentContainerUpdater {})
-    assert(converter != null)
+  test("newConverter decodes INT64 epoch-nanos into the (epochMicros, nanosWithinMicro) pair") {
+    // 1_000_000_500 ns = 1_000_000 micros + 500 ns; precision 9 keeps all sub-micro digits.
+    assert(decode(ltz, nanosField(isAdjustedToUTC = true), 1000000500L) ===
+      TimestampNanosVal.fromParts(1000000L, 500.toShort))
+    // Floor semantics keep nanosWithinMicro in [0, 999] for pre-epoch values.
+    assert(decode(ltz, nanosField(isAdjustedToUTC = true), -1L) ===
+      TimestampNanosVal.fromParts(-1L, 999.toShort))
+  }
+
+  test("newConverter truncates sub-precision nanos to an explicit lower read precision") {
+    val ntz7 = TimestampNTZNanosParquetOps(TimestampNTZNanosType(7))
+    // nanosWithinMicro 123 -> truncated to 100 at precision 7.
+    assert(decode(ntz7, nanosField(isAdjustedToUTC = false), 2000000123L) ===
+      TimestampNanosVal.fromParts(2000000L, 100.toShort))
   }
 
   // ---------- isNanosTimestamp helper ----------
@@ -126,7 +134,23 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     }
   }
 
-  // ---------- helper ----------
+  // ---------- helpers ----------
+
+  private def nanosField(isAdjustedToUTC: Boolean): Type =
+    Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(isAdjustedToUTC, TimeUnit.NANOS))
+      .named("c")
+
+  // Builds the converter, feeds one INT64 epoch-nanos value through addLong, and returns the
+  // value the converter set into its updater (the decoded TimestampNanosVal).
+  private def decode(ops: TimestampNanosParquetOps, field: Type, epochNanos: Long): Any = {
+    var captured: Any = null
+    val updater = new ParentContainerUpdater {
+      override def set(value: Any): Unit = captured = value
+    }
+    ops.newConverter(field, updater).asInstanceOf[PrimitiveConverter].addLong(epochNanos)
+    captured
+  }
 
   private def assertNanosTimestampSchema(parquetType: Type, expectedAdjustedToUTC: Boolean): Unit = {
     assert(parquetType.isPrimitive, s"expected a primitive type, got $parquetType")
