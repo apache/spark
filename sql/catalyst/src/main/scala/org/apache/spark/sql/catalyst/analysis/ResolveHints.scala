@@ -84,8 +84,6 @@ object ResolveHints {
    * This rule must happen before common table expressions.
    */
   object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
-    private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
-
     private def hintErrorHandler = conf.hintErrorHandler
 
     def resolver: Resolver = conf.resolver
@@ -159,7 +157,7 @@ object ResolveHints {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_HINT), ruleId) {
-      case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      case h: UnresolvedHint if JoinStrategyHint.isJoinStrategyHintName(h.name) =>
         if (h.parameters.isEmpty) {
           // If there is no table alias specified, apply the hint on the entire subtree.
           ResolvedHint(h.child, createHintInfo(h.name))

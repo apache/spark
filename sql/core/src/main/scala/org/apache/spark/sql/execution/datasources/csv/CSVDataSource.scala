@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{FileNotFoundException, InputStream, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
+import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
@@ -119,13 +120,16 @@ abstract class CSVDataSource extends Serializable with Logging {
    *
    * @param getParser builds a fresh [[UnivocityParser]].
    * @param getHeaderChecker builds a fresh [[CSVHeaderChecker]] for `(isStartOfFile, source)`.
+   * @param ignoredPathSegmentRegex the compiled effective `ignoredPathSegmentRegex` option, so
+   *                           hidden entries are skipped exactly like Spark's file listing would.
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow]
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow]
 
   /**
    * Shared driver used by the [[readArchive]] implementations: streams each non-skipped entry's
@@ -137,10 +141,11 @@ abstract class CSVDataSource extends Serializable with Logging {
       conf: Configuration,
       file: PartitionedFile,
       getParser: () => UnivocityParser,
-      getHeaderChecker: (Boolean, String) => CSVHeaderChecker)(
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
+      ignoredPathSegmentRegex: Pattern)(
       parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
     : Iterator[InternalRow] = {
-    ArchiveReader(file.toPath).readEntries(conf) { (entryName, in) =>
+    ArchiveReader(file.toPath).readEntries(conf, ignoredPathSegmentRegex) { (entryName, in) =>
       val headerChecker =
         getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/$entryName")
       val parser = getParser()
@@ -296,12 +301,14 @@ object TextInputCSVDataSource extends CSVDataSource {
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow] =
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
     // Stream each tar entry through the line-based parser, treating the entry exactly like a
     // standalone CSV file (a fresh parser/header checker is built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
-      UnivocityParser.parseIterator(
-        entryLines(in, parser.options), parser, headerChecker, requiredSchema)
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+      (parser, headerChecker, in) =>
+        UnivocityParser.parseIterator(
+          entryLines(in, parser.options), parser, headerChecker, requiredSchema)
     }
 
   /**
@@ -425,11 +432,13 @@ object MultiLineCSVDataSource extends CSVDataSource {
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow] =
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
     // Stream each tar entry whole through the multi-line parser (a fresh parser/header checker is
     // built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
-      UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+      (parser, headerChecker, in) =>
+        UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
     }
 
   override protected def tokenizeForInference(

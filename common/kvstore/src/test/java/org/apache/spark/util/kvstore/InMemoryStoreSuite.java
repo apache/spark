@@ -237,4 +237,39 @@ public class InMemoryStoreSuite {
     store.delete(t4.getClass(), t4.key);
     assertEquals(0, store.count(CustomType2.class));
   }
+
+  @Test
+  public void testCountByIndexValue() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    // Counting by an indexed value for a type that was never written must return 0 instead
+    // of throwing, consistent with count(Class) and the LevelDB/RocksDB implementations.
+    assertEquals(0, store.count(CustomType1.class, "id", "id"));
+
+    // An unknown index name must be rejected even when the type has no rows, matching both
+    // the populated-type path and the LevelDB/RocksDB stores (IllegalArgumentException),
+    // rather than being silently swallowed into a 0.
+    assertThrows(IllegalArgumentException.class,
+      () -> store.count(CustomType1.class, "nonexistentIndex", "id"));
+
+    CustomType1 t1 = new CustomType1();
+    t1.key = "key1";
+    t1.id = "id";
+    t1.name = "name1";
+    store.write(t1);
+
+    CustomType1 t2 = new CustomType1();
+    t2.key = "key2";
+    t2.id = "id";
+    t2.name = "name2";
+    store.write(t2);
+
+    assertEquals(2, store.count(CustomType1.class, "id", "id"));
+    assertEquals(1, store.count(CustomType1.class, "name", "name1"));
+    assertEquals(0, store.count(CustomType1.class, "name", "nonexistent"));
+
+    // Same rejection for a populated type, confirming the absent/present paths agree.
+    assertThrows(IllegalArgumentException.class,
+      () -> store.count(CustomType1.class, "nonexistentIndex", "id"));
+  }
 }

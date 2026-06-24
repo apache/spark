@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{Closeable, InputStream}
 import java.util.Locale
+import java.util.regex.Pattern
 import java.util.zip.GZIPInputStream
 
 import scala.util.control.NonFatal
@@ -59,9 +60,13 @@ abstract class ArchiveReader(path: Path) {
    * only once the current entry's iterator is exhausted, so nothing is buffered to disk and at most
    * one entry's bytes are read at a time. The archive stream is closed when the returned iterator
    * is exhausted, when [[Closeable.close]] is called on it, and (defensively) on task completion.
+   * Entry skipping mirrors Spark's file listing: `ignoredPathSegmentRegex` is the effective filter
+   * (the `ignoredPathSegmentRegex` data source option), so callers reading with a custom filter
+   * must pass its compiled form here for archive entries to be filtered like loose files.
    */
   def readEntries[T](
-      conf: Configuration)(
+      conf: Configuration,
+      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)(
       parseEntry: (String, InputStream) => Iterator[T]): Iterator[T]
 }
 
@@ -147,16 +152,19 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
   /**
    * Whether an entry is not a real data file and must be skipped: a directory, or a name Spark's
    * own file listing would filter out. Applying [[HadoopFSUtils.shouldFilterOutPathName]] (the
-   * `InMemoryFileIndex` filter) to every path component keeps archive reads in parity with reading
-   * the same entries as loose files: `.`-prefixed sidecars (macOS `._x`, `.DS_Store`), `_`-prefixed
-   * markers (`_SUCCESS`, `_committed_*`), and anything under a `.`/`_`-prefixed directory (e.g. a
-   * leftover `_temporary/` from a failed write) are skipped, while data files are kept. The
-   * per-component check matters because `InMemoryFileIndex` never recurses into such directories,
-   * so a basename-only filter would read `_temporary/part-0.csv` that a loose-file scan drops.
+   * `InMemoryFileIndex` filter) with the same effective `ignoredPathSegmentRegex` to every path
+   * component keeps archive reads in parity with reading the same entries as loose files,
+   * including when the user supplies a custom `ignoredPathSegmentRegex` option: under the default
+   * filter, `.`-prefixed sidecars (macOS `._x`, `.DS_Store`), `_`-prefixed markers (`_SUCCESS`,
+   * `_committed_*`), and anything under a `.`/`_`-prefixed directory (e.g. a leftover
+   * `_temporary/` from a failed write) are skipped, while data files are kept. The per-component
+   * check matters because `InMemoryFileIndex` never recurses into such directories, so a
+   * basename-only filter would read `_temporary/part-0.csv` that a loose-file scan drops.
    */
-  private def shouldSkipEntry(entry: TarArchiveEntry): Boolean = {
+  private def shouldSkipEntry(entry: TarArchiveEntry, ignoredPathSegmentRegex: Pattern): Boolean = {
     if (entry.isDirectory) return true
-    entry.getName.split("/").exists(c => c.nonEmpty && HadoopFSUtils.shouldFilterOutPathName(c))
+    entry.getName.split("/").exists(c =>
+      c.nonEmpty && HadoopFSUtils.shouldFilterOutPathName(c, ignoredPathSegmentRegex))
   }
 
   /** Opens the archive as a tar stream, transparently decompressing `.tar.gz` / `.tgz`. */
@@ -176,7 +184,8 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
     CloseShieldInputStream.wrap(tar)
 
   override def readEntries[T](
-      conf: Configuration)(
+      conf: Configuration,
+      ignoredPathSegmentRegex: Pattern)(
       parseEntry: (String, InputStream) => Iterator[T]): Iterator[T] = {
     val tar = openTarStream(conf)
     var closed = false
@@ -207,7 +216,9 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
             case _ =>
           }
           var entry = tar.getNextEntry
-          while (entry != null && shouldSkipEntry(entry)) entry = tar.getNextEntry
+          while (entry != null && shouldSkipEntry(entry, ignoredPathSegmentRegex)) {
+            entry = tar.getNextEntry
+          }
           if (entry == null) {
             done = true
             cleanup()
