@@ -198,3 +198,54 @@ SELECT unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999');
 SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
 -- NULL nanosecond timestamp.
 SELECT unix_nanos(NULL :: timestamp_ntz(9));
+
+-- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_NTZ(p). The resolved
+-- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
+-- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in
+-- TimestampNanosWideningSuite; the cases below complement those by locking the resolved type with
+-- typeof() and the end-to-end rendered values, by covering operators those suites do not
+-- (greatest/least and the array/map constructors), and by spanning the value range: the min/max
+-- supported timestamps, the 1582 Julian/Gregorian boundary (Spark uses the proleptic Gregorian
+-- calendar), pre/post epoch, near-current values, and varied fractions / precisions. NTZ is
+-- zone-independent, so the time-zone dimension is exercised in timestamp-ltz-nanos.sql instead.
+
+-- UNION ALL widens micro -> nanos: the minimum and maximum supported TIMESTAMP_NTZ values.
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_NTZ '0001-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999') ORDER BY c;
+-- UNION ALL widens nanos(7)/nanos(9) -> nanos(9): around the 1582 Julian/Gregorian boundary
+-- (1582-10-05..14 are valid dates only under the proleptic Gregorian calendar).
+SELECT typeof(c), c FROM (
+    SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ntz(9)) ORDER BY c;
+
+-- coalesce keeps the first non-null, widened to the wider precision: pre-epoch boundary values.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '1969-12-31 23:59:59.0000001' :: timestamp_ntz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ntz(9)) AS v);
+-- CASE WHEN unifies its branches: a near-current value taken from the micro branch.
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_NTZ '2026-06-21 10:16:30'
+    ELSE '2026-06-21 10:16:30.987654321' :: timestamp_ntz(9) END AS v);
+
+-- nanos <-> DATE widening: the minimum DATE adopts the nanos family and renders at midnight.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '0001-01-01', '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8)) AS v);
+
+-- greatest / least widen their arguments to the common nanosecond type and pick the extreme instant.
+SELECT typeof(greatest(TIMESTAMP_NTZ '0001-01-01 00:00:00',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ntz(9)));
+SELECT greatest(TIMESTAMP_NTZ '1500-03-01 12:00:00',
+    '1582-10-15 00:00:00.123456789' :: timestamp_ntz(9),
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.5');
+SELECT least('1970-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ntz(9));
+
+-- array() unifies element types and map() value types: a spread of eras, fractions and precisions.
+SELECT array('0001-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    TIMESTAMP_NTZ '2026-06-21 10:16:30',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ntz(9));
+SELECT typeof(array(TIMESTAMP_NTZ '9999-12-31 23:59:59',
+    '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9)));
+SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9),
+    'max', TIMESTAMP_NTZ '9999-12-31 23:59:59.999999');

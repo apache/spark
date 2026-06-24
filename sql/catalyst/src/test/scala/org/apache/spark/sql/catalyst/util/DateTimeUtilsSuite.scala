@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.types.{Decimal, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
-import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -724,6 +724,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       withDefaultTimeZone(zid) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_YEAR, "1769-01-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "1769-10-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MONTH, "1769-10-01T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_WEEK, "1769-10-16T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_DAY, "1769-10-17T00:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "1769-10-17T17:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
@@ -873,6 +877,29 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     val expected = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2018-11-04T01:00:00-02:00"), zone).get
     assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
+  }
+
+  test("truncTimestamp date-level units across DST boundaries") {
+    val la = getZoneId("America/Los_Angeles")
+    // YEAR / QUARTER truncation of an instant in March (post-spring-forward) crosses
+    // the DST boundary: Jan 1 is in PST, March is in PDT, so the offset at the
+    // candidate (Jan 1 wall-clock) differs from the offset at the original. The fast
+    // path falls back to the slow path, which resolves Jan 1 00:00 in PST.
+    val mar = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-15T12:00:00-07:00"), la).get
+    val expectedYear = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-01T00:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(mar, DateTimeUtils.TRUNC_TO_YEAR, la) === expectedYear)
+    val expectedQuarter = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-01T00:00:00-08:00"), la).get
+    assert(
+      DateTimeUtils.truncTimestamp(mar, DateTimeUtils.TRUNC_TO_QUARTER, la) === expectedQuarter)
+    // MONTH where original and candidate are both in PDT: April fully in DST, no cross.
+    val apr = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-04-15T12:00:00-07:00"), la).get
+    val expectedMonth = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-04-01T00:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(apr, DateTimeUtils.TRUNC_TO_MONTH, la) === expectedMonth)
   }
 
   test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
@@ -1505,6 +1532,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "targetType" -> "\"TIME(6)\"",
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
+
+    // The error must report the requested target precision, not the default TIME(6).
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidTime = "not a time"
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          stringToTimeAnsi(UTF8String.fromString(invalidTime), precision, null)
+        },
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> s"'$invalidTime'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> s""""TIME($precision)"""",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
   }
 
   test("timeToMicros") {
@@ -1592,6 +1634,43 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       makeTimestampNTZ(0, -1)
     }.getMessage
     assert(msg.contains("Invalid value"))
+  }
+
+  test("makeTimestampNTZNanos") {
+    // The combined date + time is floored to the target nanosecond precision in [7, 9].
+    val nanos = localTime(23, 59, 59, 999999, 999)
+    val microsOfDay = localTime(23, 59, 59, 999999) / NANOS_PER_MICROS
+    assert(makeTimestampNTZNanos(0, nanos, 9) ===
+      TimestampNanosVal.fromParts(microsOfDay, 999.toShort))
+    assert(makeTimestampNTZNanos(0, nanos, 8) ===
+      TimestampNanosVal.fromParts(microsOfDay, 990.toShort))
+    assert(makeTimestampNTZNanos(0, nanos, 7) ===
+      TimestampNanosVal.fromParts(microsOfDay, 900.toShort))
+    // A non-zero date shifts the microsecond component while preserving the sub-micro digits.
+    assert(makeTimestampNTZNanos(days(2020, 5, 17), localTime(12, 34, 56, 789012, 345), 9) ===
+      TimestampNanosVal.fromParts(date(2020, 5, 17, 12, 34, 56, 789012), 345.toShort))
+    // Pre-epoch date.
+    assert(makeTimestampNTZNanos(days(1969, 12, 31), localTime(23, 59, 59, 123456, 789), 9) ===
+      TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort))
+  }
+
+  test("timestampNTZ time-of-day extraction") {
+    // Micro TimestampNTZ: time-of-day is the value modulo one day.
+    assert(timestampNTZToNanosOfDay(0) === 0)
+    assert(timestampNTZToNanosOfDay(date(2020, 5, 17, 12, 34, 56, 789012)) ===
+      localTime(12, 34, 56, 789012))
+    // Pre-epoch timestamps wrap correctly via floorMod.
+    assert(timestampNTZToNanosOfDay(date(1969, 12, 31, 23, 59, 59, 123456)) ===
+      localTime(23, 59, 59, 123456))
+    assert(timestampNTZToNanosOfDay(-1) === localTime(23, 59, 59, 999999))
+
+    // Nanosecond TimestampNTZ preserves the sub-microsecond digits.
+    assert(timestampNTZNanosToNanosOfDay(
+      TimestampNanosVal.fromParts(date(2020, 5, 17, 12, 34, 56, 789012), 345.toShort)) ===
+      localTime(12, 34, 56, 789012, 345))
+    assert(timestampNTZNanosToNanosOfDay(
+      TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort)) ===
+      localTime(23, 59, 59, 123456, 789))
   }
 
   test("instant to nanos of day") {

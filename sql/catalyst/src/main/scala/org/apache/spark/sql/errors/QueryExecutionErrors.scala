@@ -342,12 +342,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     arithmeticOverflowError("Overflow in function conv()", context = context)
   }
 
-  def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2003",
-      messageParameters = Map(
-        "size" -> size.toString(),
-        "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString()))
+  def mapSizeExceedArraySizeWhenZipMapError(size: Int): SparkException = {
+    SparkException.internalError(
+      s"Unsuccessful try to zip maps with $size unique keys due to exceeding the array size " +
+        s"limit ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
   }
 
   def literalTypeUnsupportedError(v: Any): RuntimeException = {

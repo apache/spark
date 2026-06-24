@@ -390,6 +390,25 @@ trait SparkDateTimeUtils {
   def nanosToLocalTime(nanos: Long): LocalTime = LocalTime.ofNanoOfDay(nanos)
 
   /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a `TIMESTAMP_NTZ`
+   * microsecond value. `TIMESTAMP_NTZ` is a UTC wall-clock value, so its time-of-day is the value
+   * taken modulo one day. `floorMod` keeps the result in `[0, NANOS_PER_DAY)` even for pre-epoch
+   * (negative) timestamps.
+   */
+  def timestampNTZToNanosOfDay(micros: Long): Long = {
+    Math.floorMod(micros, MICROS_PER_DAY) * NANOS_PER_MICROS
+  }
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a nanosecond-precision
+   * `TIMESTAMP_NTZ` value, preserving the sub-microsecond digits carried in `nanosWithinMicro`.
+   * Since `nanosWithinMicro` is in `[0, 999]`, the result stays in `[0, NANOS_PER_DAY)`.
+   */
+  def timestampNTZNanosToNanosOfDay(v: TimestampNanosVal): Long = {
+    Math.floorMod(v.epochMicros, MICROS_PER_DAY) * NANOS_PER_MICROS + v.nanosWithinMicro
+  }
+
+  /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
    * the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
    * rebased from the hybrid to Proleptic Gregorian calendar. The days rebasing is performed via
@@ -1123,9 +1142,12 @@ trait SparkDateTimeUtils {
     }
   }
 
-  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long =
+    stringToTimeAnsi(s, TimeType.DEFAULT_PRECISION, context)
+
+  def stringToTimeAnsi(s: UTF8String, precision: Int, context: QueryContext): Long = {
     stringToTime(s).getOrElse {
-      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(precision), context)
     }
   }
 
