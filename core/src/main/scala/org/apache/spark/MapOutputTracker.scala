@@ -117,7 +117,7 @@ private class ShuffleStatus(
   /**
    * Mark a partition as having stale (redundant) push attempts. Called from TaskSetManager when it
    * detects that multiple task attempts for the same map output pushed data to the merger.
-   * @param partitionId the partition index (== mapIndex) of the stale (redundant) attempt;
+   * @param mapIndex the partition index (== mapIndex) of the stale (redundant) attempt;
    *                   this is NOT MapStatus.mapId
    */
   def markStalePushedPartition(mapIndex: Int): Unit = withWriteLock {
