@@ -65,6 +65,14 @@ public class InMemoryStore implements KVStore {
   @Override
   public long count(Class<?> type, String index, Object indexedValue) throws Exception {
     InstanceList<?> list = inMemoryLists.get(type);
+    if (list == null) {
+      // The type has never been written, so there are no matching entities. Still validate
+      // the index name (via reflection on the type) before returning, so that an unknown
+      // index fails the same way it does for a populated type and for the LevelDB/RocksDB
+      // stores, instead of being silently swallowed.
+      new KVTypeInfo(type).getAccessor(index);
+      return 0;
+    }
     int count = 0;
     Object comparable = asKey(indexedValue);
     KVTypeInfo.Accessor accessor = list.getIndexAccessor(index);
