@@ -2162,3 +2162,286 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "CASE WHEN true THEN time'12:34:56' ELSE timestamp_ntz'2020-05-17 12:34:56' END"
   } ]
 }
+
+
+-- !query
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(6))
+-- !query schema
+struct<CAST(TIMESTAMP '2020-05-17 12:34:56.789012' AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(3))
+-- !query schema
+struct<CAST(TIMESTAMP '2020-05-17 12:34:56.789012' AS TIME(3)):time(3)>
+-- !query output
+12:34:56.789
+
+
+-- !query
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(0))
+-- !query schema
+struct<CAST(TIMESTAMP '2020-05-17 12:34:56.789012' AS TIME(0)):time(0)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(7))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(7)):time(7)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(7) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_LTZ(7)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT timestamp'2020-05-17 12:34:56.789012' :: TIME(6)
+-- !query schema
+struct<CAST(TIMESTAMP '2020-05-17 12:34:56.789012' AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ))
+-- !query schema
+struct<typeof(CAST(TIME '12:34:56' AS TIMESTAMP)):string>
+-- !query output
+timestamp
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ(9)))
+-- !query schema
+struct<typeof(CAST(TIME '12:34:56' AS TIMESTAMP_LTZ(9))):string>
+-- !query output
+timestamp_ltz(9)
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ) AS DATE) = current_date()
+-- !query schema
+struct<(CAST(CAST(TIME '12:34:56' AS TIMESTAMP) AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS DATE) = current_date()
+-- !query schema
+struct<(CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_LTZ) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012' AS TIMESTAMP) AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(7)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_LTZ(7)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_LTZ(6)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(CAST(TIME '12:34:56.789012345' AS TIME(9)) AS TIMESTAMP) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_LTZ)
+-- !query schema
+struct<CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_LTZ(9))
+-- !query schema
+struct<CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP) AS TIME(6)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_LTZ)) t(x)
+-- !query schema
+struct<(CAST(x AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_LTZ)) t(x)
+-- !query schema
+struct<x:time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9))) t(x)
+-- !query schema
+struct<x:time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
+SELECT time'12:34:56' UNION ALL SELECT timestamp'2020-05-17 12:34:56'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"TIMESTAMP\"",
+    "dataType2" : "\"TIME(6)\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 69,
+    "fragment" : "SELECT time'12:34:56' UNION ALL SELECT timestamp'2020-05-17 12:34:56'"
+  } ]
+}
+
+
+-- !query
+SELECT coalesce(time'12:34:56', timestamp'2020-05-17 12:34:56')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"TIME(6)\" or \"TIMESTAMP\")",
+    "functionName" : "`coalesce`",
+    "sqlExpr" : "\"coalesce(TIME '12:34:56', TIMESTAMP '2020-05-17 12:34:56')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 63,
+    "fragment" : "coalesce(time'12:34:56', timestamp'2020-05-17 12:34:56')"
+  } ]
+}
+
+
+-- !query
+SELECT coalesce(time'12:34:56', timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"TIME(6)\" or \"TIMESTAMP_LTZ(9)\")",
+    "functionName" : "`coalesce`",
+    "sqlExpr" : "\"coalesce(TIME '12:34:56', CAST(TIMESTAMP_LTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_LTZ(9)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 95,
+    "fragment" : "coalesce(time'12:34:56', timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9))"
+  } ]
+}
+
+
+-- !query
+SELECT CASE WHEN true THEN time'12:34:56' ELSE timestamp'2020-05-17 12:34:56' END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "[\"TIME(6)\", \"TIMESTAMP\"]",
+    "functionName" : "`casewhen`",
+    "sqlExpr" : "\"CASE WHEN true THEN TIME '12:34:56' ELSE TIMESTAMP '2020-05-17 12:34:56' END\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 81,
+    "fragment" : "CASE WHEN true THEN time'12:34:56' ELSE timestamp'2020-05-17 12:34:56' END"
+  } ]
+}

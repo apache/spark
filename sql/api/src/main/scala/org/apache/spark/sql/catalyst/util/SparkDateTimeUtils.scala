@@ -409,6 +409,26 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a `TIMESTAMP_LTZ`
+   * microsecond value. `TIMESTAMP_LTZ` denotes an absolute instant, so its time-of-day is the
+   * local wall-clock time observed in the session time zone `zoneId`. The result stays in
+   * `[0, NANOS_PER_DAY)`.
+   */
+  def timestampToNanosOfDay(micros: Long, zoneId: ZoneId): Long = {
+    getLocalDateTime(micros, zoneId).toLocalTime.toNanoOfDay
+  }
+
+  /**
+   * Extracts the time-of-day component (nanoseconds since midnight) from a nanosecond-precision
+   * `TIMESTAMP_LTZ` value. `TIMESTAMP_LTZ` denotes an absolute instant, so its time-of-day is the
+   * local wall-clock time observed in the session time zone `zoneId`. The sub-microsecond digits
+   * carried in `nanosWithinMicro` are preserved, and the result stays in `[0, NANOS_PER_DAY)`.
+   */
+  def timestampLTZNanosToNanosOfDay(v: TimestampNanosVal, zoneId: ZoneId): Long = {
+    timestampNanosToInstant(v).atZone(zoneId).toLocalTime.toNanoOfDay
+  }
+
+  /**
    * Converts a local date at the default JVM time zone to the number of days since 1970-01-01 in
    * the hybrid calendar (Julian + Gregorian) by discarding the time part. The resulted days are
    * rebased from the hybrid to Proleptic Gregorian calendar. The days rebasing is performed via
