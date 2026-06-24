@@ -158,6 +158,14 @@ object Cast extends QueryErrorsBase {
     case (_: TimeType, _: TimeType) => true
     case (_: TimeType, _: IntegralType) => true
 
+    // TIME(p) <-> TIMESTAMP_NTZ(q), q in [6, 9] (precision 6 is the micro TimestampNTZType,
+    // [7, 9] is TimestampNTZNanosType). Restricted to the NTZ family on purpose: TIMESTAMP_LTZ
+    // is not a valid counterpart for these casts.
+    case (_: TimeType, TimestampNTZType) => true
+    case (TimestampNTZType, _: TimeType) => true
+    case (_: TimeType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, _: TimeType) => true
+
     // non-null variants can generate nulls even in ANSI mode
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canAnsiCast(fromType, toType) && resolvableNullability(fn || (fromType == VariantType), tn)
@@ -311,6 +319,14 @@ object Cast extends QueryErrorsBase {
     case (_: TimeType, _: TimeType) => true
     case (_: TimeType, _: IntegralType) => true
 
+    // TIME(p) <-> TIMESTAMP_NTZ(q), q in [6, 9] (precision 6 is the micro TimestampNTZType,
+    // [7, 9] is TimestampNTZNanosType). Restricted to the NTZ family on purpose: TIMESTAMP_LTZ
+    // is not a valid counterpart for these casts.
+    case (_: TimeType, TimestampNTZType) => true
+    case (TimestampNTZType, _: TimeType) => true
+    case (_: TimeType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, _: TimeType) => true
+
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
@@ -351,11 +367,11 @@ object Cast extends QueryErrorsBase {
 
   /**
    * Return true if we need to use the `timeZone` information casting `from` type to `to` type.
-   * The patterns matched reflect the current implementation in the Cast node.
-   * c.f. usage of `timeZone` in:
-   * * Cast.castToString
-   * * Cast.castToDate
-   * * Cast.castToTimestamp
+   * The patterns matched reflect the current implementation in the Cast node and must stay in sync
+   * with it: a conversion needs the session time zone exactly when its `castTo*` / `castTo*Code`
+   * path reads `zoneId`. This is principally the string/date casts of the LTZ timestamp families
+   * (TIMESTAMP and TIMESTAMP_LTZ(p)), the cross-family TIMESTAMP_LTZ <-> TIMESTAMP_NTZ conversions
+   * (micro and nanosecond), and TIME -> TIMESTAMP_NTZ (whose date fields come from CURRENT_DATE).
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
@@ -383,6 +399,11 @@ object Cast extends QueryErrorsBase {
     // mirroring micro TIMESTAMP_NTZ<->DATE which is intentionally absent here.
     case (DateType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, DateType) => true
+    // TIME -> TIMESTAMP_NTZ fills the date fields from CURRENT_DATE, which is resolved in the
+    // session time zone. The reverse (TIMESTAMP_NTZ -> TIME) extracts the UTC wall-clock
+    // time-of-day and is intentionally zone-independent, so it is absent here.
+    case (_: TimeType, TimestampNTZType) => true
+    case (_: TimeType, _: TimestampNTZNanosType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
@@ -392,6 +413,18 @@ object Cast extends QueryErrorsBase {
           case (fromField, toField) =>
             needsTimeZone(fromField.dataType, toField.dataType)
         }
+    case _ => false
+  }
+
+  /**
+   * Returns true for a cast from `TIME(p)` to `TIMESTAMP_NTZ(q)` (q in [6, 9]). Such casts derive
+   * their date fields from `CURRENT_DATE`, so they are stabilized within a query by
+   * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]], which scans `CAST` nodes and
+   * uses this predicate on the resolved plan.
+   */
+  def isTimeToTimestampNTZ(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: TimeType, _: TimestampNTZType) => true
+    case (_: TimeType, _: TimestampNTZNanosType) => true
     case _ => false
   }
 
@@ -868,6 +901,12 @@ case class Cast(
       buildCast[TimestampNanosVal](_, v => v.epochMicros)
     case _: TimestampLTZNanosType =>
       buildCast[TimestampNanosVal](_, v => convertTz(v.epochMicros, ZoneOffset.UTC, zoneId))
+    case _: TimeType =>
+      // Per ANSI, the date fields come from CURRENT_DATE (resolved in the session time zone).
+      // In a real query plan ComputeCurrentTime rewrites this cast with a query-stable date
+      // literal; this eval path is the fallback for direct expression evaluation and reads the
+      // current date in the session time zone.
+      buildCast[Long](_, nanos => DateTimeUtils.makeTimestampNTZ(currentDate(zoneId), nanos))
   }
 
   private[this] def castToTimestampLTZNanos(
@@ -919,6 +958,12 @@ case class Cast(
     case DateType =>
       buildCast[Int](_, d =>
         TimestampNanosVal.fromParts(daysToMicros(d, ZoneOffset.UTC), 0.toShort))
+    case _: TimeType =>
+      // See castToTimestampNTZ: the date fields come from CURRENT_DATE in the session time zone,
+      // with the query-stable rewrite handled by ComputeCurrentTime. The sub-microsecond digits
+      // of the TIME value are preserved up to the target precision.
+      buildCast[Long](_, nanos =>
+        DateTimeUtils.makeTimestampNTZNanos(currentDate(zoneId), nanos, precision))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -973,6 +1018,18 @@ case class Cast(
       }
     case _: TimeType =>
       buildCast[Long](_, nanos => DateTimeUtils.truncateTimeToPrecision(nanos, to.precision))
+    case TimestampNTZType =>
+      buildCast[Long](_, micros => DateTimeUtils.truncateTimeToPrecision(
+        DateTimeUtils.timestampNTZToNanosOfDay(micros), to.precision))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => DateTimeUtils.truncateTimeToPrecision(
+        DateTimeUtils.timestampNTZNanosToNanosOfDay(v), to.precision))
+    // Unreachable for valid casts: `canCast(_, TimeType)` only allows the source types handled
+    // above (and NullType is short-circuited in castInternal). Fail fast to keep the interpreted
+    // and codegen (castToTimeCode) paths consistent if a future canCast arm is added without a
+    // matching converter here.
+    case _ =>
+      throw SparkException.internalError(s"Cannot cast $from to ${to.typeName}.")
   }
 
   // IntervalConverter
@@ -1692,8 +1749,22 @@ case class Cast(
           code"""
             $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision($nanos, ${to.precision});
           """
+      case TimestampNTZType =>
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
+              $dateTimeUtilsCls.timestampNTZToNanosOfDay($c), ${to.precision});
+          """
+      case _: TimestampNTZNanosType =>
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
+              $dateTimeUtilsCls.timestampNTZNanosToNanosOfDay($c), ${to.precision});
+          """
+      // Unreachable for valid casts (see castToTime). Fail fast at codegen time instead of
+      // silently emitting a null, matching the interpreted path.
       case _ =>
-        (_, _, evNull) => code"$evNull = true;"
+        throw SparkException.internalError(s"Cannot cast $from to ${to.typeName}.")
     }
   }
 
@@ -1932,6 +2003,10 @@ case class Cast(
       val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c.epochMicros, java.time.ZoneOffset.UTC, $zid);"
+    case _: TimeType =>
+      val zid = zoneIdValue(ctx)
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.makeTimestampNTZ($dateTimeUtilsCls.currentDate($zid), $c);"
   }
 
   private[this] def castToTimestampLTZNanosCode(
@@ -2024,6 +2099,11 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts(" +
           code"$dateTimeUtilsCls.daysToMicros($c, java.time.ZoneOffset.UTC), (short) 0);"
+    case _: TimeType =>
+      val zid = zoneIdValue(ctx)
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.makeTimestampNTZNanos(" +
+          code"$dateTimeUtilsCls.currentDate($zid), $c, $precision);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {

@@ -1099,6 +1099,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Makes a nanosecond-precision timestamp without time zone from a date and a local time,
+   * flooring the combined value to the target `precision` in [7, 9] (see
+   * [[localDateTimeToTimestampNanos]]).
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_NTZ(precision)`.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZNanos(days: Int, nanos: Long, precision: Int): TimestampNanosVal = {
+    localDateTimeToTimestampNanos(
+      LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)), precision)
+  }
+
+  /**
    * Makes a timestamp from a date and a local time.
    *
    * @param days The number of days since the epoch 1970-01-01.
