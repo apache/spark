@@ -3095,6 +3095,11 @@ case class MakeTimestampLTZ(
 
   override def prettyName: String = "make_timestamp_ltz"
 
+  // TimeZoneAwareExpression's `final override val nodePatterns` wins in linearization and would
+  // otherwise drop RUNTIME_REPLACEABLE; re-add it via this hook, mirroring the other
+  // RuntimeReplaceable + TimeZoneAwareExpression siblings (e.g. ParseToDate, ParseToTimestamp).
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
@@ -3133,6 +3138,10 @@ case class MakeTimestampLTZNanos(
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
 
   override def prettyName: String = "make_timestamp_ltz_nanos"
+
+  // See MakeTimestampLTZ: re-add RUNTIME_REPLACEABLE that TimeZoneAwareExpression's final
+  // nodePatterns would otherwise drop in linearization.
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

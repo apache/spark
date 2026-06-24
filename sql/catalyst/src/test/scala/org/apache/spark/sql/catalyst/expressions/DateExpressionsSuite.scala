@@ -2681,6 +2681,35 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MakeTimestampLTZNanos(dateLit(date), timeNanos, 7, UTC_OPT).canonicalized)
   }
 
+  test("SPARK-57660: make timestamp_ltz across DST transitions") {
+    // This is the zone-conversion branch of the TIME -> TIMESTAMP_LTZ cast (ComputeCurrentTime
+    // rewrites the cast into these builders). The Cast itself can't be DST-tested deterministically
+    // because it takes the date from CURRENT_DATE, so the gap/overlap behavior is asserted here on
+    // the builders with explicit transition dates.
+    val tz = "America/Los_Angeles"
+    // Spring-forward gap: 2020-03-08 02:30 does not exist in LA; java.time shifts it forward to
+    // 03:30 PDT. The builder must resolve to that instant.
+    val gapInstant = LocalDateTime.of(2020, 3, 8, 3, 30, 0).atZone(LA).toInstant
+    checkEvaluation(
+      MakeTimestampLTZ(dateLit("2020-03-08"), timeLit("02:30:00"), Option(tz)),
+      DateTimeUtils.instantToMicros(gapInstant))
+    // Sub-microsecond digits survive the gap shift.
+    val gapNanoInstant = LocalDateTime.of(2020, 3, 8, 3, 30, 0, 789012000).atZone(LA).toInstant
+    checkEvaluation(
+      MakeTimestampLTZNanos(
+        dateLit("2020-03-08"),
+        Literal.create(localTime(2, 30, 0, 789012, 345), TimeType(9)), 9, Option(tz)),
+      TimestampNanosVal.fromParts(DateTimeUtils.instantToMicros(gapNanoInstant), 345.toShort))
+    // Fall-back overlap: 2020-11-01 01:30 occurs twice in LA; java.time picks the earlier offset
+    // (PDT, UTC-7). Pin the expected instant to that explicit offset so the assertion does not just
+    // mirror the builder's own atZone resolution.
+    val overlapInstant =
+      LocalDateTime.of(2020, 11, 1, 1, 30, 0).atOffset(java.time.ZoneOffset.ofHours(-7)).toInstant
+    checkEvaluation(
+      MakeTimestampLTZ(dateLit("2020-11-01"), timeLit("01:30:00"), Option(tz)),
+      DateTimeUtils.instantToMicros(overlapInstant))
+  }
+
   test("SPARK-53113: try to make timestamp from date, time, and timezone") {
     Seq(
       ("2023-10-01", "12:34:56.123456", "America/Los_Angeles", LA),
