@@ -630,6 +630,16 @@ class MetricsFailureInjectionSuite
     // OSS Spark cannot roll back a partially-finished result stage, so the job aborts. With
     // the default RESULT_STAGE_DELAY=0 the result stage is corrupted before any task
     // dispatches and the rollback path does not abort.
+    //
+    // We group by the high-cardinality `id` column (not `low_cardinality_col`) so that every
+    // one of the 20 reducer partitions reads data from the corrupted mapper 0. Otherwise only
+    // the handful of reducer partitions that happen to hold mapper-0's few low-cardinality keys
+    // would observe the FetchFailed, and the abort would only fire when one of those specific
+    // partitions happened to be scheduled after the (asynchronous) corruption -- a scheduling
+    // race that made this test flaky under Maven. With `id`, every partition depends on mapper
+    // 0, so once RESULT_STAGE_DELAY=1 has corrupted it (after the first result task), local[2]
+    // dispatches the remaining result tasks afterwards and at least one is guaranteed to hit
+    // the corrupted mapper, deterministically triggering the indeterminate-stage abort.
     withTable("test_table") {
       setUpTestTable("test_table")
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
@@ -638,7 +648,7 @@ class MetricsFailureInjectionSuite
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY.key -> "1",
             config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
           val df = spark.read.table("test_table")
-            .groupBy("low_cardinality_col")
+            .groupBy("id")
             .count()
           val ex = intercept[SparkException] {
             df.collect()
