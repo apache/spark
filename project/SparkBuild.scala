@@ -1278,7 +1278,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.4")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.22.0")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val grpcVersion = sys.props.get("io.grpc.version").getOrElse("1.76.0")
   lazy val grpcDeps = Bom.dependencies("io.grpc" % "grpc-bom" % grpcVersion)
