@@ -39,7 +39,10 @@ if should_test_connect:
     from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.errors import PySparkRuntimeError
-    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
+    from pyspark.errors.exceptions.connect import (
+        SparkConnectException,
+        SparkConnectGrpcException,
+    )
     import pyspark.sql.connect.proto as proto
 
     class TestPolicy(DefaultPolicy):
@@ -277,43 +280,63 @@ class SparkConnectClientTestCase(unittest.TestCase):
             mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
         )
 
+    class MultiBatchMockService:
+        """Mock service returning a single arrow batch message whose IPC stream
+        carries multiple RecordBatches. ``declared_row_count`` is the row_count
+        the server claims, allowing tests to exercise both the matching and the
+        mismatching validation paths."""
+
+        def __init__(self, session_id: str, values, declared_row_count: int):
+            self._session_id = session_id
+            self._values = values
+            self._declared_row_count = declared_row_count
+            self.req: Optional[proto.ExecutePlanRequest] = None
+
+        def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata, timeout=None):
+            self.req = req
+            resp = proto.ExecutePlanResponse()
+            resp.session_id = self._session_id
+            resp.operation_id = req.operation_id
+
+            pdf = pd.DataFrame(data={"col1": self._values})
+            schema = pa.Schema.from_pandas(pdf)
+            table = pa.Table.from_pandas(pdf)
+            sink = pa.BufferOutputStream()
+            writer = pa.ipc.new_stream(sink, schema=schema)
+            # Split the data into multiple RecordBatches within one IPC stream.
+            for batch in table.to_batches(max_chunksize=2):
+                writer.write_batch(batch)
+            writer.close()
+
+            resp.arrow_batch.data = sink.getvalue().to_pybytes()
+            resp.arrow_batch.row_count = self._declared_row_count
+            return [resp]
+
     def test_multiple_record_batches_in_single_arrow_batch(self):
         # An Arrow IPC stream may carry multiple RecordBatches; row_count is the total
         # across them and must be validated only after the stream is fully consumed.
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        values = [1, 2, 3, 4]
+        client._stub = self.MultiBatchMockService(
+            client._session_id, values, declared_row_count=len(values)
+        )
 
-        class MultiBatchMockService:
-            def __init__(self, session_id: str):
-                self._session_id = session_id
-                self.req: Optional[proto.ExecutePlanRequest] = None
+        table, _, _ = client.to_table(proto.Plan(), {})
+        self.assertEqual(table.num_rows, len(values))
+        self.assertEqual(table.column("col1").to_pylist(), values)
 
-            def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
-                self.req = req
-                resp = proto.ExecutePlanResponse()
-                resp.session_id = self._session_id
-                resp.operation_id = req.operation_id
+    def test_multiple_record_batches_row_count_mismatch_raises(self):
+        # The validation this fix targets: when the declared row_count does not match
+        # the total rows across all RecordBatches in the stream, it must still raise.
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        values = [1, 2, 3, 4]
+        client._stub = self.MultiBatchMockService(
+            client._session_id, values, declared_row_count=len(values) + 1
+        )
 
-                pdf = pd.DataFrame(data={"col1": [1, 2, 3, 4]})
-                schema = pa.Schema.from_pandas(pdf)
-                table = pa.Table.from_pandas(pdf)
-                sink = pa.BufferOutputStream()
-                writer = pa.ipc.new_stream(sink, schema=schema)
-                # Two RecordBatches in one IPC stream.
-                for batch in table.to_batches(max_chunksize=2):
-                    writer.write_batch(batch)
-                writer.close()
-
-                resp.arrow_batch.data = sink.getvalue().to_pybytes()
-                # row_count is the total across all RecordBatches in the message.
-                resp.arrow_batch.row_count = 4
-                return [resp]
-
-        mock = MultiBatchMockService(client._session_id)
-        client._stub = mock
-
-        plan = proto.Plan()
-        table, _, _ = client.to_table(plan, {})
-        self.assertEqual(table.num_rows, 4)
+        with self.assertRaises(SparkConnectException) as ctx:
+            client.to_table(proto.Plan(), {})
+        self.assertIn("Expected 5 rows in arrow batch but got 4", str(ctx.exception))
 
     def test_properties(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
