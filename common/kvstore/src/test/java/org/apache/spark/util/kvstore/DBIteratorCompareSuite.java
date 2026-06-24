@@ -46,6 +46,11 @@ public class DBIteratorCompareSuite {
     // Equal arrays compare equal.
     assertEquals(0, cmp.compare(new byte[] { 1, 2, 3 }, new byte[] { 1, 2, 3 }));
 
+    // Empty arrays compare equal, and an empty array sorts before any non-empty one.
+    assertEquals(0, cmp.compare(new byte[] {}, new byte[] {}));
+    assertTrue(cmp.compare(new byte[] {}, new byte[] { 1 }) < 0);
+    assertTrue(cmp.compare(new byte[] { 1 }, new byte[] {}) > 0);
+
     // A prefix sorts before the longer array that extends it.
     assertTrue(cmp.compare(new byte[] { 1, 2 }, new byte[] { 1, 2, 3 }) < 0);
     assertTrue(cmp.compare(new byte[] { 1, 2, 3 }, new byte[] { 1, 2 }) > 0);
