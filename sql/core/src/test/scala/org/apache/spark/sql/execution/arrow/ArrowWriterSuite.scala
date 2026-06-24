@@ -193,6 +193,11 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     check(TimestampNTZNanosType(9), null)
     check(TimestampLTZNanosType(9), "UTC")
+    // The value path packs the full nanosecond value regardless of the column precision (precision
+    // is carried in the Arrow field metadata, not the value), so p=7 round-trips identically to
+    // p=9; exercising it guards the value path against a future precision-enforcing change.
+    check(TimestampNTZNanosType(7), null)
+    check(TimestampLTZNanosType(7), "UTC")
   }
 
   test("timestamp nanos out of range raises DATETIME_OVERFLOW") {
