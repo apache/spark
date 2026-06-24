@@ -4096,6 +4096,14 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("你好世界你好", "你好", -1, 2, UTF8_LCASE, 1);
     assertStringInstrWithOccurrence("你好世界你好", "你好", -1, 2, UNICODE_CI, 1);
     assertStringInstrWithOccurrence("你好世界你好", "你好", -1, 2, UNICODE, 1);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 1, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 1, UTF8_LCASE, 5);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 1, UNICODE_CI, 5);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 1, UNICODE, 5);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 2, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 2, UTF8_LCASE, 1);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 2, UNICODE_CI, 1);
+    assertStringInstrWithOccurrence("你好世界你好", "你好", -2, 2, UNICODE, 1);
     // Reverse lookup under case sensitivity/insensitivity
     assertStringInstrWithOccurrence("AbCaBc", "Bc", -1, 1, UTF8_BINARY, 5);
     assertStringInstrWithOccurrence("AbCaBc", "Bc", -1, 1, UTF8_LCASE, 5);
@@ -4103,6 +4111,12 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("AbCaBc", "bc", -1, 1, UTF8_BINARY, 0);
     assertStringInstrWithOccurrence("AbCaBc", "bc", -1, 1, UTF8_LCASE, 5);
     assertStringInstrWithOccurrence("AbCaBc", "bc", -1, 1, UNICODE_CI, 5);
+    assertStringInstrWithOccurrence("AbCaBc", "Bc", -2, 1, UTF8_BINARY, 5);
+    assertStringInstrWithOccurrence("AbCaBc", "Bc", -2, 1, UTF8_LCASE, 5);
+    assertStringInstrWithOccurrence("AbCaBc", "Bc", -2, 1, UNICODE_CI, 5);
+    assertStringInstrWithOccurrence("AbCaBc", "bc", -2, 1, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("AbCaBc", "bc", -2, 1, UTF8_LCASE, 5);
+    assertStringInstrWithOccurrence("AbCaBc", "bc", -2, 1, UNICODE_CI, 5);
     // Forward, occurrence = 2, with UNICODE_CI / UTF8_LCASE
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", 1, 2, UNICODE_CI, 3);
     assertStringInstrWithOccurrence("İoi\u0307oİo", "i\u0307o", 1, 2, UNICODE_CI, 3);
@@ -4115,6 +4129,8 @@ public class CollationSupportSuite {
     // start = -2 (search left from the second-last character)
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -2, 1, UNICODE_CI, 6);
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -2, 2, UNICODE_CI, 3);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -2, 1, UTF8_LCASE, 6);
+    assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -2, 2, UTF8_LCASE, 3);
     // Boundary: occurrence exceeds actual count
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", 1, 4, UNICODE_CI, 0);
     assertStringInstrWithOccurrence("İoi\u0307oİo", "İo", -1, 4, UTF8_LCASE, 0);
@@ -4210,6 +4226,14 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "🙃", -8, 1, UTF8_BINARY, 0);
     assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "🙃", -8, 1, UNICODE, 0);
     assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "🙃", -8, 1, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 1, UTF8_LCASE, 6);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 1, UNICODE, 6);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 1, UNICODE_CI, 6);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 1, UTF8_BINARY, 6);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 2, UTF8_LCASE, 4);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 2, UNICODE, 4);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 2, UNICODE_CI, 4);
+    assertStringInstrWithOccurrence("x🙃yz🙃z🙃", "z🙃", -2, 2, UTF8_BINARY, 4);
     // Empty substring with negative start, occurrence >= 1
     assertStringInstrWithOccurrence("a", "", -1, 1, UTF8_BINARY, 1);
     assertStringInstrWithOccurrence("a", "", -1, 1, UTF8_LCASE, 1);
@@ -4231,6 +4255,38 @@ public class CollationSupportSuite {
     assertStringInstrWithOccurrence("", "x", -1, 1, UTF8_LCASE, 0);
     assertStringInstrWithOccurrence("", "x", -1, 1, UNICODE, 0);
     assertStringInstrWithOccurrence("", "x", -1, 1, UNICODE_CI, 0);
+    // Overlapping matches
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 1, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 3, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 4, UTF8_BINARY, 0);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", -1, 2, UTF8_LCASE, 2);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", 1, 3, UTF8_LCASE, 3);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", 1, 4, UTF8_LCASE, 0);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 1, UNICODE_CI, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 2, UNICODE_CI, 2);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 3, UNICODE_CI, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 4, UNICODE_CI, 0);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 1, UNICODE, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 2, UNICODE, 2);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 3, UNICODE, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", 1, 4, UNICODE, 0);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 1, UTF8_BINARY, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 3, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UTF8_BINARY, 1);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", -1, 1, UTF8_LCASE, 3);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", -2, 1, UTF8_LCASE, 3);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", -1, 3, UTF8_LCASE, 1);
+    assertStringInstrWithOccurrence("σσσσ", "σσ", -2, 3, UTF8_LCASE, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 1, UNICODE_CI, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 1, UNICODE_CI, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 3, UNICODE_CI, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UNICODE_CI, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 1, UNICODE, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 1, UNICODE, 3);
+    assertStringInstrWithOccurrence("aaaa", "aa", -1, 3, UNICODE, 1);
+    assertStringInstrWithOccurrence("aaaa", "aa", -2, 3, UNICODE, 1);
   }
 
 }

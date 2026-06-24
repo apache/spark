@@ -1042,6 +1042,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)), 1)
     checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
       Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
     checkEvaluation(StringInstrWithOccurrence(
       Literal("abc"), Literal("b"), Literal(0), Literal(2)), 0)

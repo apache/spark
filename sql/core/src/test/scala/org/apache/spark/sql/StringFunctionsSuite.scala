@@ -493,6 +493,10 @@ class StringFunctionsSuite extends SharedSparkSession {
       df.selectExpr("instr(a, '', -1, 2)"),
       Row(1))
 
+    checkAnswer(
+      df.selectExpr("instr('abcde', 'cd', -3, 1)"),
+      Row(3))
+
     // Test throw exception when occurrence <= 0
     checkError(
       exception = intercept[SparkRuntimeException] {

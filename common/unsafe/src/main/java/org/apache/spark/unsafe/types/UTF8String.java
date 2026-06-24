@@ -1250,8 +1250,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
    * starting the search at the specified position.
    * When {@code start} is positive, the search proceeds forward from the
-   * {@code start}-th character (1-based). When {@code start} is negative, the
-   * search proceeds backward from the {@code |start|}-th character from the end.
+   * {@code start}-th character (1‑based). When {@code start} is negative, the
+   * search proceeds backward: {@code start} specifies the first character to
+   * compare, counting from the end of the string. For example,
+   * {@code start = -3} points at the 3rd character from the end, and the first
+   * candidate substring is the one that begins at that character.
    * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1, 2 for
    * occurrence 1, 2, 3 respectively).
    *
@@ -1279,10 +1282,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         charCount += 1;
       }
     } else {
-      // For negative start, byteIdx is the exclusive end boundary of the search.
-      // We skip (-start - 1) characters to place byteIdx just past the last
-      // character that may participate in the match.
-      charsToSkip = -start - 1;
+      // For negative start, skip |start| characters from the end to position
+      // byteIdx at the starting byte of the first character to compare.
+      charsToSkip = -start;
       byteIdx = numBytes;
       while (byteIdx > 0 && charCount < charsToSkip) {
         byteIdx = prevCharStart(byteIdx);
@@ -1294,9 +1296,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     // For forward search, byteIdx is the starting byte offset of the current character,
     // and charCount tracks the 0-based character index of that character.
-    // For backward search, byteIdx is the exclusive end boundary (the byte after the
-    // last character that can participate in the match), and charCount is not used
-    // for indexing but kept for consistency.
+    // For backward search, byteIdx points to the starting byte of the current candidate match.
     if (start > 0) {
       // Search for the occurrence-th match, starting from the current byteIdx.
       while (occurrence > 0) {
@@ -1323,24 +1323,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         charCount += 1;
       }
     } else {
-      // Backward search: the search range is [0, byteIdx) in bytes.
-      // byteIdx is initially positioned just after the start character (exclusive end).
-      int startIdx;
+      // trying to match pattern starting at byteIdx, scanning leftwards
       while (occurrence > 0) {
         while (byteIdx >= 0) {
-          startIdx = byteIdx - pattern.numBytes;
-          if (startIdx < 0) {
-            return -1;
-          }
-          if (ByteArrayMethods.arrayEquals(base, offset + startIdx,
-                  pattern.base, pattern.offset, pattern.numBytes)) {
+          // Only attempt to match if there is enough room for the pattern.
+          if (byteIdx + pattern.numBytes <= numBytes &&
+            ByteArrayMethods.arrayEquals(base, offset + byteIdx, pattern.base, pattern.offset,
+              pattern.numBytes)) {
             break;
           }
           byteIdx = prevCharStart(byteIdx);
         }
+        if (byteIdx < 0) return -1;
 
         occurrence--;
-        if (occurrence == 0) return bytePosToChar(byteIdx - pattern.numBytes);
+        if (occurrence == 0) return bytePosToChar(byteIdx);
 
         byteIdx = prevCharStart(byteIdx);
       }

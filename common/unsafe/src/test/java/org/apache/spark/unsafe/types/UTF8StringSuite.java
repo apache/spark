@@ -302,12 +302,19 @@ public class UTF8StringSuite {
     assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), -1, 1));
     assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), -1, 2));
     assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), -1, 3));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), -2, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), -2, 2));
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), -2, 3));
 
     // Multi-byte characters
     assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), 1, 1));
     assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), 1, 2));
     assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), -1, 1));
     assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -1, 2));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), -2, 1));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -2, 2));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -3, 1));
+    assertEquals(-1, fromString("你好世界你好").indexOf(fromString("你好"), -3, 2));
 
     // Empty substring (behavior depends on indexOfEmpty, currently returns 0)
     assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 1, 1));
@@ -329,6 +336,13 @@ public class UTF8StringSuite {
     // Target larger than string
     assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));
     assertEquals(-1, fromString("ab").indexOf(fromString("abc"), -1, 1));
+
+    // Backward search with multi-character patterns
+    assertEquals(2, fromString("abcde").indexOf(fromString("cd"), -3, 1));
+    assertEquals(1, fromString("abcde").indexOf(fromString("bc"), -3, 1));
+    assertEquals(0, fromString("abcde").indexOf(fromString("ab"), -3, 1));
+    assertEquals(-1, fromString("abcde").indexOf(fromString("de"), -3, 1));
+    assertEquals(2, fromString("abcde").indexOf(fromString("cde"), -1, 1));
   }
 
   @Test

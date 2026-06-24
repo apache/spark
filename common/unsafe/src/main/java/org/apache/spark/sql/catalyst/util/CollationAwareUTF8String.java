@@ -843,7 +843,7 @@ public class CollationAwareUTF8String {
       if (startIdx >= target.numChars()) return MATCH_NOT_FOUND;
     }
     else {
-      startIdx = target.numChars() + start + 1; // 1-based to 0-based (right side)
+      startIdx = target.numChars() + start; // 1-based to 0-based (right side)
       if (startIdx < 0) return MATCH_NOT_FOUND;
     }
 
@@ -861,6 +861,9 @@ public class CollationAwareUTF8String {
         startIdx = searchIdx + 1;
       }
     } else {
+      // Convert startIdx to the exclusive right boundary needed by lowercaseMatchLengthUntil.
+      startIdx = startIdx + lowercasePattern.numChars();
+      if (startIdx > target.numChars()) startIdx = target.numChars();
       // Backward search
       while (remaining > 0) {
         // Find the matching length (substring in the target) of the first
