@@ -91,7 +91,7 @@ class ArrayWrappers {
         }
       }
 
-      return array.length - other.array.length;
+      return Integer.compare(array.length, other.array.length);
     }
   }
 
@@ -132,7 +132,7 @@ class ArrayWrappers {
         }
       }
 
-      return array.length - other.array.length;
+      return Integer.compare(array.length, other.array.length);
     }
   }
 
