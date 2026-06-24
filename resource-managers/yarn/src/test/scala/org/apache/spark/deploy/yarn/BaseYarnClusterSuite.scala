@@ -103,6 +103,13 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
+    // `maximum-am-resource-percent` defaults to 0.1, which caps the queue's total AM resource
+    // usage to 10% of its capacity. On memory-constrained CI runners this becomes ~1GB, smaller
+    // than the AM/driver memory these tests request (1-2GB), so applications get stuck in the
+    // ACCEPTED state (never activated) and the suite times out waiting for a final state. Let
+    // AMs use the whole queue in tests so applications are always activated.
+    yarnConf.setFloat("yarn.scheduler.capacity.maximum-am-resource-percent", 1.0f)
+    yarnConf.setFloat("yarn.scheduler.capacity.root.default.maximum-am-resource-percent", 1.0f)
 
     // Support both IPv4 and IPv6
     yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
