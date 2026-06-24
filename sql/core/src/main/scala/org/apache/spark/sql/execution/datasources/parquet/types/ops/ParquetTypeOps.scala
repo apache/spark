@@ -41,13 +41,12 @@ import org.apache.spark.sql.types.{DataType, StructType, TimeType}
  *   - Schema conversion: Spark DataType -> Parquet schema type (write path)
  *   - Value write: writing values to Parquet RecordConsumer
  *   - Row-based read: creating Parquet converters for reading into InternalRow
- *   - Type gates: declaring Parquet support (supportDataType) and the vectorized-read
- *     capability flag (isBatchReadSupported)
+ *   - Vectorized read: the batch capability flag (isBatchReadSupported) and the batch
+ *     updater (getVectorUpdater)
+ *   - Type gates: declaring Parquet support (supportDataType)
  *   - Schema clipping: declaring internal struct schema for column pruning
  *
- * NOT yet on the trait (deferred to follow-ups): vectorized-read batch updaters and
- * filter-pushdown predicates. Only the isBatchReadSupported capability gate exists today;
- * the actual vectorized updater and filter predicate hooks are not implemented here.
+ * NOT yet on the trait (deferred to follow-ups): filter-pushdown predicates.
  *
  * DISPATCH PATTERN: Framework FIRST at all integration sites. Each Parquet infrastructure
  * method wraps itself with:
@@ -174,12 +173,9 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * by overriding to true. When false, Spark uses the row-based read path (newConverter)
    * which is always available.
    *
-   * PRECONDITION: there is no framework vectorized-read hook yet, so returning true is only
-   * safe for a type the legacy Java vectorized path (ParquetVectorUpdaterFactory /
-   * VectorizedColumnReader) already handles. A new type that returns true without that
-   * legacy support would route into a factory that does not recognize it. TimeType is safe
-   * here precisely because the legacy path handles it; until the vectorized integration
-   * (follow-up) lands, other types should leave this false.
+   * A type that returns true must also supply a batch decoder via [[getVectorUpdater]]
+   * (dispatched from ParquetVectorUpdaterFactory.getUpdater); otherwise the vectorized factory
+   * would not recognize it. TimeType returns true and overrides getVectorUpdater accordingly.
    *
    * @param sqlConf the active SQL configuration
    */
