@@ -69,6 +69,9 @@ class AdaptiveQueryExecSuite
 
   setupTestData()
 
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
+
   private def runAdaptiveAndVerifyResult(query: String,
       skipCheckAnswer: Boolean = false): (SparkPlan, SparkPlan) = {
     var finalPlanCnt = 0
