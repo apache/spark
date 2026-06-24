@@ -2571,6 +2571,7 @@ class DataFrameSuite extends SharedSparkSession
   test("SPARK-41048: Improve output partitioning and ordering with AQE cache") {
     withSQLConf(
         SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "0",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.range(10).selectExpr("cast(id as string) c1")
       val df2 = spark.range(10).selectExpr("cast(id as string) c2")
