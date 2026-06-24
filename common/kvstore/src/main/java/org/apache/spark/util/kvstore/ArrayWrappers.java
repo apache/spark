@@ -83,7 +83,7 @@ class ArrayWrappers {
     public int compareTo(ComparableIntArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        int diff = array[i] - other.array[i];
+        int diff = Integer.compare(array[i], other.array[i]);
         if (diff != 0) {
           return diff;
         }
@@ -122,9 +122,9 @@ class ArrayWrappers {
     public int compareTo(ComparableLongArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        long diff = array[i] - other.array[i];
+        int diff = Long.compare(array[i], other.array[i]);
         if (diff != 0) {
-          return diff > 0 ? 1 : -1;
+          return diff;
         }
       }
 

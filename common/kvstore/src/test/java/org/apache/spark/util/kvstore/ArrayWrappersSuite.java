@@ -56,4 +56,17 @@ public class ArrayWrappersSuite {
    assertTrue(ArrayWrappers.forArray(s1).compareTo(ArrayWrappers.forArray(s2)) > 0);
   }
 
+  @Test
+  public void testOppositeSignArrayKeyComparison() {
+    int[] minInt = new int[] { Integer.MIN_VALUE };
+    int[] maxInt = new int[] { Integer.MAX_VALUE };
+    assertTrue(ArrayWrappers.forArray(minInt).compareTo(ArrayWrappers.forArray(maxInt)) < 0);
+    assertTrue(ArrayWrappers.forArray(maxInt).compareTo(ArrayWrappers.forArray(minInt)) > 0);
+
+    long[] minLong = new long[] { Long.MIN_VALUE };
+    long[] maxLong = new long[] { Long.MAX_VALUE };
+    assertTrue(ArrayWrappers.forArray(minLong).compareTo(ArrayWrappers.forArray(maxLong)) < 0);
+    assertTrue(ArrayWrappers.forArray(maxLong).compareTo(ArrayWrappers.forArray(minLong)) > 0);
+  }
+
 }
