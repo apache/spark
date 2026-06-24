@@ -89,6 +89,12 @@ abstract class RowLevelOperationSuiteBase
     Collections.emptyMap[String, String]
   }
 
+  /** True for the *NoMetadata* test variants - the writer doesn't request any required
+   * distribution / ordering and so MergeRowsExec / writer can run in the same stage as the
+   * preceding join. */
+  protected def noMetadata: Boolean =
+    extraTableProps.getOrDefault("no-metadata", "false") == "true"
+
   protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
     catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
