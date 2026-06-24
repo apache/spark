@@ -83,9 +83,8 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = {
-            "unix_nanos",  # SPARK-57527: PySpark support tracked as a follow-up
-            "timestamp_nanos",  # SPARK-57526: PySpark support tracked as a follow-up
-        }
+            "timestamp_nanos"
+        }  # SPARK-57526: PySpark support tracked as a follow-up
 
         self.assertEqual(
             expected_missing_in_py, missing_in_py, "Missing functions in pyspark not as expected"

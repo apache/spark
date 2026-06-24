@@ -3531,6 +3531,13 @@ def unix_millis(col: "ColumnOrName") -> Column:
 unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
 
 
+def unix_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_nanos", col)
+
+
+unix_nanos.__doc__ = pysparkfuncs.unix_nanos.__doc__
+
+
 def unix_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unix_seconds", col)
 
