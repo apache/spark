@@ -225,5 +225,5 @@ class PipelineEventSender(
 object PipelineEventSender {
   // Minimum interval between dropped-event warnings, to avoid flooding the logs when the queue
   // stays full. Mirrors AsyncEventQueue.LOGGING_INTERVAL.
-  private val DROPPED_EVENT_LOG_INTERVAL_MS = 60 * 1000
+  private val DROPPED_EVENT_LOG_INTERVAL_MS = 60L * 1000
 }

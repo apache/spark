@@ -279,9 +279,10 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
       val warnings = logAppender.loggingEvents
         .filter(_.getLevel == Level.WARN)
         .map(_.getMessage.getFormattedMessage)
-      // Both drops fall inside the throttle window, so the per-drop warning fires exactly once
-      // (first logs, second suppressed) and the running total is logged at shutdown. The
-      // assertions match on substrings so they stay robust to the exact WARN wording.
+      // The two drops are submitted back-to-back, far inside the default 60s throttle window, so
+      // the per-drop warning fires exactly once (first logs, second suppressed) and the running
+      // total is logged at shutdown. The assertions match on substrings so they stay robust to
+      // the exact WARN wording.
       assert(warnings.count(_.contains("Dropped pipeline event for session")) == 1)
       assert(warnings.exists(_.contains("dropped a total of")))
     } finally {
