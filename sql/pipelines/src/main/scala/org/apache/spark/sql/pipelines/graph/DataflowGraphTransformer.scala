@@ -290,8 +290,11 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
             }
         )
       } else if (outstanding > 0) {
-        // Nothing finished and nothing could be scheduled, but tasks are still running:
-        // block until the next one finishes instead of busy-spinning on Future.isDone.
+        // Nothing could be scheduled (slots full, or the queue is drained) but tasks are still
+        // running: block until the next finishes instead of busy-spinning on Future.isDone. The
+        // outstanding > 0 guard is required, not redundant: the poll() drain above can take
+        // outstanding to 0 with an empty queue, and then there is nothing to wait for - the loop
+        // should just exit rather than block forever in take().
         reap(completionService.take())
       }
     }
