@@ -32,8 +32,8 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  * additionally exposed as a {@link Predicate predicate} via {@link #predicate()} whenever it can be
  * expressed using supported expressions. A CHECK constraint can reference one or more columns. Such
  * constraint is considered violated if its condition evaluates to {@code FALSE}, but not
- * {@code NULL}. The search condition must be deterministic and cannot contain subqueries and certain
- * functions like aggregates or UDFs.
+ * {@code NULL}. The search condition must be deterministic and cannot contain subqueries and
+ * certain functions like aggregates or UDFs.
  * <p>
  * Spark supports enforced and not enforced CHECK constraints, allowing connectors to control
  * whether data modifications that violate the constraint must fail. Each constraint is either
