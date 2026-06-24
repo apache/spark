@@ -241,8 +241,8 @@ private[sql] object AvroUtils extends Logging {
 
   /**
    * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading the writer schema
-   * from the first readable archive entry's Avro header via a forward-only [[DataFileStream]] -- the
-   * archive is streamed, never unpacked to disk, and records are never scanned. Mirrors
+   * from the first readable archive entry's Avro header via a forward-only [[DataFileStream]] --
+   * the archive is streamed, never unpacked to disk, and records are never scanned. Mirrors
    * [[inferAvroSchemaFromFiles]]: schema evolution is not supported, so the first readable writer
    * schema (across the archives, then any loose files) is used for the whole dataset, and archives
    * past the first readable one are never opened.
@@ -255,7 +255,9 @@ private[sql] object AvroUtils extends Logging {
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean): Schema = {
     archives.iterator
-      .flatMap(f => firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles))
+      .flatMap { f =>
+        firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+      }
       .nextOption()
       .getOrElse {
         // No readable schema in any archive; fall back to the loose files. With none readable
