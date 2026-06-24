@@ -191,6 +191,14 @@ private[sql] class AvroFileFormat extends FileFormat
       requiredSchema: StructType,
       filters: Seq[Filter]): Iterator[InternalRow] = {
     val userProvidedSchema = parsedOptions.schema
+    // Filters depend only on (filters, requiredSchema), which are constant across entries, so build
+    // them once. The datum reader, writer schema, and rebase mode are per-entry (each entry carries
+    // its own header schema).
+    val avroFilters = if (SQLConf.get.avroFilterPushDown) {
+      new OrderedFilters(filters, requiredSchema)
+    } else {
+      new NoopFilters
+    }
     ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
       val datumReader = userProvidedSchema match {
         case Some(schema) => new GenericDatumReader[GenericRecord](schema)
@@ -200,11 +208,6 @@ private[sql] class AvroFileFormat extends FileFormat
       val avroSchema = userProvidedSchema.getOrElse(stream.getSchema)
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseSpec(
         stream.getMetaString, parsedOptions.datetimeRebaseModeInRead)
-      val avroFilters = if (SQLConf.get.avroFilterPushDown) {
-        new OrderedFilters(filters, requiredSchema)
-      } else {
-        new NoopFilters
-      }
       val deserializer = new AvroDeserializer(
         avroSchema,
         requiredSchema,
