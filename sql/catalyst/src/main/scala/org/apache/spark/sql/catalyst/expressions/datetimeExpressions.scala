@@ -3035,6 +3035,37 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
   }
 }
 
+/**
+ * Creates a nanosecond-precision `TIMESTAMP_NTZ(precision)` (precision in [7, 9]) from a date and
+ * a local time, preserving the time's sub-microsecond digits up to `precision`. This is the
+ * nanosecond counterpart of [[MakeTimestampNTZ]]. It is an internal expression used by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] to rewrite
+ * `CAST(time AS TIMESTAMP_NTZ(precision))` with a query-stable current date; it is not registered
+ * as a SQL function.
+ */
+case class MakeTimestampNTZNanos(left: Expression, right: Expression, precision: Int)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampNTZNanosType(precision),
+    "makeTimestampNTZNanos",
+    Seq(left, right, Literal(precision)),
+    Seq(left.dataType, right.dataType, IntegerType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ntz_nanos"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
