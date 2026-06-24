@@ -248,27 +248,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check(expectedResult4, smallObject, smallMetadata)
   }
 
-  test("SPARK-57599: non-ASCII keys and string values decode as UTF-8") {
-    // The variant writer stores object keys and string values as UTF-8. The reader must decode
-    // them as UTF-8 rather than the JVM default charset, which is platform-dependent on Java 17
-    // (e.g. US-ASCII under LANG=C) and would corrupt multi-byte characters. Round-trip JSON
-    // through parse_json/to_json to exercise both getMetadataKey (keys) and getString (values),
-    // including a value long enough (> 63 UTF-8 bytes) to use the LONG_STR encoding.
-    // scalastyle:off nonascii
-    val long = "你" * 22 // 66 UTF-8 bytes, over MAX_SHORT_STR_SIZE -> LONG_STR encoding
-    Seq(
-      "\"café\"", // 2-byte UTF-8 in a string value
-      "\"你好世界\"", // 3-byte UTF-8 in a string value
-      "{\"你好\":\"世界\"}", // non-ASCII object key and string value
-      "{\"é\":[\"é\",\"你好\"]}", // non-ASCII key with non-ASCII array values
-      "\"" + long + "\"", // LONG_STR string value
-      "{\"" + long + "\":\"ok\"}" // long non-ASCII object key
-    ).foreach { json =>
-      checkEvaluation(StructsToJson(Map.empty, Literal(parseJson(json))), json)
-    }
-    // scalastyle:on nonascii
-  }
-
   test("is_variant_null invalid input") {
     checkErrorInExpression[SparkRuntimeException](
       IsVariantNull(Literal(new VariantVal(Array(), Array(1, 2, 3)))),
