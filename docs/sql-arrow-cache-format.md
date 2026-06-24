@@ -26,6 +26,10 @@ spark.conf.set("spark.sql.cache.serializer",
 ```
 
 **Note**: This is a static configuration that must be set before the SparkSession is created.
+It selects the cache serializer for the whole session; once set, this serializer handles every
+cached relation. There is no automatic per-relation fallback to another cache serializer based on
+the data types involved (see [Supported Data Types](#supported-data-types) for how unsupported
+types are handled).
 
 ```scala
 val spark = SparkSession.builder()
@@ -116,21 +120,28 @@ authoritative, regularly regenerated numbers, see
 
 ## Supported Data Types
 
-Arrow cache supports all Spark SQL data types:
+Arrow cache supports the following data types:
 
 ### Primitive Types
 - BooleanType
 - ByteType, ShortType, IntegerType, LongType
 - FloatType, DoubleType
 - DecimalType (all precision/scale combinations)
+- NullType
 
 ### Temporal Types
 - DateType
 - TimestampType
 - TimestampNTZType
+- TimeType
+
+### Interval Types
+- YearMonthIntervalType
+- DayTimeIntervalType
+- CalendarIntervalType
 
 ### String and Binary
-- StringType
+- StringType (including collated strings)
 - BinaryType
 
 ### Complex Types
@@ -138,6 +149,21 @@ Arrow cache supports all Spark SQL data types:
 - StructType
 - MapType
 - Nested combinations of the above
+
+### Other Types
+- VariantType
+- GeometryType, GeographyType
+- User-defined types (UDTs) whose underlying representation is itself supported
+
+### Unsupported Types
+
+Arrow cache covers every type the default cache serializer supports, plus some it
+does not (for example geometry and geography). Types that Arrow cannot represent
+(such as `ObjectType`) are not silently dropped or routed to a different cache
+serializer: there is no per-type fallback, because the cache serializer is chosen
+once via the static `spark.sql.cache.serializer` configuration and then handles
+every cached relation. Attempting to cache an unsupported type fails with an
+`UNSUPPORTED_DATATYPE` error when the cache is materialized.
 
 ## Statistics and Filter Pushdown
 
