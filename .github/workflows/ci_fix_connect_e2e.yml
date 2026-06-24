@@ -1,0 +1,85 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# DO-NOT-MERGE: temporary focused workflow used only to validate the
+# SparkSessionE2ESuite flakiness fix on a fork. It builds the connect module once
+# (via the proven dev/run-tests path) and then re-runs ONLY SparkSessionE2ESuite
+# several times to confirm the test is no longer flaky. This file must be dropped
+# before the real fix is merged.
+name: "DO-NOT-MERGE CI fix - connect SparkSessionE2ESuite"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'ci-fix/connect-sparksession-e2e-flaky'
+
+jobs:
+  connect-e2e:
+    name: "Build connect + repeat SparkSessionE2ESuite"
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
+      SKIP_MIMA: true
+      SKIP_PACKAGING: true
+      SERIAL_SBT_TESTS: 1
+      HADOOP_PROFILE: hadoop3
+      HIVE_PROFILE: hive2.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Free up disk space
+        run: |
+          if [ -f ./dev/free_disk_space ]; then ./dev/free_disk_space; fi
+      - name: Install Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install Python packages (Python 3.12)
+        run: |
+          python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
+          python3.12 -m pip list
+      # Phase 1: build everything for the connect module and run the full connect
+      # module once via the standard tooling (validates the fix in the real path).
+      - name: Build + run connect module (dev/run-tests)
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          export TERM=vt100
+          ./dev/run-tests --parallelism 1 --modules connect
+      # Phase 2: re-run ONLY SparkSessionE2ESuite several times, reusing the jars
+      # built above, to confirm the previously-flaky interrupt tests are stable.
+      - name: Repeat SparkSessionE2ESuite (flakiness check)
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          export TERM=vt100
+          for i in $(seq 1 8); do
+            echo "==================== SparkSessionE2ESuite iteration $i ===================="
+            ./build/sbt -Phive -Phadoop-3 \
+              "connect-client-jvm/testOnly org.apache.spark.sql.connect.SparkSessionE2ESuite"
+          done
