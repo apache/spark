@@ -24,7 +24,18 @@ import decimal
 import typing
 from collections.abc import Iterable
 from inspect import isclass
-from typing import Any, Callable, Generic, List, Optional, Tuple, Union, Type, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    List,
+    Optional,
+    Tuple,
+    TypeAliasType,
+    Union,
+    Type,
+    get_type_hints,
+)
 
 import numpy as np
 import pandas as pd
@@ -163,7 +174,10 @@ def as_spark_type(
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
+    elif hasattr(tpe, "__origin__") and (
+        (isinstance(tpe.__origin__, TypeAliasType) and issubclass(tpe.__origin__.__value__, list))
+        or (isinstance(tpe.__origin__, type) and issubclass(tpe.__origin__, list))
+    ):
         element_type = as_spark_type(
             tpe.__args__[0],  # type: ignore[union-attr]
             raise_error=raise_error,
