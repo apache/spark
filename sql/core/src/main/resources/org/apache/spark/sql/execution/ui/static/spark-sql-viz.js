@@ -773,6 +773,8 @@ function setupZoomAndPan(svg, zoomLayer) {
   svg.on("wheel.zoom", null);
   svgNode.addEventListener("wheel", function (e) {
     if (e.ctrlKey || e.metaKey) {
+      // Prevent the browser's native page zoom so only the DAG zooms.
+      e.preventDefault();
       // Forward to d3-zoom's original handler for zoom behavior.
       // Note: trackpad pinch gestures fire as wheel events with ctrlKey=true,
       // so pinch-to-zoom still works as expected.
@@ -793,8 +795,11 @@ function showZoomHint() {
     hint = document.createElement("div");
     hint.id = "plan-viz-zoom-hint";
     hint.className = "plan-viz-zoom-hint";
-    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-    hint.textContent = (isMac ? "\u2318" : "Ctrl") + " + scroll to zoom";
+    var platform = navigator.platform || navigator.userAgent;
+    var isMac = /Mac|iPhone|iPad/.test(platform);
+    var isLinux = /Linux/.test(platform);
+    var modKey = isMac ? "\u2318" : isLinux ? "Super" : "Ctrl";
+    hint.textContent = modKey + " + scroll to zoom";
     container.appendChild(hint);
   }
   hint.classList.add("visible");
