@@ -486,6 +486,64 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     )
   }
 
+  test("streamingSourcesChanged matches only a streaming source-set change error") {
+    // Structured Streaming raises an AssertionError when a stream's source set changes; it is
+    // often wrapped in another exception by the time the pipeline sees it.
+    val sourceChange = new AssertionError(
+      "There are [2] sources in the checkpoint offsets and now there are [3] sources " +
+      "requested by the query. Cannot continue.")
+    assert(PipelinesErrors.streamingSourcesChanged(sourceChange))
+    assert(PipelinesErrors.streamingSourcesChanged(new RuntimeException("wrapper", sourceChange)))
+    // Unrelated errors - including an AssertionError with a different message - must not match.
+    assert(!PipelinesErrors.streamingSourcesChanged(new RuntimeException("boom")))
+    assert(!PipelinesErrors.streamingSourcesChanged(new AssertionError("a different assertion")))
+  }
+
+  test("determineFlowExecutionActionFromError stops on a source change before checking retries") {
+    val sourceChange = new RuntimeException(
+      "stream failed",
+      new AssertionError(
+        "There are [2] sources in the checkpoint offsets and now there are [3] sources " +
+        "requested by the query. Cannot continue."))
+
+    // Source-set changes are checked before the retry budget, so the flow stops even with retries
+    // left, and the reason is reported as needing a full refresh (maxRetries = 0).
+    GraphExecution.determineFlowExecutionActionFromError(
+      ex = sourceChange,
+      flowDisplayName = "flow_a",
+      currentNumTries = 1,
+      maxAllowedRetries = 3) match {
+      case GraphExecution.StopFlowExecution(reason) =>
+        assert(reason.failureMessage.contains("streaming sources added or removed"))
+        assert(
+          reason.runTerminationReason ==
+            QueryExecutionFailure("flow_a", maxRetries = 0, Some(sourceChange)))
+      case other => fail(s"expected StopFlowExecution, got $other")
+    }
+  }
+
+  test("determineFlowExecutionActionFromError retries other errors until budget is exhausted") {
+    val transient = new RuntimeException("transient")
+    // Retries remaining -> retry.
+    assert(
+      GraphExecution.determineFlowExecutionActionFromError(
+        ex = transient, flowDisplayName = "flow_a", currentNumTries = 1, maxAllowedRetries = 3) ==
+        GraphExecution.RetryFlowExecution)
+    // Budget exhausted -> stop as max-retries-exceeded, not as a source change.
+    GraphExecution.determineFlowExecutionActionFromError(
+      ex = transient,
+      flowDisplayName = "flow_a",
+      currentNumTries = 4,
+      maxAllowedRetries = 3) match {
+      case GraphExecution.StopFlowExecution(reason) =>
+        assert(!reason.failureMessage.contains("streaming sources added or removed"))
+        assert(
+          reason.runTerminationReason ==
+            QueryExecutionFailure("flow_a", maxRetries = 3, Some(transient)))
+      case other => fail(s"expected StopFlowExecution, got $other")
+    }
+  }
+
   test("user-specified schema is applied to table") {
     val session = spark
     import session.implicits._
