@@ -17,7 +17,6 @@
 
 package org.apache.spark.types.variant;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 
 import java.io.CharArrayWriter;
@@ -240,11 +239,6 @@ public final class Variant {
     toJsonImpl(value, metadata, pos, sb, zoneId);
     return sb.toString();
   }
-
-  // Jackson's JsonFactory is thread-safe and intended to be reused. `escapeJson` is called once
-  // per string value and object key while serializing, so sharing a single factory avoids
-  // allocating one for every string.
-  private static final JsonFactory JSON_FACTORY = new JsonFactory();
 
   // Escape a string so that it can be pasted into JSON structure.
   // For example, if `str` only contains a new-line character, then the result content is "\n"

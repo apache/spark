@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.*;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonToken;
@@ -42,11 +41,6 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  * Build variant value and metadata by parsing JSON values.
  */
 public class VariantBuilder {
-  // Jackson's JsonFactory is thread-safe and intended to be reused. parseJson is invoked once per
-  // input JSON value (e.g. per row in parse_json), so sharing a single factory avoids allocating
-  // one (and its symbol tables) on every call.
-  private static final JsonFactory JSON_FACTORY = new JsonFactory();
-
   public VariantBuilder(boolean allowDuplicateKeys) {
     this(allowDuplicateKeys, true);
   }
