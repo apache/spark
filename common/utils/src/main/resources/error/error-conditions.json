@@ -6182,7 +6182,7 @@
     "message" : [
       "<message>"
     ],
-    "sqlState" : "58000"
+    "sqlState" : "42K0S"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
