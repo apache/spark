@@ -180,11 +180,14 @@ private class ClientEndpoint(
           System.exit(-1)
         case _ =>
           state.get match {
-            case DriverState.FINISHED | DriverState.FAILED |
-                 DriverState.ERROR | DriverState.KILLED =>
+            case DriverState.FINISHED =>
               logInfo(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
                 log" is ${MDC(DRIVER_STATE, state.get)}, exiting spark-submit JVM.")
               System.exit(0)
+            case DriverState.FAILED | DriverState.ERROR | DriverState.KILLED =>
+                  logError(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                    log" is ${MDC(DRIVER_STATE, state.get)}, exiting spark-submit JVM.")
+                  System.exit(-1)
             case _ =>
               if (!waitAppCompletion) {
                 logInfo("spark-submit not configured to wait for completion, " +
