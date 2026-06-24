@@ -400,8 +400,8 @@ object SparkConnectService extends Logging {
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
-    healthStatusManager = new HealthStatusManager()
-    setHealthStatus(ServingStatus.NOT_SERVING)
+    val newHealthStatusManager = new HealthStatusManager()
+    setHealthStatus(newHealthStatusManager, ServingStatus.NOT_SERVING)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
     val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
@@ -415,7 +415,7 @@ object SparkConnectService extends Logging {
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
         .addService(sparkConnectService)
-        .addService(healthStatusManager.getHealthService)
+        .addService(newHealthStatusManager.getHealthService)
 
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
@@ -450,6 +450,7 @@ object SparkConnectService extends Logging {
       startServiceFn,
       maxRetries,
       getClass.getName.stripSuffix("$"))
+    healthStatusManager = newHealthStatusManager
   }
 
   // Starts the service
@@ -480,7 +481,7 @@ object SparkConnectService extends Logging {
       throw IllegalStateErrors.serviceNotStarted()
     }
 
-    setHealthStatus(ServingStatus.NOT_SERVING)
+    enterTerminalHealthState()
     if (server != null) {
       if (timeout.isDefined && unit.isDefined) {
         server.shutdown()
@@ -497,13 +498,22 @@ object SparkConnectService extends Logging {
     started = false
     stopped = true
     postSparkConnectServiceEnd()
-    healthStatusManager = null
   }
 
   private def setHealthStatus(status: ServingStatus): Unit = {
     if (healthStatusManager != null) {
-      healthStatusManager.setStatus(OverallHealthServiceName, status)
-      healthStatusManager.setStatus(SparkConnectServiceGrpc.SERVICE_NAME, status)
+      setHealthStatus(healthStatusManager, status)
+    }
+  }
+
+  private def setHealthStatus(manager: HealthStatusManager, status: ServingStatus): Unit = {
+    manager.setStatus(OverallHealthServiceName, status)
+    manager.setStatus(SparkConnectServiceGrpc.SERVICE_NAME, status)
+  }
+
+  private def enterTerminalHealthState(): Unit = {
+    if (healthStatusManager != null) {
+      healthStatusManager.enterTerminalState()
     }
   }
 

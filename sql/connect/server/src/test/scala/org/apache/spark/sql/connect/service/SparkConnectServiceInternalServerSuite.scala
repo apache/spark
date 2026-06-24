@@ -17,8 +17,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.net.ServerSocket
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{CopyOnWriteArrayList, Semaphore, TimeUnit}
 
 import scala.collection.mutable
 
@@ -297,6 +296,7 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
       assert(sparkConnectStatus == HealthCheckResponse.ServingStatus.SERVING)
     } finally {
       channel.shutdownNow()
+      channel.awaitTermination(10, TimeUnit.SECONDS)
       SparkConnectService.stop()
     }
   }
