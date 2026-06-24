@@ -290,6 +290,18 @@ class ColumnTestsMixin:
             messageParameters={"arg_name": "metadata"},
         )
 
+    def test_col_name_property(self):
+        # SPARK-38483: Column.col_name exposes the column name/alias shown in repr
+        self.assertEqual(sf.col("a").col_name, "a")
+        self.assertEqual(sf.col("a").alias("b").col_name, "a AS b")
+        self.assertEqual(sf.col("a").cast("int").col_name, "CAST(a AS INT)")
+
+        # col_name is always the string rendered inside the column's repr. The
+        # rendering of compound expressions (e.g. arithmetic) can differ between
+        # the Classic and Connect backends, so only assert that invariant here.
+        for col in [sf.col("x"), sf.col("x").alias("y"), sf.col("x") + 1]:
+            self.assertEqual(repr(col), "Column<'%s'>" % col.col_name)
+
     def test_cast_str_representation(self):
         self.assertEqual(str(sf.col("a").cast("int")), "Column<'CAST(a AS INT)'>")
         self.assertEqual(str(sf.col("a").cast("INT")), "Column<'CAST(a AS INT)'>")
