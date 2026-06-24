@@ -2439,6 +2439,19 @@
     },
     "sqlState" : "42809"
   },
+  "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' DataFrame API reader option is mutually exclusive with the '<option>' DataFrame API option.",
+      "Please remove one of them and then retry the DataFrame operation again."
+    ],
+    "sqlState" : "4274K"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' option can only be used when reading JSON files. It is not supported in <usage>."
+    ],
+    "sqlState" : "0A000"
+  },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
       "Failed to decode a row to a value of the expressions: <expressions>."
@@ -3810,6 +3823,12 @@
       "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
+  },
+  "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
+    "message" : [
+      "User specified schema <schema> is invalid when the `explodeEmbeddedArray` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_EXPRESSION_ENCODER" : {
     "message" : [

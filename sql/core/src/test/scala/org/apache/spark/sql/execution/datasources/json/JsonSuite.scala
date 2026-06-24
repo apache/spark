@@ -3812,7 +3812,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 32)
+    assert(JSONOptions.getAllOptions.size == 33)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3843,6 +3843,7 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
     assert(JSONOptions.isValidOption("singleVariantColumn"))
+    assert(JSONOptions.isValidOption("explodeEmbeddedArray"))
     assert(JSONOptions.isValidOption("useUnsafeRow"))
     assert(JSONOptions.isValidOption("encoding"))
     assert(JSONOptions.isValidOption("charset"))

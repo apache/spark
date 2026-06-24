@@ -115,6 +115,11 @@ class JacksonParser(
       case _: StructType if options.singleVariantColumn.isDefined => (parser: JsonParser) => {
         Some(InternalRow(parseVariant(parser)))
       }
+      // Each embedded array element is parsed into a single variant column, like
+      // `singleVariantColumn`. The elements have already been split out by the data source.
+      case _: StructType if options.explodeEmbeddedArray.isDefined => (parser: JsonParser) => {
+        Some(InternalRow(parseVariant(parser)))
+      }
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
       case at: ArrayType => makeArrayRootConverter(at)
