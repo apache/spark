@@ -587,7 +587,15 @@ class CliSuite extends SparkFunSuite {
       "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
       "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
       "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
-      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+      // SPARK-56147: the new ANTLR-based splitter correctly handles
+      // nested bracketed comments, so `;` inside any nesting level is
+      // ignored as long as every level is closed. The previous regex-based
+      // scanner had a bug that mis-handled `/*/*` (it treated the third
+      // char `/` together with the preceding `*` as a closing `*/`),
+      // which made `/*/* multi-level bracketed*/ SELECT 'test';` look
+      // like a closed comment followed by a real statement -- now that
+      // input is correctly recognized as an unclosed nested comment.
+      "/* outer; /* inner; */ outer; */ SELECT 'test';" -> "test"
     )
   }
 
@@ -618,11 +626,22 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37471: spark-sql support nested bracketed comment ") {
+    // SPARK-56147: the original input here was
+    //   `/* SELECT /*+ HINT() */ 4; */`
+    // which relied on the old regex-based scanner treating `/*+` as opening a
+    // nested bracketed comment (so the whole thing was one closed nested
+    // comment). The new parser-based [[SqlStatementSplitter]] uses the actual
+    // ANTLR lexer, which correctly treats `/*+` as a hint marker (NOT a
+    // nested comment opener), so under that input the outer `/*` would close
+    // at the first `*/` and the trailing `4; */` would be a parse error.
+    // Updated to use truly-nested syntax (`/* outer /* inner */ outer */`)
+    // so the test verifies nested bracketed comment support under the new
+    // lexer's actual nesting rules.
     runCliWithin(1.minute)(
       """
-        |/* SELECT /*+ HINT() */ 4; */
-        |SELECT 1;
-        |""".stripMargin -> "SELECT 1"
+        |/* outer /* inner */ outer */
+        |SELECT 'nested-comment';
+        |""".stripMargin -> "nested-comment"
     )
   }
 
@@ -915,5 +934,20 @@ class CliSuite extends SparkFunSuite {
       Files.writeString(sqlFilePath, sql)
       runCliWithin(2.minutes, extraArgs = Seq("-f", sqlFilePath.toString))("" -> "x\t1")
     }
+  }
+
+  test("SPARK-56147: `\\;` at end of line is a Hive-compat line continuation marker") {
+    // `\;` at the end of an interactive line defers execution and shows the
+    // continuation prompt for the next line, matching pre-PR behavior. The
+    // queried-once joined input is then sent to the backend; the `\;` chunk
+    // reattachment in `processLine` reinjects a literal `;` in the middle,
+    // so the backend reports a parse error. Asserting the parse error here
+    // also confirms the continuation prompt for the second line was reached
+    // (otherwise the queryEcho for `' second';` would carry the main prompt
+    // and the first expected echo would not match).
+    runCliWithin(2.minutes, errorResponses = Nil)(
+      """SELECT 'first' \;
+        |, 'second';""".stripMargin -> "PARSE_SYNTAX_ERROR"
+    )
   }
 }

@@ -95,9 +95,17 @@ trait ParserInterface extends DataTypeParserInterface {
    * in [[SqlStatementSplitResult.partialStatement]] so callers can buffer it and
    * read more input.
    *
-   * Implementations are expected to apply the same input preprocessing (variable
-   * substitution, etc.) as their `parsePlan` so that the splitter sees the same
-   * stream of tokens the parser would.
+   * Variable substitution: the emitted [[SqlStatement]] text is always the
+   * **original** input -- variable references such as `${var}` are NOT
+   * substituted at split time, because their values may come from an earlier
+   * `SET` in the same batch that has not executed yet when the splitter runs.
+   * Substitution is deferred to `parsePlan` at execution time, where each
+   * complete statement is substituted individually after all preceding statements
+   * have run. Implementations whose grammar allows `${...}` in syntactically
+   * significant positions (e.g. block boundaries) may use a validation-only
+   * preprocessor to help the parser recognize complete statements -- see
+   * [[org.apache.spark.sql.catalyst.parser.SqlStatementSplitter.split]]'s
+   * `validationPreprocess` hook.
    */
   def splitStatements(sqlText: String): SqlStatementSplitResult
 }

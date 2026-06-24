@@ -239,9 +239,13 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     var ret = 0
-    // Accumulated input that has not yet formed a complete statement. The new
-    // parser-based [[SqlStatementSplitter]] tells us when the buffered text is
-    // complete (and may be executed) vs. partial (must wait for more input).
+    // Accumulated input that has not yet formed a complete statement. The
+    // interactive loop is line-level: we buffer input until the user types a
+    // line ending with `;`, then ask the parser-based [[SqlStatementSplitter]]
+    // to split the buffered text into statements. This matches the pre-PR
+    // behavior so multi-line input like an un-closed bracketed comment that
+    // spans several lines (SPARK-33100, SPARK-37471) still buffers until the
+    // user actually signals end-of-statement with `;`.
     var buffer = ""
 
     def currentDB = {
@@ -266,26 +270,39 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // SPARK-55198: call line.trim to also skip comment line with leading whitespaces,
       // this keeps the behavior align with HIVE-8396
       if (!line.trim.startsWith("--")) {
-        val candidate = if (buffer.isEmpty) line else buffer + "\n" + line
-        // Use the parser-based splitter to find complete statements and any trailing
-        // partial. This correctly handles `;` inside quoted strings, comments, and
-        // SQL scripting compound blocks (`BEGIN ... END`), so multi-line interactive
-        // input like `BEGIN ... END;` works without any `\;` escape.
-        val splitResult = sqlParser.splitStatements(candidate)
-        // An un-terminated bracketed comment cannot be completed by appending more
-        // SQL; flush it to the backend so the user sees a parse error rather than
-        // staying stuck on the continuation prompt forever (SPARK-37555).
-        val flushPartial =
-          splitResult.hasUnclosedComment && splitResult.partialStatement.nonEmpty
-        if (splitResult.completeStatements.nonEmpty || flushPartial) {
-          val parts =
-            splitResult.completeStatements.iterator.map(s => s.statement + s.terminator).toBuffer
-          if (flushPartial) parts += splitResult.partialStatement
-          ret = cli.processLine(parts.mkString("\n"), true)
+        val trimmed = line.trim
+        if (trimmed.endsWith(";") && !trimmed.endsWith("\\;")) {
+          // The line ends with `;` (and not the Hive-compat `\;` continuation
+          // escape) -- the user signaled end of statement. Ask the splitter
+          // to split the accumulated buffer into statements. The splitter
+          // correctly handles `;` inside quoted strings, comments, and SQL
+          // scripting compound blocks (`BEGIN ... END`).
+          val candidate = if (buffer.isEmpty) line else buffer + "\n" + line
+          val splitResult = sqlParser.splitStatements(candidate)
+          // An un-terminated bracketed comment cannot be completed by
+          // appending more SQL; flush it to the backend so the user sees a
+          // parse error rather than staying stuck on the continuation prompt
+          // forever (SPARK-37555).
+          val flushPartial =
+            splitResult.hasUnclosedComment && splitResult.partialStatement.nonEmpty
+          if (splitResult.completeStatements.nonEmpty || flushPartial) {
+            val parts =
+              splitResult.completeStatements.iterator.map(s => s.statement + s.terminator).toBuffer
+            if (flushPartial) parts += splitResult.partialStatement
+            ret = cli.processLine(parts.mkString("\n"), true)
+          }
+          buffer = if (flushPartial) "" else splitResult.partialStatement
+          currentPrompt =
+            if (buffer.isEmpty) promptWithCurrentDB else continuedPromptWithDBSpaces
+        } else {
+          // The line does not signal end of statement (no trailing `;`, or
+          // the trailing `;` is escaped as `\;`). Accumulate and wait for
+          // more input. The `\;` escape survives into the buffer and is
+          // reattached at execution time by `processLine` (via its
+          // `oneCmd.endsWith("\\")` branch).
+          buffer = if (buffer.isEmpty) line else buffer + "\n" + line
+          currentPrompt = continuedPromptWithDBSpaces
         }
-        buffer = if (flushPartial) "" else splitResult.partialStatement
-        currentPrompt =
-          if (buffer.isEmpty) promptWithCurrentDB else continuedPromptWithDBSpaces
       }
       line = reader.readLine(currentPrompt + "> ")
     }

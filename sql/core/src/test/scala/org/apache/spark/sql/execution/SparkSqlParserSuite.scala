@@ -1207,30 +1207,77 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       "SELECT CAST(null AS STRUCT<>), CAST(null AS MAP<STRING, ARRAY<INT>>), 2 >> 1")
   }
 
-  test("splitStatements applies variable substitution before splitting") {
-    // A `${spark.x.stmt}` value that itself contains a `;` should be expanded
-    // *before* the splitter walks the token stream, so the embedded `;`
-    // becomes a real statement boundary.
-    withSQLConf("spark.x.stmt" -> "SELECT 1; SELECT 2") {
-      val result = parser.splitStatements("${spark.x.stmt}; SELECT 3;")
-      assert(result.completeStatements.map(_.statement) ===
-        Seq("SELECT 1", "SELECT 2", "SELECT 3"))
+  test("splitStatements preserves ${...} variable references in emitted statements") {
+    // The splitter must NOT pre-expand variable references at split time --
+    // doing so in batch mode would resolve `${x}` against the pre-`SET` value
+    // when an earlier statement in the same batch is `SET x=...`. Per-statement
+    // substitution at execution time (in `parseInternal`) handles that case
+    // correctly. The reference must therefore survive into the emitted
+    // statement text.
+    withSQLConf("spark.x.stmt" -> "abc") {
+      val result = parser.splitStatements("SELECT '${spark.x.stmt}';")
+      assert(result.completeStatements.map(_.statement) === Seq("SELECT '${spark.x.stmt}'"))
       assert(result.partialStatement.isEmpty)
     }
   }
 
-  test("splitStatements does not split when variable substitution is disabled") {
-    // When variable substitution is off, `${...}` is left untouched, so the
-    // splitter sees the literal token sequence and may report the input as a
-    // partial / broken statement depending on the parser's verdict.
-    withSQLConf(
-      SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false",
-      "spark.x.stmt" -> "SELECT 1; SELECT 2") {
-      val result = parser.splitStatements("${spark.x.stmt}; SELECT 3;")
-      // The first chunk `${spark.x.stmt}` is not a valid statement, so the
-      // splitter falls back to per-`;` splitting.
+  test("splitStatements: BEGIN..END containing ${...} is confirmed as one statement (C2)") {
+    // The block's body references a pre-set conf variable. The splitter must
+    // confirm the whole `BEGIN..END;` as a single statement -- it does so by
+    // replacing the `${...}` with a placeholder identifier purely for the
+    // parse-validation step, while emitting the original text with `${...}`
+    // intact.
+    withSQLConf("spark.x.t" -> "my_table") {
+      val sql = "BEGIN SELECT 1 FROM ${spark.x.t}; SELECT 2; END;"
+      val result = parser.splitStatements(sql)
       assert(result.completeStatements.map(_.statement) ===
-        Seq("${spark.x.stmt}", "SELECT 3"))
+        Seq("BEGIN SELECT 1 FROM ${spark.x.t}; SELECT 2; END"))
+      assert(result.partialStatement.isEmpty)
+    }
+  }
+
+  test("splitStatements: SET-then-${var} across statements (C4)") {
+    // The variable is `SET` by an earlier statement in the same batch. The
+    // splitter must not try to resolve `${x}` against its pre-`SET` value;
+    // it must emit the reference verbatim and let it resolve at execution
+    // time after the `SET` has run.
+    val result = parser.splitStatements("SET x=1; SELECT '${x}';")
+    assert(result.completeStatements.map(_.statement) ===
+      Seq("SET x=1", "SELECT '${x}'"))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("splitStatements: SET-in-batch-then-${var}-inside-BEGIN..END (C3)") {
+    // The original splitter design substituted the whole batch up front,
+    // which would replace `${x}` with the pre-`SET` (default / empty) value
+    // and break the block's parse. The placeholder-validation hybrid leaves
+    // `${x}` in the emitted text but still recognizes the block boundary.
+    val sql = "SET x=1; BEGIN SELECT ${x}; SELECT 1; END;"
+    val result = parser.splitStatements(sql)
+    assert(result.completeStatements.map(_.statement) ===
+      Seq("SET x=1", "BEGIN SELECT ${x}; SELECT 1; END"))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("splitStatements: ${...} in a non-block statement preserved (no premature substitute)") {
+    // Same shape as C4 but without the SET -- the variable need not exist.
+    // The reference must still survive into the emitted statement so the
+    // backend substituter can either resolve it from session config or
+    // leave it literal (per the substituter's contract).
+    val result = parser.splitStatements("SELECT '${unset.var}';")
+    assert(result.completeStatements.map(_.statement) === Seq("SELECT '${unset.var}'"))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("splitStatements: when variable substitution is disabled, ${...} still passes through") {
+    // Disabling variable substitution should disable the placeholder pass
+    // too -- the parser then sees the literal `${...}` and (typically) bails
+    // non-EOF, so the splitter falls back to a plain delimiter walk. The
+    // emitted text still keeps the `${...}` intact.
+    withSQLConf(SQLConf.VARIABLE_SUBSTITUTE_ENABLED.key -> "false") {
+      val result = parser.splitStatements("SELECT '${spark.x}';")
+      assert(result.completeStatements.map(_.statement) === Seq("SELECT '${spark.x}'"))
+      assert(result.partialStatement.isEmpty)
     }
   }
 }

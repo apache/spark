@@ -953,4 +953,52 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     // single statement back.
     assert(result.completeStatements.size + (if (result.partialStatement.isEmpty) 0 else 1) >= 2)
   }
+
+  // ----------------------------------------------------------------------------------
+  // validationPreprocess hook
+  // ----------------------------------------------------------------------------------
+
+  test("validationPreprocess: identity preserves single-text-splitter behavior") {
+    // Smoke test that `split(text, identity)` behaves identically to
+    // `split(text)` for a non-trivial mix of vanilla and compound input.
+    val sql = "SELECT 1; BEGIN SELECT 2; SELECT 3; END;"
+    val a = SqlStatementSplitter.split(sql)
+    val b = SqlStatementSplitter.split(sql, identity)
+    assert(a === b)
+    assert(b.completeStatements.map(_.statement) ===
+      Seq("SELECT 1", "BEGIN SELECT 2; SELECT 3; END"))
+  }
+
+  test("validationPreprocess: emitted text is from the *original* input, not the preprocessed") {
+    // Replace every `XXX` with `1` for validation only. The boundary-finding
+    // still sees the original tokens, and emission must reproduce the
+    // original substring -- the preprocessed value never leaks out.
+    val sql = "SELECT XXX FROM t; SELECT XXX + 1;"
+    val preprocess: String => String = _.replace("XXX", "1")
+    val result = SqlStatementSplitter.split(sql, preprocess)
+    // Both candidates must validate (the preprocessed text is valid SQL).
+    assert(result.completeStatements.map(_.statement) ===
+      Seq("SELECT XXX FROM t", "SELECT XXX + 1"))
+    assert(result.partialStatement.isEmpty)
+  }
+
+  test("validationPreprocess: lets the parser confirm a region the original cannot parse") {
+    // The original region uses `@@@` (unrecognized by Spark SQL) where a column
+    // expression would go. With `identity` the region fails validation and
+    // the splitter falls back to a delimiter walk; with a preprocessor that
+    // maps `@@@` -> `1`, the region validates as a single compound block.
+    val sql = "BEGIN SELECT @@@; SELECT 2; END;"
+    val identityResult = SqlStatementSplitter.split(sql, identity)
+    // Identity preprocess: the BEGIN..END can't be confirmed, so it falls
+    // through to per-`;` splitting (a known behavior under the fall-back).
+    assert(identityResult.completeStatements.size > 1)
+
+    val mapped: String => String = _.replace("@@@", "1")
+    val mappedResult = SqlStatementSplitter.split(sql, mapped)
+    // With the preprocessor, the whole block is one statement -- and the
+    // *emitted* text still contains the original `@@@`.
+    assert(mappedResult.completeStatements.map(_.statement) ===
+      Seq("BEGIN SELECT @@@; SELECT 2; END"))
+    assert(mappedResult.partialStatement.isEmpty)
+  }
 }

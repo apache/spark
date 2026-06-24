@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import java.util.{ArrayList => JArrayList}
-
 import scala.collection.mutable
 
 import org.antlr.v4.runtime._
@@ -87,12 +85,45 @@ case class SqlStatementSplitResult(
  * Quoted strings, single-line and bracketed (nested) comments are honored
  * throughout. An unterminated bracketed comment is surfaced via
  * [[SqlStatementSplitResult.hasUnclosedComment]].
+ *
+ * The optional `validationPreprocess` parameter lets the caller transform the
+ * candidate region before the parser sees it -- this exists for the
+ * placeholder-substitution hybrid in [[org.apache.spark.sql.execution.SparkSqlParser]]
+ * where `${...}` references are replaced with a constant identifier so the
+ * parser can confirm block boundaries even when the real variable values are
+ * not available yet (they are produced by an earlier `SET` in the same batch).
+ * Emission always uses the original (un-preprocessed) token text, so the
+ * variable references survive into the emitted statement and are substituted
+ * for real at execution time. When `validationPreprocess` is `identity`
+ * (the default), the splitter behaves as a pure original-text splitter.
+ *
+ * Performance note: for a single `BEGIN ... END` block with k internal `;`,
+ * the splitter calls `tryParseSegment` O(k) times on growing prefixes -- an
+ * O(k^2) cost in the worst case (incomplete block on every keystroke in
+ * interactive mode). Ordinary non-scripting SQL is O(n). A non-EOF terminated
+ * single-statement rule (read `ctx.getStop` once per region) would make this
+ * O(n), but Spark's `setResetStatement` has `SET .*?` / `RESET .*?` wildcards
+ * that need an EOF anchor to terminate deterministically, so the simple
+ * rule-rewrite the reviewer suggested does not drop in cleanly. Tracked as a
+ * follow-up.
  */
 object SqlStatementSplitter {
 
   /** Split the given SQL text into individual statements at `;` boundaries. */
-  def split(sqlText: String): SqlStatementSplitResult = {
+  def split(sqlText: String): SqlStatementSplitResult =
+    split(sqlText, identity)
+
+  /**
+   * Split the given SQL text, applying `validationPreprocess` to each candidate
+   * region before parser validation. The emitted [[SqlStatement]] text is
+   * always the original (un-preprocessed) input; the preprocessor only affects
+   * whether the parser accepts a candidate region as a complete statement.
+   *
+   * Pass `identity` for a pure original-text splitter (the default).
+   */
+  def split(sqlText: String, validationPreprocess: String => String): SqlStatementSplitResult = {
     require(sqlText != null, "sqlText must not be null")
+    require(validationPreprocess != null, "validationPreprocess must not be null")
 
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(sqlText)))
     lexer.removeErrorListeners()
@@ -160,11 +191,8 @@ object SqlStatementSplitter {
         var d = delimSearchStart
         while (!parsedOk && !failedNonEof && d < delimiterPositions.length) {
           val candidateEnd = delimiterPositions(d)
-          // `+ 1` because the `tryParseSegment` upper bound is exclusive but
-          // we want the trailing `;` (at `candidateEnd`) to be part of the
-          // parsed slice -- it acts as the `SEMICOLON* EOF` terminator of the
-          // `singleStatement` / `singleCompoundStatement` rule.
-          tryParseSegment(tokenStream, startIdx, candidateEnd + 1, conf) match {
+          tryParseRegion(
+            sqlText, tokenStream, startIdx, candidateEnd, validationPreprocess, conf) match {
             case ParsedOk =>
               parsedOk = true
               matchedDelimIdx = candidateEnd
@@ -270,14 +298,18 @@ object SqlStatementSplitter {
   private case object FailedNonEof extends ParseOutcome
 
   /**
-   * Try to parse the half-open token slice `stream[startIdx, endIdx)` as a
-   * complete top-level Spark SQL statement.
+   * Try to parse the region of `sqlText` corresponding to the original token
+   * slice `[startIdx, endIdx]` (inclusive on both ends -- `endIdx` is the
+   * position of the trailing `;` token whose char range belongs to the
+   * region) as a complete top-level Spark SQL statement.
    *
-   * Implemented by wrapping the slice in a [[ListTokenSource]] and feeding a
-   * fresh [[SqlBaseParser]] -- this gives the parser a token stream whose only
-   * EOF position is right after the last copied token, so the existing
-   * `compoundOrSingleStatement` rule (which requires `SEMICOLON* EOF`) acts as
-   * the per-statement validator without any custom grammar rule.
+   * The region is extracted from the original source by char-offset
+   * (`Token.getStartIndex` / `getStopIndex`), `validationPreprocess` is
+   * applied to it, and the result is re-lexed and parsed with a fresh
+   * [[SqlBaseParser]]. This isolation means the splitter's parser sees a
+   * sub-stream whose EOF lands right after the trailing `;`, so the existing
+   * `compoundOrSingleStatement` rule (which requires `SEMICOLON* EOF`) acts
+   * as the per-statement validator without any custom grammar rule.
    *
    * Uses the same two-stage SLL -> LL prediction strategy as the main parser
    * for performance (most statements parse cleanly with the faster SLL stage).
@@ -292,28 +324,29 @@ object SqlStatementSplitter {
    * Deeply nested input that throws [[StackOverflowError]] during parsing is
    * treated as [[FailedNonEof]] so the splitter still surfaces the broken
    * input to the backend (which will report the error properly via
-   * [[org.apache.spark.sql.errors.QueryParsingErrors.parserStackOverflow]]).
-   *
-   * @param stream    the full input token stream
-   * @param startIdx  inclusive lower bound of the slice to parse
-   * @param endIdx    exclusive upper bound of the slice to parse
-   * @param conf      session config snapshot used to configure the sub-parser
+   * `QueryParsingErrors.parserStackOverflow`).
    */
-  private def tryParseSegment(
+  private def tryParseRegion(
+      sqlText: String,
       stream: CommonTokenStream,
       startIdx: Int,
       endIdx: Int,
+      validationPreprocess: String => String,
       conf: SqlApiConf): ParseOutcome = {
-    val tokens = new JArrayList[Token](endIdx - startIdx)
-    var i = startIdx
-    while (i < endIdx) {
-      tokens.add(stream.get(i))
-      i += 1
-    }
-    val source = new ListTokenSource(tokens)
-    val subStream = new CommonTokenStream(source)
-    subStream.fill()
-    val parser = new SqlBaseParser(subStream)
+    val firstTok = stream.get(startIdx)
+    val lastTok = stream.get(endIdx)
+    val regionStart = firstTok.getStartIndex
+    // Token.getStopIndex is inclusive, substring's upper bound is exclusive.
+    val regionEnd = lastTok.getStopIndex + 1
+    val original = sqlText.substring(regionStart, regionEnd)
+    val preprocessed = validationPreprocess(original)
+
+    val regionLexer = new SqlBaseLexer(
+      new UpperCaseCharStream(CharStreams.fromString(preprocessed)))
+    regionLexer.removeErrorListeners()
+    val regionTokens = new CommonTokenStream(regionLexer)
+    regionTokens.fill()
+    val parser = new SqlBaseParser(regionTokens)
     configureSplitterParser(parser, conf)
 
     // Two-stage parse: SLL first (fast), then LL on failure. Matches the
@@ -325,7 +358,7 @@ object SqlStatementSplitter {
     } catch {
       case _: ParseCancellationException =>
         // SLL bailed (could be a false positive). Rewind and retry with LL.
-        subStream.seek(0)
+        regionTokens.seek(0)
         parser.reset()
         parser.getInterpreter.setPredictionMode(PredictionMode.LL)
         try {
@@ -336,7 +369,7 @@ object SqlStatementSplitter {
             // Use the parser's cursor position (rather than the exception's
             // offending token, which is unreliable under LL adaptive
             // prediction) to tell apart the two failure modes.
-            if (subStream.LA(1) == Token.EOF) FailedAtEof else FailedNonEof
+            if (regionTokens.LA(1) == Token.EOF) FailedAtEof else FailedNonEof
           case _: StackOverflowError => FailedNonEof
         }
       case _: StackOverflowError => FailedNonEof

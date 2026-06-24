@@ -104,20 +104,25 @@ class SparkSqlParser extends AbstractSqlParser {
   }
 
   /**
-   * Split a SQL string into individual statements after expanding any `${...}`
-   * variable references. Variable substitution has to happen *before* splitting
-   * because a substituted value may itself contain `;`, comments, or
-   * `BEGIN ... END` structure that affect statement boundaries.
+   * Split a SQL string into individual statements at `;` boundaries.
    *
-   * Parameter substitution is intentionally NOT applied here: the splitter
-   * runs at the top level of an interactive session / batch input, where there
-   * is no parameter context bound. If a caller does have a parameter context,
-   * they should pre-substitute the input and call this with the result.
+   * The emitted statements are pieces of the original input -- `${...}` variable
+   * references are NOT expanded here, so they survive into each emitted statement
+   * and are substituted for real per-statement at parse time (see [[parseInternal]]).
+   * This is important for the `spark-sql` CLI's batch mode: a `${x}` whose value
+   * comes from a `SET x=...` in the same batch must resolve to the post-`SET`
+   * value, which is only available *after* the earlier statement executes.
+   *
+   * To still recognize `BEGIN ... END` compound block boundaries when a body
+   * contains a `${...}` reference, the splitter is invoked with a validation
+   * preprocessor that replaces every `${...}` with a fixed valid identifier.
+   * The placeholder makes the candidate region parse-equivalent regardless of
+   * whether (or how) the variable is set, while the emitted statement keeps
+   * the original `${...}` so per-statement substitution at execution still
+   * runs against the real session config (with earlier `SET`s applied).
    */
-  override def splitStatements(sqlText: String): SqlStatementSplitResult = {
-    val variableSubstituted = substitutor.substitute(sqlText)
-    SqlStatementSplitter.split(variableSubstituted)
-  }
+  override def splitStatements(sqlText: String): SqlStatementSplitResult =
+    SqlStatementSplitter.split(sqlText, SparkSqlParser.substituteVariablesForValidation)
 
   /**
    * Internal parse method that handles both parameter substitution and regular parsing.
@@ -182,6 +187,42 @@ class SparkSqlParser extends AbstractSqlParser {
     CurrentOrigin.withOrigin(originToUse) {
       super.parse(paramSubstituted)(toResult)
     }
+  }
+}
+
+object SparkSqlParser {
+
+  /**
+   * Identifier used to stand in for every `${...}` variable reference when
+   * the splitter validates a candidate compound block. It is intentionally
+   * shaped so that a real user identifier cannot collide with it; it is also
+   * a structurally well-formed Spark SQL identifier (letters + underscores
+   * only) so the parser accepts it in nearly every position a `${...}` might
+   * appear.
+   */
+  private[execution] val VariableRefPlaceholder = "__SPARK_VAR_PLACEHOLDER__"
+
+  /**
+   * Regex matching a `${...}` variable reference. Mirrors
+   * [[org.apache.spark.internal.config.ConfigReader.REF_RE]]: an optional
+   * `prefix:` followed by a non-whitespace name, enclosed in `${ }`.
+   */
+  private val variableRefRe = """\$\{(?:\w+?:)?\S+?\}""".r
+
+  /**
+   * Validation-time preprocessor for the splitter (see
+   * [[SparkSqlParser.splitStatements]]): replaces every `${...}` reference
+   * with [[VariableRefPlaceholder]] so candidate regions parse regardless of
+   * whether the referenced variable is set. The emitted statement keeps the
+   * original `${...}` and is substituted for real at execution time. If
+   * variable substitution is disabled in the session conf, the input is
+   * returned unchanged (matching the behavior of the real substituter).
+   */
+  private[execution] def substituteVariablesForValidation(input: String): String = {
+    if (input == null || input.isEmpty || !input.contains("${")) return input
+    if (!SQLConf.get.variableSubstituteEnabled) return input
+    variableRefRe.replaceAllIn(
+      input, _ => scala.util.matching.Regex.quoteReplacement(VariableRefPlaceholder))
   }
 }
 
