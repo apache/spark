@@ -178,6 +178,7 @@ class SQLQueryTestSuite extends SharedSparkSession
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
     .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
+    // SPARK-57667: pin so AQE keeps SMJ regardless of the default
     .set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD, 0L)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
