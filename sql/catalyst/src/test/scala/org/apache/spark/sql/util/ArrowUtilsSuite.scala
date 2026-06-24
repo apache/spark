@@ -131,6 +131,21 @@ class ArrowUtilsSuite extends SparkFunSuite {
     assert(ArrowUtils.fromArrowField(nanosField(null)) === TimestampNTZNanosType(9))
     assert(ArrowUtils.fromArrowField(nanosField("UTC")) === TimestampLTZNanosType(9))
 
+    // Fallback also covers a present-but-invalid precision key (out of [7, 9] or non-numeric):
+    // the value is unusable, so the type maps to the canonical p=9 just like the no-metadata case.
+    def nanosFieldWithPrecision(timeZoneId: String, precision: String): Field = new Field(
+      "value",
+      new FieldType(
+        true,
+        new ArrowType.Timestamp(TimeUnit.NANOSECOND, timeZoneId),
+        null,
+        java.util.Collections.singletonMap("SPARK::timestampNanos::precision", precision)),
+      java.util.Collections.emptyList[Field]())
+    assert(
+      ArrowUtils.fromArrowField(nanosFieldWithPrecision(null, "5")) === TimestampNTZNanosType(9))
+    assert(
+      ArrowUtils.fromArrowField(nanosFieldWithPrecision("UTC", "x")) === TimestampLTZNanosType(9))
+
     // The precision metadata key does not leak into the reconstructed column Metadata.
     val md = new MetadataBuilder().putString("city", "beijing").build()
     val schemaWithMeta =
