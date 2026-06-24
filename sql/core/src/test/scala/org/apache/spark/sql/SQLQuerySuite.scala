@@ -1697,6 +1697,15 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
+
+    // Test for empty and whitespace-only paths
+    Seq("", " ", "\t", "\n", "\t\n", " \t ").foreach { location =>
+      val e = intercept[AnalysisException] {
+        sql(s"select id from json.`$location`")
+      }
+      assert(e.message.contains("The location name cannot be empty string"))
+      assert(e.message.contains(s"`$location`"))
+    }
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
