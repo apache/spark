@@ -25,9 +25,8 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{CollationFactory, SketchEnvelope, SketchProfile}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -188,27 +187,17 @@ case class HllSketchAgg(
    * @return A binary sketch which can be evaluated or merged
    */
   override def eval(sketch: HllSketch): Any = {
-    maybeWrap(sketch.toUpdatableByteArray)
+    sketch.toUpdatableByteArray
   }
 
   /** Convert the underlying HllSketch into an updatable byte array  */
   override def serialize(sketch: HllSketch): Array[Byte] = {
-    maybeWrap(sketch.toUpdatableByteArray)
+    sketch.toUpdatableByteArray
   }
 
   /** De-serializes the updatable byte array into a HllSketch instance */
   override def deserialize(buffer: Array[Byte]): HllSketch = {
-    val (_, payload) = SketchEnvelope.unwrap(buffer)
-    HllSketch.heapify(payload)
-  }
-
-  /** Wraps the payload in a provenance envelope when envelope writes are enabled. */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(left.dataType))
-    } else {
-      payload
-    }
+    HllSketch.heapify(buffer)
   }
 }
 
@@ -337,27 +326,13 @@ case class HllUnionAgg(
    * @param unionOption A previously initialized Union instance, or None
    * @param input An input row
    */
-  // Reference profile observed from the first enveloped input sketch in this task, used to detect
-  // when later inputs were built under an incompatible provenance profile.
-  @transient private var observedProfile: Option[SketchProfile] = None
-
   override def update(unionOption: Option[Union], input: InternalRow): Option[Union] = {
     val v = left.eval(input)
     if (v != null) {
       left.dataType match {
         case BinaryType =>
           try {
-            val (profileOpt, payload) = SketchEnvelope.unwrap(v.asInstanceOf[Array[Byte]])
-            profileOpt.foreach { p =>
-              observedProfile match {
-                case Some(ref) =>
-                  SketchEnvelope.assertCompatible(
-                    p, ref, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-                case None =>
-                  observedProfile = Some(p)
-              }
-            }
-            val sketch = HllSketch.wrap(Memory.wrap(payload))
+            val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
             val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
             compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
             union.update(sketch)
@@ -405,16 +380,16 @@ case class HllUnionAgg(
    */
   override def eval(unionOption: Option[Union]): Any = {
     unionOption match {
-      case Some(union) => maybeWrap(union.toUpdatableByteArray)
+      case Some(union) => union.toUpdatableByteArray
       // unclear if these scenarios can ever occur
-      case None => maybeWrap(new Union().toUpdatableByteArray)
+      case None => new Union().toUpdatableByteArray
     }
   }
 
   /** Convert the underlying Union into an updatable byte array  */
   override def serialize(unionOption: Option[Union]): Array[Byte] = {
     unionOption match {
-      case Some(union) => maybeWrap(union.toUpdatableByteArray)
+      case Some(union) => union.toUpdatableByteArray
       // unclear if these scenarios can ever occur
       case None => new Array[Byte](0)
     }
@@ -423,23 +398,10 @@ case class HllUnionAgg(
   /** De-serializes the updatable byte array into a Union instance */
   override def deserialize(buffer: Array[Byte]): Option[Union] = {
     if (buffer.length != 0) {
-      val (_, payload) = SketchEnvelope.unwrap(buffer)
-      Some(Union.heapify(payload))
+      Some(Union.heapify(buffer))
     // unclear if these scenarios can ever occur
     } else {
       None
-    }
-  }
-
-  /**
-   * Wraps the merged union output, propagating the provenance profile observed from the input
-   * sketches. If no enveloped input was seen (all inputs were legacy), the bytes are left
-   * unwrapped because the union cannot honestly describe a provenance it never observed.
-   */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    (SQLConf.get.sketchEnvelopeWriteEnabled, observedProfile) match {
-      case (true, Some(p)) => SketchEnvelope.wrap(payload, p)
-      case _ => payload
     }
   }
 }

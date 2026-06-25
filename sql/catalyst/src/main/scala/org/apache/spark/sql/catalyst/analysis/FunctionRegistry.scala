@@ -869,7 +869,6 @@ object FunctionRegistry {
     // datasketch functions
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
-    expression[SketchMetadata]("sketch_metadata"),
     expression[ThetaSketchEstimate]("theta_sketch_estimate"),
     expression[ThetaUnion]("theta_union"),
     expression[ThetaDifference]("theta_difference"),

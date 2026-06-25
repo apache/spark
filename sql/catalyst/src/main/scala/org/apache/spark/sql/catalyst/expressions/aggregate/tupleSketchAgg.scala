@@ -27,9 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchEnvelope, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -440,7 +439,7 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
    * @return
    *   A CompactSketch binary representation
    */
-  override def eval(sketchState: TupleSketchState[S]): Any = maybeWrap(sketchState.eval())
+  override def eval(sketchState: TupleSketchState[S]): Any = sketchState.eval()
 
   /**
    * Returns a CompactSketch binary derived from the input column or expression
@@ -451,11 +450,10 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
    *   A CompactSketch binary representation
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
-    maybeWrap(sketchState.serialize())
+    sketchState.serialize()
 
   /**
-   * Heapify a CompactSketch from the sketch byte array. Envelope stripping happens inside
-   * `heapifySketch` (via `TupleSketchUtils`), so legacy and enveloped buffers both work.
+   * Heapify a CompactSketch from the sketch byte array.
    *
    * @param buffer
    *   A serialized sketch byte array
@@ -467,15 +465,6 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
       createAggregationBuffer()
-    }
-  }
-
-  /** Wraps the payload in a provenance envelope when envelope writes are enabled. */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(key.dataType))
-    } else {
-      payload
     }
   }
 }

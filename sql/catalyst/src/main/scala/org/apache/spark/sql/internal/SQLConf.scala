@@ -1164,29 +1164,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val SKETCH_ENVELOPE_WRITE_ENABLED =
-    buildConf("spark.sql.sketch.envelope.writeEnabled")
-      .doc("When true, DataSketches-based aggregate functions (such as hll_sketch_agg, " +
-        "theta_sketch_agg and approx_top_k_accumulate) wrap their materialized binary output " +
-        "in a self-identifying provenance envelope that records the ICU version, collation id, " +
-        "key encoding and library versions used to build the sketch. This allows incompatible " +
-        "sketches to be detected at union/intersection/merge time. When false (the default), " +
-        "the emitted bytes are byte-identical to the native DataSketches payload. Enabling this " +
-        "produces bytes that can only be read by an envelope-aware Spark version.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
-  val SKETCH_ALLOW_VERSION_MISMATCH =
-    buildConf("spark.sql.sketch.allowVersionMismatch")
-      .doc("When true, suppress the errors raised when combining DataSketches sketches that " +
-        "were built under incompatible provenance profiles (for example a different ICU " +
-        "version or collation). The mismatch is logged instead. This is an escape hatch; the " +
-        "default of false protects correctness of unions, intersections and merges.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val OBJECT_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.objectLevel.enabled")
       .internal()
@@ -7866,10 +7843,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SHUFFLE_CHECKSUM_MISMATCH_QUERY_LEVEL_ROLLBACK_ENABLED)
 
   def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
-
-  def sketchEnvelopeWriteEnabled: Boolean = getConf(SKETCH_ENVELOPE_WRITE_ENABLED)
-
-  def sketchAllowVersionMismatch: Boolean = getConf(SKETCH_ALLOW_VERSION_MISMATCH)
 
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
 

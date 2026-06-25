@@ -29,9 +29,8 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, SketchEnvelope, SketchProfile}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -380,25 +379,15 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
    * Serialize the buffer into bytes.
    * The format is:
    * [sketch bytes][null count (8 bytes Long)]
-   *
-   * When `profile` is defined and envelope writes are enabled, the inner sketch bytes are wrapped
-   * in a provenance envelope. The outer framing (and the trailing null count) is unchanged, so the
-   * user-visible struct schema is untouched.
    */
-  def serialize(serDe: ArrayOfItemsSerDe[T], profile: Option[SketchProfile]): Array[Byte] = {
-    val raw = sketch.toByteArray(serDe)
-    val sketchBytes = (SQLConf.get.sketchEnvelopeWriteEnabled, profile) match {
-      case (true, Some(p)) => SketchEnvelope.wrap(raw, p)
-      case _ => raw
-    }
+  def serialize(serDe: ArrayOfItemsSerDe[T]): Array[Byte] = {
+    val sketchBytes = sketch.toByteArray(serDe)
     val result = new Array[Byte](sketchBytes.length + java.lang.Long.BYTES)
     val byteBuffer = java.nio.ByteBuffer.wrap(result)
     byteBuffer.put(sketchBytes)
     byteBuffer.putLong(nullCount)
     result
   }
-
-  def serialize(serDe: ArrayOfItemsSerDe[T]): Array[Byte] = serialize(serDe, None)
 
   /**
    * Evaluate the buffer and return top K items (including null) with their estimated frequency.
@@ -471,24 +460,8 @@ object ApproxTopKAggregateBuffer {
     val sketchBytes = new Array[Byte](sketchBytesLength)
     byteBuffer.get(sketchBytes, 0, sketchBytesLength)
     val nullCount = byteBuffer.getLong(sketchBytesLength)
-    val (_, payload) = SketchEnvelope.unwrap(sketchBytes)
-    val deserializedSketch = ItemsSketch.getInstance(Memory.wrap(payload), serDe)
+    val deserializedSketch = ItemsSketch.getInstance(Memory.wrap(sketchBytes), serDe)
     new ApproxTopKAggregateBuffer[Any](deserializedSketch, nullCount)
-  }
-
-  /**
-   * Peek at the provenance profile of a serialized buffer without materializing the sketch, by
-   * peeling off the trailing null count and unwrapping the inner sketch bytes. Returns None for
-   * legacy (un-enveloped) buffers.
-   */
-  def peekProfile(bytes: Array[Byte]): Option[SketchProfile] = {
-    if (bytes.length <= 8) {
-      None
-    } else {
-      val sketchBytes = new Array[Byte](bytes.length - 8)
-      java.nio.ByteBuffer.wrap(bytes).get(sketchBytes, 0, sketchBytes.length)
-      SketchEnvelope.unwrap(sketchBytes)._1
-    }
   }
 }
 
@@ -598,9 +571,7 @@ case class ApproxTopKAccumulate(
   }
 
   override def serialize(buffer: ApproxTopKAggregateBuffer[Any]): Array[Byte] =
-    buffer.serialize(
-      ApproxTopK.genSketchSerDe(itemDataType),
-      Some(SketchEnvelope.currentItemsProfile(itemDataType)))
+    buffer.serialize(ApproxTopK.genSketchSerDe(itemDataType))
 
   override def deserialize(storageFormat: Array[Byte]): ApproxTopKAggregateBuffer[Any] =
     ApproxTopKAggregateBuffer.deserialize(storageFormat, ApproxTopK.genSketchSerDe(itemDataType))
@@ -688,8 +659,7 @@ class CombineInternal[T](
    */
   def serialize(): Array[Byte] = {
     val sketchWithNullCountBytes = sketchWithNullCount.serialize(
-      ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]],
-      Some(SketchEnvelope.currentItemsProfile(itemDataType)))
+      ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
     val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
     val byteArray = new Array[Byte](
@@ -842,25 +812,12 @@ case class ApproxTopKCombine(
    * Update the aggregation buffer with an input sketch. The input has the same schema as the
    * ApproxTopKAccumulate output, i.e., sketchBytes + maxItemsTracked + null + DDL.
    */
-  // Reference profile observed from the first enveloped input sketch in this task, used to detect
-  // when later inputs were built under an incompatible provenance profile.
-  @transient private var observedProfile: Option[SketchProfile] = None
-
   override def update(buffer: CombineInternal[Any], input: InternalRow): CombineInternal[Any] = {
     val inputState = state.eval(input).asInstanceOf[InternalRow]
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
     val inputItemDataType = ApproxTopK.DDLToDataType(inputItemDataTypeDDL)
-    // Detect incompatible provenance across input sketches.
-    ApproxTopKAggregateBuffer.peekProfile(inputSketchBytes).foreach { p =>
-      observedProfile match {
-        case Some(ref) =>
-          SketchEnvelope.assertCompatible(
-            p, ref, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-        case None => observedProfile = Some(p)
-      }
-    }
     // update maxItemsTracked (throw error if not match)
     buffer.updateMaxItemsTracked(combineSizeSpecified, inputMaxItemsTracked)
     // update itemDataType (throw error if not match)
@@ -886,9 +843,7 @@ case class ApproxTopKCombine(
 
   override def eval(buffer: CombineInternal[Any]): Any = {
     val sketchBytes = buffer.getSketchWithNullCount
-      .serialize(
-        ApproxTopK.genSketchSerDe(buffer.getItemDataType),
-        Some(SketchEnvelope.currentItemsProfile(buffer.getItemDataType)))
+      .serialize(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
     val maxItemsTracked = buffer.getMaxItemsTracked
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
     InternalRow.apply(

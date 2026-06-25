@@ -249,12 +249,6 @@ object SketchEnvelope extends Logging {
       dsLibMinor = DATASKETCHES_LIB_MINOR)
   }
 
-  /**
-   * Variant for `approx_top_k`. The recorded provenance is identical to [[currentProfile]] because
-   * the key encoding is derived from the collation id rather than stored explicitly.
-   */
-  def currentItemsProfile(dataType: DataType): SketchProfile = currentProfile(dataType)
-
   // Version of the bundled Apache DataSketches Java library (see dev/deps).
   private[spark] val DATASKETCHES_LIB_MAJOR: Short = 6
   private[spark] val DATASKETCHES_LIB_MINOR: Short = 2

@@ -23,7 +23,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, SketchEnvelope}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -46,7 +46,7 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
   override def prettyName: String = "kll_sketch_to_string_bigint"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
@@ -74,7 +74,7 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
   override def prettyName: String = "kll_sketch_to_string_float"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
@@ -102,7 +102,7 @@ case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringB
   override def prettyName: String = "kll_sketch_to_string_double"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
@@ -140,7 +140,7 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
   override def prettyName: String = "kll_sketch_get_n_bigint"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
@@ -168,7 +168,7 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
   override def prettyName: String = "kll_sketch_get_n_float"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
@@ -196,7 +196,7 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
   override def prettyName: String = "kll_sketch_get_n_double"
   override def nullSafeEval(input: Any): Any = {
     try {
-      val buffer = SketchEnvelope.payloadOf(input.asInstanceOf[Array[Byte]])
+      val buffer = input.asInstanceOf[Array[Byte]]
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
@@ -234,8 +234,8 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
   override def prettyName: String = "kll_sketch_merge_bigint"
   override def nullSafeEval(left: Any, right: Any): Any = {
     try {
-      val leftBuffer = SketchEnvelope.payloadOf(left.asInstanceOf[Array[Byte]])
-      val rightBuffer = SketchEnvelope.payloadOf(right.asInstanceOf[Array[Byte]])
+      val leftBuffer = left.asInstanceOf[Array[Byte]]
+      val rightBuffer = right.asInstanceOf[Array[Byte]]
       val leftSketch = KllLongsSketch.heapify(Memory.wrap(leftBuffer))
       val rightSketch = KllLongsSketch.wrap(Memory.wrap(rightBuffer))
       leftSketch.merge(rightSketch)
@@ -265,8 +265,8 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
   override def prettyName: String = "kll_sketch_merge_float"
   override def nullSafeEval(left: Any, right: Any): Any = {
     try {
-      val leftBuffer = SketchEnvelope.payloadOf(left.asInstanceOf[Array[Byte]])
-      val rightBuffer = SketchEnvelope.payloadOf(right.asInstanceOf[Array[Byte]])
+      val leftBuffer = left.asInstanceOf[Array[Byte]]
+      val rightBuffer = right.asInstanceOf[Array[Byte]]
       val leftSketch = KllFloatsSketch.heapify(Memory.wrap(leftBuffer))
       val rightSketch = KllFloatsSketch.wrap(Memory.wrap(rightBuffer))
       leftSketch.merge(rightSketch)
@@ -296,8 +296,8 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
   override def prettyName: String = "kll_sketch_merge_double"
   override def nullSafeEval(left: Any, right: Any): Any = {
     try {
-      val leftBuffer = SketchEnvelope.payloadOf(left.asInstanceOf[Array[Byte]])
-      val rightBuffer = SketchEnvelope.payloadOf(right.asInstanceOf[Array[Byte]])
+      val leftBuffer = left.asInstanceOf[Array[Byte]]
+      val rightBuffer = right.asInstanceOf[Array[Byte]]
       val leftSketch = KllDoublesSketch.heapify(Memory.wrap(leftBuffer))
       val rightSketch = KllDoublesSketch.wrap(Memory.wrap(rightBuffer))
       leftSketch.merge(rightSketch)
@@ -498,7 +498,7 @@ abstract class KllSketchGetQuantileBase
   }
 
   override def nullSafeEval(leftInput: Any, rightInput: Any): Any = {
-    val buffer = SketchEnvelope.payloadOf(leftInput.asInstanceOf[Array[Byte]])
+    val buffer = leftInput.asInstanceOf[Array[Byte]]
     val memory = Memory.wrap(buffer)
 
     rightInput match {
@@ -663,7 +663,7 @@ abstract class KllSketchGetRankBase
   }
 
   override def nullSafeEval(leftInput: Any, rightInput: Any): Any = {
-    val buffer: Array[Byte] = SketchEnvelope.payloadOf(leftInput.asInstanceOf[Array[Byte]])
+    val buffer: Array[Byte] = leftInput.asInstanceOf[Array[Byte]]
     val memory: Memory = Memory.wrap(buffer)
 
     rightInput match {

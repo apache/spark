@@ -77,11 +77,7 @@ object ThetaSketchUtils {
    * @return
    *   A CompactSketch object wrapping the provided bytes
    */
-  def wrapCompactSketch(rawBytes: Array[Byte], prettyName: String): CompactSketch = {
-    // Strip the provenance envelope if present so the native DataSketches bytes can be wrapped.
-    // Legacy (un-enveloped) buffers pass through unchanged, and this is idempotent for callers
-    // that already unwrapped the envelope to perform a compatibility check.
-    val bytes = SketchEnvelope.payloadOf(rawBytes)
+  def wrapCompactSketch(bytes: Array[Byte], prettyName: String): CompactSketch = {
     val memory =
       try {
         Memory.wrap(bytes)

@@ -24,8 +24,7 @@ import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummarySe
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.catalyst.util.{SketchEnvelope, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.util.{SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -361,31 +360,13 @@ abstract class TupleUnionBase[S <: Summary]
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
-    // Inspect provenance envelopes (if any) to reject combining incompatible sketches and to
-    // propagate provenance to the result. Reads themselves are envelope-tolerant downstream.
-    val profile1 = SketchEnvelope.profileOf(sketch1Bytes)
-    val profile2 = SketchEnvelope.profileOf(sketch2Bytes)
-    (profile1, profile2) match {
-      case (Some(a), Some(b)) =>
-        SketchEnvelope.assertCompatible(b, a, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-      case _ =>
-    }
-
     val nominalEntries = 1 << logNominalEntries
     val summarySetOps = createSummarySetOperations(tupleSummaryMode)
     val union = new Union(nominalEntries, summarySetOps)
 
     unionSketches(sketch1Bytes, sketch2Bytes, union, tupleSummaryMode)
 
-    val result = union.getResult.toByteArray
-    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      profile1.orElse(profile2) match {
-        case Some(p) => SketchEnvelope.wrap(result, p)
-        case None => result
-      }
-    } else {
-      result
-    }
+    union.getResult.toByteArray
   }
 }
 

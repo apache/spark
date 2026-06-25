@@ -25,9 +25,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchEnvelope, SketchProfile, ThetaSketchUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -277,30 +276,20 @@ case class ThetaSketchAgg(
    *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
-    maybeWrap(sketchState.eval())
+    sketchState.eval()
   }
 
   /** Convert the underlying UpdateSketch/Union into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
-    maybeWrap(sketchState.serialize())
+    sketchState.serialize()
   }
 
   /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
-      val (_, payload) = SketchEnvelope.unwrap(buffer)
-      FinalizedSketch(CompactSketch.heapify(Memory.wrap(payload)))
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       this.createAggregationBuffer()
-    }
-  }
-
-  /** Wraps the payload in a provenance envelope when envelope writes are enabled. */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(left.dataType))
-    } else {
-      payload
     }
   }
 }
@@ -412,10 +401,6 @@ case class ThetaUnionAgg(
    * @param input
    *   An input row
    */
-  // Reference profile observed from the first enveloped input sketch in this task, used to detect
-  // when later inputs were built under an incompatible provenance profile.
-  @transient private var observedProfile: Option[SketchProfile] = None
-
   override def update(unionBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
     // Return early for null input values.
     val v = left.eval(input)
@@ -427,15 +412,7 @@ case class ThetaUnionAgg(
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
 
-    val (profileOpt, sketchBytes) = SketchEnvelope.unwrap(v.asInstanceOf[Array[Byte]])
-    profileOpt.foreach { p =>
-      observedProfile match {
-        case Some(ref) =>
-          SketchEnvelope.assertCompatible(
-            p, ref, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-        case None => observedProfile = Some(p)
-      }
-    }
+    val sketchBytes = v.asInstanceOf[Array[Byte]]
     val inputSketch = ThetaSketchUtils.wrapCompactSketch(sketchBytes, prettyName)
 
     val union = unionBuffer match {
@@ -486,32 +463,20 @@ case class ThetaUnionAgg(
    *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
-    maybeWrap(sketchState.eval())
+    sketchState.eval()
   }
 
   /** Converts the underlying Union into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
-    maybeWrap(sketchState.serialize())
+    sketchState.serialize()
   }
 
   /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
-      val (_, payload) = SketchEnvelope.unwrap(buffer)
-      FinalizedSketch(CompactSketch.heapify(Memory.wrap(payload)))
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       this.createAggregationBuffer()
-    }
-  }
-
-  /**
-   * Wraps the merged union output, propagating the provenance profile observed from the input
-   * sketches. If no enveloped input was seen, the bytes are left unwrapped.
-   */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    (SQLConf.get.sketchEnvelopeWriteEnabled, observedProfile) match {
-      case (true, Some(p)) => SketchEnvelope.wrap(payload, p)
-      case _ => payload
     }
   }
 }
@@ -596,10 +561,6 @@ case class ThetaIntersectionAgg(
    * @param input
    *   An input row
    */
-  // Reference profile observed from the first enveloped input sketch in this task, used to detect
-  // when later inputs were built under an incompatible provenance profile.
-  @transient private var observedProfile: Option[SketchProfile] = None
-
   override def update(
       intersectionBuffer: ThetaSketchState,
       input: InternalRow): ThetaSketchState = {
@@ -613,15 +574,7 @@ case class ThetaIntersectionAgg(
       case _ => throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
     }
 
-    val (profileOpt, sketchBytes) = SketchEnvelope.unwrap(v.asInstanceOf[Array[Byte]])
-    profileOpt.foreach { p =>
-      observedProfile match {
-        case Some(ref) =>
-          SketchEnvelope.assertCompatible(
-            p, ref, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-        case None => observedProfile = Some(p)
-      }
-    }
+    val sketchBytes = v.asInstanceOf[Array[Byte]]
     val inputSketch = ThetaSketchUtils.wrapCompactSketch(sketchBytes, prettyName)
 
     val intersection = intersectionBuffer match {
@@ -678,32 +631,20 @@ case class ThetaIntersectionAgg(
    *   A Compact binary sketch
    */
   override def eval(sketchState: ThetaSketchState): Any = {
-    maybeWrap(sketchState.eval())
+    sketchState.eval()
   }
 
   /** Convert the underlying Intersection into an Compact byte array. */
   override def serialize(sketchState: ThetaSketchState): Array[Byte] = {
-    maybeWrap(sketchState.serialize())
+    sketchState.serialize()
   }
 
   /** Wrap the byte array into a Compact sketch instance. */
   override def deserialize(buffer: Array[Byte]): ThetaSketchState = {
     if (buffer.nonEmpty) {
-      val (_, payload) = SketchEnvelope.unwrap(buffer)
-      FinalizedSketch(CompactSketch.heapify(Memory.wrap(payload)))
+      FinalizedSketch(CompactSketch.heapify(Memory.wrap(buffer)))
     } else {
       this.createAggregationBuffer()
-    }
-  }
-
-  /**
-   * Wraps the intersected output, propagating the provenance profile observed from the input
-   * sketches. If no enveloped input was seen, the bytes are left unwrapped.
-   */
-  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
-    (SQLConf.get.sketchEnvelopeWriteEnabled, observedProfile) match {
-      case (true, Some(p)) => SketchEnvelope.wrap(payload, p)
-      case _ => payload
     }
   }
 }

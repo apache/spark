@@ -21,13 +21,9 @@ import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{KeyEncoding, SketchEnvelope}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, StructField, StructType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
 @ExpressionDescription(
   usage = """
@@ -56,7 +52,7 @@ case class HllSketchEstimate(child: Expression)
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Any = {
-    val (_, buffer) = SketchEnvelope.unwrap(input.asInstanceOf[Array[Byte]])
+    val buffer = input.asInstanceOf[Array[Byte]]
     try {
       Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
     } catch {
@@ -110,22 +106,15 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
-    val (profile1, payload1) = SketchEnvelope.unwrap(value1.asInstanceOf[Array[Byte]])
-    val (profile2, payload2) = SketchEnvelope.unwrap(value2.asInstanceOf[Array[Byte]])
-    (profile1, profile2) match {
-      case (Some(p1), Some(p2)) =>
-        SketchEnvelope.assertCompatible(p2, p1, prettyName, SQLConf.get.sketchAllowVersionMismatch)
-      case _ =>
-    }
     val sketch1 = try {
-      HllSketch.heapify(Memory.wrap(payload1))
+      HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
     } catch {
       case _: SketchesArgumentException | _: java.lang.Error
            | _: ArrayIndexOutOfBoundsException =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val sketch2 = try {
-      HllSketch.heapify(Memory.wrap(payload2))
+      HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
     } catch {
       case _: SketchesArgumentException | _: java.lang.Error
            | _: ArrayIndexOutOfBoundsException =>
@@ -139,73 +128,6 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)
     union.update(sketch2)
-    val result = union.getResult(targetType).toUpdatableByteArray
-    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
-      profile1.orElse(profile2) match {
-        case Some(p) => SketchEnvelope.wrap(result, p)
-        case None => result
-      }
-    } else {
-      result
-    }
+    union.getResult(targetType).toUpdatableByteArray
   }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(sketch) - Returns the provenance metadata recorded in a DataSketches sketch envelope.
-    The result is a struct with the derived key encoding, collation id, ICU version, DataSketches
-    library version and a flag indicating whether the input carried an envelope. For legacy
-    sketches without an envelope, every field except `has_envelope` is NULL. This reads only the
-    envelope header and does not touch the underlying DataSketches library. """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(hll_sketch_agg(col)).has_envelope FROM VALUES (1), (2), (3) tab(col);
-       false
-  """,
-  group = "sketch_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class SketchMetadata(child: Expression)
-  extends UnaryExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
-  override def nullIntolerant: Boolean = true
-
-  override protected def withNewChildInternal(newChild: Expression): SketchMetadata =
-    copy(child = newChild)
-
-  override def prettyName: String = "sketch_metadata"
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
-
-  override def dataType: DataType = SketchMetadata.outputType
-
-  override def nullSafeEval(input: Any): Any = {
-    val (profileOpt, _) = SketchEnvelope.unwrap(input.asInstanceOf[Array[Byte]])
-    profileOpt match {
-      case Some(p) =>
-        val collationId: Any =
-          if (p.collationId == SketchEnvelope.NO_COLLATION_ID) null else p.collationId
-        val keyEncoding = SketchEnvelope.keyEncodingForCollation(p.collationId)
-        InternalRow(
-          UTF8String.fromString(KeyEncoding.name(keyEncoding)),
-          collationId,
-          if (p.icuVersionString == null) null else UTF8String.fromString(p.icuVersionString),
-          UTF8String.fromString(p.datasketchesVersionString),
-          true)
-      case None =>
-        InternalRow(null, null, null, null, false)
-    }
-  }
-}
-
-object SketchMetadata {
-  val outputType: StructType = StructType(Seq(
-    StructField("key_encoding", StringType, nullable = true),
-    StructField("collation_id", IntegerType, nullable = true),
-    StructField("icu_version", StringType, nullable = true),
-    StructField("datasketches_version", StringType, nullable = true),
-    StructField("has_envelope", BooleanType, nullable = false)))
 }

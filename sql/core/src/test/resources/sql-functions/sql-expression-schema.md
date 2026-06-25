@@ -329,7 +329,6 @@
 | org.apache.spark.sql.catalyst.expressions.Sinh | sinh | SELECT sinh(0) | struct<SINH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Size | cardinality | SELECT cardinality(array('b', 'd', 'c', 'a')) | struct<cardinality(array(b, d, c, a)):int> |
 | org.apache.spark.sql.catalyst.expressions.Size | size | SELECT size(array('b', 'd', 'c', 'a')) | struct<size(array(b, d, c, a)):int> |
-| org.apache.spark.sql.catalyst.expressions.SketchMetadata | sketch_metadata | SELECT sketch_metadata(hll_sketch_agg(col)).has_envelope FROM VALUES (1), (2), (3) tab(col) | struct<sketch_metadata(hll_sketch_agg(col, 12)).has_envelope:boolean> |
 | org.apache.spark.sql.catalyst.expressions.Slice | slice | SELECT slice(array(1, 2, 3, 4), 2, 2) | struct<slice(array(1, 2, 3, 4), 2, 2):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.SortArray | sort_array | SELECT sort_array(array('b', 'd', null, 'c', 'a'), true) | struct<sort_array(array(b, d, NULL, c, a), true):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.SoundEx | soundex | SELECT soundex('Miller') | struct<soundex(Miller):string> |
