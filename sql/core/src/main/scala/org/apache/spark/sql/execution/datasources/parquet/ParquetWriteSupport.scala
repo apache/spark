@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, STUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
@@ -193,12 +193,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
   private def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
     try {
-      Math.addExact(
-        Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
-        value.nanosWithinMicro.toLong)
+      DateTimeUtils.timestampNanosToEpochNanos(value)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value, isNtz)
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          value, isNtz, sink = "Parquet INT64")
     }
   }
 

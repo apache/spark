@@ -36,9 +36,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, Decimal, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.Utils
 
 
@@ -1429,6 +1429,47 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
 
     assert(count == inputRows.length)
+  }
+
+  test("SPARK-57159: roundtrip arrow batches with nanosecond timestamps") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq[(DataType, String)](
+        (TimestampNTZNanosType(9), null),
+        (TimestampLTZNanosType(9), "UTC")).foreach { case (dt, timeZoneId) =>
+        val values = Seq(
+          TimestampNanosVal.fromParts(0L, 0.toShort),
+          TimestampNanosVal.fromParts(0L, 999.toShort),
+          TimestampNanosVal.fromParts(1234567L, 7.toShort),
+          // pre-epoch instant with a sub-microsecond remainder
+          TimestampNanosVal.fromParts(-1234567L, 13.toShort))
+        // A trailing null exercises the null path.
+        val inputRows = values.map(v => InternalRow(v)) :+ InternalRow(null)
+        val schema = StructType(Seq(StructField("value", dt, nullable = true)))
+
+        val ctx = TaskContext.empty()
+        val batchIter = ArrowConverters.toBatchIterator(
+          inputRows.iterator, schema, 5, timeZoneId, true, false, ctx)
+        // The output iterator reuses a mutable row, so read each row before advancing.
+        val outputRowIter = ArrowConverters.fromBatchIterator(
+          batchIter, schema, timeZoneId, true, false, ctx)
+
+        var count = 0
+        outputRowIter.zipWithIndex.foreach { case (row, i) =>
+          if (i < values.length) {
+            val got = dt match {
+              case _: TimestampNTZNanosType => row.getTimestampNTZNanos(0)
+              case _: TimestampLTZNanosType => row.getTimestampLTZNanos(0)
+            }
+            assert(got.epochMicros === values(i).epochMicros)
+            assert(got.nanosWithinMicro === values(i).nanosWithinMicro)
+          } else {
+            assert(row.isNullAt(0))
+          }
+          count += 1
+        }
+        assert(count === inputRows.length)
+      }
+    }
   }
 
   test("ArrowBatchStreamWriter roundtrip") {
