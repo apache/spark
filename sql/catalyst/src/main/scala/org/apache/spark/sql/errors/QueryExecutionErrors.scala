@@ -2615,8 +2615,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def parquetTimestampNanosOverflowError(
-      value: TimestampNanosVal, isNtz: Boolean): SparkArithmeticException = {
+  def timestampNanosEpochNanosOverflowError(
+      value: TimestampNanosVal, isNtz: Boolean, sink: String): SparkArithmeticException = {
     // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
     // values are absolute instants and render as UTC with a trailing `Z`.
     val rendered =
@@ -2625,7 +2625,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"write the timestamp value $rendered as Parquet INT64 " +
+        "operation" -> (s"write the timestamp value $rendered as $sink " +
           "epoch-nanoseconds " +
           "(supported range: 1677-09-21T00:12:43.145224192Z to 2262-04-11T23:47:16.854775807Z)")),
       context = Array.empty,
