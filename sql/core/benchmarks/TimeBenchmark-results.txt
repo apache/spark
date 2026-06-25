@@ -1,0 +1,126 @@
+================================================================================================
+Current time
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+current_time:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+current_time wholestage off                         144            145           2         69.4          14.4       1.0X
+current_time wholestage on                          147            187          45         67.9          14.7       1.0X
+
+
+================================================================================================
+make_time
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+make_time:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+make_time wholestage off                            322            323           1         31.0          32.2       1.0X
+make_time wholestage on                             308            310           2         32.5          30.8       1.0X
+
+
+================================================================================================
+Parsing time
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+to_time:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+to_time wholestage off                             5902           5970          97          1.7         590.2       1.0X
+to_time wholestage on                              5824           5959          99          1.7         582.4       1.0X
+
+
+================================================================================================
+Extract components from TIME
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+hour of time:                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+hour of time wholestage off                         365            365           1         27.4          36.5       1.0X
+hour of time wholestage on                          354            356           2         28.2          35.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+minute of time:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+minute of time wholestage off                       349            351           2         28.6          34.9       1.0X
+minute of time wholestage on                        353            356           2         28.4          35.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+second of time:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+second of time wholestage off                       347            348           1         28.8          34.7       1.0X
+second of time wholestage on                        350            352           2         28.6          35.0       1.0X
+
+
+================================================================================================
+time_trunc
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+time_trunc HOUR:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+time_trunc HOUR wholestage off                      709            714           7         14.1          70.9       1.0X
+time_trunc HOUR wholestage on                       687            706          29         14.6          68.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+time_trunc MINUTE:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+time_trunc MINUTE wholestage off                    689            693           6         14.5          68.9       1.0X
+time_trunc MINUTE wholestage on                     692            696           5         14.5          69.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+time_trunc SECOND:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+time_trunc SECOND wholestage off                    685            686           2         14.6          68.5       1.0X
+time_trunc SECOND wholestage on                     719            728           5         13.9          71.9       1.0X
+
+
+================================================================================================
+time_diff
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+time_diff:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+time_diff wholestage off                            999           1011          17         10.0          99.9       1.0X
+time_diff wholestage on                             708            712           7         14.1          70.8       1.4X
+
+
+================================================================================================
+TIME +/- interval
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+TIME +/- interval:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+time + interval hour                                330            331           1         30.3          33.0       1.0X
+time + interval minute                              327            331           3         30.6          32.7       1.0X
+time + interval second                              328            334           4         30.5          32.8       1.0X
+time - interval hour                                335            339           5         29.8          33.5       1.0X
+
+
+================================================================================================
+Conversion from/to external types
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.18+8-LTS on Mac OS X 26.5
+Apple M3 Pro
+To/from java.time.LocalTime:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+From java.time.LocalTime                            133            135           2         37.6          26.6       1.0X
+Collect java.time.LocalTime                         606            634          27          8.2         121.2       0.2X
+
+
