@@ -614,10 +614,10 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
     new SparkConnectResultSet(df.collectResult())
   }
 
-  // getImportedKeys and getExportedKeys share the JDBC foreign-key result schema. Spark supports
-  // informational FOREIGN KEY constraints on DSv2 tables (SPARK-51207), but the Spark Connect JDBC
-  // client cannot retrieve them in a structured way yet, so both return an empty result set
-  // instead of throwing.
+  // getImportedKeys, getExportedKeys and getCrossReference share the JDBC foreign-key result
+  // schema. Spark supports informational FOREIGN KEY constraints on DSv2 tables (SPARK-51207),
+  // but the Spark Connect JDBC client cannot retrieve them in a structured way yet, so they all
+  // return an empty result set instead of throwing.
   private def emptyForeignKeys: ResultSet = {
     val df = conn.spark.emptyDataFrame
       .withColumn("PKTABLE_CAT", lit(""))
@@ -653,8 +653,10 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       parentTable: String,
       foreignCatalog: String,
       foreignSchema: String,
-      foreignTable: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+      foreignTable: String): ResultSet = {
+    conn.checkOpen()
+    emptyForeignKeys
+  }
 
   // Static catalog of the Spark SQL atomic types, so JDBC clients can resolve type
   // information instead of failing on a thrown exception.

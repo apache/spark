@@ -822,17 +822,19 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
     }
   }
 
-  test("SparkConnectDatabaseMetaData getImportedKeys and getExportedKeys") {
+  test("SparkConnectDatabaseMetaData getImportedKeys, getExportedKeys and getCrossReference") {
     withConnection { conn =>
       val metadata = conn.getMetaData
       val foreignKeySchema = Seq(
         "PKTABLE_CAT", "PKTABLE_SCHEM", "PKTABLE_NAME", "PKCOLUMN_NAME",
         "FKTABLE_CAT", "FKTABLE_SCHEM", "FKTABLE_NAME", "FKCOLUMN_NAME",
         "KEY_SEQ", "UPDATE_RULE", "DELETE_RULE", "FK_NAME", "PK_NAME", "DEFERRABILITY")
-      // Spark has no foreign keys, so both return an empty result set with the JDBC schema.
+      // Spark has no foreign keys, so all three return an empty result set with the JDBC schema.
       Seq(
         () => metadata.getImportedKeys(null, null, null),
-        () => metadata.getExportedKeys(null, null, null)).foreach { getForeignKeys =>
+        () => metadata.getExportedKeys(null, null, null),
+        () => metadata.getCrossReference(null, null, null, null, null, null))
+        .foreach { getForeignKeys =>
         Using.resource(getForeignKeys()) { rs =>
           val rsmd = rs.getMetaData
           assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === foreignKeySchema)
