@@ -30,13 +30,13 @@ option java_outer_classname = "SketchEnvelopeProtos";
 //
 // Fields use proto3 default semantics: a field left at its default (0) is not written on the wire
 // and reads back as 0. Numeric (collation-independent) sketches use collation_id = -1 to mark the
-// absence of a collation, so the UTF8_BINARY collation (id 0) remains distinguishable.
+// absence of a collation, so the UTF8_BINARY collation (ID 0) remains distinguishable.
 message SketchMetadata {
   // Major/minor version of the Apache DataSketches library that produced the payload.
   int32 datasketches_major = 1;
   int32 datasketches_minor = 2;
 
-  // Spark collation id under which string keys were encoded, or -1 when no collation applies.
+  // Spark collation ID under which string keys were encoded, or -1 when no collation applies.
   int32 collation_id = 3;
 
   // Major/minor version of the ICU library backing the collation, or 0 when ICU does not apply.

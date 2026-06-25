@@ -2914,7 +2914,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def sketchKeyEncodingMismatch(function: String, left: String, right: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "SKETCH_KEY_ENCODING_MISMATCH",
+      errorClass = "SKETCH_INPUT_MISMATCH.KEY_ENCODING",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "left" -> left,
@@ -2923,7 +2923,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def sketchCollationMismatch(function: String, left: Int, right: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "SKETCH_COLLATION_MISMATCH",
+      errorClass = "SKETCH_INPUT_MISMATCH.COLLATION",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "left" -> toSQLValue(left, IntegerType),
@@ -2932,7 +2932,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def sketchIcuVersionMismatch(function: String, left: String, right: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "SKETCH_ICU_VERSION_MISMATCH",
+      errorClass = "SKETCH_INPUT_MISMATCH.ICU_VERSION",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "left" -> (if (left == null) "unknown" else left),

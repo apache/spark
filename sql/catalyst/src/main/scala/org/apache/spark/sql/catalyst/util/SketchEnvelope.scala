@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, 
 
 /**
  * How the bytes that were hashed/fed into the sketch were derived from the logical input value.
- * This is not persisted; it is derived from the collation id recorded in the envelope at the time
+ * This is not persisted; it is derived from the collation ID recorded in the envelope at the time
  * a compatibility check is performed (see [[SketchEnvelope.keyEncodingForCollation]]).
  */
 object KeyEncoding {
@@ -58,26 +58,8 @@ object KeyEncoding {
 }
 
 /**
- * Provenance recorded alongside a materialized DataSketches buffer that the native preamble does
- * not capture. This is the in-memory view of the [[SketchMetadata]] protobuf carried by an
- * envelope. See [[SketchEnvelope]] for the on-the-wire layout.
- */
-case class SketchProfile(
-    collationId: Int,
-    icuMajor: Short,
-    icuMinor: Short,
-    dsLibMajor: Short,
-    dsLibMinor: Short) {
-
-  def icuVersionString: String =
-    if (icuMajor == 0 && icuMinor == 0) null else s"$icuMajor.$icuMinor"
-
-  def datasketchesVersionString: String = s"$dsLibMajor.$dsLibMinor"
-}
-
-/**
  * A small self-identifying envelope wrapped around the binary payload that the DataSketches
- * aggregates emit into `BinaryType` columns. It records provenance (ICU version, collation id and
+ * aggregates emit into `BinaryType` columns. It records provenance (ICU version, collation ID and
  * the DataSketches library version) so that incompatible sketches can be detected at
  * union/intersection/merge time instead of silently producing wrong answers.
  *
@@ -115,16 +97,9 @@ object SketchEnvelope extends Logging {
     }
   }
 
-  /** Wrap a native sketch payload with the envelope describing the given profile. */
-  def wrap(payload: Array[Byte], p: SketchProfile): Array[Byte] = {
-    val proto = SketchMetadata.newBuilder()
-      .setDatasketchesMajor(p.dsLibMajor.toInt)
-      .setDatasketchesMinor(p.dsLibMinor.toInt)
-      .setCollationId(p.collationId)
-      .setIcuMajor(p.icuMajor.toInt)
-      .setIcuMinor(p.icuMinor.toInt)
-      .build()
-      .toByteArray
+  /** Wrap a native sketch payload with the envelope describing the given metadata. */
+  def wrap(payload: Array[Byte], meta: SketchMetadata): Array[Byte] = {
+    val proto = meta.toByteArray
     val out = new Array[Byte](HEADER_LEN + proto.length + payload.length)
     val bb = ByteBuffer.wrap(out).order(ByteOrder.BIG_ENDIAN)
     bb.put(MAGIC)
@@ -135,25 +110,18 @@ object SketchEnvelope extends Logging {
   }
 
   /**
-   * Unwrap a buffer. If it carries a valid envelope, returns its profile and the inner payload.
-   * Otherwise the buffer is a legacy sketch and is returned unchanged with no profile. A buffer
+   * Unwrap a buffer. If it carries a valid envelope, returns its metadata and the inner payload.
+   * Otherwise the buffer is a legacy sketch and is returned unchanged with no metadata. A buffer
    * that passes the framing checks but whose protobuf fails to parse is also treated as legacy.
    */
-  def unwrap(b: Array[Byte]): (Option[SketchProfile], Array[Byte]) = {
+  def unwrap(b: Array[Byte]): (Option[SketchMetadata], Array[Byte]) = {
     if (!hasEnvelope(b)) {
       (None, b)
     } else {
       val protoLen = ByteBuffer.wrap(b, 1, 4).order(ByteOrder.BIG_ENDIAN).getInt
       try {
-        val proto = SketchMetadata.parseFrom(b.slice(HEADER_LEN, HEADER_LEN + protoLen))
-        val payload = b.slice(HEADER_LEN + protoLen, b.length)
-        val profile = SketchProfile(
-          collationId = proto.getCollationId,
-          icuMajor = proto.getIcuMajor.toShort,
-          icuMinor = proto.getIcuMinor.toShort,
-          dsLibMajor = proto.getDatasketchesMajor.toShort,
-          dsLibMinor = proto.getDatasketchesMinor.toShort)
-        (Some(profile), payload)
+        val meta = SketchMetadata.parseFrom(b.slice(HEADER_LEN, HEADER_LEN + protoLen))
+        (Some(meta), b.slice(HEADER_LEN + protoLen, b.length))
       } catch {
         // InvalidProtocolBufferException extends IOException; if the bytes are not a real
         // envelope we conservatively fall back to treating the buffer as a legacy sketch.
@@ -165,33 +133,33 @@ object SketchEnvelope extends Logging {
   /** Returns the native payload of a buffer, stripping the envelope if present. */
   def payloadOf(b: Array[Byte]): Array[Byte] = unwrap(b)._2
 
-  /** Returns the provenance profile of a buffer, or None for legacy (un-enveloped) buffers. */
-  def profileOf(b: Array[Byte]): Option[SketchProfile] = unwrap(b)._1
+  /** Returns the recorded metadata of a buffer, or None for legacy (un-enveloped) buffers. */
+  def metadataOf(b: Array[Byte]): Option[SketchMetadata] = unwrap(b)._1
 
   /**
-   * Validate that an observed input profile is compatible with the runtime profile of the engine
-   * consuming it, per the compatibility policy. Throws a `SKETCH_*` error on a hard mismatch
+   * Validate that an observed input's metadata is compatible with the runtime metadata of the
+   * engine consuming it, per the compatibility policy. Throws a `SKETCH_*` error on a hard mismatch
    * unless `spark.sql.sketch.allowVersionMismatch` is set, in which case the mismatch is logged.
    *
-   * The key encoding is derived from the recorded collation id at check time, so two sketches that
+   * The key encoding is derived from the recorded collation ID at check time, so two sketches that
    * encoded their keys differently (for example one numeric and one ICU-collated) are rejected.
    */
   def assertCompatible(
-      observed: SketchProfile,
-      runtime: SketchProfile,
+      observed: SketchMetadata,
+      runtime: SketchMetadata,
       prettyName: String,
       allowMismatch: Boolean): Unit = {
     def fail(error: => Throwable): Unit = {
       if (allowMismatch) {
-        logWarning(s"Ignoring incompatible sketch profile for $prettyName because " +
+        logWarning(s"Ignoring incompatible sketch metadata for $prettyName because " +
           "spark.sql.sketch.allowVersionMismatch is enabled.")
       } else {
         throw error
       }
     }
 
-    val observedEncoding = keyEncodingForCollation(observed.collationId)
-    val runtimeEncoding = keyEncodingForCollation(runtime.collationId)
+    val observedEncoding = keyEncodingForCollation(observed.getCollationId)
+    val runtimeEncoding = keyEncodingForCollation(runtime.getCollationId)
 
     if (observedEncoding != runtimeEncoding) {
       fail(QueryExecutionErrors.sketchKeyEncodingMismatch(
@@ -199,18 +167,19 @@ object SketchEnvelope extends Logging {
         KeyEncoding.name(observedEncoding),
         KeyEncoding.name(runtimeEncoding)))
     } else if (KeyEncoding.isStringy(observedEncoding) &&
-        observed.collationId != runtime.collationId) {
+        observed.getCollationId != runtime.getCollationId) {
       fail(QueryExecutionErrors.sketchCollationMismatch(
-        prettyName, observed.collationId, runtime.collationId))
+        prettyName, observed.getCollationId, runtime.getCollationId))
     } else if (KeyEncoding.usesIcu(observedEncoding) &&
-        (observed.icuMajor != runtime.icuMajor || observed.icuMinor != runtime.icuMinor)) {
+        (observed.getIcuMajor != runtime.getIcuMajor ||
+          observed.getIcuMinor != runtime.getIcuMinor)) {
       fail(QueryExecutionErrors.sketchIcuVersionMismatch(
-        prettyName, observed.icuVersionString, runtime.icuVersionString))
+        prettyName, icuVersionString(observed), icuVersionString(runtime)))
     }
   }
 
   /**
-   * Derive the key encoding for a recorded collation id. Numeric/binary sketches record
+   * Derive the key encoding for a recorded collation ID. Numeric/binary sketches record
    * [[NO_COLLATION_ID]]; otherwise the encoding follows from the collation semantics.
    */
   def keyEncodingForCollation(collationId: Int): Byte = {
@@ -227,50 +196,63 @@ object SketchEnvelope extends Logging {
   }
 
   /**
-   * Build the profile describing how the current runtime would encode values of `dataType` into a
+   * Build the metadata describing how the current runtime would encode values of `dataType` into a
    * sketch, reading the ICU version from the relevant collation.
    */
-  def currentProfile(dataType: DataType): SketchProfile = {
+  def currentMetadata(dataType: DataType): SketchMetadata = {
     val (collationId, icuMajor, icuMinor) = dataType match {
       case st: StringType =>
         val collation = CollationFactory.fetchCollation(st.collationId)
         val (major, minor) = parseIcuVersion(collation.version)
         (st.collationId, major, minor)
       case _: IntegerType | _: LongType | _: BinaryType =>
-        (NO_COLLATION_ID, 0.toShort, 0.toShort)
+        (NO_COLLATION_ID, 0, 0)
       case _ =>
-        (NO_COLLATION_ID, 0.toShort, 0.toShort)
+        (NO_COLLATION_ID, 0, 0)
     }
-    SketchProfile(
-      collationId = collationId,
-      icuMajor = icuMajor,
-      icuMinor = icuMinor,
-      dsLibMajor = DATASKETCHES_LIB_MAJOR,
-      dsLibMinor = DATASKETCHES_LIB_MINOR)
+    SketchMetadata.newBuilder()
+      .setDatasketchesMajor(DATASKETCHES_LIB_MAJOR)
+      .setDatasketchesMinor(DATASKETCHES_LIB_MINOR)
+      .setCollationId(collationId)
+      .setIcuMajor(icuMajor)
+      .setIcuMinor(icuMinor)
+      .build()
   }
 
-  // Version of the bundled Apache DataSketches Java library (see dev/deps).
-  private[spark] val DATASKETCHES_LIB_MAJOR: Short = 6
-  private[spark] val DATASKETCHES_LIB_MINOR: Short = 2
+  /** Human-readable ICU version recorded in the metadata, or null when ICU does not apply. */
+  def icuVersionString(meta: SketchMetadata): String =
+    if (meta.getIcuMajor == 0 && meta.getIcuMinor == 0) {
+      null
+    } else {
+      s"${meta.getIcuMajor}.${meta.getIcuMinor}"
+    }
 
-  private def parseIcuVersion(version: String): (Short, Short) = {
+  /** Human-readable DataSketches library version recorded in the metadata. */
+  def datasketchesVersionString(meta: SketchMetadata): String =
+    s"${meta.getDatasketchesMajor}.${meta.getDatasketchesMinor}"
+
+  // Version of the bundled Apache DataSketches Java library (see dev/deps).
+  private[spark] val DATASKETCHES_LIB_MAJOR: Int = 6
+  private[spark] val DATASKETCHES_LIB_MINOR: Int = 2
+
+  private def parseIcuVersion(version: String): (Int, Int) = {
     if (version == null) {
-      (0.toShort, 0.toShort)
+      (0, 0)
     } else {
       // CollationFactory exposes "1.0" for UTF8_BINARY and the ICU library version (e.g. "75.1")
       // for ICU-family collations and UTF8_LCASE.
       val parts = version.split("\\.")
-      val major = if (parts.length > 0) parseShortOr0(parts(0)) else 0.toShort
-      val minor = if (parts.length > 1) parseShortOr0(parts(1)) else 0.toShort
+      val major = if (parts.length > 0) parseIntOr0(parts(0)) else 0
+      val minor = if (parts.length > 1) parseIntOr0(parts(1)) else 0
       (major, minor)
     }
   }
 
-  private def parseShortOr0(s: String): Short = {
+  private def parseIntOr0(s: String): Int = {
     try {
-      s.trim.toShort
+      s.trim.toInt
     } catch {
-      case _: NumberFormatException => 0.toShort
+      case _: NumberFormatException => 0
     }
   }
 }
