@@ -30,6 +30,7 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.logging.log4j.Level
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
@@ -55,17 +56,31 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * A test StateStoreProvider implementation that controls maintenance execution
- * timing using a CountDownLatch to simulate concurrent maintenance scenarios.
- *
- * This provider is used to test the scenario where a task thread attempts to
- * unload a provider via maintenance while it's already being processed by a
- * maintenance thread. This tests the awaitProcessThisPartition functionality
- * that ensures proper synchronization in StateStore's maintenance thread pool.
+ * A test StateStoreProvider that counts how many times each split maintenance operation
+ * (snapshot, cleanup) runs and records the thread that closed it. Used to verify that the
+ * decoupled maintenance scheduler submits snapshot and cleanup as independent operations.
  */
-class SignalingStateStoreProvider extends StateStoreProvider with Logging {
-  import SignalingStateStoreProvider._
+/**
+ * A test StateStoreProvider whose split maintenance operations (snapshot and cleanup) block
+ * on per-instance latches, so tests can observe and control the decoupled maintenance
+ * lifecycle. Records the thread that ran each op and the thread that closed the provider.
+ */
+class BlockingMaintenanceProvider extends StateStoreProvider with Logging {
   private var id: StateStoreId = null
+
+  // Per-instance state. No shared static fields, so stale scheduler cycles from a previous
+  // test use the old instance's latches (already counted down) and finish immediately. No
+  // cross-test interference.
+  @volatile var snapshotThreadName: String = ""
+  @volatile var cleanupThreadName: String = ""
+  @volatile var closeThreadName: String = ""
+  @volatile var snapshotShouldThrow: Boolean = false
+  @volatile var cleanupShouldThrow: Boolean = false
+
+  val snapshotEnteredLatch = new CountDownLatch(1)
+  val cleanupEnteredLatch = new CountDownLatch(1)
+  val snapshotContinueSignal = new CountDownLatch(1)
+  val cleanupContinueSignal = new CountDownLatch(1)
 
   override def init(
       stateStoreId: StateStoreId,
@@ -82,70 +97,39 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
 
   override def stateStoreId: StateStoreId = id
 
-  /**
-   * Records which thread called close() to verify that only maintenance threads close providers
-   */
   override def close(): Unit = {
     closeThreadName = Thread.currentThread.getName
   }
 
-  /**
-   * This test implementation doesn't need to provide an actual store
-   */
+  // Returns null because tests using this provider do not need a real store. They only
+  // exercise the maintenance scheduler and close paths.
   override def getStore(
       version: Long,
       uniqueId: Option[String],
       forceSnapshotOnCommit: Boolean = false,
       loadEmpty: Boolean = false): StateStore = null
 
-  /**
-   * Simulates a maintenance operation that blocks until a signal is received.
-   * This allows testing the scenario where a provider is already under maintenance
-   * when a task thread tries to trigger another maintenance operation on it.
-   */
-  override def doMaintenance(): Unit = {
-    maintenanceStarted = true
-    logInfo(s"Maintenance started on thread: ${Thread.currentThread().getName}")
-
-    // Block until the test signals to continue
-    continueSignal.await()
-
-    logInfo(s"Maintenance continuing after signal on thread: ${Thread.currentThread().getName}")
+  /** Signals entry, then blocks until the test releases the continue latch. */
+  override def doSnapshotMaintenance(): Unit = {
+    snapshotThreadName = Thread.currentThread.getName
+    logInfo(s"Snapshot maintenance entered on ${Thread.currentThread.getName}")
+    snapshotEnteredLatch.countDown()
+    snapshotContinueSignal.await()
+    logInfo(s"Snapshot maintenance continuing on ${Thread.currentThread.getName}")
+    if (snapshotShouldThrow) {
+      throw new RuntimeException("snapshot error")
+    }
   }
-}
 
-/**
- * Companion object that tracks state and provides synchronization primitives
- * for testing concurrent maintenance scenarios
- */
-object SignalingStateStoreProvider extends Logging {
-  // For tracking state across threads
-  var maintenanceStarted: Boolean = false
-  var taskSubmittedMaintenance: Boolean = false
-  var closeThreadName: String = ""
-
-  // Added for queue testing
-  var providerWasQueued: Boolean = false
-
-  // For coordination between threads
-  var continueSignal = new CountDownLatch(1)
-  val maintenanceStartedLatch = new CountDownLatch(1)
-  val taskAttemptCompletedLatch = new CountDownLatch(1)
-
-  /**
-   * Resets all test state between test runs
-   */
-  def reset(): Unit = {
-    maintenanceStarted = false
-    taskSubmittedMaintenance = false
-    closeThreadName = ""
-
-    // Reset the latch to ensure maintenance will block again
-    try {
-      continueSignal = new CountDownLatch(1)
-    } catch {
-      case e: Exception =>
-        logError(s"Error resetting latch: ${e.getMessage}")
+  /** Same handshake as doSnapshotMaintenance but for cleanup. */
+  override def doCleanupMaintenance(): Unit = {
+    cleanupThreadName = Thread.currentThread.getName
+    logInfo(s"Cleanup maintenance entered on ${Thread.currentThread.getName}")
+    cleanupEnteredLatch.countDown()
+    cleanupContinueSignal.await()
+    logInfo(s"Cleanup maintenance continuing on ${Thread.currentThread.getName}")
+    if (cleanupShouldThrow) {
+      throw new RuntimeException("cleanup error")
     }
   }
 }
@@ -211,11 +195,20 @@ class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStorePr
       storeConfs, hadoopConf, useMultipleValuesPerKey)
   }
 
-  override def doMaintenance(): Unit = {
+  private def maybeThrow(): Unit = {
     if (id.partitionId == 0 || id.partitionId == 1) {
       throw new RuntimeException("Intentional maintenance failure")
     }
-    super.doMaintenance()
+  }
+
+  override def doSnapshotMaintenance(): Unit = {
+    maybeThrow()
+    super.doSnapshotMaintenance()
+  }
+
+  override def doCleanupMaintenance(): Unit = {
+    maybeThrow()
+    super.doCleanupMaintenance()
   }
 }
 
@@ -270,17 +263,24 @@ private object FakeStateStoreProviderWithMaintenanceError {
 class MaintenanceCountingStateStoreProvider extends HDFSBackedStateStoreProvider {
   import MaintenanceCountingStateStoreProvider._
 
-  override def doMaintenance(): Unit = {
-    maintenanceCallCount.incrementAndGet()
-    super.doMaintenance()
+  override def doSnapshotMaintenance(): Unit = {
+    snapshotMaintenanceCallCount.incrementAndGet()
+    super.doSnapshotMaintenance()
+  }
+
+  override def doCleanupMaintenance(): Unit = {
+    cleanupMaintenanceCallCount.incrementAndGet()
+    super.doCleanupMaintenance()
   }
 }
 
 private object MaintenanceCountingStateStoreProvider {
-  val maintenanceCallCount = new java.util.concurrent.atomic.AtomicInteger(0)
+  val snapshotMaintenanceCallCount = new java.util.concurrent.atomic.AtomicInteger(0)
+  val cleanupMaintenanceCallCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
   def reset(): Unit = {
-    maintenanceCallCount.set(0)
+    snapshotMaintenanceCallCount.set(0)
+    cleanupMaintenanceCallCount.set(0)
   }
 }
 
@@ -302,258 +302,476 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     require(!StateStore.isMaintenanceRunning)
   }
 
-  test("SPARK-51596: submitMaintenanceWorkForProvider from task thread adds" +
-    " to queue when timeout occurs") {
-    // Reset tracking variables for a clean test
-    SignalingStateStoreProvider.reset()
+  private def getUnloadQueue(): ConcurrentLinkedQueue[
+      (StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)] = {
+    val f = PrivateMethod[ConcurrentLinkedQueue[
+      (StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]](
+      Symbol("unloadedProvidersToClose"))
+    StateStore invokePrivate f()
+  }
 
+  private def getSnapshotPartitions(): mutable.HashSet[StateStoreProviderId] = {
+    val f = PrivateMethod[mutable.HashSet[StateStoreProviderId]](Symbol("snapshotPartitions"))
+    StateStore invokePrivate f()
+  }
+
+  private def getCleanupPartitions(): mutable.HashSet[StateStoreProviderId] = {
+    val f = PrivateMethod[mutable.HashSet[StateStoreProviderId]](Symbol("cleanupPartitions"))
+    StateStore invokePrivate f()
+  }
+
+  private def getLoadedProviders(): mutable.HashMap[StateStoreProviderId, StateStoreProvider] = {
+    val f = PrivateMethod[mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
+      Symbol("loadedProviders"))
+    StateStore invokePrivate f()
+  }
+
+  private def getBlockingProvider(id: StateStoreProviderId): BlockingMaintenanceProvider = {
+    val loaded = getLoadedProviders()
+    loaded.synchronized { loaded.get(id).get }.asInstanceOf[BlockingMaintenanceProvider]
+  }
+
+  private def maintenanceStoreConf(
+      providerClass: Class[_],
+      interval: Long = 100L,
+      numThreads: Int = 4): StateStoreConf = {
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
-      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
-    )
+      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get)
+    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, interval)
+    sqlConf.setConf(SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS, numThreads)
+    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS, providerClass.getName)
+    new StateStoreConf(sqlConf)
+  }
 
-    // Critical: Set a very short timeout to ensure awaitProcessThisPartition fails quickly
-    sqlConf.setConf(SQLConf.STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT, 1L) // 1 second
+  private def loadNullProvider(
+      dir: String,
+      storeConf: StateStoreConf,
+      partition: Int = 0): StateStoreProviderId = {
+    val storeId = StateStoreProviderId(StateStoreId(dir, 0, partition), UUID.randomUUID)
+    StateStore.get(
+      storeId, null, null, NoPrefixKeyStateEncoderSpec(null),
+      0, None, None, useColumnFamilies = false, storeConf, new Configuration())
+    storeId
+  }
 
-    // Maintenance interval large enough that we control timing manually
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
-    sqlConf.setConf(SQLConf.NUM_STATE_STORE_MAINTENANCE_THREADS, 4)
-
-    // Use our test provider
-    sqlConf.setConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[SignalingStateStoreProvider].getName
-    )
-
+  test("SPARK-51596: task thread unload lifecycle from queue to close") {
     val conf = new SparkConf().setMaster("local").setAppName("test")
-
     withSpark(SparkContext.getOrCreate(conf)) { sc =>
-      withCoordinatorRef(sc) { _ =>
-        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596-timeout-queue"
-        val providerId = StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
+      withCoordinatorRef(sc) { coordinatorRef =>
+        // TODO: set to a longer interval once triggerNow is added so the test verifies close
+        // happens via triggerNow, not the periodic tick.
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider], interval = 5000L)
+        val id1 = loadNullProvider("lifecycle", storeConf)
+        val bp = getBlockingProvider(id1)
 
-        // Load the provider to start the maintenance system
-        StateStore.get(
-          providerId,
-          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, None, None, useColumnFamilies = false,
-          new StateStoreConf(sqlConf), new Configuration()
-        )
-
-        // Access the queue via reflection for verification
-        val queueField = PrivateMethod[ConcurrentLinkedQueue[
-          (StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]](
-          Symbol("unloadedProvidersToClose"))
-        val queue = StateStore invokePrivate queueField()
+        val queue = getUnloadQueue()
+        assert(StateStore.isLoaded(id1))
         assert(queue.isEmpty, "Queue should start empty")
 
-        // Manually trigger maintenance which will block
-        val maintenanceMethod = PrivateMethod[Unit](Symbol("doMaintenance"))
-        StateStore invokePrivate maintenanceMethod()
+        // Make stale and load another provider to trigger task thread queueing. Use a
+        // non-blocking provider for id2 since we don't need to observe its maintenance.
+        coordinatorRef.reportActiveInstance(id1, "otherhost", "otherexec", Seq.empty)
+        val storeConf2 = maintenanceStoreConf(classOf[FakeStateStoreProviderTracksCloseThread])
+        val id2 = loadNullProvider("lifecycle", storeConf2, partition = 1)
 
-        // Wait for maintenance to start
-        eventually(timeout(5.seconds)) {
-          assert(SignalingStateStoreProvider.maintenanceStarted)
-          assert(StateStore.isLoaded(providerId))
+        assert(!StateStore.isLoaded(id1), "Provider1 should be removed")
+        assert(StateStore.isLoaded(id2), "Provider2 should still be loaded")
+
+        // Verify task thread queued with All.
+        assert(!queue.isEmpty)
+        val (qId, _, opReq) = queue.peek()
+        assert(qId == id1)
+        assert(opReq == MaintenanceOpRequest.All, s"Expected All, got $opReq")
+
+        // Step 2: Scheduler submits first op as FromTaskThread. Snapshot enters latch.
+        assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS) &&
+          bp.snapshotEnteredLatch.getCount == 0, "snapshot should have started")
+
+        // Step 3: Release snapshot. Post-work queues remaining op (Cleanup).
+        bp.snapshotContinueSignal.countDown()
+
+        // Step 4: Scheduler picks up Cleanup as FromUnloadedProvidersQueue. cleanupEnteredLatch
+        // being counted down proves Cleanup was queued and submitted.
+        assert(bp.cleanupEnteredLatch.await(10, TimeUnit.SECONDS) &&
+          bp.cleanupEnteredLatch.getCount == 0, "cleanup should have started")
+
+        // Snapshot's post-work queued Cleanup and scheduler drained it. Cleanup is now running,
+        // queue is empty.
+        assert(queue.isEmpty, "queue should be drained while cleanup runs")
+
+        // Step 5: Release cleanup. FromUnloadedProvidersQueue calls closeProvider.
+        bp.cleanupContinueSignal.countDown()
+
+        // Verify provider was closed on the maintenance pool.
+        eventually(timeout(10.seconds)) {
+          assert(bp.closeThreadName.contains("state-store-maintenance-thread"),
+            "close should happen on maintenance thread, but was on: " + bp.closeThreadName)
+          assert(!StateStore.isLoaded(id1), "provider should be removed from loadedProviders")
+          assert(queue.isEmpty, "Queue should be drained")
         }
+      }
+    }
+  }
 
-        // Now get access to the provider to simulate a task thread
-        val loadedProvidersField = PrivateMethod[
-          mutable.HashMap[StateStoreProviderId, StateStoreProvider]](
-          Symbol("loadedProviders"))
-        val loadedProviders = StateStore invokePrivate loadedProvidersField()
-        val provider = loadedProviders.synchronized { loadedProviders.get(providerId).get }
-        val maintenancePartitionsField = PrivateMethod[
-          mutable.HashSet[StateStoreProviderId]](
-          Symbol("maintenancePartitions"))
-        val maintenancePartitions = StateStore invokePrivate maintenancePartitionsField()
+  test("tryClaimPartition returns true first call, false second, true for different opType") {
+    val id = StateStoreProviderId(StateStoreId("dir", 0, 0), UUID.randomUUID)
+    val id2 = StateStoreProviderId(StateStoreId("dir", 0, 1), UUID.randomUUID)
 
-        // Create a task thread that will attempt to submit maintenance
-        val taskThread = new Thread(() => {
-          try {
-            // Call submitMaintenanceWorkForProvider directly since that's what we're testing
-            val submitMaintenanceMethod = PrivateMethod[Unit](
-              Symbol("submitMaintenanceWorkForProvider"))
-            StateStore invokePrivate submitMaintenanceMethod(
-              providerId, provider, new StateStoreConf(sqlConf),
-              MaintenanceTaskType.FromTaskThread)
+    try {
+      // First claim for snapshot succeeds
+      assert(StateStore.tryClaimPartition(id, MaintenanceOpType.Snapshot))
+      // Second claim for same id + opType fails
+      assert(!StateStore.tryClaimPartition(id, MaintenanceOpType.Snapshot))
+      // Claim for same id but different opType succeeds
+      assert(StateStore.tryClaimPartition(id, MaintenanceOpType.Cleanup))
+      // That one is also occupied now
+      assert(!StateStore.tryClaimPartition(id, MaintenanceOpType.Cleanup))
 
-            SignalingStateStoreProvider.taskSubmittedMaintenance = true
-            SignalingStateStoreProvider.taskAttemptCompletedLatch.countDown()
-          } catch {
-            case e: Exception =>
-              logError(s"Error in task thread: ${e.getMessage}", e)
+      // Different id can still claim both
+      assert(StateStore.tryClaimPartition(id2, MaintenanceOpType.Snapshot))
+      assert(StateStore.tryClaimPartition(id2, MaintenanceOpType.Cleanup))
+    } finally {
+      getSnapshotPartitions().clear()
+      getCleanupPartitions().clear()
+    }
+  }
+
+  test("otherMaintenanceOpRequest maps correctly") {
+    assert(StateStore.otherMaintenanceOpRequest(MaintenanceOpType.Snapshot)
+      === MaintenanceOpRequest.Cleanup)
+    assert(StateStore.otherMaintenanceOpRequest(MaintenanceOpType.Cleanup)
+      === MaintenanceOpRequest.Snapshot)
+  }
+
+  test("closeProvider sets unloaded even if close() throws") {
+    val storeId = StateStoreProviderId(StateStoreId("closeTest", 0, 0), UUID.randomUUID)
+    val callOrder = new mutable.ArrayBuffer[String]()
+    val provider = new FakeStateStoreProviderTracksCloseThread {
+      override def close(): Unit = {
+        callOrder += "close"
+        throw new RuntimeException("close failed")
+      }
+      override def setUnloaded(): Unit = {
+        callOrder += "setUnloaded"
+        super.setUnloaded()
+      }
+    }
+    provider.init(
+      storeId.storeId, null, null, NoPrefixKeyStateEncoderSpec(null),
+      useColumnFamilies = false, null, null)
+
+    assert(!provider.unloaded)
+    intercept[RuntimeException] {
+      StateStore.closeProvider(storeId, provider)
+    }
+    assert(provider.unloaded, "setUnloaded should run even if close() throws")
+    assert(callOrder === Seq("close", "setUnloaded"),
+      "setUnloaded should run after close() even if it throws")
+  }
+
+  test("concurrent snapshot and cleanup on same provider both succeed") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
+        val storeId = loadNullProvider("concurrentDir", storeConf)
+        val bp = getBlockingProvider(storeId)
+
+        // Wait for both snapshot and cleanup to enter.
+        assert(bp.snapshotEnteredLatch.await(30, TimeUnit.SECONDS), "snapshot should have started")
+        assert(bp.cleanupEnteredLatch.await(30, TimeUnit.SECONDS), "cleanup should have started")
+
+        // Both run on maintenance pool threads, on different threads.
+        val prefix = "state-store-maintenance-thread"
+        assert(bp.snapshotThreadName.startsWith(prefix))
+        assert(bp.cleanupThreadName.startsWith(prefix))
+        assert(bp.snapshotThreadName != bp.cleanupThreadName,
+          "snapshot and cleanup should run on different threads")
+
+        // Partition sets should be claimed while both are running.
+        assert(!StateStore.tryClaimPartition(storeId, MaintenanceOpType.Snapshot),
+          "snapshot partition set should be occupied")
+        assert(!StateStore.tryClaimPartition(storeId, MaintenanceOpType.Cleanup),
+          "cleanup partition set should be occupied")
+
+        // Release both to finish.
+        bp.snapshotContinueSignal.countDown()
+        bp.cleanupContinueSignal.countDown()
+
+        // Verify all ops completed by checking partition sets are released. Read the sets via
+        // reflection (tryClaimPartition has side effects that break eventually retries).
+        eventually(timeout(10.seconds)) {
+          assert(!getSnapshotPartitions().contains(storeId),
+            "snapshot partition set should be released")
+          assert(!getCleanupPartitions().contains(storeId),
+            "cleanup partition set should be released")
+        }
+      }
+    }
+  }
+
+  test("partition set released when maintenance throws") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
+        val storeId = loadNullProvider("errorDir", storeConf)
+        val bp = getBlockingProvider(storeId)
+        bp.snapshotShouldThrow = true
+
+        // Wait for snapshot to enter.
+        assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
+        // Partition set is claimed while running.
+        assert(!StateStore.tryClaimPartition(storeId, MaintenanceOpType.Snapshot),
+          "snapshot set should be occupied")
+
+        // Release snapshot. It will throw. Release cleanup to avoid blocking the pool.
+        bp.snapshotContinueSignal.countDown()
+        bp.cleanupContinueSignal.countDown()
+
+        // isLoaded returning false proves the exception was thrown (only the error handler
+        // unloads), and the finally block must release the partition set.
+        eventually(timeout(10.seconds)) {
+          assert(!StateStore.isLoaded(storeId), "provider should be unloaded after throw")
+          assert(bp.closeThreadName.nonEmpty, "provider should be closed after throw")
+          assert(!getSnapshotPartitions().contains(storeId),
+            "snapshot set should be released by finally block after throw")
+        }
+      }
+    }
+  }
+
+  private def testRequeue(opRequest: MaintenanceOpRequest): Unit = {
+    val logAppender = new LogAppender("requeue-log", maxEvents = 100)
+    logAppender.setThreshold(Level.INFO)
+    withLogAppender(logAppender, level = Some(Level.INFO)) {
+      val conf = new SparkConf().setMaster("local").setAppName("test")
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
+          val storeId = loadNullProvider("requeueDir", storeConf)
+          val bp = getBlockingProvider(storeId)
+
+          // Wait for both ops to enter, occupying both partition sets.
+          assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
+          assert(bp.cleanupEnteredLatch.await(10, TimeUnit.SECONDS))
+
+          // Add an entry to the queue. The scheduler tries to drain it but the partition set is
+          // occupied (held by the blocked task above), so it should be requeued.
+          val queue = getUnloadQueue()
+          queue.add((storeId, bp, opRequest))
+
+          eventually(timeout(10.seconds)) {
+            assert(logAppender.loggingEvents.exists(
+              _.getMessage.getFormattedMessage.contains("Had to requeue")),
+              s"scheduler should have logged requeue for $opRequest")
           }
-        })
 
-        // Start the task thread - it should timeout and add provider to queue
-        taskThread.start()
+          // Queue should still have the entry.
+          assert(queue.size() == 1, s"$opRequest entry should have been requeued")
+          val (requeuedId, _, requeuedOp) = queue.peek()
+          assert(requeuedId == storeId)
+          assert(requeuedOp == opRequest)
 
-        // Wait for task attempt to complete
-        assert(SignalingStateStoreProvider
-          .taskAttemptCompletedLatch.await(10, TimeUnit.SECONDS),
-          "Task thread didn't complete")
-
-        // Critical verification: After timeout, the provider should be in the queue
-        eventually(timeout(5.seconds)) {
-          assert(queue.size() == 1, "Provider should be queued after timeout")
-        }
-        // TODO: Assert opRequest value once decoupled maintenance is enabled.
-        val (queuedId, _, _) = queue.peek()
-        assert(queuedId == providerId, "Queued provider has wrong ID")
-
-        // Now allow the first maintenance to complete
-        SignalingStateStoreProvider.continueSignal.countDown()
-
-        eventually(timeout(5.seconds)) {
-          assert(maintenancePartitions.isEmpty,
-            "Maintenance partitions should be removed from")
-        }
-        // Manually trigger another maintenance to process the queue
-        StateStore invokePrivate maintenanceMethod()
-
-        // Verify the queue eventually gets processed
-        eventually(timeout(5.seconds)) {
-          assert(queue.isEmpty, "Queue should be emptied after maintenance")
+          // Clean up: release latches.
+          bp.snapshotContinueSignal.countDown()
+          bp.cleanupContinueSignal.countDown()
+          queue.clear()
         }
       }
     }
   }
 
-  test("SPARK-51596: queued maintenance tasks get processed when lock is available") {
-    // Reset tracking variables for a clean test
-    SignalingStateStoreProvider.reset()
+  test("Snapshot entry requeues when snapshot partition set is occupied") {
+    testRequeue(MaintenanceOpRequest.Snapshot)
+  }
 
-    val sqlConf = getDefaultSQLConf(
-      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
-      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
-    )
-    // Use a maintenance interval large enough that we control timing explicitly
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
-    // Set our special provider class that lets us control maintenance timing
-    sqlConf.setConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[SignalingStateStoreProvider].getName
-    )
+  test("Cleanup entry requeues when cleanup partition set is occupied") {
+    testRequeue(MaintenanceOpRequest.Cleanup)
+  }
 
+  test("All entry requeues when both partition sets are occupied") {
+    testRequeue(MaintenanceOpRequest.All)
+  }
+
+  test("When MaintenanceOpRequest is All, cleanup is submitted if snapshot partition set " +
+      "is occupied") {
     val conf = new SparkConf().setMaster("local").setAppName("test")
-
     withSpark(SparkContext.getOrCreate(conf)) { sc =>
-      withCoordinatorRef(sc) { coordinatorRef =>
-        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596-queue"
+      withCoordinatorRef(sc) { _ =>
+        // Long interval so we can set up before the first cycle fires (5s initial delay).
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider], interval = 5000L)
+        val id = loadNullProvider("shortCircuit", storeConf)
+        val bp = getBlockingProvider(id)
 
-        // Create two providers that we'll use for the test
-        val provider1Id =
-          StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
-        val provider2Id =
-          StateStoreProviderId(StateStoreId(rootLocation, 0, 1), UUID.randomUUID)
+        try {
+          // Claim snapshot partition set.
+          assert(StateStore.tryClaimPartition(id, MaintenanceOpType.Snapshot))
 
-        // Get the first provider to load it
-        StateStore.get(
-          provider1Id,
-          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, None, None, useColumnFamilies = false,
-          new StateStoreConf(sqlConf), new Configuration()
-        )
+          // Remove from loadedProviders so the scheduler doesn't submit cleanup for this
+          // provider by iterating through it. Only the queue entry should submit cleanup.
+          getLoadedProviders().synchronized { getLoadedProviders().remove(id) }
 
-        // Manually trigger maintenance for provider1, which will block in doMaintenance()
-        val maintenanceMethod = PrivateMethod[Unit](Symbol("doMaintenance"))
-        StateStore invokePrivate maintenanceMethod()
+          // Add All entry. The scheduler's first cycle (at 5s) drains it, tries snapshot
+          // (occupied), falls through to cleanup. Cleanup blocks on bp's latch, keeping the set.
+          getUnloadQueue().add((id, bp, MaintenanceOpRequest.All))
 
-        // Wait for maintenance to start before continuing
-        eventually(timeout(5.seconds)) {
-          assert(SignalingStateStoreProvider.maintenanceStarted)
-          assert(StateStore.isLoaded(provider1Id))
+          eventually(timeout(10.seconds)) {
+            assert(getCleanupPartitions().contains(id), "cleanup should be claimed")
+            assert(getUnloadQueue().isEmpty, "queue should be drained")
+          }
+        } finally {
+          bp.snapshotContinueSignal.countDown()
+          bp.cleanupContinueSignal.countDown()
+          getSnapshotPartitions().remove(id)
         }
-
-        // Now make the first provider "stale" by reporting it active on another executor
-        coordinatorRef.reportActiveInstance(provider1Id, "otherhost", "otherexec", Seq.empty)
-
-        // Get provider2 which will cause a maintenance task for provider1 to be queued
-        // (since provider1 is already under maintenance and can't be processed immediately)
-        StateStore.get(
-          provider2Id,
-          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, None, None, useColumnFamilies = false,
-          new StateStoreConf(sqlConf), new Configuration()
-        )
-
-        // Mark that task submitted maintenance
-        SignalingStateStoreProvider.taskSubmittedMaintenance = true
-
-        // Unblock the first maintenance operation
-        SignalingStateStoreProvider.continueSignal.countDown()
-
-        // Verify that provider1 is eventually unloaded by the maintenance thread
-        // after the first maintenance completes and the queued maintenance runs
-        eventually(timeout(5.seconds)) {
-          // Provider1 should be unloaded
-          assert(!StateStore.isLoaded(provider1Id))
-          // Provider2 should still be loaded
-          assert(StateStore.isLoaded(provider2Id))
-          // Close should have been called on a maintenance thread
-          assert(SignalingStateStoreProvider.closeThreadName.contains("maintenance"))
-        }
-
-        // Get the partitionsForMaintenance field to check the queue is empty
-        val partitionsField = PrivateMethod[
-          ConcurrentLinkedQueue[(StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]](
-          Symbol("unloadedProvidersToClose"))
-        val queue = StateStore invokePrivate partitionsField()
-        assert(queue.isEmpty, "Maintenance queue should be empty after processing queued tasks")
       }
     }
   }
 
-  test("SPARK-51596: unloading only occurs on maintenance thread but occurs promptly") {
-    // Reset closeThreadNames
-    FakeStateStoreProviderTracksCloseThread.closeThreadNames = Nil
+  test("canProcess is false and maintenance is skipped when provider has already been unloaded") {
+    val logAppender = new LogAppender("canProcess-log", maxEvents = 100)
+    logAppender.setThreshold(Level.INFO)
+    withLogAppender(logAppender, level = Some(Level.INFO)) {
+      val conf = new SparkConf().setMaster("local").setAppName("test")
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          val storeConf =
+            maintenanceStoreConf(classOf[BlockingMaintenanceProvider], interval = 5000L)
+          val id = loadNullProvider("canProcess", storeConf)
+          val bp = getBlockingProvider(id)
 
-    val sqlConf = getDefaultSQLConf(
-      SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
-      SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
-    )
-    // Make maintenance interval very large (30s) so that task thread runs before maintenance.
-    sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 30000L)
-    // Use the `FakeStateStoreProviderTracksCloseThread` to run the test
-    sqlConf.setConf(
-      SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[FakeStateStoreProviderTracksCloseThread].getName
-    )
+          // Mark unloaded before the first maintenance cycle fires (5s initial delay).
+          // canProcess checks !provider.unloaded and will return false, skipping maintenance.
+          bp.setUnloaded()
 
+          // Wait for the "Skipping maintenance" log proving canProcess was false.
+          eventually(timeout(10.seconds)) {
+            assert(logAppender.loggingEvents.exists(
+              _.getMessage.getFormattedMessage.contains("Skipping maintenance")),
+              "should log skipping maintenance for unloaded provider")
+          }
+          assert(bp.snapshotEnteredLatch.getCount == 1, "snapshot should not have entered")
+          assert(bp.cleanupEnteredLatch.getCount == 1, "cleanup should not have entered")
+        }
+      }
+    }
+  }
+
+  test("canProcess is false and maintenance is skipped when provider instance differs") {
+    val logAppender = new LogAppender("canProcess-stale-log", maxEvents = 100)
+    logAppender.setThreshold(Level.INFO)
+    withLogAppender(logAppender, level = Some(Level.INFO)) {
+      val conf = new SparkConf().setMaster("local").setAppName("test")
+      withSpark(SparkContext.getOrCreate(conf)) { sc =>
+        withCoordinatorRef(sc) { _ =>
+          // numThreads=1: snapshot gets the only pool thread. Cleanup's task waits in the pool's
+          // work queue until the thread is free.
+          val storeConf =
+            maintenanceStoreConf(classOf[BlockingMaintenanceProvider], numThreads = 1)
+          val id = loadNullProvider("canProcessStale", storeConf)
+          val bp = getBlockingProvider(id)
+
+          // Wait for snapshot to enter (occupies the only pool thread). Cleanup's task waits in
+          // the pool's work queue.
+          assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
+
+          // Replace A with a different instance while cleanup is waiting. When cleanup starts,
+          // canProcess sees contains(A) is false.
+          val replacement = new FakeStateStoreProviderTracksCloseThread
+          replacement.init(id.storeId, null, null, NoPrefixKeyStateEncoderSpec(null),
+            useColumnFamilies = false, null, null)
+          val loaded = getLoadedProviders()
+          loaded.synchronized { loaded.put(id, replacement) }
+
+          // Release snapshot. Thread frees, cleanup starts, canProcess fails (instance differs),
+          // maintenance skipped.
+          bp.snapshotContinueSignal.countDown()
+
+          eventually(timeout(10.seconds)) {
+            assert(logAppender.loggingEvents.exists(
+              _.getMessage.getFormattedMessage.contains("Skipping maintenance")),
+              "should log skipping maintenance for stale instance")
+          }
+          assert(bp.cleanupEnteredLatch.getCount == 1, "cleanup should not have entered")
+        }
+      }
+    }
+  }
+
+  test("FromLoadedProviders unload: reloaded provider is not removed nor queued") {
     val conf = new SparkConf().setMaster("local").setAppName("test")
-
     withSpark(SparkContext.getOrCreate(conf)) { sc =>
       withCoordinatorRef(sc) { coordinatorRef =>
-        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-51596"
-        val providerId =
-          StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
-        val providerId2 =
-          StateStoreProviderId(StateStoreId(rootLocation, 0, 1), UUID.randomUUID)
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
+        val id = loadNullProvider("staleInstance", storeConf)
+        val bp = getBlockingProvider(id)
 
-        // Create provider to start the maintenance task + pool
-        StateStore.get(
-          providerId,
-          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, None, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
-        )
+        // Mark as needing to be closed.
+        coordinatorRef.reportActiveInstance(id, "otherhost", "otherexec", Seq.empty)
 
-        // Report instance active on another executor
-        coordinatorRef.reportActiveInstance(providerId, "otherhost", "otherexec", Seq.empty)
+        // Wait for snapshot to enter.
+        assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
 
-        // Load another provider to trigger task unload
-        StateStore.get(
-          providerId2,
-          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-          0, None, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
-        )
+        // Stop only the scheduler (not the pools) so A's threads keep running but no new cycles
+        // fire after we replace.
+        val taskField = PrivateMethod[StateStore.MaintenanceTask](Symbol("maintenanceTask"))
+        (StateStore invokePrivate taskField()).stop()
 
-        // Wait for close to occur. Timeout is less than maintenance interval,
-        // so should only close by task triggering.
-        eventually(timeout(5.seconds)) {
-          assert(FakeStateStoreProviderTracksCloseThread.closeThreadNames.size == 1)
-          FakeStateStoreProviderTracksCloseThread.closeThreadNames.foreach { name =>
-            assert(name.contains("state-store-maintenance-thread"))}
+        // Replace provider A with a different instance while A is blocked. When A finishes,
+        // loadedProviders.get(id).contains(A) is false (replacement is there), removal skipped.
+        val replacement = new FakeStateStoreProviderTracksCloseThread
+        replacement.init(id.storeId, null, null,
+          NoPrefixKeyStateEncoderSpec(null), useColumnFamilies = false, null, null)
+        val loaded = getLoadedProviders()
+        loaded.synchronized { loaded.put(id, replacement) }
+
+        // Release A.
+        bp.snapshotContinueSignal.countDown()
+        bp.cleanupContinueSignal.countDown()
+
+        // Wait for A's partition sets to be released.
+        eventually(timeout(10.seconds)) {
+          assert(!getSnapshotPartitions().contains(id), "snapshot partition should be released")
+        }
+
+        // A should NOT have removed the replacement from loadedProviders.
+        assert(StateStore.isLoaded(id), "replacement provider should still be loaded")
+        // A should NOT have queued anything (instance differs, skip).
+        assert(getUnloadQueue().isEmpty, "queue should be empty (stale instance skipped removal)")
+      }
+    }
+  }
+
+  test("FromLoadedProviders unload: with concurrent ops, only one removes and queues") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    withSpark(SparkContext.getOrCreate(conf)) { sc =>
+      withCoordinatorRef(sc) { coordinatorRef =>
+        val storeConf = maintenanceStoreConf(classOf[BlockingMaintenanceProvider])
+        val id = loadNullProvider("concurrentUnload", storeConf)
+        val bp = getBlockingProvider(id)
+
+        // Make provider stale so both ops detect inactive in source handling.
+        coordinatorRef.reportActiveInstance(id, "otherhost", "otherexec", Seq.empty)
+
+        // Wait for both ops to enter.
+        assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS))
+        assert(bp.cleanupEnteredLatch.await(10, TimeUnit.SECONDS))
+
+        // Stop the scheduler so no new cycles drain the queue before we can check its size.
+        val taskField = PrivateMethod[StateStore.MaintenanceTask](Symbol("maintenanceTask"))
+        (StateStore invokePrivate taskField()).stop()
+
+        // Release both. Both finish, both see !verifyIfStoreInstanceActive. Only one should
+        // remove from loadedProviders and queue.
+        bp.snapshotContinueSignal.countDown()
+        bp.cleanupContinueSignal.countDown()
+
+        val queue = getUnloadQueue()
+        eventually(timeout(10.seconds)) {
+          assert(!StateStore.isLoaded(id), "provider should be removed")
+          assert(queue.size() == 1, "only one op should queue, the other should no-op")
         }
       }
     }
@@ -1108,27 +1326,30 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
             assert(StateStore.isLoaded(storeProviderId1), "Store is not loaded")
           }
 
-          // Record the current maintenance call count before deactivation
-          val maintenanceCountBeforeDeactivate =
-            MaintenanceCountingStateStoreProvider.maintenanceCallCount.get()
+          // Record the current maintenance call counts before deactivation
+          val snapshotCountBefore =
+            MaintenanceCountingStateStoreProvider.snapshotMaintenanceCallCount.get()
+          val cleanupCountBefore =
+            MaintenanceCountingStateStoreProvider.cleanupMaintenanceCallCount.get()
 
-          // Deactivate the store instance - this should trigger maintenance before unload
+          // Deactivate the store instance - this should trigger maintenance before close. In the
+          // decoupled design, the provider is removed from loadedProviders before close completes
+          // (removal and close are separate events), so we wait for all conditions together.
           coordinatorRef.deactivateInstances(storeProviderId1.queryRunId)
 
-          // Wait for the store to be unloaded
           eventually(timeout(timeoutDuration)) {
             assert(!StateStore.isLoaded(storeProviderId1), "Store was not unloaded")
+            val snapshotCountAfter =
+              MaintenanceCountingStateStoreProvider.snapshotMaintenanceCallCount.get()
+            val cleanupCountAfter =
+              MaintenanceCountingStateStoreProvider.cleanupMaintenanceCallCount.get()
+            assert(snapshotCountAfter > snapshotCountBefore,
+              s"Snapshot maintenance should run before close. " +
+                s"Before: $snapshotCountBefore, After: $snapshotCountAfter")
+            assert(cleanupCountAfter > cleanupCountBefore,
+              s"Cleanup maintenance should run before close. " +
+                s"Before: $cleanupCountBefore, After: $cleanupCountAfter")
           }
-
-          // Get the maintenance count after unload
-          val maintenanceCountAfterUnload =
-            MaintenanceCountingStateStoreProvider.maintenanceCallCount.get()
-
-          // Ensure that maintenance was called at least one more time during unload
-          assert(maintenanceCountAfterUnload > maintenanceCountBeforeDeactivate,
-            s"Maintenance should be called before unload. " +
-              s"Before: $maintenanceCountBeforeDeactivate, " +
-              s"After: $maintenanceCountAfterUnload")
         }
       }
     }
