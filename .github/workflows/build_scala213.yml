@@ -24,7 +24,7 @@
 # build (e.g. branch-3.5). The actual build is defined in the same file on
 # those branches.
 
-name: "Build / Scala 2.13 (Hadoop 3, JDK 8)"
+name: "Build / Java8 (Scala 2.13, JDK 8)"
 
 on:
   workflow_dispatch:
