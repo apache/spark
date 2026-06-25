@@ -221,6 +221,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALTIME	false
 LOCATION	false
 LOCK	false
 LOCKS	false
