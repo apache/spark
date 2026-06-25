@@ -37,7 +37,6 @@ RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
     apt install -y --no-install-recommends bash tini libc6 libjemalloc2 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
-    ln -s "$(find /usr/lib -name 'libjemalloc.so.2' | head -n1)" /usr/lib/libjemalloc.so.2 && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \
