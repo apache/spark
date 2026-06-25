@@ -85,16 +85,21 @@ class AbstractTranspiler(object):
         pass
 
 def _is_definitely_basic_type(node: ast.AST) -> bool:
-    """Return True when ``node`` is statically guaranteed to produce a Python
+    """
+    Return True when ``node`` is statically guaranteed to produce a Python
     basic/builtin type (int, float, str, bool, None, lists, etc.).
+    All ast.Name's are treated as basic types for now this will need to be updated
+    if/when we add free variables / closures to transpilation.
     """
     match node:
-        case ast.Constant(value=v):
+        case ast.Constant():
             return True
         case ast.BinOp(left=left, right=right):
             return _is_definitely_basic_type(left) and _is_definitely_basic_type(right)
         case ast.UnaryOp(operand=operand):
             return _is_definitely_basic_type(operand)
+        case ast.Name():
+            return True
         case _:
             return False
 
@@ -111,11 +116,11 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     match node:
         case ast.Constant(value=v):
             return v is None or isinstance(v, bool)
-        case ast.Compare(values=values):
+        case ast.Compare(left=left, comparators=comparators):
             # All comparison operators of simple types bool
-            return all(_is_definitely_basic_type(v) for v in values)
+            return all(_is_definitely_basic_type(v) for v in comparators + [left])
         case ast.BoolOp(values=values):
-            return all(_is_definitely_boolean(v) for v in values):
+            return all(_is_definitely_boolean(v) for v in values)
         case ast.UnaryOp(op=ast.Not()):
             # `not x` always produces bool.
             return True
@@ -226,8 +231,8 @@ class CatalystTranspiler(AbstractTranspiler):
         # falls back to interpreted Python execution instead.
         if not _is_definitely_boolean(test_node):
             raise UnsupportedOperationException(
-                "bare truthiness tests in if-expressions are not currently "
-                "supported by the transpiler"
+                f"bare truthiness tests ({ast.dump(test_node)}) in if-expressions are "
+                " not currently supported by the transpiler"
             )
         safe_test = coalesce(test_col, lit(False))
         return when(safe_test, body_col).otherwise(else_col)
