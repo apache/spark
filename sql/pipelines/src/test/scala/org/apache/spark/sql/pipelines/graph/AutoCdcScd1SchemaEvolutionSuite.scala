@@ -58,16 +58,13 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
 
     val stream = MemoryStream[(Int, String, Option[String], Long)]
-    def buildCtx(): TestGraphRegistrationContext = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
         target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("id", "name", "email", "version")),
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
         keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+        sequencing = functions.col("version"))
 
     // Run #1: insert with NULL email.
     stream.addData((1, "alice", None, 1L))
@@ -101,31 +98,22 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream1 = MemoryStream[(Int, Int, Long)]
     stream1.addData((1, 30, 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "age", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "age", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     // Run #2: widen `age` from Int to Long.
     val stream2 = MemoryStream[(Int, Long, Long)]
     stream2.addData((1, 31L, 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "age", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "age", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
       failure = ex,
@@ -154,31 +142,22 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream1 = MemoryStream[(Int, Long, Long)]
     stream1.addData((1, 100L, 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "payload", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "payload", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     // Run #2: narrow `payload` from Long (BIGINT) to Int (INT).
     val stream2 = MemoryStream[(Int, Int, Long)]
     stream2.addData((1, 5, 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "payload", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "payload", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
@@ -209,19 +188,16 @@ class AutoCdcScd1SchemaEvolutionSuite
     // unchanged (only the downstream projection differs), so the source identity that the
     // OffsetSeqLog records is stable across runs.
     val stream = MemoryStream[(Int, String, Option[String], Long)]
-    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
-        val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(projectedDf),
-          keys = Seq("id"),
-          sequencing = functions.col("version")
-        ))
-      }
+    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
+      val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
+    }
 
     // Run #1: source projects (id, name, version). Target schema is unchanged.
     stream.addData((1, "alice", None, 1L))
@@ -262,17 +238,13 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(selection: Option[ColumnSelection]): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(stream.toDF().toDF("id", "name", "email", "version")),
-          keys = Seq("id"),
-          sequencing = functions.col("version"),
-          columnSelection = selection
-        ))
-      }
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        columnSelection = selection)
 
     // Run #1: only (id, name, version) selected; `email` is dropped before the MERGE.
     stream.addData((1, "alice", "ignored", 1L))
@@ -312,17 +284,13 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(selection: Option[ColumnSelection]): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(stream.toDF().toDF("id", "name", "email", "version")),
-          keys = Seq("id"),
-          sequencing = functions.col("version"),
-          columnSelection = selection
-        ))
-      }
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
+        columnSelection = selection)
 
     // Run #1: include all columns; populate `email` for key=1.
     stream.addData((1, "alice", "a@x.com", 1L))
@@ -365,19 +333,16 @@ class AutoCdcScd1SchemaEvolutionSuite
     // Same `MemoryStream[(Int, String, Option[String], Long)]` shape across runs; runs
     // differ in whether `email` is kept in the projected source DF.
     val stream = MemoryStream[(Int, String, Option[String], Long)]
-    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
-        val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(projectedDf),
-          keys = Seq("id"),
-          sequencing = functions.col("version")
-        ))
-      }
+    def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
+      val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
+    }
 
     // Run #1: wide source DF (id, name, email, version). mergeSchemas appends `email` to
     // the target.
@@ -421,28 +386,25 @@ class AutoCdcScd1SchemaEvolutionSuite
     // shapes; the underlying tuple shape is unchanged so the streaming source's identity
     // is stable across runs.
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
-    def buildCtx(includeC: Boolean): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
-        val inner = if (includeC) {
-          functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
-        } else {
-          functions.struct(functions.col("b_d").as("d"))
-        }
-        val projected = src.select(
-          functions.col("key"),
-          functions.col("version"),
-          functions.struct(functions.col("a"), inner.as("b")).as("value")
-        )
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(projected),
-          keys = Seq("key"),
-          sequencing = functions.col("version")
-        ))
+    def buildCtx(includeC: Boolean): TestGraphRegistrationContext = {
+      val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
+      val inner = if (includeC) {
+        functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
+      } else {
+        functions.struct(functions.col("b_d").as("d"))
       }
+      val projected = src.select(
+        functions.col("key"),
+        functions.col("version"),
+        functions.struct(functions.col("a"), inner.as("b")).as("value")
+      )
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
+    }
 
     stream.addData((1, 1L, 1, 1, 1), (2, 1L, 2, 2, 2))
     runPipeline(buildCtx(includeC = true))
@@ -476,30 +438,27 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
-    def buildCtx(includeD: Boolean): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
-        val inner = if (includeD) {
-          functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
-        } else {
-          functions.struct(functions.col("b_c").as("c"))
-        }
-        val projected = src.select(
-          functions.col("key"),
-          functions.col("version"),
-          functions.array(
-            functions.struct(functions.col("a"), inner.as("b"))
-          ).as("vals")
-        )
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(projected),
-          keys = Seq("key"),
-          sequencing = functions.col("version")
-        ))
+    def buildCtx(includeD: Boolean): TestGraphRegistrationContext = {
+      val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
+      val inner = if (includeD) {
+        functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
+      } else {
+        functions.struct(functions.col("b_c").as("c"))
       }
+      val projected = src.select(
+        functions.col("key"),
+        functions.col("version"),
+        functions.array(
+          functions.struct(functions.col("a"), inner.as("b"))
+        ).as("vals")
+      )
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
+    }
 
     stream.addData((1, 1L, 1, 1, 99))
     runPipeline(buildCtx(includeD = false))
@@ -537,30 +496,27 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
 
     val stream = MemoryStream[(Int, Long, Int, Int, Int)]
-    def buildCtx(includeD: Boolean): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
-        val inner = if (includeD) {
-          functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
-        } else {
-          functions.struct(functions.col("b_c").as("c"))
-        }
-        val projected = src.select(
-          functions.col("key"),
-          functions.col("version"),
-          functions.array(
-            functions.struct(functions.col("a"), inner.as("b"))
-          ).as("vals")
-        )
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(projected),
-          keys = Seq("key"),
-          sequencing = functions.col("version")
-        ))
+    def buildCtx(includeD: Boolean): TestGraphRegistrationContext = {
+      val src = stream.toDF().toDF("key", "version", "a", "b_c", "b_d")
+      val inner = if (includeD) {
+        functions.struct(functions.col("b_c").as("c"), functions.col("b_d").as("d"))
+      } else {
+        functions.struct(functions.col("b_c").as("c"))
       }
+      val projected = src.select(
+        functions.col("key"),
+        functions.col("version"),
+        functions.array(
+          functions.struct(functions.col("a"), inner.as("b"))
+        ).as("vals")
+      )
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
+    }
 
     stream.addData((1, 1L, 1, 1, 1), (2, 1L, 2, 2, 2))
     runPipeline(buildCtx(includeD = true))
@@ -598,19 +554,15 @@ class AutoCdcScd1SchemaEvolutionSuite
 
       val stream = MemoryStream[(Int, Long, String)]
       stream.addData((1, 1L, "alice"))
-      val ctx = new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        // Source DF emits `Value` (capital), differing only in case from the target's
-        // `value` column.
-        val df = stream.toDF().toDF("key", "version", "Value")
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(df),
-          keys = Seq("key"),
-          sequencing = functions.col("version")
-        ))
-      }
+      // Source DF emits `Value` (capital), differing only in case from the target's
+      // `value` column.
+      val df = stream.toDF().toDF("key", "version", "Value")
+      val ctx = singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = df,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
 
       val ex = intercept[RuntimeException] { runPipeline(ctx) }
       // The exact `name` and `referenceNames` parameters depend on internal merge-plan
@@ -655,17 +607,12 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L), (2, "bob", 1L))
-    val ctx = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx)
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.target").select("id", "name", "version", "extra"),
@@ -691,31 +638,22 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     val stream1 = MemoryStream[(Int, Long, Timestamp)]
     stream1.addData((1, 1L, Timestamp.valueOf("2024-01-01 10:00:00")))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("key", "version", "value")),
-        keys = Seq("key"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("key", "version", "value"),
+      keys = Seq("key"),
+      sequencing = functions.col("version")))
 
     // Run #2 emits `value` as STRING. mergeSchemas rejects the type change.
     val stream2 = MemoryStream[(Int, Long, String)]
     stream2.addData((1, 2L, "2024-01-02 11:00:00"))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("key", "version", "value")),
-        keys = Seq("key"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = singleAutoCdcFlowPipeline(
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("key", "version", "value"),
+      keys = Seq("key"),
+      sequencing = functions.col("version"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(

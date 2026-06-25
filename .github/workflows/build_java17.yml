@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Java17 (Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Java17 (Scala 2.13, JDK 17)"
 
 on:
   workflow_dispatch:

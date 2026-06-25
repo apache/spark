@@ -265,11 +265,11 @@ private object RowToColumnConverter {
       case ShortType => ShortConverter
       case IntegerType | DateType | _: YearMonthIntervalType => IntConverter
       case FloatType => FloatConverter
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
-      case _: GeographyType => GeographyConverter
-      case _: GeometryType => GeometryConverter
+      case _: GeographyType | _: GeometryType => BinaryViewConverter
       case CalendarIntervalType => CalendarConverter
       case VariantType => VariantConverter
       case _: TimestampNTZNanosType => TimestampNTZNanosConverter
@@ -286,7 +286,7 @@ private object RowToColumnConverter {
     if (nullable) {
       dataType match {
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
-        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        case _: AnyTimestampNanoType =>
           new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
@@ -345,16 +345,9 @@ private object RowToColumnConverter {
     }
   }
 
-  private object GeographyConverter extends TypeConverter {
+  private object BinaryViewConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeography(column).getBytes
-      cv.appendByteArray(data, 0, data.length)
-    }
-  }
-
-  private object GeometryConverter extends TypeConverter {
-    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeometry(column).getBytes
+      val data = row.getBinaryView(column).getBytes
       cv.appendByteArray(data, 0, data.length)
     }
   }

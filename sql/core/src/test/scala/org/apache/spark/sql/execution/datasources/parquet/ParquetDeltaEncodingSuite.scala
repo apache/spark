@@ -27,7 +27,7 @@ import org.apache.parquet.io.ParquetDecodingException
 
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, IntegralType, LongType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, IntegralType, LongType}
 
 /**
  * Read tests for vectorized Delta binary packed reader.
@@ -261,6 +261,26 @@ abstract class ParquetDeltaEncodingSuite[T] extends ParquetCompatibilityTest
 
 class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
 
+  test("read INT32 as long with modular delta overflow") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsLongs(data, reads = Seq(data.length))
+  }
+
+  test("read INT32 as long with modular delta overflow across split reads") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsLongs(data, reads = Seq(2, 2))
+  }
+
+  test("read INT32 as double with modular delta overflow") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsDoubles(data, reads = Seq(data.length))
+  }
+
+  test("read INT32 as double with modular delta overflow across split reads") {
+    val data = Array(1, 2, Int.MinValue, 3)
+    shouldReadIntegersAsDoubles(data, reads = Seq(2, 2))
+  }
+
   override protected def getSparkSqlType: IntegralType = IntegerType
   override protected def writeData(data: Array[Int]): Unit = writeData(data, data.length)
 
@@ -308,6 +328,36 @@ class ParquetDeltaEncodingInteger extends ParquetDeltaEncodingSuite[Int] {
 
   override protected def compareValues(expected: Int, actual: Int) : Boolean =
     expected == actual
+
+  private def shouldReadIntegersAsLongs(data: Array[Int], reads: Seq[Int]): Unit = {
+    writeData(data)
+    reader = new VectorizedDeltaBinaryPackedReader
+    reader.initFromPage(data.length, writer.getBytes.toInputStream)
+    writableColumnVector = new OnHeapColumnVector(data.length, LongType)
+    var rowId = 0
+    reads.foreach { total =>
+      reader.readIntegersAsLongs(total, writableColumnVector, rowId)
+      rowId += total
+    }
+    data.indices.foreach { i =>
+      assert(writableColumnVector.getLong(i) == data(i).toLong)
+    }
+  }
+
+  private def shouldReadIntegersAsDoubles(data: Array[Int], reads: Seq[Int]): Unit = {
+    writeData(data)
+    reader = new VectorizedDeltaBinaryPackedReader
+    reader.initFromPage(data.length, writer.getBytes.toInputStream)
+    writableColumnVector = new OnHeapColumnVector(data.length, DoubleType)
+    var rowId = 0
+    reads.foreach { total =>
+      reader.readIntegersAsDoubles(total, writableColumnVector, rowId)
+      rowId += total
+    }
+    data.indices.foreach { i =>
+      assert(writableColumnVector.getDouble(i) == data(i).toDouble)
+    }
+  }
 
 }
 

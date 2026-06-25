@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
@@ -84,12 +84,9 @@ object CatalystTypeConverters {
         new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
-      case t: TimestampNTZNanosType => new TimestampNTZNanosConverter(t)
-      case t: TimestampLTZNanosType => new TimestampLTZNanosConverter(t)
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -380,8 +377,8 @@ object CatalystTypeConverters {
   }
 
   private class GeometryConverter(dataType: GeometryType)
-      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, GeometryVal] {
-    override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, BinaryView] {
+    override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
@@ -391,7 +388,7 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
+    override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeom(catalystValue, dataType)
@@ -400,13 +397,13 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geometry = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeom(row.getGeometry(0), dataType)
+      STUtils.deserializeGeom(row.getBinaryView(0), dataType)
     }
   }
 
   private class GeographyConverter(dataType: GeographyType)
-      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, GeographyVal] {
-    override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, BinaryView] {
+    override def toCatalystImpl(scalaValue: Any): BinaryView = scalaValue match {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
@@ -416,7 +413,7 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
+    override def toScala(catalystValue: BinaryView): org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeog(catalystValue, dataType)
@@ -425,7 +422,7 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int):
         org.apache.spark.sql.types.Geography = {
       assertGeospatialEnabled()
-      STUtils.deserializeGeog(row.getGeography(0), dataType)
+      STUtils.deserializeGeog(row.getBinaryView(0), dataType)
     }
   }
 
@@ -515,50 +512,6 @@ object CatalystTypeConverters {
 
     override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
-  }
-
-  private class TimestampNTZNanosConverter(dataType: TimestampNTZNanosType)
-    extends CatalystTypeConverter[Any, LocalDateTime, TimestampNanosVal] {
-    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, dataType.precision)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> dataType.sql))
-    }
-
-    override def toScala(catalystValue: TimestampNanosVal): LocalDateTime =
-      if (catalystValue == null) null
-      else DateTimeUtils.timestampNanosToLocalDateTime(catalystValue)
-
-    override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
-      DateTimeUtils.timestampNanosToLocalDateTime(row.getTimestampNTZNanos(column))
-  }
-
-  // Always maps `TimestampLTZNanosType` to `java.time.Instant`. Unlike micro `TimestampType`,
-  // the mapping does not consult `spark.sql.datetime.java8API.enabled`: the nanos LTZ type is
-  // post-Java-8 and the legacy `java.sql.Timestamp` external type is intentionally out of scope
-  // here. See SPARK-57033.
-  private class TimestampLTZNanosConverter(dataType: TimestampLTZNanosType)
-    extends CatalystTypeConverter[Any, Instant, TimestampNanosVal] {
-    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case i: Instant => DateTimeUtils.instantToTimestampNanos(i, dataType.precision)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> dataType.sql))
-    }
-
-    override def toScala(catalystValue: TimestampNanosVal): Instant =
-      if (catalystValue == null) null
-      else DateTimeUtils.timestampNanosToInstant(catalystValue)
-
-    override def toScalaImpl(row: InternalRow, column: Int): Instant =
-      DateTimeUtils.timestampNanosToInstant(row.getTimestampLTZNanos(column))
   }
 
   private class DecimalConverter(dataType: DecimalType)

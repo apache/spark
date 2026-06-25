@@ -22,6 +22,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Static helpers used by {@code Cast.doGenCode} (and corresponding eval paths)
@@ -111,5 +112,38 @@ public final class CastUtils {
 
   public static Decimal changePrecisionOrNull(Decimal d, int precision, int scale) {
     return d.changePrecision(precision, scale) ? d : null;
+  }
+
+  // ----- string -> floating point (ANSI: throw on invalid input) -----
+  // Mirrors castToFloatCode / castToDoubleCode: parse the string, and on a
+  // NumberFormatException fall back to the special-literal forms handled by
+  // Cast.processFloatingPointSpecialLiterals (inf / +inf / -inf / infinity / nan,
+  // case-insensitive). If that also yields no value, throw the ANSI
+  // CAST_INVALID_INPUT error citing the original (untrimmed) input string.
+
+  public static float stringToFloatExact(UTF8String s, QueryContext context) {
+    String str = s.toString();
+    try {
+      return Float.parseFloat(str);
+    } catch (NumberFormatException e) {
+      Float f = (Float) Cast.processFloatingPointSpecialLiterals(str, true);
+      if (f == null) {
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(FLOAT, s, context);
+      }
+      return f;
+    }
+  }
+
+  public static double stringToDoubleExact(UTF8String s, QueryContext context) {
+    String str = s.toString();
+    try {
+      return Double.parseDouble(str);
+    } catch (NumberFormatException e) {
+      Double d = (Double) Cast.processFloatingPointSpecialLiterals(str, false);
+      if (d == null) {
+        throw QueryExecutionErrors.invalidInputInCastToNumberError(DOUBLE, s, context);
+      }
+      return d;
+    }
   }
 }

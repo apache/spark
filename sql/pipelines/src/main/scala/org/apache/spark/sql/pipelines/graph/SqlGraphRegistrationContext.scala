@@ -609,7 +609,7 @@ object SqlGraphRegistrationContext {
    * terminated statement is not returned.
    */
   private def splitSqlTextBySemicolon(sqlText: String): List[String] = StringUtils
-    .splitSemiColonWithIndex(line = sqlText, enableSqlScripting = false)
+    .splitSemiColon(line = sqlText, enableSqlScripting = false)
 
   /** Class that holds the logical plan and query origin parsed from a SQL statement. */
   case class SqlQueryPlanWithOrigin(plan: LogicalPlan, queryOrigin: QueryOrigin)

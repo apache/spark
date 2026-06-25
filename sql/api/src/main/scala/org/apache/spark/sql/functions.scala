@@ -5221,6 +5221,15 @@ object functions {
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
+   * Computes the Jaro-Winkler similarity between the two given string columns. The result is a
+   * double between 0.0 (no similarity) and 1.0 (identical).
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def jaro_winkler_similarity(l: Column, r: Column): Column =
+    Column.fn("jaro_winkler_similarity", l, r)
+
+  /**
    * Locate the position of the first occurrence of substr.
    *
    * @note
@@ -5393,6 +5402,16 @@ object functions {
     regexp_replace(e, lit(pattern), lit(replacement))
 
   /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: String, replacement: String, pos: Int): Column =
+    regexp_replace(e, lit(pattern), lit(replacement), lit(pos))
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
@@ -5400,6 +5419,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column, pos: Column): Column =
+    Column.fn("regexp_replace", e, pattern, replacement, pos)
 
   /**
    * Returns the substring that matches the regular expression `regexp` within the string `str`.
@@ -7697,7 +7726,9 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/time/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string. The input may also
+   * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7770,7 +7801,9 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/time/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7876,7 +7909,9 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/time/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
@@ -8163,6 +8198,16 @@ object functions {
    * @since 3.5.0
    */
   def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC for a nanosecond-precision
+   * timestamp (`TIMESTAMP_LTZ(p)` / `TIMESTAMP_NTZ(p)`, `p` in `[7, 9]`). The result is a
+   * lossless `DECIMAL(21, 0)`.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
 
   /**
    * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
@@ -8523,6 +8568,15 @@ object functions {
    * @since 3.5.0
    */
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
+
+  /**
+   * Creates a timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from
+   * the number of nanoseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def timestamp_nanos(e: Column): Column = Column.fn("timestamp_nanos", e)
 
   /**
    * Gets the difference between the timestamps in the specified units by truncating the fraction
@@ -9652,6 +9706,44 @@ object functions {
    * @since 4.2.0
    */
   def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
+
+  /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the first JSONPath string. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath arguments, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: Column, paths: Column*): Column =
+    Column.fn("variant_delete", (v +: path +: paths): _*)
+
+  /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the first JSONPath identifying a deletion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath strings, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: String, paths: String*): Column =
+    Column.fn("variant_delete", (v +: lit(path) +: paths.map(lit)): _*)
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
@@ -11880,6 +11972,78 @@ object functions {
    * @since 3.4.0
    */
   def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
+
+  // ---------------------- Vector Functions ----------------------
+
+  /**
+   * Returns the cosine similarity between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_cosine_similarity(left: Column, right: Column): Column =
+    Column.fn("vector_cosine_similarity", left, right)
+
+  /**
+   * Returns the inner product (dot product) between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_inner_product(left: Column, right: Column): Column =
+    Column.fn("vector_inner_product", left, right)
+
+  /**
+   * Returns the Euclidean (L2) distance between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_l2_distance(left: Column, right: Column): Column =
+    Column.fn("vector_l2_distance", left, right)
+
+  /**
+   * Returns the Lp norm of a float vector. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column, degree: Column): Column =
+    Column.fn("vector_norm", vector, degree)
+
+  /**
+   * Returns the Lp norm of a float vector using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column): Column =
+    Column.fn("vector_norm", vector)
+
+  /**
+   * Normalizes a float vector to unit length. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column, degree: Column): Column =
+    Column.fn("vector_normalize", vector, degree)
+
+  /**
+   * Normalizes a float vector to unit length using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column): Column =
+    Column.fn("vector_normalize", vector)
+
+  /**
+   * Aggregate function: returns the element-wise mean of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
+
+  /**
+   * Aggregate function: returns the element-wise sum of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those

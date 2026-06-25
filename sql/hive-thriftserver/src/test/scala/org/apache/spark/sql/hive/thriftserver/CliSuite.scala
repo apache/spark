@@ -674,7 +674,18 @@ class CliSuite extends SparkFunSuite {
       "SELECT /* comment */  1;" -> Seq("SELECT /* comment */  1"),
       "-- comment " -> Seq(),
       "-- comment \nSELECT 1" -> Seq("-- comment \nSELECT 1"),
-      "/*  comment */  " -> Seq()
+      "/*  comment */  " -> Seq(),
+      // SPARK-54876: statement after semicolon ending with block comment should not be dropped
+      "SELECT 1; SELECT 2 /* comment */" -> Seq("SELECT 1", " SELECT 2 /* comment */"),
+      // SPARK-54876: line comment followed by block comment should produce empty result
+      "-- foo\n/* bar */" -> Seq(),
+      "SELECT 1; -- foo\n /* bar */" -> Seq("SELECT 1"),
+      // SPARK-54876: nested block comments
+      "SELECT 1; /* outer /* inner */ */" -> Seq("SELECT 1"),
+      // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
+      "/* a */ -- foo\n/* b */" -> Seq(),
+      // SPARK-54876: semicolons inside backtick-quoted identifiers are not split points
+      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", " SELECT 1")
     ).foreach { case (query, ret) =>
       assert(cli.splitSemiColon(query).asScala === ret)
     }

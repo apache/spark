@@ -33,6 +33,7 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -532,6 +533,24 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public BinaryView getBinaryView(int rowId) {
+    if (isNullAt(rowId)) return null;
+    if (dictionary == null) {
+      return arrayData().getBytesAsBinaryView(getArrayOffset(rowId), getArrayLength(rowId));
+    } else {
+      byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
+      return BinaryView.fromBytes(bytes);
+    }
+  }
+
+  /**
+   * Gets the values of bytes from [rowId, rowId + count), as a BinaryView.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but can save data copy as
+   * BinaryView is used as a pointer.
+   */
+  protected abstract BinaryView getBytesAsBinaryView(int rowId, int count);
+
   /**
    * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
    * This method is similar to {@link ColumnVector#getBytes(int, int)}, but avoids making a copy.
@@ -763,8 +782,8 @@ public abstract class WritableColumnVector extends ColumnVector {
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
         if (c.type instanceof StructType || c.type instanceof VariantType
-            || c.type instanceof TimestampNTZNanosType
-            || c.type instanceof TimestampLTZNanosType) {
+            || c.type instanceof CalendarIntervalType
+            || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -1069,7 +1088,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
-    } else if (type instanceof TimestampNTZNanosType || type instanceof TimestampLTZNanosType) {
+    } else if (type instanceof AnyTimestampNanoType) {
       // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.LongType);

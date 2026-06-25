@@ -54,7 +54,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration)
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -705,7 +705,7 @@ object SparkConnectClient {
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
-    Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+    Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
 
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {
@@ -802,6 +802,11 @@ object SparkConnectClient {
 
     def retryPolicy(policy: RetryPolicy): Builder = {
       retryPolicy(List(policy))
+    }
+
+    def rpcDeadlines(deadlines: RpcDeadlines): Builder = {
+      _configuration = _configuration.copy(rpcDeadlines = deadlines)
+      this
     }
 
     private object URIParams {
@@ -1037,6 +1042,7 @@ object SparkConnectClient {
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
+      rpcDeadlines: RpcDeadlines = RpcDeadlines(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,

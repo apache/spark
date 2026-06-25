@@ -402,9 +402,12 @@ abstract class JdbcDialect extends Serializable with Logging {
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // SPARK-53454: Produce portable SQL for AlwaysTrue/AlwaysFalse predicates.
     // Some databases (Oracle, DB2) do not support bare TRUE/FALSE in WHERE clauses.
+    // The result is parenthesized so it stays valid when nested as an operand of a
+    // larger expression (e.g. "a" = (1 = 1) or (1 = 1) IS NOT NULL), not just as a
+    // standalone WHERE predicate.
     override def build(expr: Expression): String = expr match {
-      case _: AlwaysTrue => "1 = 1"
-      case _: AlwaysFalse => "1 = 0"
+      case _: AlwaysTrue => "(1 = 1)"
+      case _: AlwaysFalse => "(1 = 0)"
       case _ => super.build(expr)
     }
 
@@ -713,11 +716,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   def getTableCommentQuery(table: String, comment: String): String = {
-    s"COMMENT ON TABLE $table IS '$comment'"
+    s"COMMENT ON TABLE $table IS '${escapeSql(comment)}'"
   }
 
   def getSchemaCommentQuery(schema: String, comment: String): String = {
-    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '${escapeSql(comment)}'"
   }
 
   def removeSchemaCommentQuery(schema: String): String = {

@@ -42,10 +42,11 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUt
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataSourceUtils, OutputWriter, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -143,7 +144,10 @@ object ParquetUtils extends Logging {
     val leaves = allFiles.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
-      data = leaves.filterNot(f => isSummaryFile(f.getPath)).toImmutableArraySeq,
+      // Zero-length files (e.g. `_SUCCESS` markers surfaced by a relaxed `ignoredPathSegmentRegex`)
+      // cannot contain a Parquet footer, so exclude them from schema inference candidates.
+      data = leaves.filter(_.getLen > 0).filterNot(f => isSummaryFile(f.getPath))
+        .toImmutableArraySeq,
       metadata =
         leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE)
           .toImmutableArraySeq,
@@ -206,7 +210,14 @@ object ParquetUtils extends Logging {
     sqlConf.parquetVectorizedReaderEnabled &&
       schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
 
-  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+  def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean =
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(dt).map(_.isBatchReadSupported(sqlConf))
+      .getOrElse(isBatchReadSupportedDefault(sqlConf, dt))
+
+  private def isBatchReadSupportedDefault(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      false
     case _: AtomicType =>
       true
     case _: NullType =>

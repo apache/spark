@@ -659,6 +659,51 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
   }
 
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 for floating-point types") {
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Double.NaN)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float('NaN')), (float('NaN')) AS t(v)"),
+      Row(Seq(Float.NaN)))
+
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float(-0.0)), (float(0.0)) AS t(v)"),
+      Row(Seq(0.0f)))
+
+    val df = Seq(Double.NaN, Double.NaN, 0.0d, -0.0d, 1.0d).toDF("v").repartition(3)
+    checkAnswer(df.selectExpr("sort_array(collect_set(v))"), Row(Seq(0.0d, 1.0d, Double.NaN)))
+  }
+
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 nested in complex types") {
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(Row(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(-0.0D)), (array(0.0D)) AS t(a)"),
+      Row(Seq(Seq(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(float(-0.0))), (array(float(0.0))) AS t(a)"),
+      Row(Seq(Seq(0.0f))))
+
+    // Nested NaN already deduplicates today, included as a guardrail against regressions.
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM " +
+        "VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Row(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(double('NaN'))), (array(double('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(float('NaN'))), (array(float('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Float.NaN))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -1044,6 +1089,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.groupBy("arr", "stru", "arrOfStru").count(),
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
+  }
+
+  test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
+      Row(0.0d))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f, 9.0f, 9.0f).toDF("f").select(expr("mode(f)")),
+      Row(0.0f))
+
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d),
+          Array(9.0d), Array(9.0d), Array(9.0d)).toDF("a").select(expr("mode(a)")),
+      Row(Seq(0.0d)))
+
+    // pandas_mode shares the same normalization path; cover it explicitly. It is an
+    // internal expression, so invoke it via Column.internalFn rather than SQL.
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d).toDF("d")
+        .select(Column.internalFn("pandas_mode", col("d"), lit(true))),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f).toDF("f")
+        .select(Column.internalFn("pandas_mode", col("f"), lit(true))),
+      Row(Seq(0.0f)))
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d), Array(9.0d)).toDF("a")
+        .select(Column.internalFn("pandas_mode", col("a"), lit(true))),
+      Row(Seq(Seq(0.0d))))
+
+    // Struct complex type: same recursive NormalizeFloatingNumbers path as the array case
+    // above, but a different shape. -0.0/0.0 collapse to 4 occurrences, outvoting 9.0's 3.
+    checkAnswer(
+      sql("SELECT mode(named_struct('a', v)) FROM " +
+        "VALUES (-0.0D), (-0.0D), (0.0D), (0.0D), (9.0D), (9.0D), (9.0D) AS t(v)"),
+      Row(Row(0.0d)))
+
+    // NaN with differing bit patterns nested in a complex type. The normalization lambda
+    // canonicalizes the NaN bits so the two patterns collapse to 4 occurrences, outvoting
+    // 9.0's 3. Without normalization each pattern forms its own group of 2 and 9.0 (3) wins,
+    // so the expected NaN result genuinely distinguishes fixed from buggy behavior.
+    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000000L)
+    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    assert(nan1.isNaN && nan2.isNaN &&
+      java.lang.Double.doubleToRawLongBits(nan1) !=
+        java.lang.Double.doubleToRawLongBits(nan2))
+    checkAnswer(
+      Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
+        .select(struct(col("v")).as("s")).select(expr("mode(s)")),
+      Row(Row(Double.NaN)))
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
@@ -3315,14 +3410,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df: => DataFrame,
       expected: Int): Unit = {
     val configurations = Seq(
-      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.USE_HASH_AGG.key -> "true"),
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+      Seq(SQLConf.USE_HASH_AGG.key -> "false"),
+      Seq(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
     )
 
     // Make tests faster

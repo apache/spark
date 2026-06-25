@@ -148,52 +148,66 @@ object FileFormatWriter extends Logging {
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
-    // SPARK-40588: when planned writing is disabled and AQE is enabled,
-    // plan contains an AdaptiveSparkPlanExec, which does not know
-    // its final plan's ordering, so we have to materialize that plan first
-    // it is fine to use plan further down as the final plan is cached in that plan
-    def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
-      case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
-      case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
-    }
+    // SPARK-56919: setupJob must run before materializeAdaptiveSparkPlan, which can throw.
+    // Otherwise INSERT OVERWRITE permanently loses the table path if AQE fails.
+    // setupJob is outside the try below because it only initializes the job; the try/catch
+    // calls abortJob on any later failure (e.g. materialize throwing), which cleans up the
+    // staging dir (_temporary / .spark-staging-*).
+    committer.setupJob(job)
 
-    // the sort order doesn't matter
-    val actualOrdering = writeFilesOpt.map(_.child)
-      .getOrElse(materializeAdaptiveSparkPlan(plan))
-      .outputOrdering
-    val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
-
-    SQLExecution.checkSQLExecutionId(sparkSession)
-
-    // propagate the description UUID into the jobs, so that committers
-    // get an ID guaranteed to be unique.
-    job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
-
-    // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
-    // operator based on the required ordering of the V1 write command. So the output
-    // ordering of the physical plan should always match the required ordering. Here
-    // we set the variable to verify this behavior in tests.
-    // There are two cases where FileFormatWriter still needs to add physical sort:
-    // 1) When the planned write config is disabled.
-    // 2) When the concurrent writers are enabled (in this case the required ordering of a
-    //    V1 write command will be empty).
-    if (Utils.isTesting) outputOrderingMatched = orderingMatched
-
-    if (writeFilesOpt.isDefined) {
-      // build `WriteFilesSpec` for `WriteFiles`
-      val concurrentOutputWriterSpecFunc = (plan: SparkPlan) => {
-        val sortPlan = createSortPlan(plan, requiredOrdering, outputSpec)
-        createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
+    try {
+      // SPARK-40588: when planned writing is disabled and AQE is enabled,
+      // plan contains an AdaptiveSparkPlanExec, which does not know
+      // its final plan's ordering, so we have to materialize that plan first
+      // it is fine to use plan further down as the final plan is cached in that plan
+      def materializeAdaptiveSparkPlan(plan: SparkPlan): SparkPlan = plan match {
+        case a: AdaptiveSparkPlanExec => a.finalPhysicalPlan
+        case p: SparkPlan => p.withNewChildren(p.children.map(materializeAdaptiveSparkPlan))
       }
-      val writeSpec = WriteFilesSpec(
-        description = description,
-        committer = committer,
-        concurrentOutputWriterSpecFunc = concurrentOutputWriterSpecFunc
-      )
-      executeWrite(sparkSession, plan, writeSpec, job)
-    } else {
-      executeWrite(sparkSession, plan, job, description, committer, outputSpec,
-        requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+
+      // the sort order doesn't matter
+      val actualOrdering = writeFilesOpt.map(_.child)
+        .getOrElse(materializeAdaptiveSparkPlan(plan))
+        .outputOrdering
+      val orderingMatched = V1WritesUtils.isOrderingMatched(requiredOrdering, actualOrdering)
+
+      SQLExecution.checkSQLExecutionId(sparkSession)
+
+      // propagate the description UUID into the jobs, so that committers
+      // get an ID guaranteed to be unique.
+      job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
+
+      // When `PLANNED_WRITE_ENABLED` is true, the optimizer rule V1Writes will add logical sort
+      // operator based on the required ordering of the V1 write command. So the output
+      // ordering of the physical plan should always match the required ordering. Here
+      // we set the variable to verify this behavior in tests.
+      // There are two cases where FileFormatWriter still needs to add physical sort:
+      // 1) When the planned write config is disabled.
+      // 2) When the concurrent writers are enabled (in this case the required ordering of a
+      //    V1 write command will be empty).
+      if (Utils.isTesting) outputOrderingMatched = orderingMatched
+
+      if (writeFilesOpt.isDefined) {
+        // build `WriteFilesSpec` for `WriteFiles`
+        val concurrentOutputWriterSpecFunc = (plan: SparkPlan) => {
+          val sortPlan = createSortPlan(plan, requiredOrdering, outputSpec)
+          createConcurrentOutputWriterSpec(sparkSession, sortPlan, sortColumns)
+        }
+        val writeSpec = WriteFilesSpec(
+          description = description,
+          committer = committer,
+          concurrentOutputWriterSpecFunc = concurrentOutputWriterSpecFunc
+        )
+        executeWrite(sparkSession, plan, writeSpec, job)
+      } else {
+        executeWrite(sparkSession, plan, job, description, committer, outputSpec,
+          requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+      }
+    } catch {
+      case cause: Throwable =>
+        logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
+        committer.abortJob(job)
+        throw cause
     }
   }
   // scalastyle:on argcount
@@ -267,30 +281,21 @@ object FileFormatWriter extends Logging {
       job: Job,
       description: WriteJobDescription,
       committer: FileCommitProtocol)(f: => Array[WriteTaskResult]): Set[String] = {
-    // This call shouldn't be put into the `try` block below because it only initializes and
-    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-    committer.setupJob(job)
-    try {
-      val ret = f
-      val commitMsgs = ret.map(_.commitMsg)
+    val ret = f
+    val commitMsgs = ret.map(_.commitMsg)
 
-      logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
-      val (_, duration) = Utils
-        .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
-      logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
-        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
+    logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
+    val (_, duration) = Utils
+      .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
+    logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+      log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
-      processStats(
-        description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
-      logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
+    processStats(
+      description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
+    logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
-      // return a set of all the partition paths that were updated during this job
-      ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
-    } catch { case cause: Throwable =>
-      logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
-      committer.abortJob(job)
-      throw cause
-    }
+    // return a set of all the partition paths that were updated during this job
+    ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
   }
 
   /**

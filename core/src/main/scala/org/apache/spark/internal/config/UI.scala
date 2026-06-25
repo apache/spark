@@ -136,6 +136,16 @@ private[spark] object UI {
     .stringConf
     .createOptional
 
+  val UI_CONTENT_SECURITY_POLICY_ENABLED =
+    ConfigBuilder("spark.ui.contentSecurityPolicy.enabled")
+      .doc("Whether to set the HTTP Content-Security-Policy (CSP) response header for the " +
+        "Spark UI. When enabled, CSP restricts the sources from which the browser is allowed " +
+        "to load resources, providing defense-in-depth against cross-site scripting (XSS).")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val UI_REQUEST_HEADER_SIZE = ConfigBuilder("spark.ui.requestHeaderSize")
     .doc("Value for HTTP request header size in bytes.")
     .version("2.2.3")
@@ -149,6 +159,7 @@ private[spark] object UI {
       "backward compatibility with standalone deployments. Set to true to enforce " +
       "SNI host checking for stricter security.")
     .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 

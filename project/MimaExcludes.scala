@@ -33,8 +33,11 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
-  // Exclude rules for 5.0.x from 4.2.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v42excludes
+  // Exclude rules for 5.0.x from 4.3.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v43excludes
+
+  // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
+  lazy val v43excludes: Seq[Problem => Boolean] = v42excludes
 
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
@@ -66,7 +69,13 @@ object MimaExcludes {
     // [SPARK-34591][ML] Add pruneTree parameter to Strategy
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
     // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin"),
+    // [SPARK-57332][SQL] MySQLDialect no longer overrides the visit methods below; the public
+    // Scala overrides on its private SQL builder are replaced by the inherited protected Java
+    // methods of V2ExpressionSQLBuilder. MySQLDialect is private, so this is not a public API.
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitStartsWith"),
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitEndsWith"),
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitContains")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
@@ -162,6 +171,7 @@ object MimaExcludes {
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
     case v if v.startsWith("5.0") => v50excludes
+    case v if v.startsWith("4.3") => v43excludes
     case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()

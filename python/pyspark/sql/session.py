@@ -1756,7 +1756,7 @@ class SparkSession(SparkConversionMixin):
         return self.createDataFrame([], schema)
 
     def sql(
-        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List[Any]]] = None, **kwargs: Any
     ) -> "ParentDataFrame":
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
@@ -2288,11 +2288,14 @@ class SparkSession(SparkConversionMixin):
                         messageParameters={"normalized_path": normalized_path},
                     )
         if archive:
-            self._sc.addArchive(*path)
+            for p in path:
+                self._sc.addArchive(p)
         elif pyfile:
-            self._sc.addPyFile(*path)
+            for p in path:
+                self._sc.addPyFile(p)
         elif file:
-            self._sc.addFile(*path)  # type: ignore[arg-type]
+            for p in path:
+                self._sc.addFile(p)
 
     addArtifact = addArtifacts
 

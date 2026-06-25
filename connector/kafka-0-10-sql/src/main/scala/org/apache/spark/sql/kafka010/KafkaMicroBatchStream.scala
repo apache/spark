@@ -357,7 +357,7 @@ private[kafka010] class KafkaMicroBatchStream(
           }
         }
       } else {
-        Some(latestPartitionOffsets)
+        Option(latestPartitionOffsets)
       }
 
       KafkaMicroBatchStream.metrics(latestConsumedOffset, reCalculatedLatestPartitionOffsets)

@@ -19,6 +19,7 @@ import uuid
 import json
 import threading
 import os
+import sys
 import warnings
 from collections.abc import Callable, Sized
 import functools
@@ -800,7 +801,7 @@ class SparkSession:
     def sql(
         self,
         sqlQuery: str,
-        args: Optional[Union[Dict[str, Any], List]] = None,
+        args: Optional[Union[Dict[str, Any], List[Any]]] = None,
         **kwargs: Any,
     ) -> "ParentDataFrame":
         _args = []
@@ -959,6 +960,17 @@ class SparkSession:
             if self is getattr(SparkSession._active_session, "session", None):
                 SparkSession._active_session.session = None
 
+            # Only touch the SQLContext cache if the module was ever imported; if no
+            # SQLContext was created there is nothing to reset, and we avoid importing it.
+            _connect_context = sys.modules.get("pyspark.sql.connect.context")
+            if _connect_context is not None:
+                _ConnectSQLContext = _connect_context.SQLContext
+                if (
+                    _ConnectSQLContext._instantiatedContext is not None
+                    and _ConnectSQLContext._instantiatedContext.sparkSession is self
+                ):
+                    _ConnectSQLContext._instantiatedContext = None
+
             if "SPARK_LOCAL_REMOTE" in os.environ:
                 # When local mode is in use, follow the regular Spark session's
                 # behavior by terminating the Spark Connect server,
@@ -1000,7 +1012,7 @@ class SparkSession:
     streams.__doc__ = PySparkSession.streams.__doc__
 
     def __getattr__(self, name: str) -> Any:
-        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext", "newSession"]:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "sparkContext"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -1307,6 +1319,35 @@ class SparkSession:
         new_session = object.__new__(SparkSession)
         new_session._client = cloned_client
         new_session._session_id = cloned_client._session_id
+        new_session.release_session_on_close = True
+        return new_session
+
+    def newSession(self) -> "SparkSession":
+        """
+        Returns a new :class:`SparkSession` as a new session, that has separate SQLConf,
+        registered temporary views and UDFs, but shared table cache.
+
+        Unlike :meth:`cloneSession`, the returned session starts with empty state: no
+        configuration, temporary views, registered functions, or catalog state are copied
+        over from this session. This matches the Scala Connect ``newSession()`` semantics,
+        which creates a completely fresh session against the same server. Note one
+        difference from classic ``newSession()``: configurations set through
+        ``SparkSession.builder.config(...)`` when this session was created are not
+        reapplied to the new session; it starts from the server defaults.
+
+        .. versionadded:: 4.3.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            A new SparkSession bound to a fresh, independent server-side session.
+        """
+        new_client = self._client.newSession()
+        # Create a new SparkSession bound to the fresh, independent session directly.
+        new_session = object.__new__(SparkSession)
+        new_session._client = new_client
+        new_session._session_id = new_client._session_id
+        new_session.release_session_on_close = True
         return new_session
 
 

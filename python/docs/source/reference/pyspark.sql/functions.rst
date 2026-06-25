@@ -180,6 +180,7 @@ String Functions
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length
@@ -326,6 +327,7 @@ Date and Timestamp Functions
     unix_date
     unix_micros
     unix_millis
+    unix_nanos
     unix_seconds
     unix_timestamp
     weekday
@@ -599,6 +601,7 @@ VARIANT Functions
     schema_of_variant
     schema_of_variant_agg
     try_variant_get
+    variant_delete
     variant_get
     try_parse_json
     to_variant_object
@@ -723,6 +726,20 @@ Geospatial ST Functions
     st_geomfromwkb
     st_setsrid
     st_srid
+
+
+Vector Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    vector_cosine_similarity
+    vector_inner_product
+    vector_l2_distance
+    vector_norm
+    vector_normalize
+    vector_avg
+    vector_sum
 
 
 UDF, UDTF and UDT

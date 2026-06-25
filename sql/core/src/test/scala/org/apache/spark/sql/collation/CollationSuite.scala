@@ -22,8 +22,9 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -48,6 +49,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   private val allFileBasedDataSources = collationPreservingSources ++  collationNonPreservingSources
   private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
   private val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+
+  override protected def sparkConf =
+    super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
 
   @inline
   private def isSortMergeForced: Boolean = {
@@ -979,6 +983,168 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "expressionStr" -> "UCASE(struct1.a)",
         "reason" ->
           "generation expression cannot contain non utf8 binary collated string type"))
+  }
+
+  test("Generated column expressions using table default collation - errors out") {
+    // The referenced columns are declared as plain STRING (default UTF8_BINARY), but the
+    // table-level DEFAULT COLLATION makes them effectively non-UTF8 binary collated. The
+    // generation expression must be rejected the same way an explicit per-column COLLATE would be.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 STRING GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(c1, 0, 1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 STRING GENERATED ALWAYS AS (LOWER(c1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UTF8_LCASE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LOWER(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  struct1 STRUCT<a: STRING>,
+             |  c2 STRING GENERATED ALWAYS AS (UCASE(struct1.a))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "UCASE(struct1.a)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+  }
+
+  test("Generated column with non-string output referencing collated column - errors out") {
+    // The non-UTF8 collation check is structural: a generation expression that references a
+    // collated string column is rejected even when the generated column's own type is not a
+    // string (here INT). This must hold both for an explicit per-column collation and for a
+    // table-level DEFAULT COLLATION.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 INT GENERATED ALWAYS AS (LENGTH(c1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LENGTH(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 INT GENERATED ALWAYS AS (LENGTH(c1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LENGTH(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+  }
+
+  test("Generated column with UTF8_BINARY default collation is allowed") {
+    withTable("testcat.test_table") {
+      sql(
+        s"""
+           |CREATE TABLE testcat.test_table(
+           |  c1 STRING,
+           |  c2 STRING GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+           |)
+           |USING $v2Source
+           |DEFAULT COLLATION UTF8_BINARY
+           |""".stripMargin)
+    }
+  }
+
+  test("Unresolved column in generated column under DEFAULT COLLATION reports a friendly error") {
+    val query =
+      s"""
+         |CREATE TABLE testcat.test_table(
+         |  c1 STRING,
+         |  c2 INT GENERATED ALWAYS AS (LENGTH(c_typo))
+         |)
+         |USING $v2Source
+         |DEFAULT COLLATION UNICODE
+         |""".stripMargin
+    val start = query.indexOf("c_typo")
+    checkError(
+      exception = intercept[AnalysisException](sql(query)),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map(
+        "objectName" -> "`c_typo`",
+        "proposal" -> "`c1`, `c2`"),
+      queryContext = Array(ExpectedContext("c_typo", start, start + "c_typo".length - 1)))
+  }
+
+  test("CREATE TABLE with DEFAULT COLLATION correctly applies collation") {
+    val t = "testcat.ns1.tbl"
+    withTable(t) {
+      val queryExecutions = QueryTest.withQueryExecutionsCaptured(spark) {
+        sql(s"CREATE TABLE $t (c1 STRING, c2 STRING COLLATE UNICODE) " +
+          s"DEFAULT COLLATION UTF8_LCASE")
+      }
+      val resolvedIdentifier = queryExecutions.flatMap { qe =>
+        qe.analyzed.collectFirst { case ri: ResolvedIdentifier => ri }
+      }.headOption
+      assert(resolvedIdentifier.nonEmpty,
+        "Expected a ResolvedIdentifier in the analyzed CREATE TABLE plan")
+      val output = resolvedIdentifier.get.output
+      assert(output.nonEmpty,
+        "Expected the ResolvedIdentifier to expose the table columns as output")
+
+      // c1 has no explicit collation, so it inherits the table default collation.
+      assert(output.find(_.name == "c1").map(_.dataType).contains(StringType("UTF8_LCASE")))
+      // c2 has an explicit collation and must be left untouched.
+      assert(output.find(_.name == "c2").map(_.dataType).contains(StringType("UNICODE")))
+    }
   }
 
   test("Cast expression for collations") {

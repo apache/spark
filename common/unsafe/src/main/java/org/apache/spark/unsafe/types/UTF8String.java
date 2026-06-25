@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -702,6 +703,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
   public byte getByte(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
+      return 0;
+    }
     return Platform.getByte(base, offset + byteIndex);
   }
 
@@ -711,9 +715,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * If `byteIndex` of the first byte in the code point is known, use `codePointFrom` instead.
    */
   public int getChar(int charIndex) {
-    if (charIndex < 0 || charIndex >= numChars()) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkIndex(charIndex, numChars());
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
@@ -724,28 +726,37 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Returns the code point starting from the byte at position `byteIndex`.
-   * If byte index is invalid, throws exception.
+   * If byte index is invalid, throws exception. If the sequence is truncated (the leader byte
+   * declares more bytes than remain), the missing continuation bytes are treated as 0.
    */
   public int codePointFrom(int byteIndex) {
-    if (byteIndex < 0 || byteIndex >= numBytes) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkIndex(byteIndex, numBytes);
     byte b = getByte(byteIndex);
     int numBytes = numBytesForFirstByte(b);
     return switch (numBytes) {
       case 1 ->
         b & 0x7F;
       case 2 ->
-        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
+        ((b & 0x1F) << 6) | continuationByte(byteIndex + 1);
       case 3 ->
-        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
-        (getByte(byteIndex + 2) & 0x3F);
+        ((b & 0x0F) << 12) | (continuationByte(byteIndex + 1) << 6) |
+        continuationByte(byteIndex + 2);
       case 4 ->
-        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
-        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
+        ((b & 0x07) << 18) | (continuationByte(byteIndex + 1) << 12) |
+        (continuationByte(byteIndex + 2) << 6) | continuationByte(byteIndex + 3);
       default ->
         throw new IllegalStateException("Error in UTF-8 code point");
     };
+  }
+
+  /**
+   * Returns the low 6 bits of the UTF-8 continuation byte at `byteIndex`, or 0 when `byteIndex`
+   * is past the end of the string. The bounds check stops a truncated trailing multi-byte
+   * sequence (a leader byte whose declared width exceeds the bytes that remain) from reading
+   * past the end of the backing memory.
+   */
+  private int continuationByte(int byteIndex) {
+    return byteIndex < numBytes ? getByte(byteIndex) & 0x3F : 0;
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -944,7 +955,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
   public UTF8String copyUTF8String(int start, int end) {
-    int len = end - start + 1;
+    // Clamp to the bytes that actually remain so an out-of-range `end` (for example, derived
+    // from a truncated trailing multi-byte sequence) can't copy past the end of the backing
+    // memory.
+    int len = Math.min(end - start + 1, numBytes - start);
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
@@ -1137,7 +1151,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
       if (trimString.find(searchChar, 0) >= 0) {
-        trimEnd -= stringCharLen[numChars - 1];
+        // Advance by the bytes the character actually occupies. A truncated trailing leader is
+        // shorter than the width its leader byte declares, so use the (clamped) search char.
+        trimEnd -= searchChar.numBytes;
       } else {
         break;
       }
@@ -1160,7 +1176,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes - i);
       int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
         BYTE_ARRAY_OFFSET + targetOffset, len);

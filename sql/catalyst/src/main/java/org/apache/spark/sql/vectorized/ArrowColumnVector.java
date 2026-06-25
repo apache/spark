@@ -28,9 +28,8 @@ import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.sql.catalyst.util.STUtils;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -150,25 +149,21 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public GeographyVal getGeography(int rowId) {
+  public BinaryView getBinaryView(int rowId) {
     if (isNullAt(rowId)) return null;
 
-    GeographyType gt = (GeographyType) this.type;
-    int srid = getChild(0).getInt(rowId);
-    byte[] bytes = getChild(1).getBinary(rowId);
-    gt.assertSridAllowedForType(srid);
-    return (bytes == null) ? null : STUtils.stGeogFromWKB(bytes, srid);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int rowId) {
-    if (isNullAt(rowId)) return null;
-
-    GeometryType gt = (GeometryType) this.type;
-    int srid = getChild(0).getInt(rowId);
-    byte[] bytes = getChild(1).getBinary(rowId);
-    gt.assertSridAllowedForType(srid);
-    return (bytes == null) ? null : STUtils.stGeomFromWKB(bytes, srid);
+    if (this.type instanceof GeographyType gt) {
+      int srid = getChild(0).getInt(rowId);
+      gt.assertSridAllowedForType(srid);
+      byte[] bytes = getChild(1).getBinary(rowId);
+      return (bytes == null) ? null : STUtils.stGeogFromWKB(bytes, srid);
+    } else if (this.type instanceof GeometryType gt) {
+      int srid = getChild(0).getInt(rowId);
+      gt.assertSridAllowedForType(srid);
+      byte[] bytes = getChild(1).getBinary(rowId);
+      return (bytes == null) ? null : STUtils.stGeomFromWKB(bytes, srid);
+    }
+    return super.getBinaryView(rowId);
   }
 
   public ArrowColumnVector(ValueVector vector) {

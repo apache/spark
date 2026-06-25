@@ -34,11 +34,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, STUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.Variant
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -188,9 +191,33 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
+  private def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
+    try {
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value, isNtz)
+    }
+  }
+
   // `inShredded` indicates whether the current traversal is nested within a shredded Variant
   // schema. This affects how timestamp values are written.
   private def makeWriter(dataType: DataType, inShredded: Boolean): ValueWriter = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // The recursive callback passes makeWriter (framework-first) so that sub-fields of
+    // struct-backed types also go through the framework, consistent with schema conversion.
+    // NOTE: recordConsumer is null during init() when makeWriter is first called -
+    // it's set later in prepareForWrite(). The existing code works because closures
+    // over `this.recordConsumer` (a var field) capture the var reference, not its value.
+    // We wrap in a lambda to achieve the same lazy evaluation for the ops method.
+    ParquetTypeOps(dataType)
+      .map(_.makeWriter(() => recordConsumer, makeWriter(_, inShredded)))
+      .getOrElse(makeWriterDefault(dataType, inShredded))
+  }
+
+  private def makeWriterDefault(dataType: DataType, inShredded: Boolean): ValueWriter =
     dataType match {
       case NullType => // No values of NullType should ever be written, as all values are null.
         (_: SpecializedGetters, _: Int) => throw SparkUnsupportedOperationException()
@@ -268,9 +295,17 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
-      case _: TimeType =>
+      // TIMESTAMP(NANOS) values are always proleptic Gregorian and are exempt from datetime
+      // rebasing; see the TIMESTAMP(NANOS) converters in `ParquetRowConverter` for details.
+      case _: TimestampLTZNanosType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(DateTimeUtils.nanosToMicros(row.getLong(ordinal)))
+          recordConsumer.addLong(
+            timestampNanosToEpochNanos(row.getTimestampLTZNanos(ordinal), isNtz = false))
+
+      case _: TimestampNTZNanosType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          recordConsumer.addLong(
+            timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal), isNtz = true))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
@@ -280,14 +315,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         (row: SpecializedGetters, ordinal: Int) =>
           // Data is written to Parquet using the WKB format, as per spec:
           // https://parquet.apache.org/docs/file-format/types/geospatial/.
-          val wkb = STUtils.stAsBinary(row.getGeometry(ordinal))
+          val wkb = STUtils.stGeomAsBinary(row.getBinaryView(ordinal))
           recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
 
       case _: GeographyType =>
         (row: SpecializedGetters, ordinal: Int) =>
           // Data is written to Parquet using the WKB format, as per spec:
           // https://parquet.apache.org/docs/file-format/types/geospatial/.
-          val wkb = STUtils.stAsBinary(row.getGeography(ordinal))
+          val wkb = STUtils.stGeogAsBinary(row.getBinaryView(ordinal))
           recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
 
       case DecimalType.Fixed(precision, scale) =>
@@ -333,7 +368,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case _ => throw SparkException.internalError(s"Unsupported data type $dataType.")
     }
-  }
 
   private def makeDecimalWriter(precision: Int, scale: Int): ValueWriter = {
     assert(

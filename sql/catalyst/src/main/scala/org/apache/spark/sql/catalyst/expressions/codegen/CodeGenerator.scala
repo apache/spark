@@ -183,6 +183,41 @@ class CodegenContext extends Logging {
   var currentPartitionIndexVar: String = "partitionIndex"
 
   /**
+   * Holding a map of current lambda variables.
+   */
+  var currentLambdaVars: mutable.Map[Long, ExprCode] = mutable.HashMap.empty
+
+  def withLambdaVars(
+      namedLambdas: Seq[NamedLambdaVariable],
+      f: Seq[ExprCode] => ExprCode): ExprCode = {
+    val lambdaVars = namedLambdas.map { lambda =>
+      val id = lambda.exprId.id
+      if (currentLambdaVars.get(id).nonEmpty) {
+        throw QueryExecutionErrors.lambdaVariableAlreadyDefinedError(id)
+      }
+      val isNull = if (lambda.nullable) {
+        JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "lambdaIsNull"))
+      } else {
+        FalseLiteral
+      }
+      val value = addMutableState(javaType(lambda.dataType), "lambdaValue")
+      val lambdaVar = ExprCode(isNull, JavaCode.global(value, lambda.dataType))
+      currentLambdaVars.put(id, lambdaVar)
+      lambdaVar
+    }
+
+    val result = f(lambdaVars)
+    namedLambdas.map(_.exprId.id).foreach(currentLambdaVars.remove)
+    result
+  }
+
+  def getLambdaVar(id: Long): ExprCode = {
+    currentLambdaVars.getOrElse(
+      id,
+      throw QueryExecutionErrors.lambdaVariableNotDefinedError(id))
+  }
+
+  /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
    * As an example, ("int", "count") will produce code:
@@ -667,6 +702,9 @@ class CodegenContext extends Logging {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
+    // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
+    // `$c1.compare($c2)`, which would not resolve as a Java method call.
+    case _: AnyTimestampNanoType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
       val elementType = array.elementType
@@ -1150,13 +1188,21 @@ class CodegenContext extends Logging {
    *      evaluation, we can look for generated subexpressions and do replacement.
    */
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
-    // Create a clear EquivalentExpressions and SubExprEliminationState mapping
+    // Create a clear EquivalentExpressions and compute the common subexpressions.
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+    expressions.foreach(equivalentExpressions.addExprTree(_))
+    subexpressionEliminationForWholeStageCodegen(equivalentExpressions)
+  }
+
+  /**
+   * Same as above, but takes a pre-built [[EquivalentExpressions]]. A caller that has already
+   * analyzed the expressions (e.g. to decide whether any common subexpression exists) can reuse
+   * that analysis here instead of rebuilding it.
+   */
+  def subexpressionEliminationForWholeStageCodegen(
+      equivalentExpressions: EquivalentExpressions): SubExprCodes = {
     val localSubExprEliminationExprsForNonSplit =
       mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
-
-    // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
@@ -1526,8 +1572,7 @@ object CodeGenerator extends Logging {
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
-      classOf[GeographyVal].getName,
-      classOf[GeometryVal].getName,
+      classOf[BinaryView].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
@@ -1693,8 +1738,7 @@ object CodeGenerator extends Logging {
       case _ => PhysicalDataType(dataType) match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
         case PhysicalBinaryType => s"$input.getBinary($ordinal)"
-        case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
-        case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
+        case _: PhysicalBinaryViewType => s"$input.getBinaryView($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
         case PhysicalTimestampNTZNanosType => s"$input.getTimestampNTZNanos($ordinal)"
         case PhysicalTimestampLTZNanosType => s"$input.getTimestampLTZNanos($ordinal)"
@@ -1775,9 +1819,11 @@ object CodeGenerator extends Logging {
       case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
-      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
-      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case _: StringType | _: StructType | _: ArrayType | _: MapType =>
+      // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
+      // should copy it to avoid keeping a "pointer" to a memory region which may get updated
+      // afterwards.
+      case _: StringType | _: GeometryType | _: GeographyType |
+           _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
@@ -1853,7 +1899,7 @@ object CodeGenerator extends Logging {
     } else {
       "update"
     }
-    if (isNull.isDefined && isPrimitiveType) {
+    if (isNull.isDefined) {
       s"""
          |if (${isNull.get}) {
          |  $array.setNullAt($i);
@@ -1977,8 +2023,7 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
-    case _: GeographyType => "GeographyVal"
-    case _: GeometryType => "GeometryVal"
+    case _: GeographyType | _: GeometryType => "BinaryView"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
@@ -2012,18 +2057,15 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
-    case _: GeographyType => classOf[GeographyVal]
-    case _: GeometryType => classOf[GeometryVal]
+    case _: GeographyType | _: GeometryType => classOf[BinaryView]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-      classOf[org.apache.spark.unsafe.types.TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

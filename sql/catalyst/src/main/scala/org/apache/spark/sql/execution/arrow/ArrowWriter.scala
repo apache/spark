@@ -77,7 +77,6 @@ object ArrowWriter {
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
       case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
-      case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -473,7 +472,7 @@ private[arrow] class GeographyWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeog(input.getGeography(ordinal), dt)
+    val geom = STUtils.deserializeGeog(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
@@ -491,7 +490,7 @@ private[arrow] class GeometryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeom(input.getGeometry(ordinal), dt)
+    val geom = STUtils.deserializeGeom(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 

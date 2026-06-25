@@ -461,7 +461,7 @@ select schema_of_csv('14:30:45')
 -- !query schema
 struct<schema_of_csv(14:30:45):string>
 -- !query output
-STRUCT<_c0: TIMESTAMP>
+STRUCT<_c0: TIME(6)>
 
 
 -- !query
@@ -469,4 +469,4 @@ select schema_of_csv('14:30:45.123456')
 -- !query schema
 struct<schema_of_csv(14:30:45.123456):string>
 -- !query output
-STRUCT<_c0: TIMESTAMP>
+STRUCT<_c0: TIME(6)>

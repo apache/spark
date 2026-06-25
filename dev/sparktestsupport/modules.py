@@ -449,7 +449,7 @@ mllib = Module(
 
 pipelines = Module(
     name="pipelines",
-    dependencies=[],
+    dependencies=[sql],
     source_file_regexes=["sql/pipelines"],
     sbt_test_goals=[
         "pipelines/test",
@@ -572,6 +572,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
         "pyspark.sql.tests.test_context",
+        "pyspark.sql.tests.test_sql_context",
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
@@ -986,6 +987,7 @@ pyspark_pandas = Module(
         # fallback
         "pyspark.pandas.tests.frame.test_asfreq",
         "pyspark.pandas.tests.frame.test_asof",
+        "pyspark.pandas.tests.frame.test_combine",
     ],
 )
 
@@ -1164,6 +1166,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_geometrytype",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
+        "pyspark.sql.tests.connect.test_connect_context",
+        "pyspark.sql.tests.connect.test_parity_sql_context",
         "pyspark.sql.tests.connect.test_parity_catalog",
         "pyspark.sql.tests.connect.test_parity_conf",
         "pyspark.sql.tests.connect.test_parity_serde",
@@ -1418,6 +1422,7 @@ pyspark_pandas_connect = Module(
         # fallback
         "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
         "pyspark.pandas.tests.connect.frame.test_parity_asof",
+        "pyspark.pandas.tests.connect.frame.test_parity_combine",
     ],
 )
 
@@ -1590,6 +1595,7 @@ pyspark_pipelines = Module(
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
         "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
+        "pyspark.pipelines.tests.test_auto_cdc_flow",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",
@@ -1677,6 +1683,40 @@ docker_integration_tests = Module(
         None if "GITHUB_ACTIONS" not in os.environ else {"ENABLE_DOCKER_INTEGRATION_TESTS": "1"}
     ),
     test_tags=["org.apache.spark.tags.DockerTest"],
+)
+
+
+# dev_tools is a pseudo module that contains all the dev related files that
+# won't impact the CI build and tests (except for CI which is forced to
+# run anyway).
+# This module is created so modifying files in this module won't trigger any
+# tests to run.
+dev_tools = Module(
+    name="dev-tools",
+    dependencies=[],
+    source_file_regexes=[
+        ".*README.md",
+        ".*AGENTS.md",
+        r".*\.gitignore",
+        "CONTRIBUTING.md",
+        ".asf.yaml",
+        "SECURITY.md",
+        "NOTICE-binary",
+        "LICENSE-binary",
+        "ui-test/package.json",
+        "ui-test/package-lock.json",
+        "scalastyle-config.xml",
+        "dev/checkstyle.xml",
+        "dev/checkstyle-suppressions.xml",
+        "dev/spark-test-image/lint/Dockerfile",
+        "dev/lint-python",
+        "dev/lint-scala",
+        "dev/reformat-python",
+        "dev/structured_logging_style.py",
+        "dev/merge_spark_pr.py",
+        "dev/create_spark_jira.py",
+        "dev/create-release/",
+    ],
 )
 
 # The root module is a dummy module which is used to run all of the tests.

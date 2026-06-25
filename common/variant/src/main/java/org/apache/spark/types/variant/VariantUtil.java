@@ -29,6 +29,8 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.UUID;
 
+import com.fasterxml.jackson.core.JsonFactory;
+
 /**
  * This class defines constants related to the variant format and provides functions for
  * manipulating variant binaries.
@@ -50,6 +52,12 @@ import java.util.UUID;
  * - UTF-8 string data.
  */
 public class VariantUtil {
+  // Jackson's JsonFactory is thread-safe and intended to be reused, so the variant module shares a
+  // single instance. Variant.escapeJson (one call per serialized string or key) and
+  // VariantBuilder.parseJson (one call per parsed JSON value) both use it, which avoids a per-call
+  // factory allocation (including its symbol tables) and keeps one source of configuration.
+  static final JsonFactory JSON_FACTORY = new JsonFactory();
+
   public static final int BASIC_TYPE_BITS = 2;
   public static final int BASIC_TYPE_MASK = 0x3;
   public static final int TYPE_INFO_MASK = 0x3F;

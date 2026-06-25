@@ -214,8 +214,8 @@ class WorkerMemoryTest(unittest.TestCase):
             return resource.getrlimit(resource.RLIMIT_AS)
 
         actual = rdd.map(lambda _: getrlimit()).collect()
-        self.assertTrue(len(actual) == 1)
-        self.assertTrue(len(actual[0]) == 2)
+        self.assertEqual(len(actual), 1)
+        self.assertEqual(len(actual[0]), 2)
         [(soft_limit, hard_limit)] = actual
         self.assertEqual(soft_limit, 2 * 1024 * 1024 * 1024)
         self.assertEqual(hard_limit, 2 * 1024 * 1024 * 1024)

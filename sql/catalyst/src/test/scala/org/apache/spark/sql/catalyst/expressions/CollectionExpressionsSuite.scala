@@ -24,7 +24,7 @@ import java.util.TimeZone
 import scala.language.implicitConversions
 import scala.util.Random
 
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -960,6 +960,33 @@ class CollectionExpressionsSuite
       Literal.create(Seq[String](null), ArrayType(StringType)),
       Literal(","),
       Some(Literal.create(null, StringType))), null)
+  }
+
+  test("ArrayJoin codegen with non-nullable array/delimiter and nullable " +
+    "nullReplacement") {
+    // When an upstream IsNotNull filter tightens the array and delimiter to
+    // non-nullable but the nullReplacement is a nullable column, ArrayJoin.nullable is true so
+    // doGenCode initializes ev.isNull = true. The non-nullable branch of
+    // genCodeForArrayAndDelimiter must still reset ev.isNull = false, otherwise codegen builds the
+    // joined string but discards it as NULL while interpreted eval() returns the correct result.
+    val arr = BoundReference(0, ArrayType(StringType, containsNull = true), nullable = false)
+    val delimiter = BoundReference(1, StringType, nullable = false)
+    val nullReplacement = BoundReference(2, StringType, nullable = true)
+    val arrayJoin = ArrayJoin(arr, delimiter, Some(nullReplacement))
+    // ArrayJoin is nullable only because nullReplacement is nullable.
+    assert(arrayJoin.nullable)
+
+    // Non-null replacement: NULL array elements are replaced and a joined string is produced.
+    checkEvaluation(
+      arrayJoin,
+      "a,NR,b",
+      create_row(Seq[String]("a", null, "b"), ",", "NR"))
+
+    // Null replacement value: the whole result is NULL, matching eval().
+    checkEvaluation(
+      arrayJoin,
+      null,
+      create_row(Seq[String]("a", null, "b"), ",", null))
   }
 
   test("ArraysZip") {
@@ -3296,5 +3323,27 @@ class CollectionExpressionsSuite
         "numberOfElements" -> (-BigInt(Int.MinValue) + 1).toString,
         "maxRoundedArrayLength" -> ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString,
         "functionName" -> "`array_insert`"))
+  }
+
+  test("SPARK-57335: element_at with index = Int.MinValue") {
+    val a = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    // Non-ANSI: an out-of-bounds index must return null. `Math.abs(Int.MinValue)`
+    // overflows back to a negative value, which previously bypassed the bounds check
+    // and leaked an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue)), null)
+    }
+    // ANSI: the documented error is raised instead of an internal exception.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkExceptionInExpression[SparkArrayIndexOutOfBoundsException](
+        ElementAt(a, Literal(Int.MinValue)),
+        "INVALID_ARRAY_INDEX_IN_ELEMENT_AT")
+    }
+    // try_element_at must not throw even under ANSI, since it hardcodes
+    // failOnError = false. Without the widened bounds check this leaked
+    // an internal IndexOutOfBoundsException.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkEvaluation(ElementAt(a, Literal(Int.MinValue), None, failOnError = false), null)
+    }
   }
 }
