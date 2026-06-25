@@ -8170,7 +8170,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
 
@@ -8179,7 +8179,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 

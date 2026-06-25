@@ -11607,7 +11607,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.0.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
