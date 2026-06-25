@@ -44,7 +44,7 @@ jobs:
     - name: Check if test results exist
       id: check
       run: |
-        if find . -path '*/target/test-reports/*.xml' | grep -q .; then
+        if find . -path '*/target/test-reports/*.xml' -print -quit | grep -q .; then
           echo "has_results=true" >> $GITHUB_OUTPUT
         else
           echo "No test result files found. Skipping report."
