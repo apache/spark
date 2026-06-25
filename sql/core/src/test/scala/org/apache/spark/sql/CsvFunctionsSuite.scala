@@ -511,7 +511,7 @@ class CsvFunctionsSuite extends SharedSparkSession {
   test("SPARK-32968: bad csv input with csv pruning optimization") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
-        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
+        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234X")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
         checkError(
@@ -977,5 +977,37 @@ class CsvFunctionsSuite extends SharedSparkSession {
       .select(from_csv($"csv", schema, Map.empty[String, String]))
       .collect().head
     assert(parseNull.isNullAt(0), "Null input should parse to null")
+  }
+
+  test("SPARK-50110: parse numeric CSV values with surrounding whitespace") {
+    val schema = "a INT, b INT"
+    val df = Seq("1, 1").toDS()
+    checkAnswer(
+      df.select(from_csv($"value", lit(schema), Map.empty[String, String].asJava)),
+      Row(Row(1, 1)) :: Nil)
+
+    checkAnswer(
+      sql("SELECT from_csv('1, 1', 'a INT, b INT')"),
+      Row(Row(1, 1)) :: Nil)
+
+    val types = Seq(
+      ("TINYINT", 1.toByte),
+      ("SMALLINT", 1.toShort),
+      ("INT", 1),
+      ("LONG", 1L))
+    types.foreach { case (sqlType, expectedB) =>
+      checkAnswer(
+        sql(s"SELECT from_csv('1, 1', 'a INT, b $sqlType')"),
+        Row(Row(1, expectedB)) :: Nil)
+    }
+
+    checkAnswer(
+      Seq("1, 1").toDS().select(
+        from_csv($"value", lit("a INT, b DECIMAL(9, 2)"), Map.empty[String, String].asJava)),
+      Row(Row(1, 1.00)) :: Nil)
+
+    checkAnswer(
+      sql("SELECT from_csv('1, true', 'a INT, b BOOLEAN')"),
+      Row(Row(1, true)) :: Nil)
   }
 }
