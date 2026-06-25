@@ -676,6 +676,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
+      // No equi-key (bufferAllRight path)
       checkAnswer(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
@@ -686,6 +687,29 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(5, "y", "b", 6, "y", 6)
         )
       )
+      // With equi-key (bufferRightGroup path) - use data with multiple
+      // right rows per group to actually exceed the spill threshold.
+      val schema1 = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) :: Nil)
+      val schema2 = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) ::
+          StructField("val", StringType) :: Nil)
+      val left = spark.createDataFrame(
+        List(Row("A", 5), Row("A", 10)).asJava, schema1)
+      val right = spark.createDataFrame(
+        List(Row("A", 6, "a"), Row("A", 8, "b"), Row("A", 12, "c")).asJava, schema2)
+      checkAnswer(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "forward"),
+        Seq(
+          Row("A", 5, "A", 6, "a"),
+          Row("A", 10, "A", 12, "c")
+        )
+      )
     }
   }
 
@@ -694,6 +718,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
       SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
       val (df1, df2) = prepareForAsOfJoin()
+      // No equi-key (bufferAllRight path)
       checkAnswer(
         df1.joinAsOf(
           df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
@@ -703,6 +728,28 @@ class SortMergeAsOfJoinSuite extends QueryTest
           Row(1, "x", "a", 1, "v", 1),
           Row(5, "y", "b", 6, "y", 6),
           Row(10, "z", "c", 7, "z", 7)
+        )
+      )
+      // With equi-key (bufferRightGroup path)
+      val schema1 = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) :: Nil)
+      val schema2 = StructType(
+        StructField("grp", StringType) ::
+          StructField("ts", IntegerType) ::
+          StructField("val", StringType) :: Nil)
+      val left = spark.createDataFrame(
+        List(Row("A", 5), Row("A", 10)).asJava, schema1)
+      val right = spark.createDataFrame(
+        List(Row("A", 3, "a"), Row("A", 7, "b"), Row("A", 12, "c")).asJava, schema2)
+      checkAnswer(
+        left.joinAsOf(
+          right, left.col("ts"), right.col("ts"), usingColumns = Seq("grp"),
+          joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = "nearest"),
+        Seq(
+          Row("A", 5, "A", 3, "a"),
+          Row("A", 10, "A", 12, "c")
         )
       )
     }
@@ -715,12 +762,12 @@ class SortMergeAsOfJoinSuite extends QueryTest
       val (df1, df2) = prepareForAsOfJoin()
       checkAnswer(
         df1.joinAsOf(
-          df2, df1.col("a"), df2.col("a"), usingColumns = Seq("b"),
+          df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
           joinType = "leftouter", tolerance = null,
           allowExactMatches = true, direction = "backward"),
         Seq(
-          Row(1, "x", "a", null, null, null),
-          Row(5, "y", "b", null, null, null),
+          Row(1, "x", "a", 1, "v", 1),
+          Row(5, "y", "b", 3, "x", 3),
           Row(10, "z", "c", 7, "z", 7)
         )
       )
