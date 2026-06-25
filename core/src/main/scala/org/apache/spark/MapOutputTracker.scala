@@ -127,7 +127,9 @@ private class ShuffleStatus(
   /**
    * Get all stale pushed partition indexes for this shuffle. Returns empty set if none exist.
    */
-  def getStaleMapIndexes: Set[Int] = staleMapIndexes.asScala
+  def getStaleMapIndexes: Set[Int] = withReadLock {
+    new java.util.HashSet[Int](staleMapIndexes).asScala
+  }
 
   /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
