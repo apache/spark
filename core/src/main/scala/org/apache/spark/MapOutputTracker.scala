@@ -1722,7 +1722,7 @@ private[spark] object MapOutputTracker extends Logging {
   /**
    * Serialize a set of stale pushed partition indexes into a compact byte array.
    * Uses DataOutputStream for a simple, efficient binary format:
-   * [int: count][int: mapId1][int: mapId2]...
+   * [int: count][int: mapIndex1][int: mapIndex2]...
    * This is intentionally lightweight compared to serializeOutputStatuses because
    * the set is typically small (only non-empty during speculation retries).
    */
