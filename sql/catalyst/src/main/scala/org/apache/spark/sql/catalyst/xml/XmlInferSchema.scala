@@ -38,7 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DropMalformedMode, FailFastMode, ParseMode, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
@@ -72,6 +72,10 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
+
+  private val isTimeTypeEnabled = SQLConf.get.isTimeTypeEnabled
 
   override def equals(obj: Any): Boolean = obj match {
     case other: XmlInferSchema =>
@@ -324,6 +328,7 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         case v if options.prefersDecimal && decimalTry.isDefined => decimalTry.get
         case v if isDouble(v) => DoubleType
         case v if isBoolean(v) => BooleanType
+        case v if isTimeTypeEnabled && isTime(v) => TimeType(TimeType.DEFAULT_PRECISION)
         case v if isDate(v) => DateType
         case v if timestampNTZTry.isDefined => timestampNTZTry.get
         case v if isTimestamp(v) => TimestampType
@@ -547,6 +552,10 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
 
   private def isDate(value: String): Boolean = {
     (allCatch opt dateFormatter.parse(value)).isDefined
+  }
+
+  private def isTime(value: String): Boolean = {
+    (allCatch opt timeFormatter.parse(value)).isDefined
   }
 
   /**
