@@ -96,6 +96,18 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  test("partitions table-valued function") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      runShowPartitionsSql(
+        s"SELECT * FROM partitions('$t')",
+        Row("year=2015/month=1") ::
+          Row("year=2015/month=2") ::
+          Row("year=2016/month=2") ::
+          Row("year=2016/month=3") :: Nil)
+    }
+  }
+
   test("filter by partitions") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
