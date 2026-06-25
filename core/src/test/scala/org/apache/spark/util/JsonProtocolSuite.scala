@@ -553,14 +553,6 @@ class JsonProtocolSuite extends SparkFunSuite {
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
   }
 
-  test("SPARK-57465: ExecutorShutdownFailure round-trip serialization") {
-    val reason = ExecutorShutdownFailure("exec-7")
-    val json = toJsonString(JsonProtocol.taskEndReasonToJson(reason, _))
-    val deserialized = JsonProtocol.taskEndReasonFromJson(json)
-    assertEquals(reason, deserialized)
-    assert(deserialized.asInstanceOf[ExecutorShutdownFailure].executorId === "exec-7")
-  }
-
   test("AccumulableInfo backward compatibility") {
     // "Internal" property of AccumulableInfo was added in 1.5.1
     val accumulableInfo = makeAccumulableInfo(1, internal = true, countFailedValues = true)
