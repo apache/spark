@@ -943,7 +943,10 @@ object SparkConnectDatabaseMetaData {
 
   // Static JDBC type metadata for the Spark SQL atomic types, mirroring the
   // JdbcTypeUtils type-code/precision mapping. Only STRING is case-sensitive.
-  // TIME and TIMESTAMP_NTZ are omitted (new and duplicate JDBC type codes).
+  // TIMESTAMP_NTZ is omitted because it maps to the same JDBC type code
+  // (Types.TIMESTAMP) as TIMESTAMP, so the TIMESTAMP row already covers it.
+  // TIME is omitted for now because its maximum PRECISION/scale representation
+  // in getTypeInfo is not yet settled.
   private[jdbc] val TYPE_INFO: Seq[TypeInfoRow] = Seq(
     typeRow("BOOLEAN", Types.BOOLEAN, 1, null, null, false, 0, 0, 0),
     typeRow("TINYINT", Types.TINYINT, 3, null, null, false, 0, 0, 10),
