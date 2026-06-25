@@ -668,7 +668,11 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     if tpe is None:
         raise ValueError("A return value is required for the input function")
 
-    if hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, SeriesType):
+    if (
+        hasattr(tpe, "__origin__")
+        and isinstance(tpe.__origin__, type)
+        and issubclass(tpe.__origin__, SeriesType)
+    ):
         tpe = tpe.__args__[0]
         if isinstance(tpe, type) and issubclass(tpe, NameTypeHolder):
             tpe = tpe.tpe
