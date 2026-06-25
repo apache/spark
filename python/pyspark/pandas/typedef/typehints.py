@@ -137,6 +137,43 @@ class NameTypeHolder:
     short_name: str = "NameType"
 
 
+def _numpy_ndarray_element_type(tpe: Any) -> Optional[Any]:
+    """
+    If ``tpe`` is a ``numpy.typing.NDArray[...]`` annotation, return its element
+    (scalar) type; otherwise return ``None``.
+
+    numpy 2.5 changed the internal structure of ``NDArray`` aliases: ``tpe.__origin__``
+    is no longer the bare ``numpy.ndarray`` class but a subscripted generic alias, which
+    is not a class. Relying on ``tpe.__origin__ is np.ndarray`` (and calling
+    ``issubclass`` on it) therefore breaks on numpy >= 2.5. We instead unwrap the
+    ``__origin__`` chain to detect ndarray robustly across numpy versions, and locate
+    the dtype scalar by scanning the type arguments for an ``np.dtype[...]``.
+    """
+    origin = getattr(tpe, "__origin__", None)
+    # Unwrap nested generic-alias origins until we reach a class (or run out).
+    probe = origin
+    for _ in range(5):
+        if probe is None or isclass(probe):
+            break
+        probe = getattr(probe, "__origin__", None)
+    if probe is not np.ndarray:
+        return None
+
+    def _find_scalar(args: Any) -> Optional[Any]:
+        for arg in args or ():
+            arg_origin = getattr(arg, "__origin__", None)
+            if arg is np.dtype or arg_origin is np.dtype:
+                inner = getattr(arg, "__args__", None)
+                if inner:
+                    return inner[0]
+            nested = _find_scalar(getattr(arg, "__args__", None))
+            if nested is not None:
+                return nested
+        return None
+
+    return _find_scalar(getattr(tpe, "__args__", None))
+
+
 def as_spark_type(
     tpe: Union[str, type, Dtype], *, raise_error: bool = True, prefer_timestamp_ntz: bool = False
 ) -> types.DataType:
@@ -149,21 +186,19 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    if (
-        hasattr(tpe, "__origin__")
-        and tpe.__origin__ is np.ndarray
-        and hasattr(tpe, "__args__")
-        and len(tpe.__args__) > 1
-    ):
+    ndarray_element_type = _numpy_ndarray_element_type(tpe)
+    if ndarray_element_type is not None:
         # numpy.typing.NDArray
-        return types.ArrayType(as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error))
+        return types.ArrayType(as_spark_type(ndarray_element_type, raise_error=raise_error))
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
+    elif (
+        hasattr(tpe, "__origin__") and isclass(tpe.__origin__) and issubclass(tpe.__origin__, list)
+    ):
         element_type = as_spark_type(
             tpe.__args__[0],  # type: ignore[union-attr]
             raise_error=raise_error,
