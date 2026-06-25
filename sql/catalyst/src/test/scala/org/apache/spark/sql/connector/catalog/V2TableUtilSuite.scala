@@ -188,7 +188,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       col("address", currentStructType, nullable = true))
     val table = TestTableWithMetadataSupport("test", currentCols)
 
-    val errors = V2TableUtil.validateCapturedColumns(table, originCols.toSeq)
+    val errors = V2TableUtil.validateCapturedColumns(
+      table,
+      originCols.toSeq,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head.contains("`address`.`city` type has changed from STRING to INT"))
   }
@@ -202,7 +206,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("index", IntegerType, nullable = false))
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.isEmpty, "No changes should produce no errors")
   }
 
@@ -213,7 +221,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("index", StringType, nullable = false)) // changed to StringType
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head == "`index` type has changed from INT to STRING")
   }
@@ -225,7 +237,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("index", IntegerType, nullable = true)) // now nullable
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head == "`index` is nullable now")
   }
@@ -235,7 +251,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array(metaCol("index", IntegerType, nullable = false)) // now NOT NULL
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head == "`index` is no longer nullable")
   }
@@ -245,7 +265,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array.empty[MetadataColumn] // no metadata columns
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head == "`index` INT has been removed")
   }
@@ -255,7 +279,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val table = TestTable("test", Array(col("id", LongType, nullable = true)))
     val originMetaCols = Seq(metaCol("index", IntegerType, nullable = false))
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head == "`index` INT NOT NULL has been removed")
   }
@@ -268,7 +296,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       metaCol("_partition", IntegerType, nullable = false)) // type changed from StringType
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 2)
     assert(errors.exists(e => e.contains("_partition") && e.contains("type has changed")))
     assert(errors.exists(e => e.contains("index") && e.contains("removed")))
@@ -279,7 +311,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array(metaCol("INDEX", IntegerType, nullable = true)) // uppercase
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.isEmpty, "Case insensitive comparison should match")
   }
 
@@ -294,7 +330,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
     val e = intercept[AnalysisException] {
-      V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+      V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     }
     assert(e.message.contains("Choose another name or rename the existing column"))
   }
@@ -304,7 +344,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array.empty[MetadataColumn]
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.isEmpty, "No metadata columns should produce no errors")
   }
 
@@ -316,7 +360,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array(metaCol("_partition", structType, nullable = false))
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.isEmpty)
   }
 
@@ -331,7 +379,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     val currentMetaCols = Array(metaCol("_partition", currentStructType, nullable = false))
     val table = TestTableWithMetadataSupport("test", Array.empty, currentMetaCols)
 
-    val errors = V2TableUtil.validateCapturedMetadataColumns(table, originMetaCols)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      originMetaCols,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head.contains("`_partition`.`bucket` type has changed from INT to STRING"))
   }
@@ -364,7 +416,8 @@ class V2TableUtilSuite extends SparkFunSuite {
     val errors = V2TableUtil.validateCapturedMetadataColumns(
       currentTable,
       relation,
-      mode = PROHIBIT_CHANGES)
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head.contains("`_partition` type has changed"))
   }
@@ -389,7 +442,8 @@ class V2TableUtilSuite extends SparkFunSuite {
     val errors = V2TableUtil.validateCapturedMetadataColumns(
       currentTable,
       relation,
-      mode = PROHIBIT_CHANGES)
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     assert(errors.isEmpty)
   }
 
@@ -689,7 +743,10 @@ class V2TableUtilSuite extends SparkFunSuite {
     val table = TestTableWithMetadataSupport("test", currentCols)
 
     val errors = V2TableUtil.validateCapturedColumns(
-      table, originCols.toImmutableArraySeq, checkIds = false)
+      table,
+      originCols.toImmutableArraySeq,
+      mode = PROHIBIT_CHANGES,
+      checkIds = false)
     assert(errors.isEmpty, "Disabled field ID check should not report ID changes")
   }
 
@@ -747,7 +804,8 @@ class V2TableUtilSuite extends SparkFunSuite {
     val errors = V2TableUtil.validateCapturedColumns(
       table,
       originCols.toImmutableArraySeq,
-      mode = ALLOW_NEW_TOP_LEVEL_FIELDS)
+      mode = ALLOW_NEW_TOP_LEVEL_FIELDS,
+      checkIds = true)
     assert(errors.size == 1)
     assert(errors.head.contains("`items`.`element`.`price` INT has been added"))
   }

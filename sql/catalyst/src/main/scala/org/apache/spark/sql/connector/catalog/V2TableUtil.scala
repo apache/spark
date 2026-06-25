@@ -27,7 +27,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.sql.util.SchemaValidationMode
-import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object V2TableUtil extends SQLConfHelper {
@@ -47,8 +47,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedColumns(
       table: Table,
       relation: DataSourceV2Relation,
-      mode: SchemaValidationMode): Seq[String] = {
-    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq, mode)
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq, mode, checkIds)
   }
 
   /**
@@ -69,8 +70,8 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedColumns(
       table: Table,
       originCols: Seq[Column],
-      mode: SchemaValidationMode = PROHIBIT_CHANGES,
-      checkIds: Boolean = true): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
     val originSchema = CatalogV2Util.v2ColumnsToStructType(originCols)
     val schema = CatalogV2Util.v2ColumnsToStructType(table.columns)
     SchemaUtils.validateSchemaCompatibility(originSchema, schema, resolver, mode, checkIds)
@@ -87,8 +88,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedMetadataColumns(
       table: Table,
       relation: DataSourceV2Relation,
-      mode: SchemaValidationMode): Seq[String] = {
-    validateCapturedMetadataColumns(table, extractMetadataColumns(relation), mode)
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    validateCapturedMetadataColumns(table, extractMetadataColumns(relation), mode, checkIds)
   }
 
   /**
@@ -119,8 +121,11 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedMetadataColumns(
       table: Table,
       originMetaCols: Seq[MetadataColumn],
-      mode: SchemaValidationMode = PROHIBIT_CHANGES,
-      checkIds: Boolean = true): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    require(
+      mode == PROHIBIT_CHANGES || mode == ALLOW_NEW_FIELDS,
+      s"Unsupported schema validation mode for metadata columns: $mode")
     val originMetaColNames = originMetaCols.map(_.name)
     val originMetaSchema = CatalogV2Util.toStructType(originMetaCols)
     val metaCols = filter(originMetaColNames, metadataColumns(table))

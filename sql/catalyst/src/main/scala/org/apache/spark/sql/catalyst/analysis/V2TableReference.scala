@@ -158,12 +158,17 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
     val dataErrors = V2TableUtil.validateCapturedColumns(
       table = table,
       originCols = ref.info.columns,
-      mode = PROHIBIT_CHANGES)
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     if (dataErrors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterAnalysis(ref.name, dataErrors)
     }
 
-    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)
+    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      ref.info.metadataColumns,
+      mode = PROHIBIT_CHANGES,
+      checkIds = true)
     if (metaErrors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(ref.name, metaErrors)
     }
@@ -187,7 +192,11 @@ private[sql] object V2TableReferenceUtils extends SQLConfHelper {
         dataErrors)
     }
 
-    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(table, ref.info.metadataColumns)
+    val metaErrors = V2TableUtil.validateCapturedMetadataColumns(
+      table,
+      ref.info.metadataColumns,
+      mode = PROHIBIT_CHANGES, // metadata columns are projected on demand
+      checkIds = false)
     if (metaErrors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterViewWithPlanCreation(
         ctx.viewName,
