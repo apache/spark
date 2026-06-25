@@ -106,7 +106,7 @@ case class OrcPartitionReaderFactory(
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
 
       val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
-        filePath, taskConf, fileSplit, readerOptions.getOrcTail)
+        filePath, taskConf, fileSplit, readerOptions)
 
       val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {

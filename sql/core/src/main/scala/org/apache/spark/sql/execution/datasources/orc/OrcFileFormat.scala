@@ -27,7 +27,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcUtils => _, _}
 import org.apache.orc.OrcConf.COMPRESS
-import org.apache.orc.mapred.{OrcInputFormat => OrcMapredInputFormat, OrcStruct}
+import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
@@ -226,7 +226,7 @@ class OrcFileFormat
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
           val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
-            filePath, taskConf, fileSplit, readerOptions.getOrcTail)
+            filePath, taskConf, fileSplit, readerOptions)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
