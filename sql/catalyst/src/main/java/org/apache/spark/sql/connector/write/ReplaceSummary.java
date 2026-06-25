@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 /**
  * Provides an informational summary of the REPLACE operation producing write.
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Evolving
 public interface ReplaceSummary extends WriteSummary {

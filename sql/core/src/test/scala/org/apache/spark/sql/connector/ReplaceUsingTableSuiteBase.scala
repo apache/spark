@@ -122,6 +122,27 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(2, 2, "software") :: Row(10, 1, "legal") :: Nil)
   }
 
+  test("replace using matches a multi-column scope as a full tuple") {
+    createAndInitTable(schemaString,
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 1, "dep": "software" }
+        |{ "pk": 3, "id": 2, "dep": "hr" }
+        |{ "pk": 4, "id": 2, "dep": "finance" }
+        |""".stripMargin)
+
+    // Scope is the (id, dep) tuple. Only the row whose full tuple equals the source tuple
+    // (1, 'hr') is replaced; rows that match just one of the two scope columns are preserved,
+    // confirming the scope predicate is an AND of all columns rather than a per-column match.
+    sql(
+      s"""INSERT INTO $tableNameAsString REPLACE USING (id, dep)
+         |SELECT * FROM VALUES (10, 1, 'hr') AS t(pk, id, dep)
+         |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 1, "software") :: Row(3, 2, "hr") :: Row(4, 2, "finance") :: Row(10, 1, "hr") :: Nil)
+  }
+
   test("replace using matches null scope values with EqualNullSafe") {
     createAndInitTable(schemaString,
       """{ "pk": 1, "id": 1, "dep": null }
@@ -272,6 +293,26 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
       },
       condition = "INSERT_REPLACE_USING_DUPLICATE_SCOPE_COLUMN",
       parameters = Map("columnName" -> "`dep`"))
+  }
+
+  test("replace using rejects a case-insensitive duplicate scope column") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      createAndInitTable(schemaString,
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |""".stripMargin)
+
+      // Under case-insensitive resolution `dep` and `DEP` resolve to the same target column, so
+      // the pair must be flagged as a duplicate scope column rather than silently deduplicated.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""INSERT INTO $tableNameAsString REPLACE USING (dep, DEP)
+               |SELECT * FROM VALUES (1, 1, 'hr') AS t(pk, id, dep)
+               |""".stripMargin)
+        },
+        condition = "INSERT_REPLACE_USING_DUPLICATE_SCOPE_COLUMN",
+        parameters = Map("columnName" -> "`DEP`"))
+    }
   }
 
   test("replace using resolves duplicate scope columns with the active resolver") {

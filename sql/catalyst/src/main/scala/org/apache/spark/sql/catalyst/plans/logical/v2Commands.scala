@@ -1241,13 +1241,6 @@ case class ReplaceUsingTable(
 
   override def table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
-  lazy val rewritable: Boolean = {
-    EliminateSubqueryAliases(targetTable) match {
-      case ExtractV2Table(_: SupportsRowLevelReplace) => true
-      case _ => false
-    }
-  }
-
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = query
 

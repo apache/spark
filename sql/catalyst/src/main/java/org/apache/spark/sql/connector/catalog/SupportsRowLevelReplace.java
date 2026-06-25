@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation;
  * expect {@code DELETE}, {@code UPDATE}, or {@code MERGE} are never asked to build a
  * {@code REPLACE} operation.
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Experimental
 public interface SupportsRowLevelReplace extends SupportsRowLevelOperations {

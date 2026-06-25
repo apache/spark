@@ -54,7 +54,7 @@ case class BatchScanExec(
       // REPLACE, so that the driver-side derivation `numDeletedRows = numScannedRows -
       // numCopiedRows` in `ReplaceDataExec` stays correct under stage retries.
       case rlot: RowLevelOperationTable
-          if Seq(DELETE, REPLACE).contains(rlot.operation.command()) =>
+          if rlot.operation.command() == DELETE || rlot.operation.command() == REPLACE =>
         SQLLastAttemptMetrics.createMetric(sparkContext, name)
       case _ =>
         SQLMetrics.createMetric(sparkContext, name)
