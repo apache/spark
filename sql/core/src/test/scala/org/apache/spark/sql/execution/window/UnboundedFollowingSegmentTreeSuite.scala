@@ -192,6 +192,38 @@ class UnboundedFollowingSegmentTreeSuite extends SharedSparkSession {
     }
   }
 
+  test("RANGE partition below minPartitionRows falls back to legacy frame") {
+    // Analogous to the ROWS fallback test above, but exercises the RANGE shrinking path.
+    // With minRows=1024 and partitions of 20 rows each, the segtree path forces fallback
+    // to the legacy UnboundedFollowingWindowFunctionFrame for RANGE frames as well.
+    val df = spark.range(0, 40).selectExpr(
+      "CAST(id AS INT) AS id",
+      "(CAST(id AS INT) % 2) AS pk",
+      "CAST(id AS INT) AS k",
+      "CAST((id * 13) % 41 AS INT) AS v")
+    df.createOrReplaceTempView("t_fallback_range")
+    try {
+      val query =
+        """SELECT id, pk, k,
+          |  SUM(v) OVER (PARTITION BY pk ORDER BY k
+          |    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS s
+          |FROM t_fallback_range""".stripMargin
+      val baseline = withSQLConf(disableSegTree.toSeq: _*) {
+        spark.sql(query).collect().sortBy(_.toString).toSeq
+      }
+      withSQLConf(
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
+        SQLConf.WINDOW_SEGMENT_TREE_MIN_PARTITION_ROWS.key -> "1024") {
+        val actual = spark.sql(query).collect().sortBy(_.toString).toSeq
+        assert(actual === baseline,
+          s"RANGE forced-fallback path diverges from baseline.\n" +
+            s"Expected: $baseline\nActual:   $actual")
+      }
+    } finally {
+      spark.catalog.dropTempView("t_fallback_range")
+    }
+  }
+
   // ============================================================
   // NULL / NaN / numeric edge cases
   // ============================================================
