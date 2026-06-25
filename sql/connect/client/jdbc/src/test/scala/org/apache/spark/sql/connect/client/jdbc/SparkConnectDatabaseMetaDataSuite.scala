@@ -863,7 +863,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             nullable: Short,
             searchable: Short,
             minScale: Short,
-            maxScale: Short)
+            maxScale: Short,
+            numPrecRadix: Option[Int])
         val types = new Iterator[TypeInfo] {
           def hasNext: Boolean = rs.next()
           def next(): TypeInfo = TypeInfo(
@@ -876,7 +877,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             nullable = rs.getShort("NULLABLE"),
             searchable = rs.getShort("SEARCHABLE"),
             minScale = rs.getShort("MINIMUM_SCALE"),
-            maxScale = rs.getShort("MAXIMUM_SCALE"))
+            maxScale = rs.getShort("MAXIMUM_SCALE"),
+            numPrecRadix = Option(rs.getObject("NUM_PREC_RADIX")).map(_.asInstanceOf[Integer].toInt))
         }.toSeq
 
         // results are ordered by DATA_TYPE
@@ -918,6 +920,14 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         assert(decimal.precision === 38)
         assert(decimal.minScale === 0)
         assert(decimal.maxScale === 38)
+
+        // NUM_PREC_RADIX is 10 for numeric types and NULL otherwise, mirroring JdbcTypeUtils
+        val numericTypes =
+          Set("TINYINT", "SMALLINT", "INT", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL")
+        types.foreach { t =>
+          val expected = if (numericTypes.contains(t.name)) Some(10) else None
+          assert(t.numPrecRadix === expected, s"unexpected NUM_PREC_RADIX for ${t.name}")
+        }
       }
     }
   }

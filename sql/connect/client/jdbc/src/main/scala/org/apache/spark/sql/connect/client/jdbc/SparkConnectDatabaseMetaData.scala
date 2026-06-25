@@ -903,7 +903,7 @@ object SparkConnectDatabaseMetaData {
         Short,   // MAXIMUM_SCALE
         Int,     // SQL_DATA_TYPE
         Int,     // SQL_DATETIME_SUB
-        Int      // NUM_PREC_RADIX
+        Integer  // NUM_PREC_RADIX (null for non-numeric types)
     )
 
   // Fills the columns that are constant across all Spark atomic types: every type is
@@ -919,7 +919,7 @@ object SparkConnectDatabaseMetaData {
       caseSensitive: Boolean,
       minScale: Short,
       maxScale: Short,
-      numPrecRadix: Int,
+      numPrecRadix: Integer,
       literalSuffix: String = null): TypeInfoRow =
     (
       typeName,
@@ -948,7 +948,7 @@ object SparkConnectDatabaseMetaData {
   // TIME is omitted for now because its maximum PRECISION/scale representation
   // in getTypeInfo is not yet settled.
   private[jdbc] val TYPE_INFO: Seq[TypeInfoRow] = Seq(
-    typeRow("BOOLEAN", Types.BOOLEAN, 1, null, null, false, 0, 0, 0),
+    typeRow("BOOLEAN", Types.BOOLEAN, 1, null, null, false, 0, 0, null),
     typeRow("TINYINT", Types.TINYINT, 3, null, null, false, 0, 0, 10),
     typeRow("SMALLINT", Types.SMALLINT, 5, null, null, false, 0, 0, 10),
     typeRow("INT", Types.INTEGER, 10, null, null, false, 0, 0, 10),
@@ -956,9 +956,9 @@ object SparkConnectDatabaseMetaData {
     typeRow("FLOAT", Types.FLOAT, 7, null, null, false, 0, 0, 10),
     typeRow("DOUBLE", Types.DOUBLE, 15, null, null, false, 0, 0, 10),
     typeRow("DECIMAL", Types.DECIMAL, 38, null, "precision,scale", false, 0, 38, 10),
-    typeRow("STRING", Types.VARCHAR, Int.MaxValue, "'", null, true, 0, 0, 0),
-    typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "X'", null, false, 0, 0, 0,
+    typeRow("STRING", Types.VARCHAR, Int.MaxValue, "'", null, true, 0, 0, null),
+    typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "X'", null, false, 0, 0, null,
       literalSuffix = "'"),
-    typeRow("DATE", Types.DATE, 10, "'", null, false, 0, 0, 0),
-    typeRow("TIMESTAMP", Types.TIMESTAMP, 29, "'", null, false, 0, 6, 0))
+    typeRow("DATE", Types.DATE, 10, "'", null, false, 0, 0, null),
+    typeRow("TIMESTAMP", Types.TIMESTAMP, 29, "'", null, false, 0, 6, null))
 }
