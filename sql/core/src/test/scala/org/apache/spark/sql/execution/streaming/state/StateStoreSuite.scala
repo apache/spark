@@ -342,7 +342,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
         // Access the queue via reflection for verification
         val queueField = PrivateMethod[ConcurrentLinkedQueue[
-          (StateStoreProviderId, StateStoreProvider)]](
+          (StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]](
           Symbol("unloadedProvidersToClose"))
         val queue = StateStore invokePrivate queueField()
         assert(queue.isEmpty, "Queue should start empty")
@@ -398,7 +398,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         eventually(timeout(5.seconds)) {
           assert(queue.size() == 1, "Provider should be queued after timeout")
         }
-        val (queuedId, _) = queue.peek()
+        // TODO: Assert opRequest value once decoupled maintenance is enabled.
+        val (queuedId, _, _) = queue.peek()
         assert(queuedId == providerId, "Queued provider has wrong ID")
 
         // Now allow the first maintenance to complete
@@ -496,7 +497,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
         // Get the partitionsForMaintenance field to check the queue is empty
         val partitionsField = PrivateMethod[
-          ConcurrentLinkedQueue[StateStoreProviderId]](Symbol("unloadedProvidersToClose"))
+          ConcurrentLinkedQueue[(StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]](
+          Symbol("unloadedProvidersToClose"))
         val queue = StateStore invokePrivate partitionsField()
         assert(queue.isEmpty, "Maintenance queue should be empty after processing queued tasks")
       }
@@ -617,6 +619,31 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         matchPVals = true
       )
 
+    }
+  }
+
+  test("HDFS: split maintenance methods upload snapshots and clean up old files separately") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+      for (i <- 1 to 21) {
+        val store = provider.getStore(i - 1)
+        put(store, "a", 0, i)
+        store.commit()
+        // Snapshot and cleanup run as independent operations.
+        provider.doSnapshotMaintenance()
+        provider.doCleanupMaintenance()
+      }
+
+      // Snapshots are uploaded by doSnapshotMaintenance (at versions 6, 12, 18 given
+      // minDeltasForSnapshot = 5) and doCleanupMaintenance removes old files, retaining only
+      // the last numVersionsToRetain (default 2) versions anchored on the latest snapshot (18).
+      val basePath = provider.stateStoreId.storeCheckpointLocation()
+      val remainingFiles = new File(basePath.toString)
+        .listFiles().filter(f => f.isFile && !f.getName.startsWith("."))
+        .map(_.getName).filterNot(_.endsWith(".crc")).toSet
+      assert(remainingFiles ===
+        Set("18.snapshot", "18.delta", "19.delta", "20.delta", "21.delta"),
+        s"Unexpected remaining files: $remainingFiles")
     }
   }
 

@@ -87,6 +87,21 @@ object MaintenanceTaskType {
 }
 
 /**
+ * Tracks which maintenance operations still need to run before a provider can be closed.
+ * Used as a tag on queue entries in `unloadedProvidersToClose`.
+ */
+sealed trait MaintenanceOpRequest
+
+object MaintenanceOpRequest {
+  /** All maintenance operations still need to run (e.g. query-thread-initiated unload). */
+  case object All extends MaintenanceOpRequest
+  /** Only snapshot still needs to run (cleanup already ran as the triggering op). */
+  case object Snapshot extends MaintenanceOpRequest
+  /** Only cleanup still needs to run (snapshot already ran as the triggering op). */
+  case object Cleanup extends MaintenanceOpRequest
+}
+
+/**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
  * `ReadStateStore` represents a specific version of state data, and such instances are created
  * through a [[StateStoreProvider]].
@@ -891,6 +906,12 @@ trait StateStoreProvider {
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
 
+  /** Run only the snapshot upload portion of maintenance. */
+  def doSnapshotMaintenance(): Unit = { }
+
+  /** Run only the cleanup portion of maintenance. */
+  def doCleanupMaintenance(): Unit = { }
+
   /**
    * Optional custom metrics that the implementation may want to report.
    * @note The StateStore objects created by this provider must report the same custom metrics
@@ -1238,7 +1259,7 @@ object StateStore extends Logging {
   private val maintenanceThreadPoolLock = new Object
 
   private val unloadedProvidersToClose =
-    new ConcurrentLinkedQueue[(StateStoreProviderId, StateStoreProvider)]
+    new ConcurrentLinkedQueue[(StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]
 
   // This set is to keep track of the partitions that are queued
   // for maintenance or currently have maintenance running on them
@@ -1652,19 +1673,20 @@ object StateStore extends Logging {
     }
 
     // Providers that couldn't be processed now and need to be added back to the queue
-    val providersToRequeue = new ArrayBuffer[(StateStoreProviderId, StateStoreProvider)]()
+    val providersToRequeue =
+      new ArrayBuffer[(StateStoreProviderId, StateStoreProvider, MaintenanceOpRequest)]()
 
     // unloadedProvidersToClose are StateStoreProviders that have been removed from
     // loadedProviders, and can now be processed for maintenance. This queue contains
     // providers for which we weren't able to process for maintenance on the previous iteration
     while (!unloadedProvidersToClose.isEmpty) {
-      val (providerId, provider) = unloadedProvidersToClose.poll()
+      val (providerId, provider, opRequest) = unloadedProvidersToClose.poll()
 
       if (processThisPartition(providerId)) {
         submitMaintenanceWorkForProvider(
           providerId, provider, storeConf, MaintenanceTaskType.FromUnloadedProvidersQueue)
       } else {
-        providersToRequeue += ((providerId, provider))
+        providersToRequeue += ((providerId, provider, opRequest))
       }
     }
 
@@ -1713,7 +1735,7 @@ object StateStore extends Logging {
           if (!ableToProcessNow) {
             // Add to queue for later processing if we can't process now
             // This will be resubmitted for maintenance later by the background maintenance task
-            unloadedProvidersToClose.add((id, provider))
+            unloadedProvidersToClose.add((id, provider, MaintenanceOpRequest.All))
           }
           ableToProcessNow
 

@@ -1047,15 +1047,32 @@ private[sql] class RocksDBStateStoreProvider
   }
 
   override def doMaintenance(): Unit = {
+    doSnapshotMaintenance()
+    doCleanupMaintenance()
+  }
+
+  /** Run only the snapshot upload portion of maintenance. */
+  override def doSnapshotMaintenance(): Unit = {
+    doMaintenanceOp(rocksDB.doSnapshotMaintenance(), "snapshot maintenance")
+  }
+
+  /** Run only the cleanup portion of maintenance. */
+  override def doCleanupMaintenance(): Unit = {
+    doMaintenanceOp(rocksDB.doCleanupMaintenance(), "cleanup maintenance")
+  }
+
+  /**
+   * Common wrapper for maintenance operations: verifies the state machine and swallows non-fatal
+   * exceptions (SPARK-46547) to avoid deadlock between the maintenance thread and the streaming
+   * aggregation operator.
+   */
+  private def doMaintenanceOp(op: => Unit, opName: String): Unit = {
     stateMachine.verifyForMaintenance()
     try {
-      rocksDB.doMaintenance()
+      op
     } catch {
-      // SPARK-46547 - Swallow non-fatal exception in maintenance task to avoid deadlock between
-      // maintenance thread and streaming aggregation operator
       case NonFatal(ex) =>
-        logWarning(s"Ignoring error while performing maintenance operations with exception=",
-          ex)
+        logWarning(s"Ignoring error while performing $opName with exception=", ex)
     }
   }
 
