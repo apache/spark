@@ -324,3 +324,102 @@ SELECT CAST(time '23:59:59.9' AS decimal(6, 0));
 SELECT CAST(time '23:59:59.999' AS decimal(8, 2));
 SELECT CAST(time '23:59:59.999999' AS decimal(11, 5));
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8));
+
+-- SPARK-57618: cast TIMESTAMP_NTZ(q) to TIME(p) extracts the time-of-day and truncates to p.
+-- This direction is deterministic and time-zone independent.
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(6));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(3));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(0));
+-- Pre-epoch wall-clock time-of-day is preserved.
+SELECT CAST(timestamp_ntz'1969-12-31 23:59:59.123456' AS TIME(6));
+-- Nanosecond TIMESTAMP_NTZ(q) preserves the sub-microsecond digits up to p.
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(9));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(7));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(6));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(7) AS TIME(9));
+-- Double colon syntax.
+SELECT timestamp_ntz'2020-05-17 12:34:56.789012' :: TIME(6);
+
+-- SPARK-57618: cast TIME(p) to TIMESTAMP_NTZ(q) takes the date from CURRENT_DATE. SQL-layer
+-- coverage stays deterministic: type resolution, the date anchor equals current_date(), and the
+-- value round-trips back to TIME. The current-date stabilization is covered by ComputeCurrentTimeSuite
+-- and the value semantics by CastSuite* unit tests.
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ));
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ(9)));
+-- The date fields come from the query current date.
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ) AS DATE) = current_date();
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS DATE) = current_date();
+-- Round-trips re-extract the original time-of-day (truncated to the intermediate precision).
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_NTZ(6)) AS TIME(9));
+-- Null propagation in both directions.
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ);
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9));
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6));
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6));
+
+-- SPARK-57618: inside an inline table the TIME -> TIMESTAMP_NTZ cast is foldable and carries no
+-- CURRENT_LIKE pattern, so it is early-evaluated before ComputeCurrentTime. Coverage stays
+-- deterministic: the date anchor still equals current_date() and the value round-trips back to TIME.
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x);
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x);
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9))) t(x);
+
+-- SPARK-57618: TIME and TIMESTAMP_NTZ have no common type, so implicit coercion is rejected; an
+-- explicit CAST (as above) is required. This guards `findWiderDateTimeType` against ever widening
+-- TIME, which would silently inject CURRENT_DATE into UNION / coalesce / CASE.
+SELECT time'12:34:56' UNION ALL SELECT timestamp_ntz'2020-05-17 12:34:56';
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56');
+SELECT coalesce(time'12:34:56', timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9));
+SELECT CASE WHEN true THEN time'12:34:56' ELSE timestamp_ntz'2020-05-17 12:34:56' END;
+
+-- SPARK-57660: cast TIMESTAMP_LTZ(q) to TIME(p) extracts the local wall-clock time-of-day in the
+-- session time zone and truncates to p. The LTZ literal is parsed in the session zone and the
+-- time-of-day is read back in the same zone, so these values stay zone-independent.
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(6));
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(3));
+SELECT CAST(timestamp'2020-05-17 12:34:56.789012' AS TIME(0));
+-- Nanosecond TIMESTAMP_LTZ(q) preserves the sub-microsecond digits up to p.
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(9));
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(7));
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9) AS TIME(6));
+SELECT CAST(timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(7) AS TIME(9));
+-- Double colon syntax.
+SELECT timestamp'2020-05-17 12:34:56.789012' :: TIME(6);
+
+-- SPARK-57660: cast TIME(p) to TIMESTAMP_LTZ(q) takes the date from CURRENT_DATE and interprets the
+-- result in the session time zone. SQL-layer coverage stays deterministic: type resolution, the date
+-- anchor equals current_date(), and the value round-trips back to TIME. The current-date
+-- stabilization is covered by ComputeCurrentTimeSuite and the value semantics by CastSuite* tests.
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ));
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ(9)));
+-- The date fields come from the query current date.
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_LTZ) AS DATE) = current_date();
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS DATE) = current_date();
+-- Round-trips re-extract the original time-of-day (truncated to the intermediate precision).
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_LTZ) AS TIME(6));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(7)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_LTZ(6)) AS TIME(9));
+-- Null propagation in both directions.
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_LTZ);
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_LTZ(9));
+SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ) AS TIME(6));
+SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6));
+
+-- SPARK-57660: inside an inline table the TIME -> TIMESTAMP_LTZ cast is foldable and carries no
+-- CURRENT_LIKE pattern, so it is early-evaluated before ComputeCurrentTime. Coverage stays
+-- deterministic: the date anchor still equals current_date() and the value round-trips back to TIME.
+SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_LTZ)) t(x);
+SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_LTZ)) t(x);
+SELECT CAST(x AS TIME(9)) FROM VALUES (CAST(TIME'12:34:56.789012345' AS TIMESTAMP_LTZ(9))) t(x);
+
+-- SPARK-57660: TIME and TIMESTAMP_LTZ have no common type, so implicit coercion is rejected; an
+-- explicit CAST (as above) is required. This guards `findWiderDateTimeType` against ever widening
+-- TIME, which would silently inject CURRENT_DATE into UNION / coalesce / CASE.
+SELECT time'12:34:56' UNION ALL SELECT timestamp'2020-05-17 12:34:56';
+SELECT coalesce(time'12:34:56', timestamp'2020-05-17 12:34:56');
+SELECT coalesce(time'12:34:56', timestamp_ltz'2020-05-17 12:34:56.789012345'::timestamp_ltz(9));
+SELECT CASE WHEN true THEN time'12:34:56' ELSE timestamp'2020-05-17 12:34:56' END;

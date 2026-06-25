@@ -44,9 +44,9 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  *     [0, 999])
  *   - Parquet storage: INT64 epoch-nanoseconds (signed), so the on-disk range is bounded to
  *     ~1677-09-21 .. 2262-04-11
- *   - Write path: (epochMicros, nanosWithinMicro) -> epochMicros * 1000 + nanosWithinMicro,
- *     computed with exact arithmetic; out-of-range values throw
- *     `parquetTimestampNanosOverflowError`
+ *   - Write path: (epochMicros, nanosWithinMicro) -> epochMicros * 1000 + nanosWithinMicro, via
+ *     `DateTimeUtils.timestampNanosToEpochNanos` (exact arithmetic); out-of-range values throw
+ *     `timestampNanosEpochNanosOverflowError`
  *   - Read path: epoch-nanos -> floorDiv / floorMod 1000 -> (epochMicros, nanosWithinMicro) (floor
  *     semantics keep `nanosWithinMicro` in [0, 999] for pre-epoch values), then the
  *     sub-microsecond digits are truncated to the requested precision
@@ -173,17 +173,17 @@ private[ops] object TimestampNanosParquetOps {
 
   /**
    * Combines the `(epochMicros, nanosWithinMicro)` pair into a single INT64 epoch-nanoseconds
-   * value for Parquet storage, using exact arithmetic. Values outside the signed-int64
-   * epoch-nanos range (~1677-09-21 .. 2262-04-11) throw `parquetTimestampNanosOverflowError`.
+   * value for Parquet storage. Delegates the exact-arithmetic packing to
+   * [[DateTimeUtils.timestampNanosToEpochNanos]]; values outside the signed-int64 epoch-nanos
+   * range (~1677-09-21 .. 2262-04-11) throw `timestampNanosEpochNanosOverflowError`.
    */
   private[ops] def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
     try {
-      Math.addExact(
-        Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
-        value.nanosWithinMicro.toLong)
+      DateTimeUtils.timestampNanosToEpochNanos(value)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value, isNtz)
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          value, isNtz, sink = "Parquet INT64")
     }
   }
 }

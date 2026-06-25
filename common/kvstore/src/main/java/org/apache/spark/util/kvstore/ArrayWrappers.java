@@ -83,13 +83,15 @@ class ArrayWrappers {
     public int compareTo(ComparableIntArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        int diff = array[i] - other.array[i];
+        // Use Integer.compare; subtraction overflows for large opposite-sign values
+        // (e.g. Integer.MIN_VALUE vs Integer.MAX_VALUE) and returns the wrong ordering.
+        int diff = Integer.compare(array[i], other.array[i]);
         if (diff != 0) {
           return diff;
         }
       }
 
-      return array.length - other.array.length;
+      return Integer.compare(array.length, other.array.length);
     }
   }
 
@@ -122,13 +124,15 @@ class ArrayWrappers {
     public int compareTo(ComparableLongArray other) {
       int len = Math.min(array.length, other.array.length);
       for (int i = 0; i < len; i++) {
-        long diff = array[i] - other.array[i];
+        // Use Long.compare; subtraction overflows for large opposite-sign values
+        // (e.g. Long.MIN_VALUE vs Long.MAX_VALUE) and returns the wrong ordering.
+        int diff = Long.compare(array[i], other.array[i]);
         if (diff != 0) {
-          return diff > 0 ? 1 : -1;
+          return diff;
         }
       }
 
-      return array.length - other.array.length;
+      return Integer.compare(array.length, other.array.length);
     }
   }
 

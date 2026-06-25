@@ -654,7 +654,8 @@ private[sql] object UnivocityParser {
    * is bounded to CSVOptions.MAX_ERROR_CONTENT_LENGTH so an oversized value cannot produce a huge
    * error message (SPARK-28431).
    */
-  private def malformedCsvRecord(cause: Throwable, badRecord: String): SparkRuntimeException = {
+  private[csv] def malformedCsvRecord(
+      cause: Throwable, badRecord: String): SparkRuntimeException = {
     val boundedRecord = if (badRecord.length > CSVOptions.MAX_ERROR_CONTENT_LENGTH) {
       badRecord.take(CSVOptions.MAX_ERROR_CONTENT_LENGTH) + "..."
     } else {

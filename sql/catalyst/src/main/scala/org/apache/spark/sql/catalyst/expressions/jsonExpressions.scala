@@ -142,10 +142,16 @@ case class GetJsonObject(json: Expression, path: Expression)
 }
 
 object GetJsonObject {
-  private[sql] def simpleTopLevelField(path: UTF8String): Option[String] = {
+  import PathInstruction._
+
+  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
     try {
-      Option(path).flatMap(value => JsonPathParser.parse(value.toString)).collect {
-        case List(PathInstruction.Key, PathInstruction.Named(fieldName)) => fieldName
+      Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
+        val names = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(fieldName)
+          case _ => None
+        }.toSeq
+        if (names.nonEmpty && names.forall(_.isDefined)) Some(names.flatten) else None
       }
     } catch {
       // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
@@ -155,28 +161,25 @@ object GetJsonObject {
 }
 
 /**
- * Extracts multiple simple top-level fields from a JSON string in one parse. This is an internal
- * expression used to share sibling [[GetJsonObject]] expressions; unsupported JSON paths remain
- * as independent GetJsonObject expressions.
+ * Extracts multiple simple named paths from a JSON string in one parse. This is an internal
+ * expression used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
  */
 case class MultiGetJsonObject(
     json: Expression,
-    fieldNames: Seq[String],
     fallbackPaths: Seq[String])
   extends UnaryExpression
   with ExpectsInputTypes {
 
-  require(
-    fieldNames.nonEmpty &&
-      fieldNames.distinct.length == fieldNames.length &&
-      fallbackPaths.length == fieldNames.length)
+  // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
+  require(fallbackPaths.nonEmpty)
 
   override def child: Expression = json
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  override lazy val dataType: DataType = StructType(fieldNames.indices.map { index =>
+  override lazy val dataType: DataType = StructType(fallbackPaths.indices.map { index =>
     StructField(s"_$index", StringType, nullable = true)
   })
 
@@ -190,9 +193,16 @@ case class MultiGetJsonObject(
   final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
+  private lazy val namedPaths = fallbackPaths.map { path =>
+    GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+      throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
+    }
+  }
+
+  @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
-    fieldNames,
-    fallbackPaths.map(UTF8String.fromString))
+    fallbackPaths.map(UTF8String.fromString),
+    namedPaths)
 
   override def eval(input: InternalRow): Any = {
     evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])

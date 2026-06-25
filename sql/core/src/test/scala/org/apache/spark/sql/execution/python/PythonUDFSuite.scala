@@ -265,4 +265,36 @@ class PythonUDFSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-57593: pythonPeakPickledBatchBytes metric for BatchEvalPythonUDTFExec") {
+    assume(shouldTestPythonUDFs)
+    val udtf = TestPythonUDTF(name = "test_udtf")
+
+    spark.udtf.registerPython(udtf.name, udtf.udtf)
+    withTempView("t") {
+      try {
+        spark.range(1000).selectExpr("id % 100 as a", "id % 50 as b")
+          .createOrReplaceTempView("t")
+        val result = sql(s"SELECT f.* FROM t, LATERAL ${udtf.name}(a, b) f")
+        result.collect()
+
+        val udtfExec = result.queryExecution.executedPlan.collectFirst {
+          case p: BatchEvalPythonUDTFExec => p
+        }.getOrElse {
+          fail("Expected BatchEvalPythonUDTFExec in executed plan")
+        }
+
+        // The UDTF pickle path pickles its input through the same contiguous-allocation code as
+        // BatchEvalPythonExec, so the peak pickled-batch size is recorded here too (passed via the
+        // shared pythonMetrics map) even though the UDTF path sets no byte cap.
+        val peakPickledBatchBytes =
+          udtfExec.metrics.get("pythonPeakPickledBatchBytes").map(_.value).getOrElse(0L)
+        assert(peakPickledBatchBytes > 0,
+          "pythonPeakPickledBatchBytes should be > 0 for BatchEvalPythonUDTFExec, " +
+            s"but was $peakPickledBatchBytes")
+      } finally {
+        spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+      }
+    }
+  }
 }

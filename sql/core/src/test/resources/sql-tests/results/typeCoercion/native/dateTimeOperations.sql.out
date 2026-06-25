@@ -803,3 +803,35 @@ select cast('2017-12-11 09:30:00' as date) - interval 2 day
 struct<date_add(CAST(2017-12-11 09:30:00 AS DATE), (- extractansiintervaldays(INTERVAL '2' DAY))):date>
 -- !query output
 2017-12-09
+
+
+-- !query
+select cast('12:34:56' as time) + interval '02:00:00' hour to second
+-- !query schema
+struct<CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND:time(6)>
+-- !query output
+14:34:56
+
+
+-- !query
+select interval '02:00:00' hour to second + cast('12:34:56' as time)
+-- !query schema
+struct<CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND:time(6)>
+-- !query output
+14:34:56
+
+
+-- !query
+select cast('12:34:56' as time) - interval '02:00:00' hour to second
+-- !query schema
+struct<CAST(12:34:56 AS TIME(6)) - INTERVAL '02:00:00' HOUR TO SECOND:time(6)>
+-- !query output
+10:34:56
+
+
+-- !query
+select cast('12:34:56' as time) - cast('10:00:00' as time)
+-- !query schema
+struct<CAST(12:34:56 AS TIME(6)) - CAST(10:00:00 AS TIME(6)):interval hour to second>
+-- !query output
+0 02:34:56.000000000

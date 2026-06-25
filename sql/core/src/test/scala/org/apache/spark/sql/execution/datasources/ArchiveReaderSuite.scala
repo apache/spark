@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.{ByteArrayOutputStream, Closeable, File, FileOutputStream, InputStream, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.Properties
+import java.util.regex.Pattern
 import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ArrayBuffer
@@ -164,6 +165,21 @@ class ArchiveReaderSuite extends SparkFunSuite {
         textEntry("real.csv", "kept"),
         textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
       assert(collect(tar) == Seq("real.csv" -> "kept"))
+    }
+  }
+
+  test("readEntries: a custom ignoredPathSegmentRegex pattern surfaces hidden entries") {
+    withTempDir { dir =>
+      val tar = new File(dir, "custom-filter.tar")
+      writeTar(tar, Seq(textEntry("_SUCCESS", "marker"), textEntry("real.csv", "kept")))
+      // "(?!)" matches nothing, so hidden-name filtering is disabled and only the carve-outs in
+      // HadoopFSUtils.shouldFilterOutPathName still apply -- mirroring a loose-file listing with
+      // the ignoredPathSegmentRegex option set to the same regex.
+      val entries = ArchiveReader(new Path(tar.toURI))
+        .readEntries(new Configuration(), Pattern.compile("(?!)")) { (name, in) =>
+          Iterator.single((name, new String(readAll(in), StandardCharsets.UTF_8)))
+        }.toList
+      assert(entries == Seq("_SUCCESS" -> "marker", "real.csv" -> "kept"))
     }
   }
 

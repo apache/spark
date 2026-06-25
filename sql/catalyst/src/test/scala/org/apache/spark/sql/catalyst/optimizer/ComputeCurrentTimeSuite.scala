@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Logic
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DateType, IntegerType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ComputeCurrentTimeSuite extends PlanTest {
@@ -271,6 +271,65 @@ class ComputeCurrentTimeSuite extends PlanTest {
     checkLiterals({ zoneId: String => LocalTimestamp(Some(zoneId)) }, numUniqueZoneIds)
     checkLiterals({ _: String => Now() }, 1)
     checkLiterals({ zoneId: String => CurrentDate(Some(zoneId)) }, numUniqueZoneIds)
+  }
+
+  test("CAST(time AS TIMESTAMP_NTZ) is stabilized with the query current date") {
+    val timeLit = Literal(0L, TimeType(6))
+    val in = Project(Seq(
+      Alias(Cast(timeLit, TimestampNTZType), "a")(),
+      Alias(Cast(timeLit, TimestampNTZNanosType(9)), "b")(),
+      Alias(CurrentDate(), "c")()), LocalRelation())
+
+    val min = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+    val max = DateTimeUtils.currentDate(ZoneId.systemDefault())
+
+    // The two casts and current_date() must all be anchored to the same current-date literal.
+    val dateLits = dateLiterals(plan)
+    assert(dateLits.size == 3)
+    assert(dateLits.toSet.size == 1)
+    assert(dateLits.forall(d => d >= min && d <= max))
+
+    // The TIME -> TIMESTAMP_NTZ casts must be rewritten away (replaced by a date+time builder).
+    val remainingCasts = plan.flatMap(_.expressions.flatMap(_.collect {
+      case c: Cast if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) => c
+    }))
+    assert(remainingCasts.isEmpty)
+  }
+
+  test("CAST(time AS TIMESTAMP_LTZ) is stabilized with the query current date") {
+    val timeLit = Literal(0L, TimeType(6))
+    val in = Project(Seq(
+      Alias(Cast(timeLit, TimestampType), "a")(),
+      Alias(Cast(timeLit, TimestampLTZNanosType(9)), "b")(),
+      Alias(CurrentDate(), "c")()), LocalRelation())
+
+    val min = DateTimeUtils.currentDate(ZoneId.systemDefault())
+    val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+    val max = DateTimeUtils.currentDate(ZoneId.systemDefault())
+
+    // The two casts and current_date() must all be anchored to the same current-date literal.
+    val dateLits = dateLiterals(plan)
+    assert(dateLits.size == 3)
+    assert(dateLits.toSet.size == 1)
+    assert(dateLits.forall(d => d >= min && d <= max))
+
+    // The TIME -> TIMESTAMP_LTZ casts must be rewritten away (replaced by a date+time builder).
+    val remainingCasts = plan.flatMap(_.expressions.flatMap(_.collect {
+      case c: Cast if Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) => c
+    }))
+    assert(remainingCasts.isEmpty)
+  }
+
+  private def dateLiterals(plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[Int] = {
+    val buf = new scala.collection.mutable.ArrayBuffer[Int]
+    plan.transformWithSubqueries { case subQuery =>
+      subQuery.transformAllExpressions { case lit: Literal if lit.dataType == DateType =>
+        buf += lit.value.asInstanceOf[Int]
+        lit
+      }
+    }
+    buf
   }
 
   private def literals[T](plan: LogicalPlan): scala.collection.mutable.ArrayBuffer[T] = {

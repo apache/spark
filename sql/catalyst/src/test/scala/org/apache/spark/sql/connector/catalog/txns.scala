@@ -179,6 +179,8 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
 
   override def name: String = delegate.name
 
+  override def capabilities: java.util.Set[TableCatalogCapability] = delegate.capabilities
+
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
