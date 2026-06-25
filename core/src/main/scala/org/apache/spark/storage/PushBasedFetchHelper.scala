@@ -17,20 +17,22 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.TimeUnit
+
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success}
+
+import org.roaringbitmap.RoaringBitmap
+
 import org.apache.spark.MapOutputTracker
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
-import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergedBlockMeta, MergedBlocksMetaListener}
 import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.storage.BlockManagerId.SHUFFLE_MERGER_IDENTIFIER
 import org.apache.spark.storage.ShuffleBlockFetcherIterator._
-import org.roaringbitmap.RoaringBitmap
-
-import java.util.concurrent.TimeUnit
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Success}
 
 /**
  * Helper class for [[ShuffleBlockFetcherIterator]] that encapsulates all the push-based
