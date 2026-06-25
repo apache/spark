@@ -84,7 +84,6 @@ sealed trait MaintenanceTaskType
 
 object MaintenanceTaskType {
   case object FromUnloadedProvidersQueue extends MaintenanceTaskType
-  case object FromTaskThread extends MaintenanceTaskType
   case object FromLoadedProviders extends MaintenanceTaskType
 }
 
@@ -1820,25 +1819,26 @@ object StateStore extends Logging {
 
     // Phase 1: Drain the unloadedProvidersToClose queue. These are providers that have been
     // removed from loadedProviders and need maintenance before close. opRequest determines
-    // which task to submit and which source type to use:
-    //   All:      pick one available op, submit as FromTaskThread (first of two ticks)
-    //   Snapshot: submit snapshot as FromUnloadedProvidersQueue (closes after)
-    //   Cleanup:  submit cleanup as FromUnloadedProvidersQueue (closes after)
+    // which task to submit:
+    //   All:      pick one available op, nextOp enqueues the other after completion
+    //   Snapshot: submit snapshot, nextOp = None so provider is closed after
+    //   Cleanup:  submit cleanup, nextOp = None so provider is closed after
     while (!unloadedProvidersToClose.isEmpty) {
       val (providerId, provider, opRequest) = unloadedProvidersToClose.poll()
 
       val submitted = opRequest match {
         case MaintenanceOpRequest.All =>
-          // All ops should run before the provider can be closed. We serialize them by
-          // submitting one op now as FromTaskThread; when it completes it enqueues the
-          // remaining op, which runs as FromUnloadedProvidersQueue and closes the provider.
+          // All ops should have run recently before the provider can be closed. We serialize
+          // them by submitting one op now with nextOp pointing to the other. When the first
+          // completes, the pool thread enqueues the remaining op with nextOp = None, which
+          // closes the provider after finishing.
           // Pick whichever partition set is available with short-circuit evaluation.
-          tryClaimAndSubmit(
-            providerId, provider, storeConf,
-            MaintenanceOpType.Snapshot, MaintenanceTaskType.FromTaskThread) ||
-            tryClaimAndSubmit(
-              providerId, provider, storeConf,
-              MaintenanceOpType.Cleanup, MaintenanceTaskType.FromTaskThread)
+          tryClaimAndSubmit(providerId, provider, storeConf,
+            MaintenanceOpType.Snapshot, MaintenanceTaskType.FromUnloadedProvidersQueue,
+            nextOp = Some(otherMaintenanceOpRequest(MaintenanceOpType.Snapshot))) ||
+            tryClaimAndSubmit(providerId, provider, storeConf,
+              MaintenanceOpType.Cleanup, MaintenanceTaskType.FromUnloadedProvidersQueue,
+              nextOp = Some(otherMaintenanceOpRequest(MaintenanceOpType.Cleanup)))
         case MaintenanceOpRequest.Snapshot =>
           tryClaimAndSubmit(
             providerId, provider, storeConf,
@@ -1888,10 +1888,14 @@ object StateStore extends Logging {
       provider: StateStoreProvider,
       storeConf: StateStoreConf,
       opType: MaintenanceOpType,
-      source: MaintenanceTaskType): Boolean = {
+      source: MaintenanceTaskType,
+      // Only used when source is FromUnloadedProvidersQueue.
+      nextOp: Option[MaintenanceOpRequest] = None): Boolean = {
     if (tryClaimPartition(providerId, opType)) {
-      submitMaintenanceWorkForProvider(providerId, provider, storeConf, source, opType)
-      logDebug(s"Submitted $providerId with source $source for $opType")
+      submitMaintenanceWorkForProvider(
+        providerId, provider, storeConf, source, opType, nextOp)
+      logDebug(s"Submitted $providerId with source $source" +
+        s" for $opType, nextOp=$nextOp")
       true
     } else {
       logInfo(log"Not processing partition " +
@@ -1918,14 +1922,20 @@ object StateStore extends Logging {
    *
    * @param id The StateStore provider ID to perform maintenance on
    * @param provider The StateStore provider instance
+   * @param storeConf The StateStore configuration
+   * @param source Where this request originated from
    * @param opType Which maintenance operation (snapshot or cleanup) to perform
+   * @param nextOp If set, the remaining op to enqueue after this one completes. Only used when
+   *   source is FromUnloadedProvidersQueue.
    */
   private def submitMaintenanceWorkForProvider(
       id: StateStoreProviderId,
       provider: StateStoreProvider,
       storeConf: StateStoreConf,
       source: MaintenanceTaskType,
-      opType: MaintenanceOpType): Unit = {
+      opType: MaintenanceOpType,
+      // Only used when source is FromUnloadedProvidersQueue.
+      nextOp: Option[MaintenanceOpRequest] = None): Unit = {
     val pool = opType match {
       case MaintenanceOpType.Snapshot => highPriorityThreadPool
       case MaintenanceOpType.Cleanup => lowPriorityThreadPool
@@ -1953,7 +1963,7 @@ object StateStore extends Logging {
                 loadedProviders.synchronized { loadedProviders.get(id).contains(provider) } &&
                   !provider.unloaded
               case _ =>
-                // FromTaskThread / FromUnloadedProvidersQueue: provider already removed,
+                // FromUnloadedProvidersQueue: provider already removed,
                 // reference passed directly, no containsKey needed.
                 !provider.unloaded
             }
@@ -1964,9 +1974,10 @@ object StateStore extends Logging {
                 case MaintenanceOpType.Cleanup => provider.doCleanupMaintenance()
               }
 
-              // Dispatch based on source. FromLoadedProviders and FromTaskThread run inside the
-              // read lock so no close can interleave between work and enqueue.
-              // FromUnloadedProvidersQueue releases the read lock before acquiring the write lock.
+              // Dispatch based on source. FromLoadedProviders runs inside the read lock so no
+              // close can interleave between work and enqueue. FromUnloadedProvidersQueue uses
+              // nextOp to decide whether to enqueue the remaining op or release the read lock and
+              // acquire the write lock to close the provider.
               source match {
                 case FromLoadedProviders =>
                   // Check if provider should be unloaded
@@ -1996,28 +2007,29 @@ object StateStore extends Logging {
                     }
                   }
 
-                case FromTaskThread =>
-                  // Provider already removed from loadedProviders by the query thread. Queue for
-                  // the other operation before close.
-                  unloadedProvidersToClose.add((id, provider, otherMaintenanceOpRequest(opType)))
-                  logInfo(log"${MDC(LogKeys.MAINTENANCE_TASK_TYPE, source)}: queued " +
-                    log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)} " +
-                    log"for close with ${MDC(LogKeys.OP_TYPE, otherMaintenanceOpRequest(opType))}")
-                  if (maintenanceTask != null) maintenanceTask.triggerNow()
-
-                case FromUnloadedProvidersQueue =>
-                  // Release read lock, then acquire write lock to wait for any in-flight
-                  // maintenance to finish.
-                  provider.maintenanceLock.readLock().unlock()
-                  provider.maintenanceLock.writeLock().lock()
-                  try {
-                    closeProvider(id, provider)
-                  } finally {
-                    // Downgrade: reacquire read lock while holding write lock, then release write
-                    // lock. The outer finally unconditionally releases the read lock.
-                    provider.maintenanceLock.readLock().lock()
-                    provider.maintenanceLock.writeLock().unlock()
-                  }
+                case FromUnloadedProvidersQueue => nextOp match {
+                  case Some(remainingOp) =>
+                    // Enqueue the remaining op. It will run with nextOp = None and close the
+                    // provider after.
+                    unloadedProvidersToClose.add((id, provider, remainingOp))
+                    logInfo(log"${MDC(LogKeys.MAINTENANCE_TASK_TYPE, source)}: queued " +
+                      log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)} for close with " +
+                      log"${MDC(LogKeys.OP_TYPE, remainingOp)}")
+                    if (maintenanceTask != null) maintenanceTask.triggerNow()
+                  case None =>
+                    // Release read lock, then acquire write lock to wait for any in-flight
+                    // maintenance to finish.
+                    provider.maintenanceLock.readLock().unlock()
+                    provider.maintenanceLock.writeLock().lock()
+                    try {
+                      closeProvider(id, provider)
+                    } finally {
+                      // Downgrade: reacquire read lock while holding write lock, then release
+                      // write lock. The outer finally unconditionally releases the read lock.
+                      provider.maintenanceLock.readLock().lock()
+                      provider.maintenanceLock.writeLock().unlock()
+                    }
+                }
               }
             } else {
               logInfo(log"Skipping maintenance for " +

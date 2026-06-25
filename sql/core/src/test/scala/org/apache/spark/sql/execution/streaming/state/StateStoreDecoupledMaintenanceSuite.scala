@@ -297,7 +297,7 @@ abstract class StateStoreDecoupledMaintenanceSuiteBase[
         // was consumed and snapshot was submitted.
 
         // Step 2: Scheduler (via triggerNow) submits first op as
-        // FromTaskThread. Snapshot enters latch.
+        // FromUnloadedProvidersQueue. Snapshot enters latch.
         assert(bp.snapshotEnteredLatch.await(10, TimeUnit.SECONDS) &&
           bp.snapshotEnteredLatch.getCount == 0, "snapshot should have started")
 
