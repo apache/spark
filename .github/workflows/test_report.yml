@@ -41,7 +41,17 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         run-id: ${{ github.event.workflow_run.id }}
         pattern: "test-*"
+    - name: Check if test results exist
+      id: check
+      run: |
+        if find . -path '*/target/test-reports/*.xml' | grep -q .; then
+          echo "has_results=true" >> $GITHUB_OUTPUT
+        else
+          echo "No test result files found. Skipping report."
+          echo "has_results=false" >> $GITHUB_OUTPUT
+        fi
     - name: Publish test report
+      if: steps.check.outputs.has_results == 'true'
       uses: scacap/action-surefire-report@5609ce4db72c09db044803b344a8968fd1f315da
       with:
         check_name: Report test results
