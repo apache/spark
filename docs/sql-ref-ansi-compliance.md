@@ -257,7 +257,7 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
-The `TIME` type does not promote to any other type. The least common type of `TIME(n)` and `TIME(m)` is `TIME(max(n, m))`. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
+The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
 
 Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
@@ -280,6 +280,8 @@ A least common type between decimal types should have enough digits in both inte
 More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
 However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
+
+The `TIME` type is also parameterized by its fractional-seconds precision. The least common type of `TIME(n)` and `TIME(m)` is `TIME(max(n, m))`.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 
