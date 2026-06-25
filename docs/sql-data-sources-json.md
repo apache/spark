@@ -202,9 +202,15 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>timeFormat</code></td>
+    <td>HH:mm:ss</td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>inferTimestamp</code></td>
     <td><code>false</code></td>
-    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively.</td>
+    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively. When enabled, it also allows inferring of <code>TimeType</code> from strings that match the time pattern defined by the <code>timeFormat</code> option.</td>
     <td>read</td>
   </tr>
   <tr>
