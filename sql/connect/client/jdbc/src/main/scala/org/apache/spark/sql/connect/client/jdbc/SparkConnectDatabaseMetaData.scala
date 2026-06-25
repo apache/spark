@@ -884,7 +884,7 @@ object SparkConnectDatabaseMetaData {
   private[jdbc] val TABLE_TYPES = Seq("TABLE", "VIEW")
 
   // One row of the java.sql.DatabaseMetaData.getTypeInfo result.
-  private type TypeInfoRow =
+  private[jdbc] type TypeInfoRow =
     (
         String,  // TYPE_NAME
         Int,     // DATA_TYPE
@@ -910,7 +910,7 @@ object SparkConnectDatabaseMetaData {
   // nullable and searchable, and none are unsigned, fixed-prec-scale, or auto-increment.
   // `literalPrefix` is also used as the literal suffix unless `literalSuffix` is given;
   // BINARY is the exception, whose literals use the hex syntax X'...'.
-  private def typeRow(
+  private[jdbc] def typeRow(
       typeName: String,
       dataType: Int,
       precision: Int,
