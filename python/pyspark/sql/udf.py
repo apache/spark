@@ -249,7 +249,8 @@ class UserDefinedFunction:
                 "supported when ANSI mode is enabled "
                 "(spark.sql.ansi.enabled=true). Skipping transpilation for "
                 f"{func} -- enable ANSI mode or set transpilePyUDFs=false to "
-                "silence this warning."
+                "silence this warning.",
+                RuntimeWarning,
             )
             transpile_enabled = False
         if transpile_enabled and session:
