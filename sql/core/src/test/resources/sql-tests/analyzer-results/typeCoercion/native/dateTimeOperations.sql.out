@@ -737,3 +737,31 @@ select cast('2017-12-11 09:30:00' as date) - interval 2 day
 -- !query analysis
 Project [date_add(cast(2017-12-11 09:30:00 as date), -extractansiintervaldays(INTERVAL '2' DAY)) AS date_add(CAST(2017-12-11 09:30:00 AS DATE), (- extractansiintervaldays(INTERVAL '2' DAY)))#x]
 +- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) + interval '02:00:00' hour to second
+-- !query analysis
+Project [cast(12:34:56 as time(6)) + INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select interval '02:00:00' hour to second + cast('12:34:56' as time)
+-- !query analysis
+Project [cast(12:34:56 as time(6)) + INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) + INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) - interval '02:00:00' hour to second
+-- !query analysis
+Project [cast(12:34:56 as time(6)) - INTERVAL '02:00:00' HOUR TO SECOND AS CAST(12:34:56 AS TIME(6)) - INTERVAL '02:00:00' HOUR TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+select cast('12:34:56' as time) - cast('10:00:00' as time)
+-- !query analysis
+Project [cast(12:34:56 as time(6)) - cast(10:00:00 as time(6)) AS CAST(12:34:56 AS TIME(6)) - CAST(10:00:00 AS TIME(6))#x]
++- OneRowRelation
