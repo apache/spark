@@ -249,7 +249,10 @@ public class InMemoryStore implements KVStore {
         // delete them from `data`.
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
-          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.get(parentKey);
+          if (children == null) {
+            continue;
+          }
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.remove(naturalKey);
             count ++;
@@ -413,7 +416,10 @@ public class InMemoryStore implements KVStore {
           // If there is a parent index for the natural index and the parent of `index` happens to
           // be it, Spark can use the `parentToChildrenMap` to get the related natural keys, and
           // then copy them from `data`.
-          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.get(parentKey);
+          if (children == null) {
+            return new ArrayList<>();
+          }
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.computeIfPresent(naturalKey, (k, v) -> {

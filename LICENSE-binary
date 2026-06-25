@@ -305,6 +305,7 @@ joda-time:joda-time
 net.sf.opencsv:opencsv
 net.sf.supercsv:super-csv
 net.sf.jpam:jpam
+org.apache.arrow:arrow-compression
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory-core
 org.apache.arrow:arrow-memory-netty
@@ -349,7 +350,7 @@ org.apache.logging.log4j:log4j-1.2-api
 org.apache.logging.log4j:log4j-api
 org.apache.logging.log4j:log4j-core
 org.apache.logging.log4j:log4j-layout-template-json
-org.apache.logging.log4j:log4j-slf4j-impl
+org.apache.logging.log4j:log4j-slf4j2-impl
 org.apache.orc:orc-core
 org.apache.orc:orc-format
 org.apache.orc:orc-mapreduce
