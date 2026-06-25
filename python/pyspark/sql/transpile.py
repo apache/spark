@@ -84,6 +84,19 @@ class AbstractTranspiler(object):
     ) -> Optional[Column]:
         pass
 
+def _is_definitely_basic_type(node: ast.AST) -> bool:
+    """Return True when ``node`` is statically guaranteed to produce a Python
+    basic/builtin type (int, float, str, bool, None, lists, etc.).
+    """
+    match node:
+        case ast.Constant(value=v):
+            return True
+        case ast.BinOp(left=left, right=right):
+            return _is_definitely_basic_type(left) and _is_definitely_basic_type(right)
+        case ast.UnaryOp(operand=operand):
+            return _is_definitely_basic_type(operand)
+        case _:
+            return False
 
 def _is_definitely_boolean(node: ast.AST) -> bool:
     """Return True when ``node`` is statically guaranteed to produce a Python
@@ -98,12 +111,11 @@ def _is_definitely_boolean(node: ast.AST) -> bool:
     match node:
         case ast.Constant(value=v):
             return v is None or isinstance(v, bool)
-        case ast.Compare():
-            # All comparison operators produce bool.
-            return True
-        case ast.BoolOp():
-            # and / or of booleans produces bool.
-            return True
+        case ast.Compare(values=values):
+            # All comparison operators of simple types bool
+            return all(_is_definitely_basic_type(v) for v in values)
+        case ast.BoolOp(values=values):
+            return all(_is_definitely_boolean(v) for v in values):
         case ast.UnaryOp(op=ast.Not()):
             # `not x` always produces bool.
             return True
