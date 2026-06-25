@@ -281,8 +281,6 @@ More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s
 However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
 
-The `TIME` type is also parameterized by its fractional-seconds precision. The least common type of `TIME(n)` and `TIME(m)` is `TIME(max(n, m))`.
-
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 
 | Operation  | Result precision                         | Result scale        |
