@@ -372,7 +372,7 @@ private[sql] object ArrowUtils {
         }
         StructType(fields.toArray)
       // Recover the exact precision of nanosecond timestamps from the field metadata written by
-      // `toTimestampNanosArrowField`. Foreign Arrow data (or an out-of-range value) has no usable
+      // `toPrecisionTaggedArrowField`. Foreign Arrow data (or an out-of-range value) has no usable
       // key, so fall back to the canonical maximum precision via `fromArrowType`.
       case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.NANOSECOND =>
         val precision = Option(field.getMetadata.get(timestampNanosPrecisionKey))
