@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledFuture, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -833,6 +835,21 @@ trait StateStoreProvider {
   @volatile var unloaded: Boolean = false
 
   /**
+   * Read-write lock for coordinating maintenance and close operations.
+   * - Read lock: held during snapshot/cleanup work (allows concurrent maintenance ops)
+   * - Write lock: held during close (waits for all maintenance to finish)
+   * This prevents close from racing with in-flight maintenance on the same provider.
+   *
+   * Lock ordering: maintenanceLock must be acquired before
+   * loadedProviders.synchronized to avoid ABBA deadlock.
+   *
+   * Passing fair=true to ensure fairness across reads and writes,
+   * so the write lock (close) is not starved by continuous read lock
+   * acquisitions (maintenance ops).
+   */
+  val maintenanceLock: ReentrantReadWriteLock = new ReentrantReadWriteLock(true)
+
+  /**
    * Initialize the provide with more contextual information from the SQL operator.
    * This method will be called first after creating an instance of the StateStoreProvider by
    * reflection.
@@ -1321,28 +1338,66 @@ object StateStore extends Logging {
    * StateStoreProvider is also unloaded. Any exception that happens in the MaintenanceTask
    * is indeed exceptional and thus we let it propagate.
    */
-  class MaintenanceTask(periodMs: Long, task: => Unit) {
+  class MaintenanceTask(periodMs: Long, task: Boolean => Unit) {
     private val executor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
 
-    private val runnable = new Runnable {
-      override def run(): Unit = {
-        try {
-          task
-        } catch {
-          case NonFatal(e) =>
-            logWarning("Error running maintenance thread", e)
-            throw e
-        }
+    private def runTask(processUnloadedOnly: Boolean = false): Unit = {
+      try {
+        task(processUnloadedOnly)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Error running maintenance task, " +
+            s"processUnloadedOnly=$processUnloadedOnly", e)
+          throw e
       }
+    }
+
+    private val runnable = new Runnable {
+      override def run(): Unit = runTask()
     }
 
     private val future: ScheduledFuture[_] = executor.scheduleAtFixedRate(
       runnable, periodMs, periodMs, TimeUnit.MILLISECONDS)
 
+    private val triggerPending = new AtomicBoolean(false)
+
+    /**
+     * Submit a maintenance cycle to the scheduler executor. If the scheduler is
+     * idle, it runs immediately. If a cycle is already running, this queues behind
+     * it. If a triggered run is already queued, this is a no-op. The AtomicBoolean
+     * ensures at most one triggered run is pending at a time. The flag resets before
+     * execution so a new trigger can be queued while this one is running.
+     *
+     * @param processUnloadedOnly when true (default), only drains the unload
+     *   queue without iterating loadedProviders. This avoids submitting
+     *   unnecessary maintenance work for all providers.
+     */
+    def triggerNow(processUnloadedOnly: Boolean = true): Unit = {
+      if (triggerPending.compareAndSet(false, true)) {
+        try {
+          executor.execute(() => {
+            triggerPending.set(false)
+            runTask(processUnloadedOnly)
+          })
+        } catch {
+          // Executor already shut down by stop(). Reset the flag for completeness.
+          case _: java.util.concurrent.RejectedExecutionException =>
+            logWarning("triggerNow called after scheduler maintenance task stopped")
+            triggerPending.set(false)
+        }
+      }
+    }
+
     def stop(): Unit = {
       future.cancel(false)
       executor.shutdown()
+    }
+
+    /** Stops the scheduler and waits for any in-flight cycle to finish. */
+    def stopAndAwait(): Unit = {
+      stop()
+      executor.awaitTermination(10, TimeUnit.SECONDS)
     }
 
     def isRunning: Boolean = !future.isDone
@@ -1355,18 +1410,22 @@ object StateStore extends Logging {
   class MaintenanceThreadPool(
       numThreads: Int,
       shutdownTimeout: Long,
-      forceShutdownTimeout: Long) {
-    private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
-      numThreads, "state-store-maintenance-thread")
+      forceShutdownTimeout: Long,
+      name: String) {
+    private val threadPool = ThreadUtils.newDaemonFixedThreadPool(numThreads, name)
 
     def execute(runnable: Runnable): Unit = {
       threadPool.execute(runnable)
     }
 
-    def stop(): Unit = {
-      logInfo("Shutting down MaintenanceThreadPool")
+    /** Initiate shutdown without waiting. Call awaitStop() to wait. */
+    def shutdown(): Unit = {
+      logInfo(log"Shutting down MaintenanceThreadPool")
       threadPool.shutdown() // Disable new tasks from being submitted
+    }
 
+    /** Wait for threads to finish after shutdown() was called. */
+    def awaitStop(): Unit = {
       // Wait a while for existing tasks to terminate
       if (!threadPool.awaitTermination(shutdownTimeout, TimeUnit.SECONDS)) {
         logWarning(
@@ -1381,13 +1440,21 @@ object StateStore extends Logging {
         }
       }
     }
+
+    def stop(): Unit = {
+      shutdown()
+      awaitStop()
+    }
   }
 
   @GuardedBy("loadedProviders")
   private var maintenanceTask: MaintenanceTask = null
 
   @GuardedBy("loadedProviders")
-  private var maintenanceThreadPool: MaintenanceThreadPool = null
+  private var highPriorityThreadPool: MaintenanceThreadPool = null
+
+  @GuardedBy("loadedProviders")
+  private var lowPriorityThreadPool: MaintenanceThreadPool = null
 
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
@@ -1542,14 +1609,22 @@ object StateStore extends Logging {
             // Queue the provider for maintenance and close. The maintenance scheduler will
             // drain the queue and submit tasks. remove() returning non-null ensures only one
             // queuer for this provider instance.
-            // TODO: trigger a scheduler cycle immediately so queued providers are processed
-            // without waiting for the next periodic tick.
             logInfo(log"Queuing provider from task thread for maintenance and close " +
               log"provider=${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}." + taskContextIdLogLine +
               log"Removed provider from loadedProviders")
             unloadedProvidersToClose.add((id, provider, MaintenanceOpRequest.All))
           })
         })
+
+        // Submit a scheduler cycle so queued providers are processed without waiting for the
+        // next periodic tick, minimizing the time stale providers wait to be closed. Without
+        // this, we would wait up to 2 maintenance cycles for both operations to finish and the
+        // provider to be closed from the time it is queued. At most one triggered cycle can be
+        // pending at a time.
+        if (providerStatus.providerIdsToUnload.nonEmpty && maintenanceTask != null) {
+          maintenanceTask.triggerNow()
+        }
+
         providerStatus.shouldForceSnapshotUpload
       } else {
         false
@@ -1570,12 +1645,17 @@ object StateStore extends Logging {
   }
 
   /**
-   * Close a provider and release its resources.
+   * Close a provider and release its resources. No-op if already unloaded.
    * WARNING: CAN ONLY BE CALLED FROM MAINTENANCE THREAD!
    */
   def closeProvider(
       storeProviderId: StateStoreProviderId,
       provider: StateStoreProvider): Unit = {
+    if (provider.unloaded) {
+      logInfo(log"Skipping close for ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}" +
+        log" because provider is already unloaded")
+      return
+    }
     logInfo(log"Closing ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, storeProviderId)}")
     try {
       provider.close()
@@ -1623,24 +1703,37 @@ object StateStore extends Logging {
    * it can work-around a deadlock condition where a maintenance task is waiting for the lock
    * */
   private[streaming] def stopMaintenanceTaskWithoutLock(): Unit = {
-    if (maintenanceThreadPool != null) {
-      maintenanceThreadPool.stop()
-      maintenanceThreadPool = null
-      snapshotPartitionsLock.synchronized { snapshotPartitions.clear() }
-      cleanupPartitionsLock.synchronized { cleanupPartitions.clear() }
-    }
+    // Stop the scheduler first so no new work is submitted to the pools.
     if (maintenanceTask != null) {
-      maintenanceTask.stop()
+      maintenanceTask.stopAndAwait()
       maintenanceTask = null
     }
+    // Shut down both pools concurrently, then await both, so we don't double the blocking time.
+    if (highPriorityThreadPool != null) highPriorityThreadPool.shutdown()
+    if (lowPriorityThreadPool != null) lowPriorityThreadPool.shutdown()
+    if (highPriorityThreadPool != null) {
+      highPriorityThreadPool.awaitStop()
+      highPriorityThreadPool = null
+    }
+    if (lowPriorityThreadPool != null) {
+      lowPriorityThreadPool.awaitStop()
+      lowPriorityThreadPool = null
+    }
+    snapshotPartitionsLock.synchronized { snapshotPartitions.clear() }
+    cleanupPartitionsLock.synchronized { cleanupPartitions.clear() }
   }
 
   /** Unload and stop all state store providers */
-  def stop(): Unit = loadedProviders.synchronized {
-    loadedProviders.foreach { case (id, provider) => closeProvider(id, provider) }
-    loadedProviders.clear()
-    _coordRef = null
-    stopMaintenanceTask()
+  def stop(): Unit = {
+    // Stop scheduler and pools outside loadedProviders lock. Pool threads acquire
+    // maintenanceLock then loadedProviders.synchronized, so holding loadedProviders while
+    // awaiting termination would deadlock.
+    stopMaintenanceTaskWithoutLock()
+    loadedProviders.synchronized {
+      loadedProviders.foreach { case (id, provider) => closeProvider(id, provider) }
+      loadedProviders.clear()
+      _coordRef = null
+    }
     // Drain after stopping the pool to catch anything queued during shutdown.
     while (!unloadedProvidersToClose.isEmpty) {
       val (id, provider, _) = unloadedProvidersToClose.poll()
@@ -1649,21 +1742,41 @@ object StateStore extends Logging {
     logInfo("StateStore stopped")
   }
 
+  /**
+   * Determines the number of threads for the snapshot and cleanup pools using the configured
+   * ratio. Snapshot gets the rounded value, clamped to [1, total - 1]. Cleanup gets the
+   * remainder. Each pool gets at least 1 thread and the total is never exceeded.
+   * @return (snapshotThreads, cleanupThreads)
+   */
+  private[streaming] def getPoolSizes(storeConf: StateStoreConf): (Int, Int) = {
+    val total = storeConf.numStateStoreMaintenanceThreads
+    val ratio = storeConf.snapshotToCleanupThreadRatio
+    val snapshotBeforeClamp = math.round(total * ratio).toInt
+    // Clamp to [1, total - 1] so each pool gets at least 1 thread and total is never exceeded.
+    val snapshot = math.max(1, math.min(total - 1, snapshotBeforeClamp))
+    val cleanup = total - snapshot
+    (snapshot, cleanup)
+  }
+
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
-    val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
     val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
           storeConf.maintenanceInterval,
-          task = { doMaintenance(storeConf) }
+          task = { processUnloadedOnly => doMaintenance(storeConf, processUnloadedOnly) }
         )
-        // TODO: split into separate snapshot and cleanup pools so one operation type
-        // cannot starve the other when pool threads are saturated.
-        maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
-          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout)
+        // Separate pools for snapshot and cleanup to prevent one operation type from starving
+        // the other when pool threads are saturated.
+        val (snapshotThreads, cleanupThreads) = getPoolSizes(storeConf)
+        highPriorityThreadPool = new MaintenanceThreadPool(snapshotThreads,
+          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout,
+          "state-store-maintenance-high-priority")
+        lowPriorityThreadPool = new MaintenanceThreadPool(cleanupThreads,
+          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout,
+          "state-store-maintenance-low-priority")
         logInfo("State Store maintenance task started")
       }
     }
@@ -1693,7 +1806,9 @@ object StateStore extends Logging {
    * Execute background maintenance task in all the loaded store providers if they are still
    * the active instances according to the coordinator.
    */
-  private def doMaintenance(storeConf: StateStoreConf): Unit = {
+  private def doMaintenance(
+      storeConf: StateStoreConf,
+      processUnloadedOnly: Boolean = false): Unit = {
     logDebug("Doing maintenance")
     if (SparkEnv.get == null) {
       throw new IllegalStateException("SparkEnv not active, cannot do maintenance on StateStores")
@@ -1717,8 +1832,6 @@ object StateStore extends Logging {
           // All ops should run before the provider can be closed. We serialize them by
           // submitting one op now as FromTaskThread; when it completes it enqueues the
           // remaining op, which runs as FromUnloadedProvidersQueue and closes the provider.
-          // TODO: trigger the next scheduler cycle immediately after the first op completes
-          // so the remaining op is picked up without waiting for the next periodic tick.
           // Pick whichever partition set is available with short-circuit evaluation.
           tryClaimAndSubmit(
             providerId, provider, storeConf,
@@ -1750,13 +1863,19 @@ object StateStore extends Logging {
     providersToRequeue.foreach(unloadedProvidersToClose.offer)
 
     // Phase 2: Submit separate snapshot and cleanup tasks for loaded providers.
-    loadedProviders.synchronized {
-      loadedProviders.toSeq
-    }.foreach { case (id, provider) =>
-      tryClaimAndSubmit(
-        id, provider, storeConf, MaintenanceOpType.Snapshot, MaintenanceTaskType.FromLoadedProviders)
-      tryClaimAndSubmit(
-        id, provider, storeConf, MaintenanceOpType.Cleanup, MaintenanceTaskType.FromLoadedProviders)
+    // Skipped when processUnloadedOnly is true to avoid submitting unnecessary work for all
+    // providers.
+    if (!processUnloadedOnly) {
+      loadedProviders.synchronized {
+        loadedProviders.toSeq
+      }.foreach { case (id, provider) =>
+        tryClaimAndSubmit(
+          id, provider, storeConf,
+          MaintenanceOpType.Snapshot, MaintenanceTaskType.FromLoadedProviders)
+        tryClaimAndSubmit(
+          id, provider, storeConf,
+          MaintenanceOpType.Cleanup, MaintenanceTaskType.FromLoadedProviders)
+      }
     }
   }
 
@@ -1772,6 +1891,7 @@ object StateStore extends Logging {
       source: MaintenanceTaskType): Boolean = {
     if (tryClaimPartition(providerId, opType)) {
       submitMaintenanceWorkForProvider(providerId, provider, storeConf, source, opType)
+      logDebug(s"Submitted $providerId with source $source for $opType")
       true
     } else {
       logInfo(log"Not processing partition " +
@@ -1806,101 +1926,134 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       source: MaintenanceTaskType,
       opType: MaintenanceOpType): Unit = {
-    maintenanceThreadPool.execute(() => {
+    val pool = opType match {
+      case MaintenanceOpType.Snapshot => highPriorityThreadPool
+      case MaintenanceOpType.Cleanup => lowPriorityThreadPool
+    }
+    pool.execute(() => {
+      logDebug(s"Starting $opType maintenance for $id, source=$source")
       val startTime = System.currentTimeMillis()
-      // Check that this provider is still valid before doing work.
-      // TODO: the loadedProviders check is racy (membership could change between the check and
-      // doing the work). This is resolved by the read/write lock added in a later PR, which
-      // holds the read lock through the check and the work.
-      val canProcess = source match {
-        case FromLoadedProviders =>
-          // Checks that the ID is still in loadedProviders and that the instance matches the
-          // one we were given. The scheduler submits from a stale copy of loadedProviders, so
-          // the provider may have been removed and replaced by a new instance under the same key.
-          loadedProviders.synchronized { loadedProviders.get(id).contains(provider) } &&
-            !provider.unloaded
-        case _ =>
-          // FromTaskThread / FromUnloadedProvidersQueue: provider already removed from
-          // loadedProviders, reference passed directly.
-          !provider.unloaded
-      }
-
       try {
-        if (canProcess) {
-          // Do the maintenance work for this op type.
-          opType match {
-            case MaintenanceOpType.Snapshot => provider.doSnapshotMaintenance()
-            case MaintenanceOpType.Cleanup => provider.doCleanupMaintenance()
-          }
-
-          // Handle post-work actions based on source.
-          source match {
-            case FromLoadedProviders =>
-              // Check if provider should be unloaded
-              if (!verifyIfStoreInstanceActive(id)) {
-                // Only remove if the map still holds the same provider instance we were given.
-                // Between verifyIfStoreInstanceActive and this remove, a concurrent get() may
-                // have loaded a new provider under the same key; removing by key alone would
-                // incorrectly remove the new provider.
-                val removed = loadedProviders.synchronized {
-                  if (loadedProviders.get(id).contains(provider)) {
-                    loadedProviders.remove(id)
-                  } else {
-                    None
-                  }
-                }
-                // Queue for the other operation before close.
-                if (removed.isDefined) {
-                  unloadedProvidersToClose.add((id, provider, otherMaintenanceOpRequest(opType)))
-                }
+        // We use a var instead of early return because `return` inside a closure (pool.execute)
+        // throws NonLocalReturnControl in Scala.
+        var canProcess = false
+        // If we can't acquire the lock, the write lock is held, which means another thread is
+        // closing this provider. The entire maintenance task is a no-op in that case, so we skip
+        // and free the pool thread rather than blocking. The zero timeout honors fair ordering so
+        // readers do not starve a queued writer.
+        val lockAcquired = provider.maintenanceLock.readLock().tryLock(0, TimeUnit.SECONDS)
+        try {
+          if (lockAcquired) {
+            canProcess = source match {
+              case FromLoadedProviders =>
+                // Checks that the ID is still in loadedProviders and that the instance matches
+                // the one we were given. The scheduler submits from a stale copy of
+                // loadedProviders, so the provider may have been removed and replaced by a new
+                // instance under the same key.
+                loadedProviders.synchronized { loadedProviders.get(id).contains(provider) } &&
+                  !provider.unloaded
+              case _ =>
+                // FromTaskThread / FromUnloadedProvidersQueue: provider already removed,
+                // reference passed directly, no containsKey needed.
+                !provider.unloaded
+            }
+            if (canProcess) {
+              // Do the maintenance work for this op type.
+              opType match {
+                case MaintenanceOpType.Snapshot => provider.doSnapshotMaintenance()
+                case MaintenanceOpType.Cleanup => provider.doCleanupMaintenance()
               }
 
-            case FromTaskThread =>
-              // Provider already removed from loadedProviders by the query thread.
-              // Queue for the other operation before close.
-              unloadedProvidersToClose.add((id, provider, otherMaintenanceOpRequest(opType)))
+              // Dispatch based on source. FromLoadedProviders and FromTaskThread run inside the
+              // read lock so no close can interleave between work and enqueue.
+              // FromUnloadedProvidersQueue releases the read lock before acquiring the write lock.
+              source match {
+                case FromLoadedProviders =>
+                  // Check if provider should be unloaded
+                  if (!verifyIfStoreInstanceActive(id)) {
+                    // Only remove if the map still holds the same provider instance we were
+                    // given. Between verifyIfStoreInstanceActive and this remove, a concurrent
+                    // get() may have loaded a new provider under the same key. Removing by key
+                    // alone would incorrectly remove the new provider.
+                    val removed = loadedProviders.synchronized {
+                      if (loadedProviders.get(id).contains(provider)) {
+                        loadedProviders.remove(id)
+                      } else {
+                        None
+                      }
+                    }
+                    if (removed.isDefined) {
+                      unloadedProvidersToClose.add(
+                        (id, provider, otherMaintenanceOpRequest(opType)))
+                      logInfo(log"${MDC(LogKeys.MAINTENANCE_TASK_TYPE, source)}: " +
+                        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)} verified inactive, " +
+                        log"queued for close with " +
+                        log"${MDC(LogKeys.OP_TYPE, otherMaintenanceOpRequest(opType))}")
+                    } else {
+                      logInfo(log"${MDC(LogKeys.MAINTENANCE_TASK_TYPE, source)}: " +
+                        log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)} verified inactive " +
+                        log"but provider instance differs, skipping removal")
+                    }
+                  }
 
-            case FromUnloadedProvidersQueue =>
-              // This is the final operation before close.
-              closeProvider(id, provider)
+                case FromTaskThread =>
+                  // Provider already removed from loadedProviders by the query thread. Queue for
+                  // the other operation before close.
+                  unloadedProvidersToClose.add((id, provider, otherMaintenanceOpRequest(opType)))
+                  logInfo(log"${MDC(LogKeys.MAINTENANCE_TASK_TYPE, source)}: queued " +
+                    log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)} " +
+                    log"for close with ${MDC(LogKeys.OP_TYPE, otherMaintenanceOpRequest(opType))}")
+                  if (maintenanceTask != null) maintenanceTask.triggerNow()
+
+                case FromUnloadedProvidersQueue =>
+                  // Release read lock, then acquire write lock to wait for any in-flight
+                  // maintenance to finish.
+                  provider.maintenanceLock.readLock().unlock()
+                  provider.maintenanceLock.writeLock().lock()
+                  try {
+                    closeProvider(id, provider)
+                  } finally {
+                    // Downgrade: reacquire read lock while holding write lock, then release write
+                    // lock. The outer finally unconditionally releases the read lock.
+                    provider.maintenanceLock.readLock().lock()
+                    provider.maintenanceLock.writeLock().unlock()
+                  }
+              }
+            } else {
+              logInfo(log"Skipping maintenance for " +
+                log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
+                log"provider was removed from loadedProviders or already unloaded")
+            }
+          } else {
+            logDebug(s"Skipping $opType maintenance for $id, could not acquire read lock")
           }
-        } else {
-          logInfo(log"Skipping maintenance for " +
-            log"${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}, " +
-            log"provider was removed from loadedProviders")
+        } finally {
+          if (lockAcquired) provider.maintenanceLock.readLock().unlock()
         }
       } catch {
         case NonFatal(e) =>
           logWarning(log"Error doing maintenance on provider:" +
             log" ${MDC(LogKeys.STATE_STORE_PROVIDER_ID, id)}. " +
-            log"Could not unload state store provider", e)
-          // When we get a non-fatal exception, we just unload the provider.
-          //
-          // By not bubbling the exception to the maintenance task thread or the query execution
-          // thread, it's possible for a maintenance thread pool task to continue failing on
-          // the same partition. Additionally, if there is some global issue that will cause
-          // all maintenance thread pool tasks to fail, then bubbling the exception and
-          // stopping the pool is faster than waiting for all tasks to see the same exception.
-          //
-          // However, we assume that repeated failures on the same partition and global issues
-          // are rare. The benefit to unloading just the partition with an exception is that
-          // transient issues on a given provider do not affect any other providers; so, in
-          // most cases, this should be a more performant solution.
-          source match {
-            case FromTaskThread | FromUnloadedProvidersQueue =>
-              closeProvider(id, provider)
-
-            case FromLoadedProviders =>
-              // Only remove if the map still holds the same provider instance. A concurrent
-              // get() may have loaded a new provider under the same key.
-              loadedProviders.synchronized {
-                if (loadedProviders.get(id).contains(provider)) {
-                  loadedProviders.remove(id)
-                }
+            log"Closing provider due to error", e)
+          if (source == FromLoadedProviders) {
+            // Only remove if the map still holds the same provider instance. A concurrent get()
+            // may have loaded a new provider under the same key.
+            loadedProviders.synchronized {
+              if (loadedProviders.get(id).contains(provider)) {
+                loadedProviders.remove(id)
               }
-              // Always close this provider instance regardless of whether we removed it from
-              // the map. Maintenance failed, so we must clean up this provider's resources.
-              closeProvider(id, provider)
+            }
+          }
+          // Acquire write lock before close to wait for any concurrent maintenance on the other
+          // pool thread to finish.
+          provider.maintenanceLock.writeLock().lock()
+          try {
+            // Always close this provider instance regardless of whether we removed it from the
+            // map. Maintenance failed, so we must clean up this provider's resources. We cannot
+            // rely on the queue to close the provider because maintenance may error again.
+            closeProvider(id, provider)
+          } finally {
+            provider.maintenanceLock.writeLock().unlock()
           }
       } finally {
         val duration = System.currentTimeMillis() - startTime

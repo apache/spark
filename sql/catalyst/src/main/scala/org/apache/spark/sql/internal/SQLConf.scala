@@ -2900,13 +2900,27 @@ object SQLConf {
   val NUM_STATE_STORE_MAINTENANCE_THREADS =
     buildConf("spark.sql.streaming.stateStore.numStateStoreMaintenanceThreads")
       .internal()
-      .doc("Number of threads in the thread pool that perform clean up and snapshotting tasks " +
-        "for stateful streaming queries. The default value is the number of cores * 0.25 " +
-        "so that this thread pool doesn't take too many resources " +
-        "away from the query and affect performance.")
+      .doc("Total number of threads split between the snapshot and cleanup " +
+        "maintenance pools for stateful streaming queries. Each pool needs at least " +
+        "1 thread, so the minimum is 2. The default value is the number of " +
+        "cores * 0.25 so that the pools don't take too many resources away from the " +
+        "query and affect performance. Use snapshotToCleanupThreadRatio to " +
+        "configure the split between snapshot and cleanup pools.")
       .intConf
-      .checkValue(_ > 0, "Must be greater than 0")
-      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 1))
+      .checkValue(_ > 1, "Must be greater than 1")
+      .createWithDefault(Math.max(Runtime.getRuntime.availableProcessors() / 4, 2))
+
+  val STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO =
+    buildConf("spark.sql.streaming.stateStore.snapshotToCleanupThreadRatio")
+      .internal()
+      .doc("Ratio of total maintenance threads allocated to the snapshot " +
+        "pool. The remainder goes to the cleanup pool. The snapshot " +
+        "count is rounded to the nearest integer and clamped so each " +
+        "pool gets at least 1 thread and the total is never exceeded.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0 && v < 1, "Must be between 0 and 1 (exclusive)")
+      .createWithDefault(0.5)
 
   val STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceShutdownTimeout")
@@ -7787,6 +7801,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def isStateSchemaCheckEnabled: Boolean = getConf(STATE_SCHEMA_CHECK_ENABLED)
 
   def numStateStoreMaintenanceThreads: Int = getConf(NUM_STATE_STORE_MAINTENANCE_THREADS)
+
+  def snapshotToCleanupThreadRatio: Double =
+    getConf(STATE_STORE_MAINTENANCE_SNAPSHOT_THREAD_RATIO)
 
   def numStateStoreInstanceMetricsToReport: Int =
     getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
