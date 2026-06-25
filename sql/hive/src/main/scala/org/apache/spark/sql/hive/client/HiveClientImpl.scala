@@ -1149,7 +1149,8 @@ private[hive] object HiveClientImpl extends Logging {
         if (hc.getType.toLowerCase(Locale.ROOT).contains("uniontype<")) {
           throw QueryExecutionErrors.unsupportedHiveTypeError(hc.getType, hc.getName)
         }
-        throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)    }
+        throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
+    }
   }
 
   /** Builds the native StructField from Hive's FieldSchema. */
