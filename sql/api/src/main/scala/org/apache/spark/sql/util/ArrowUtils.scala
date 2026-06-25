@@ -386,8 +386,9 @@ private[sql] object ArrowUtils {
           case None => fromArrowType(ts)
         }
       // Recover the exact precision of TIME from the field metadata written by `toArrowField`.
-      // Foreign Arrow data (or an out-of-range value) has no usable key, so fall back to the
-      // canonical microsecond precision via `fromArrowType`.
+      // Foreign Arrow data has no precision key, and a present-but-invalid value (out of [0, 9] or
+      // non-numeric) is unusable, so either way fall back to the canonical microsecond precision
+      // via `fromArrowType`.
       case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
         Option(field.getMetadata.get(timePrecisionKey))
           .flatMap(s => scala.util.Try(s.toInt).toOption)

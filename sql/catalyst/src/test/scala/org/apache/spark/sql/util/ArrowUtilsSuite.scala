@@ -157,7 +157,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
   test("time") {
     // Arrow's Time type has no precision field, so TIME(p) precision is preserved via field
     // metadata; the Arrow type itself stays Time(NANOSECOND, 64).
-    Seq(0, 3, 6, 9).foreach { p =>
+    Seq(0, 3, 6, 7, 9).foreach { p =>
       val schema = new StructType().add("value", TimeType(p))
       val arrowSchema = ArrowUtils.toArrowSchema(schema, null, true, false)
       val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Time]
@@ -185,6 +185,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
         java.util.Collections.singletonMap("SPARK::time::precision", precision)),
       java.util.Collections.emptyList[Field]())
     val micros = TimeType(TimeType.MICROS_PRECISION)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("-1")) === micros)
     assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("10")) === micros)
     assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("x")) === micros)
 
