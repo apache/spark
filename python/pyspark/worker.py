@@ -26,6 +26,7 @@ import time
 import inspect
 import itertools
 import json
+import warnings
 from collections.abc import Iterator
 from typing import (
     Any,
@@ -3731,12 +3732,108 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 
+        def pipelined_process():
+            """
+            Pipelined variant of process() that pre-fetches input batches in a background
+            reader thread while the main thread computes the UDF and writes output.
+            This allows input deserialization to overlap with UDF computation.
+            """
+            import queue
+            import threading
+
+            queue_depth = int(os.environ.get("SPARK_PIPELINED_UDF_QUEUE_DEPTH", "2"))
+            _SENTINEL = object()
+            input_queue = queue.Queue(maxsize=queue_depth)
+            reader_error = [None]
+            # Event to signal the reader thread to stop (set by main thread on
+            # exception or completion). The reader checks this after each failed
+            # put attempt instead of polling with a timeout.
+            stop_event = threading.Event()
+
+            def _reader_thread():
+                try:
+                    for batch in deserializer.load_stream(input_data_stream):
+                        # Some serializers (e.g., ArrowStreamGroupSerializer,
+                        # ArrowStreamAggPandasUDFSerializer) yield lazy iterators
+                        # that still read from the input stream. Materialize them here so
+                        # the main thread can consume them without touching the stream.
+                        if hasattr(batch, "__next__"):
+                            batch = list(batch)
+                        # Block on put, but wake up when stop_event is set.
+                        # stop_event.wait() returns immediately if already set.
+                        while not stop_event.is_set():
+                            try:
+                                input_queue.put(batch, timeout=0.1)
+                                break
+                            except queue.Full:
+                                continue
+                        if stop_event.is_set():
+                            return
+                except Exception as e:
+                    reader_error[0] = e
+                finally:
+                    # Enqueue sentinel so the consumer knows we're done.
+                    while not stop_event.is_set():
+                        try:
+                            input_queue.put(_SENTINEL, timeout=0.1)
+                            break
+                        except queue.Full:
+                            continue
+
+            t = threading.Thread(
+                target=_reader_thread, name="pyspark-pipelined-reader", daemon=True
+            )
+            t.start()
+
+            def _queued_iter():
+                while True:
+                    item = input_queue.get()
+                    if item is _SENTINEL:
+                        if reader_error[0] is not None:
+                            raise reader_error[0]
+                        return
+                    yield item
+
+            out_iter = func(init_info.split_index, _queued_iter())
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if hasattr(out_iter, "close"):
+                    out_iter.close()
+                # Signal reader thread to stop, drain the queue so it can unblock,
+                # then wait for it to finish.
+                stop_event.set()
+                try:
+                    while not input_queue.empty():
+                        input_queue.get_nowait()
+                except Exception:
+                    pass
+                # If the reader is still blocked in input_data_stream.read(), the stop_event
+                # check only fires between put attempts -- it cannot interrupt a syscall.
+                # Force-closing the stream here would break worker reuse (the next task uses
+                # the same socket fd), so we settle for a bounded join and a loud warning
+                # so an undetected leak shows up in the worker log.
+                t.join(timeout=5)
+                if t.is_alive():
+                    warnings.warn(
+                        "pipelined reader thread did not exit within 5s; "
+                        "it may still be blocked in input_data_stream.read() and could "
+                        "read data intended for a subsequent reused-worker task. "
+                        "Consider disabling spark.python.worker.reuse if this recurs.",
+                        RuntimeWarning,
+                    )
+
+        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        if is_pipelined and hasattr(serializer, "_flush_per_batch"):
+            serializer._flush_per_batch = True
+        run_process = pipelined_process if is_pipelined else process
+
         processing_start_time = time.time()
         with capture_outputs():
             if profiler:
-                profiler.profile(process)
+                profiler.profile(run_process)
             else:
-                process()
+                run_process()
         processing_time_ms = int(1000 * (time.time() - processing_start_time))
 
         # Cleanup

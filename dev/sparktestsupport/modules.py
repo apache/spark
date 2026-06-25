@@ -605,6 +605,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_udf",
         "pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg",
         "pyspark.sql.tests.pandas.test_pandas_udf_scalar",
+        "pyspark.sql.tests.pandas.test_pipelined_udf",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints",
         "pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations",
         "pyspark.sql.tests.pandas.test_pandas_udf_window",
