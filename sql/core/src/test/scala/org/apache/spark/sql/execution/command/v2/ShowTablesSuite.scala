@@ -50,6 +50,29 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("show table extended formats table properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint) $defaultUsing " +
+        "TBLPROPERTIES ('p1'='v1', 'p2'='v2')")
+
+      val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+        .collect()(0)(3).toString
+
+      assert(information.split("\n").contains("Table Properties: [p1=v1, p2=v2]"))
+    }
+  }
+
+  test("show table extended omits empty table properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint) $defaultUsing")
+
+      val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+        .collect()(0)(3).toString
+
+      assert(!information.split("\n").exists(_.startsWith("Table Properties")))
+    }
+  }
+
   override protected def extendedPartInNonPartedTableError(
       catalog: String,
       namespace: String,
@@ -63,8 +86,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   protected override def extendedTableInfo: String =
     s"""Type: MANAGED
        |Provider: _
-       |Owner: ${Utils.getCurrentUserName()}
-       |Table Properties: <table properties>""".stripMargin
+       |Owner: ${Utils.getCurrentUserName()}""".stripMargin
 
   protected override def extendedTableSchema: String =
     s"""Schema: root
