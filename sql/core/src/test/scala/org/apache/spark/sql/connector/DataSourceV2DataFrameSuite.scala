@@ -1153,7 +1153,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-
   test("create/replace table with generated columns should have V2 Expression") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
