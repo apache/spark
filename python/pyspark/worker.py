@@ -2364,14 +2364,16 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         import pandas as pd
 
         assert num_udfs == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
-        udf_func, args_offsets, kwargs_offsets, return_type = udfs[0]
+        udf_func, args_offsets, _, return_type = udfs[0]
 
         output_schema = StructType([StructField("_0", return_type)])
 
-        def extract_series(batch):
+        def extract_series(
+            batch: "pa.RecordBatch",
+        ) -> Union["pd.Series", tuple["pd.Series", ...]]:
             # Convert one RecordBatch to a pandas Series per column, then select args:
             # - pd.Series for a single column
-            # - Tuple[pd.Series, ...] for multiple columns
+            # - tuple[pd.Series, ...] for multiple columns
             all_series = ArrowBatchTransformer.to_pandas(
                 batch,
                 timezone=runner_conf.timezone,
@@ -2395,7 +2397,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     timezone=runner_conf.timezone,
                     safecheck=runner_conf.safecheck,
                     arrow_cast=True,
-                    prefers_large_types=runner_conf.use_large_var_types,
+                    prefers_large_types=False,
                     assign_cols_by_name=runner_conf.assign_cols_by_name,
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
