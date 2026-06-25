@@ -8561,7 +8561,12 @@
     ],
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_INSERT" : {
+  "UNSUPPORTED_HIVE_TYPE" : {
+    "message" : [
+      "Cannot read the Hive type <fieldType> of the column <fieldName> because Spark SQL does not support this data type."
+    ],
+    "sqlState" : "0A000"
+  },  "UNSUPPORTED_INSERT" : {
     "message" : [
       "Can't insert into the target."
     ],
