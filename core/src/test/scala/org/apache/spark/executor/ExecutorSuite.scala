@@ -724,55 +724,36 @@ class ExecutorSuite extends SparkFunSuite
 
   test("SPARK-57465: RejectedExecutionException with executorShutdown=true " +
     "reports ExecutorShutdownFailure") {
-    val conf = new SparkConf
-    val serializer = new JavaSerializer(conf)
-    val env = createMockEnv(conf, serializer)
-    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
-    val taskDescription = createFakeTaskDescription(serializedTask)
-
-    val mockExecutorBackend = mock[ExecutorBackend]
-    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
-
-    withExecutor("id", "localhost", env) { executor =>
-      val executorClass = classOf[Executor]
-
-      // Set executorShutdown flag to true via reflection
-      val shutdownField = executorClass.getDeclaredField("executorShutdown")
-      shutdownField.setAccessible(true)
-      shutdownField.get(executor).asInstanceOf[AtomicBoolean].set(true)
-
-      // Replace threadPool with a mock that throws RejectedExecutionException
-      val threadPoolField = executorClass.getDeclaredField("threadPool")
-      threadPoolField.setAccessible(true)
-      val originalThreadPool = threadPoolField.get(executor).asInstanceOf[ThreadPoolExecutor]
-
-      val mockThreadPool = mock[ThreadPoolExecutor]
-      when(mockThreadPool.execute(any[Runnable]))
-        .thenThrow(new RejectedExecutionException("shutting down"))
-      threadPoolField.set(executor, mockThreadPool)
-
-      try {
-        executor.launchTask(mockExecutorBackend, taskDescription)
-
-        verify(mockExecutorBackend).statusUpdate(
-          meq(taskDescription.taskId),
-          meq(TaskState.FAILED),
-          statusCaptor.capture()
-        )
-
-        val failReason = serializer.newInstance()
-          .deserialize[TaskFailedReason](statusCaptor.getValue)
-        assert(failReason.isInstanceOf[ExecutorShutdownFailure])
-        assert(failReason.countTowardsTaskFailures === false)
-        assert(failReason.asInstanceOf[ExecutorShutdownFailure].executorId === "id")
-      } finally {
-        threadPoolField.set(executor, originalThreadPool)
-      }
+    withRejectedExecutionSetup(executorShutdown = true, "shutting down") { (serializer, captor) =>
+      val failReason = serializer.newInstance()
+        .deserialize[TaskFailedReason](captor.getValue)
+      assert(failReason.isInstanceOf[ExecutorShutdownFailure])
+      assert(failReason.countTowardsTaskFailures === false)
+      assert(failReason.asInstanceOf[ExecutorShutdownFailure].executorId === "id")
     }
   }
 
   test("SPARK-57465: RejectedExecutionException with executorShutdown=false " +
     "reports ExceptionFailure") {
+    withRejectedExecutionSetup(executorShutdown = false, "pool full") { (serializer, captor) =>
+      val failReason = serializer.newInstance()
+        .deserialize[TaskFailedReason](captor.getValue)
+      assert(failReason.isInstanceOf[ExceptionFailure])
+      assert(failReason.countTowardsTaskFailures === true)
+      val ef = failReason.asInstanceOf[ExceptionFailure]
+      assert(ef.exception.get.isInstanceOf[RejectedExecutionException])
+    }
+  }
+
+  /**
+   * Helper for SPARK-57465 tests: sets up an executor with a mocked threadPool that throws
+   * RejectedExecutionException on execute(), launches a task, captures the statusUpdate,
+   * and yields the serializer + captured ByteBuffer for assertions.
+   */
+  private def withRejectedExecutionSetup(
+      executorShutdown: Boolean,
+      rejectionMessage: String)(
+      f: (JavaSerializer, ArgumentCaptor[ByteBuffer]) => Unit): Unit = {
     val conf = new SparkConf
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
@@ -785,36 +766,28 @@ class ExecutorSuite extends SparkFunSuite
     withExecutor("id", "localhost", env) { executor =>
       val executorClass = classOf[Executor]
 
-      // executorShutdown is false by default - no need to set it
+      if (executorShutdown) {
+        val shutdownField = executorClass.getDeclaredField("executorShutdown")
+        shutdownField.setAccessible(true)
+        shutdownField.get(executor).asInstanceOf[AtomicBoolean].set(true)
+      }
 
-      // Replace threadPool with a mock that throws RejectedExecutionException
       val threadPoolField = executorClass.getDeclaredField("threadPool")
       threadPoolField.setAccessible(true)
-      val originalThreadPool = threadPoolField.get(executor).asInstanceOf[ThreadPoolExecutor]
-
       val mockThreadPool = mock[ThreadPoolExecutor]
       when(mockThreadPool.execute(any[Runnable]))
-        .thenThrow(new RejectedExecutionException("pool full"))
+        .thenThrow(new RejectedExecutionException(rejectionMessage))
       threadPoolField.set(executor, mockThreadPool)
 
-      try {
-        executor.launchTask(mockExecutorBackend, taskDescription)
+      executor.launchTask(mockExecutorBackend, taskDescription)
 
-        verify(mockExecutorBackend).statusUpdate(
-          meq(taskDescription.taskId),
-          meq(TaskState.FAILED),
-          statusCaptor.capture()
-        )
+      verify(mockExecutorBackend).statusUpdate(
+        meq(taskDescription.taskId),
+        meq(TaskState.FAILED),
+        statusCaptor.capture()
+      )
 
-        val failReason = serializer.newInstance()
-          .deserialize[TaskFailedReason](statusCaptor.getValue)
-        assert(failReason.isInstanceOf[ExceptionFailure])
-        assert(failReason.countTowardsTaskFailures === true)
-        val ef = failReason.asInstanceOf[ExceptionFailure]
-        assert(ef.exception.get.isInstanceOf[RejectedExecutionException])
-      } finally {
-        threadPoolField.set(executor, originalThreadPool)
-      }
+      f(serializer, statusCaptor)
     }
   }
 
