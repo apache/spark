@@ -1250,7 +1250,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
    * starting the search at the specified position.
    * When {@code start} is positive, the search proceeds forward from the
-   * {@code start}-th character (1‑based). When {@code start} is negative, the
+   * {@code start}-th character (1-based). When {@code start} is negative, the
    * search proceeds backward: {@code start} specifies the first character to
    * compare, counting from the end of the string. For example,
    * {@code start = -3} points at the 3rd character from the end, and the first
