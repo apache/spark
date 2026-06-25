@@ -3869,6 +3869,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BYPASS_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.bypassPartialAggregation")
+    .doc("When true, skips the pre-shuffle partial aggregation and runs a single Complete-mode " +
+      "aggregation after the shuffle. Bypassing partial aggregation can improve performance " +
+      "when group cardinality is high and the pre-shuffle reduction ratio is low. " +
+      "When false (default), uses a two-phase Partial+Final aggregation across a shuffle. " +
+      "This setting has no effect on queries containing DISTINCT aggregate functions, where " +
+      "the partial aggregation phases are required for correctness and are always applied.")
+    .version("3.3.1")
+    .booleanConf
+    .createWithDefault(false)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -8378,6 +8389,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
   def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
+
+  def bypassPartialAggregation: Boolean = getConf(BYPASS_PARTIAL_AGGREGATION)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
