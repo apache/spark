@@ -119,6 +119,10 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     val result2 = df.selectExpr("localtime(3)")
     assert(result2.schema.fields.head.dataType == TimeType(3))
 
+    // Bare LOCALTIME keyword (no parens) returns TIME
+    val result3 = spark.sql("SELECT LOCALTIME")
+    assert(result3.schema.fields.head.dataType == TimeType(TimeType.MICROS_PRECISION))
+
     // localtime() and current_time() produce approximately the same result
     val ltResult = df.selectExpr("localtime()")
     val ctResult = df.selectExpr("current_time()")
