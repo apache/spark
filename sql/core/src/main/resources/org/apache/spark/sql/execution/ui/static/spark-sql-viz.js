@@ -769,6 +769,8 @@ function setupZoomAndPan(svg, zoomLayer) {
   // Remove d3-zoom's wheel listener (which is registered as non-passive and
   // can block page scrolling) and replace it with a gated wrapper that only
   // forwards Ctrl/Cmd+wheel to d3, letting unmodified scrolls pass through.
+  // "wheel.zoom" is d3-zoom's internal event namespace (stable since d3 v4).
+  // The null-guard below protects against future d3 changes.
   var d3WheelHandler = svg.on("wheel.zoom");
   svg.on("wheel.zoom", null);
   svgNode.addEventListener("wheel", function (e) {
@@ -783,11 +785,13 @@ function setupZoomAndPan(svg, zoomLayer) {
       // Let the event propagate naturally for page scrolling and show hint
       showZoomHint();
     }
-  });
+  }, {passive: false});
 }
 
 var zoomHintTimeout;
+var zoomHintCooldown = false;
 function showZoomHint() {
+  if (zoomHintCooldown) return;
   var container = document.getElementById("plan-viz-graph");
   if (!container) return;
   var hint = document.getElementById("plan-viz-zoom-hint");
@@ -803,9 +807,11 @@ function showZoomHint() {
     container.appendChild(hint);
   }
   hint.classList.add("visible");
+  zoomHintCooldown = true;
   clearTimeout(zoomHintTimeout);
   zoomHintTimeout = setTimeout(function () {
     hint.classList.remove("visible");
+    setTimeout(function () { zoomHintCooldown = false; }, 3000);
   }, 1000);
 }
 
