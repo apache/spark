@@ -97,10 +97,9 @@ class GroupBasedMergeNondeterministicSuite extends MergeIntoTableSuiteBase {
     }
   }
 
-  test("SPARK-56729: non-deterministic source MERGE passes analysis and produces correct results") {
-    // End-to-end: a MERGE with rand() in the source (non-deterministic) previously failed with
-    // INVALID_NON_DETERMINISTIC_EXPRESSIONS. Now it passes analysis AND produces correct results
-    // with runtime group filter enabled.
+  test("SPARK-56729: rand() source produces correct results and skips group filter") {
+    // A MERGE with rand() in the source (non-deterministic) passes analysis, produces correct
+    // results, and the determinism guard prevents the group filter from being injected.
     withSQLConf(
       SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"
@@ -117,23 +116,31 @@ class GroupBasedMergeNondeterministicSuite extends MergeIntoTableSuiteBase {
             |WHERE rand() < 2.0
             |""".stripMargin)
 
-        sql(
-          s"""MERGE INTO $tableNameAsString t
-             |USING source s
-             |ON t.pk = s.pk
-             |WHEN MATCHED THEN
-             | UPDATE SET t.salary = s.salary
-             |""".stripMargin)
+        val executedPlan = executeAndKeepPlan {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET t.salary = s.salary
+               |""".stripMargin)
+        }
 
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
           Seq(Row(1, 150, "hr"), Row(2, 250, "software")))
+
+        val dynamicFilters = collect(executedPlan) {
+          case b: BatchScanExec if b.runtimeFilters.exists(
+            _.isInstanceOf[DynamicPruningExpression]) => b
+        }
+        assert(dynamicFilters.isEmpty,
+          "Group filter should NOT be injected for non-deterministic source")
       }
     }
   }
 
   test("SPARK-56729: deterministic source MERGE still uses runtime group filter") {
-    // A deterministic source should still benefit from the group filter optimization.
     withSQLConf(
       SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"
@@ -159,57 +166,16 @@ class GroupBasedMergeNondeterministicSuite extends MergeIntoTableSuiteBase {
                |""".stripMargin)
         }
 
-        // Results are correct
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
           Seq(Row(1, 150, "hr"), Row(2, 200, "software")))
 
-        // Dynamic pruning was applied (group filter injected for deterministic source)
         val dynamicFilters = collect(executedPlan) {
           case b: BatchScanExec if b.runtimeFilters.exists(
             _.isInstanceOf[DynamicPruningExpression]) => b
         }
         assert(dynamicFilters.nonEmpty,
           "Group filter should be injected for deterministic source MERGE")
-      }
-    }
-  }
-
-  test("SPARK-56729: non-deterministic source does not inject runtime group filter") {
-    // Verify the plan-level assertion: group filter is skipped for non-deterministic source.
-    withSQLConf(
-      SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false"
-    ) {
-      withTempView("source") {
-        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-          """{ "pk": 1, "salary": 100, "dep": "hr" }
-            |{ "pk": 2, "salary": 200, "dep": "software" }
-            |""".stripMargin)
-
-        sql(
-          """CREATE OR REPLACE TEMP VIEW source AS
-            |SELECT pk, salary FROM VALUES (1, 150), (2, 250) t(pk, salary)
-            |WHERE rand() < 2.0
-            |""".stripMargin)
-
-        val executedPlan = executeAndKeepPlan {
-          sql(
-            s"""MERGE INTO $tableNameAsString t
-               |USING source s
-               |ON t.pk = s.pk
-               |WHEN MATCHED THEN
-               | UPDATE SET t.salary = s.salary
-               |""".stripMargin)
-        }
-
-        // No dynamic pruning applied (group filter skipped for non-deterministic source)
-        val dynamicFilters = collect(executedPlan) {
-          case b: BatchScanExec if b.runtimeFilters.exists(
-            _.isInstanceOf[DynamicPruningExpression]) => b
-        }
-        assert(dynamicFilters.isEmpty,
-          "Group filter should NOT be injected for non-deterministic source MERGE")
       }
     }
   }
