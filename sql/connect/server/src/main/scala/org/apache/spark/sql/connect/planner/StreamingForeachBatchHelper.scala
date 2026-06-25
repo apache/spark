@@ -169,7 +169,10 @@ object StreamingForeachBatchHelper extends Logging {
       dataOut.flush()
 
       try {
-        dataIn.readInt() match {
+        // Use an interrupt-aware read so that stopping the streaming query (which interrupts the
+        // micro-batch execution thread running this function) can promptly unblock a wedged
+        // worker instead of hanging until spark.sql.streaming.stopTimeout. See SPARK-56586.
+        runner.readInterruptibly(dataIn) match {
           case 0 =>
             logInfo(
               log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
@@ -264,6 +267,15 @@ object StreamingForeachBatchHelper extends Logging {
         case Some(_) =>
           throw IllegalStateErrors.cleanerAlreadySet(sessionHolder.key.toString, key.toString)
         case None => // Inserted. Normal.
+      }
+
+      // Let a wedged foreachBatch worker read be abandoned as soon as this query is being stopped.
+      // The micro-batch thread can block in StreamingPythonRunner reading the worker response, and
+      // that read is not broken by query.stop()'s thread interrupt; the runner's watchdog instead
+      // stops the worker (closing its socket) once the query is no longer active. See SPARK-56586.
+      cleaner match {
+        case RunnerCleaner(runner) => runner.setReadAbortCheck(() => !query.isActive)
+        case _ => // Non-Python cleaner; nothing to wire.
       }
 
       // Guard against the same shutdown race that SparkConnectStreamingQueryCache handles for

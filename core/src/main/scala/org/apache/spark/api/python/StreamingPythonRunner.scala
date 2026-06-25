@@ -19,6 +19,7 @@ package org.apache.spark.api.python
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
 import java.nio.channels.Channels
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
@@ -30,6 +31,19 @@ import org.apache.spark.internal.config.Python.{PYTHON_AUTH_SOCKET_TIMEOUT, PYTH
 
 
 private[spark] object StreamingPythonRunner {
+  // Poll interval used by `readInterruptibly`'s watchdog to re-check the abort conditions (thread
+  // interrupted or the owning query stopping) while it waits for a worker response. Short enough
+  // that a streaming query stop() unblocks well within `spark.sql.streaming.stopTimeout`, long
+  // enough to add negligible overhead.
+  private val readWatchdogPollMillis = 500
+
+  // Grace period the watchdog allows after the abort condition first trips before it force-stops
+  // the worker. A responsive worker finishes the in-flight batch in well under this window, so a
+  // normal stop() lets the read complete cleanly (no spurious foreachBatch error); only a genuinely
+  // wedged worker is still blocked after the grace and gets killed. Kept comfortably below the
+  // default `spark.sql.streaming.stopTimeout` used by the tests (30s).
+  private val readAbortGraceMillis = 10000L
+
   def apply(
       func: PythonFunction,
       connectUrl: String,
@@ -55,6 +69,11 @@ private[spark] class StreamingPythonRunner(
   protected var pythonWorker: Option[PythonWorker] = None
   protected var pythonWorkerFactory: Option[PythonWorkerFactory] = None
   protected val pythonVer: String = func.pythonVer
+
+  // Predicate consulted by `readInterruptibly` to learn when a blocking worker read should be
+  // abandoned (e.g. the owning streaming query is being stopped). Defaults to never; callers that
+  // know the lifecycle (the Connect foreachBatch cleaner cache) install a real check.
+  @volatile private var shouldAbortRead: () => Boolean = () => false
 
   /**
    * Initializes the Python worker for streaming functions. Sets up Spark Connect session
@@ -179,6 +198,79 @@ private[spark] class StreamingPythonRunner(
       pythonWorker.map { worker =>
         factory.isWorkerStopped(worker)
       }
+    }
+  }
+
+  /**
+   * Installs a predicate telling [[readInterruptibly]] when an in-flight blocking worker read
+   * should be abandoned -- typically `() => !query.isActive`, so a streaming query stop() can
+   * promptly break a wedged read. Idempotent; the latest check wins.
+   */
+  def setReadAbortCheck(check: () => Boolean): Unit = {
+    shouldAbortRead = check
+  }
+
+  /**
+   * Reads a single Int from the Python worker in a way that is responsive to the owning streaming
+   * query being stopped.
+   *
+   * A streaming query `stop()` interrupts its micro-batch execution thread to unwind it, but the
+   * blocking socket read below honors neither `Thread.interrupt()` nor a socket read timeout: the
+   * worker channel is read via `Channels.newInputStream`, which is not closed by interrupting the
+   * reader thread, and `SO_TIMEOUT` has no effect on channel reads. So if a foreachBatch Python
+   * worker is wedged -- e.g. deadlocked on a re-entrant Spark Connect call -- a plain
+   * `dataIn.readInt()` keeps the stream thread blocked until `spark.sql.streaming.stopTimeout`
+   * elapses (and, with the default infinite timeout, forever), so the stop fails to take effect.
+   *
+   * To make the read abortable we guard it with a watchdog thread that watches for an abort
+   * condition -- the calling thread is interrupted, or the installed [[shouldAbortRead]] check
+   * trips (the query is being stopped). Once the condition has held for a short grace period (so a
+   * responsive worker can finish the in-flight batch and let the read complete cleanly), the
+   * watchdog stops the worker. `stop()` closes the worker channel, which unblocks the in-flight
+   * read with an `AsynchronousCloseException` so a genuinely wedged batch (and the query) can
+   * unwind promptly. When no abort is requested, or the read completes within the grace, the
+   * worker is left untouched, so neither a healthy stop nor a legitimately slow batch is disrupted.
+   */
+  def readInterruptibly(dataIn: DataInputStream): Int = {
+    val callerThread = Thread.currentThread()
+    val readDone = new AtomicBoolean(false)
+    val watchdogBody: Runnable = () => {
+      try {
+        var triggered = false
+        var abortSinceNanos = -1L
+        while (!triggered && !readDone.get()) {
+          if (callerThread.isInterrupted || shouldAbortRead()) {
+            if (abortSinceNanos < 0L) {
+              abortSinceNanos = System.nanoTime()
+            }
+            val elapsedMillis = (System.nanoTime() - abortSinceNanos) / 1000000L
+            if (elapsedMillis >= StreamingPythonRunner.readAbortGraceMillis) {
+              logWarning(
+                log"[session: ${MDC(SESSION_ID, sessionId)}] Python worker read still blocked " +
+                  log"after the query began stopping; stopping the worker to unblock it.")
+              stop()
+              triggered = true
+            } else {
+              Thread.sleep(StreamingPythonRunner.readWatchdogPollMillis)
+            }
+          } else {
+            // Not aborting (the common case): reset the grace timer and keep waiting.
+            abortSinceNanos = -1L
+            Thread.sleep(StreamingPythonRunner.readWatchdogPollMillis)
+          }
+        }
+      } catch {
+        case _: InterruptedException => // The read finished; readDone was set. Just exit.
+      }
+    }
+    val watchdog = new Thread(watchdogBody, s"streaming-python-runner-read-watchdog-$sessionId")
+    watchdog.setDaemon(true)
+    watchdog.start()
+    try {
+      dataIn.readInt()
+    } finally {
+      readDone.set(true)
+      watchdog.interrupt()
     }
   }
 }
