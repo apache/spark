@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -1119,8 +1120,13 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
         assert(statusStore.planGraphCount() <= 50)
-        // No live data should be left behind after all executions end.
-        assert(statusStore.listener.get.noLiveData())
+        // No live data should be left behind after all executions end. The cleanup of live
+        // executions/stage metrics is finalized when the metrics aggregation triggered by the
+        // SQLExecutionEnd event completes, so wait for the listener to drain rather than asserting
+        // immediately to avoid a timing race.
+        eventually(timeout(10.seconds), interval(10.milliseconds)) {
+          assert(statusStore.listener.get.noLiveData())
+        }
       }
     }
   }
