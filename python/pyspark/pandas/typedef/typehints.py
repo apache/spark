@@ -137,6 +137,33 @@ class NameTypeHolder:
     short_name: str = "NameType"
 
 
+def _extract_ndarray_scalar_type(tpe: Any) -> Optional[Any]:
+    """
+    Return the scalar element type of a ``numpy.typing.NDArray`` annotation defined as a
+    PEP 695 type alias (NumPy 2.5+), or ``None`` if ``tpe`` is not such an annotation.
+
+    Starting with NumPy 2.5, ``NDArray`` is declared with the ``type`` statement
+    (``type NDArray[ScalarT: np.generic] = np.ndarray[Any, np.dtype[ScalarT]]``). As a result,
+    ``NDArray[T]`` is a ``types.GenericAlias`` whose ``__origin__`` is the ``NDArray``
+    ``TypeAliasType`` (rather than the ``np.ndarray`` class) and whose ``__args__`` is the single
+    substituted scalar type ``(T,)``. We detect this by resolving the alias value and checking
+    that it expands to ``np.ndarray[..., np.dtype[...]]``.
+    """
+    origin = getattr(tpe, "__origin__", None)
+    args = getattr(tpe, "__args__", None)
+    if origin is None or not args or len(args) != 1:
+        return None
+    # ``TypeAliasType`` is available on Python 3.12+; on older runtimes NumPy keeps the legacy
+    # ``_GenericAlias`` form handled above, so this branch is simply never taken.
+    type_alias_type = getattr(typing, "TypeAliasType", None)
+    if type_alias_type is None or not isinstance(origin, type_alias_type):
+        return None
+    value = getattr(origin, "__value__", None)
+    if getattr(value, "__origin__", None) is not np.ndarray:
+        return None
+    return args[0]
+
+
 def as_spark_type(
     tpe: Union[str, type, Dtype], *, raise_error: bool = True, prefer_timestamp_ntz: bool = False
 ) -> types.DataType:
@@ -155,15 +182,31 @@ def as_spark_type(
         and hasattr(tpe, "__args__")
         and len(tpe.__args__) > 1
     ):
-        # numpy.typing.NDArray
+        # numpy.typing.NDArray, e.g. ``NDArray[np.int64]``.
+        # Before NumPy 2.5, ``NDArray[T]`` is a ``types.GenericAlias`` whose ``__origin__`` is
+        # ``np.ndarray`` and whose ``__args__`` are ``(shape, np.dtype[T])``, so the scalar type
+        # is reached via ``__args__[1].__args__[0]``.
         return types.ArrayType(as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error))
+
+    ndarray_scalar = _extract_ndarray_scalar_type(tpe)
+    if ndarray_scalar is not None:
+        # numpy.typing.NDArray on NumPy 2.5+, where ``NDArray`` is defined as a PEP 695 type
+        # alias (``type NDArray[ScalarT: np.generic] = np.ndarray[Any, np.dtype[ScalarT]]``).
+        # ``NDArray[T]`` is then a ``types.GenericAlias`` whose ``__origin__`` is the
+        # ``NDArray`` ``TypeAliasType`` (not ``np.ndarray``) and whose ``__args__`` is the
+        # single scalar type ``(T,)``.
+        return types.ArrayType(as_spark_type(ndarray_scalar, raise_error=raise_error))
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass
     # ArrayType
     elif tpe in (np.ndarray,):
         return types.ArrayType(types.StringType())
-    elif hasattr(tpe, "__origin__") and issubclass(tpe.__origin__, list):
+    elif (
+        hasattr(tpe, "__origin__")
+        and isinstance(tpe.__origin__, type)
+        and issubclass(tpe.__origin__, list)
+    ):
         element_type = as_spark_type(
             tpe.__args__[0],  # type: ignore[union-attr]
             raise_error=raise_error,
