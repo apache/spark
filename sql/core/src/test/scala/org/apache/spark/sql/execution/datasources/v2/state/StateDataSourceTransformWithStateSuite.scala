@@ -1186,6 +1186,6 @@ class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
 /**
  * Test suite that runs all StateDataSourceTransformWithStateSuite tests with row checksum enabled.
  */
-@SlowSQLTest
+@ExtendedSQLTest
 class StateDataSourceTransformWithStateSuiteWithRowChecksum
   extends StateDataSourceTransformWithStateSuite with EnableStateStoreRowChecksum
