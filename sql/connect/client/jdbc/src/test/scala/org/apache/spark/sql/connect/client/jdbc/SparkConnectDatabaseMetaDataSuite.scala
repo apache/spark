@@ -859,6 +859,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             precision: Int,
             literalPrefix: String,
             literalSuffix: String,
+            createParams: String,
             caseSensitive: Boolean,
             nullable: Short,
             searchable: Short,
@@ -873,6 +874,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             precision = rs.getInt("PRECISION"),
             literalPrefix = rs.getString("LITERAL_PREFIX"),
             literalSuffix = rs.getString("LITERAL_SUFFIX"),
+            createParams = rs.getString("CREATE_PARAMS"),
             caseSensitive = rs.getBoolean("CASE_SENSITIVE"),
             nullable = rs.getShort("NULLABLE"),
             searchable = rs.getShort("SEARCHABLE"),
@@ -915,11 +917,29 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
           assert(t.literalSuffix === suffix, s"unexpected LITERAL_SUFFIX for ${t.name}")
         }
 
-        // DECIMAL carries precision and scale
-        val decimal = types.find(_.name == "DECIMAL").get
-        assert(decimal.precision === 38)
-        assert(decimal.minScale === 0)
-        assert(decimal.maxScale === 38)
+        // PRECISION mirrors JdbcTypeUtils.getPrecision for every type
+        val precisions = Map(
+          "BOOLEAN" -> 1, "TINYINT" -> 3, "SMALLINT" -> 5, "INT" -> 10, "BIGINT" -> 19,
+          "FLOAT" -> 7, "DOUBLE" -> 15, "DECIMAL" -> 38, "STRING" -> Int.MaxValue,
+          "BINARY" -> Int.MaxValue, "DATE" -> 10, "TIMESTAMP" -> 29)
+        types.foreach { t =>
+          assert(t.precision === precisions(t.name), s"unexpected PRECISION for ${t.name}")
+        }
+
+        // CREATE_PARAMS is set only for the parameterized types
+        val createParams = Map("DECIMAL" -> "precision,scale")
+        types.foreach { t =>
+          assert(t.createParams === createParams.getOrElse(t.name, null),
+            s"unexpected CREATE_PARAMS for ${t.name}")
+        }
+
+        // (MINIMUM_SCALE, MAXIMUM_SCALE); types not listed carry no scale (0, 0)
+        val scales = Map("DECIMAL" -> (0, 38), "TIMESTAMP" -> (0, 6))
+        types.foreach { t =>
+          val (minScale, maxScale) = scales.getOrElse(t.name, (0, 0))
+          assert(t.minScale === minScale.toShort, s"unexpected MINIMUM_SCALE for ${t.name}")
+          assert(t.maxScale === maxScale.toShort, s"unexpected MAXIMUM_SCALE for ${t.name}")
+        }
 
         // NUM_PREC_RADIX is 10 for numeric types and NULL otherwise, mirroring JdbcTypeUtils
         val numericTypes =
