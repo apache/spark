@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Terminates the execution of an iteration of a looping statement and exits the loop.
+Exits the execution of a labeled statement, which may be a looping construct or a labeled compound block.
 
 This statement may only be used within a [compound statement](compound-stmt.html).
 
@@ -68,4 +68,3 @@ LEAVE label
 - [WHILE Statement](../control-flow/while-stmt.html)
 - [IF Statement](../control-flow/if-stmt.html)
 - [ITERATE Statement](../control-flow/iterate-stmt.html)
-
