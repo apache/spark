@@ -152,7 +152,8 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     captured
   }
 
-  private def assertNanosTimestampSchema(parquetType: Type, expectedAdjustedToUTC: Boolean): Unit = {
+  private def assertNanosTimestampSchema(
+      parquetType: Type, expectedAdjustedToUTC: Boolean): Unit = {
     assert(parquetType.isPrimitive, s"expected a primitive type, got $parquetType")
     assert(parquetType.asPrimitiveType.getPrimitiveTypeName === INT64)
     parquetType.getLogicalTypeAnnotation match {
