@@ -26,6 +26,7 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -63,6 +64,23 @@ class ArchiveReaderSuite extends SparkFunSuite {
     } finally out.close()
   }
 
+  /** Write a zip archive, used to verify the `.zip` archive path. */
+  private def writeZip(file: File, entries: Seq[Entry]): Unit = {
+    val out = new ZipArchiveOutputStream(new FileOutputStream(file))
+    try {
+      entries.foreach { e =>
+        // A trailing slash marks a directory entry.
+        val rawName = if (e.isDir && !e.name.endsWith("/")) e.name + "/" else e.name
+        val zipEntry = new ZipArchiveEntry(rawName)
+        if (!e.isDir) zipEntry.setSize(e.data.length.toLong)
+        out.putArchiveEntry(zipEntry)
+        if (!e.isDir) out.write(e.data)
+        out.closeArchiveEntry()
+      }
+      out.finish()
+    } finally out.close()
+  }
+
   private def textEntry(name: String, body: String): Entry =
     Entry(name, body.getBytes(StandardCharsets.UTF_8))
 
@@ -89,15 +107,16 @@ class ArchiveReaderSuite extends SparkFunSuite {
     Seq(
       "foo.tar", "FOO.TAR", "/a/b/c/x.tar", "weird.TaR",
       "foo.tar.gz", "FOO.TAR.GZ", "mixed.Tar.Gz", "/a/b/c/x.tar.gz",
-      "foo.tgz", "FOO.TGZ", "/a/b/c/x.tgz"
+      "foo.tgz", "FOO.TGZ", "/a/b/c/x.tgz",
+      "data.zip", "FOO.ZIP", "weird.ZiP", "/a/b/c/x.zip"
     ).foreach { p =>
       assert(ArchiveReader.isArchivePath(new Path(p)), s"expected archive match for $p")
     }
   }
 
   test("isArchivePath: negative cases") {
-    Seq("foo.csv", "foo.gz", "foo", "dir/", "foo.tarball", "data.zip",
-        "foo.tar.bz2", "foo.targz").foreach { p =>
+    Seq("foo.csv", "foo.gz", "foo", "dir/", "foo.tarball",
+        "foo.tar.bz2", "foo.targz", "foo.zipx", "foo.gzip").foreach { p =>
       assert(!ArchiveReader.isArchivePath(new Path(p)), s"expected non-match for $p")
     }
   }
@@ -272,6 +291,99 @@ class ArchiveReaderSuite extends SparkFunSuite {
       } finally {
         TaskContext.unset()
       }
+    }
+  }
+
+  // ----- zip ----------------------------------------------------------------
+  // The streaming engine is shared with tar (only stream-opening differs), so these cases focus on
+  // the `.zip` dispatch and the `ZipArchiveInputStream` container behaving like the tar path.
+
+  test("readEntries: empty zip yields empty iterator") {
+    withTempDir { dir =>
+      val zip = new File(dir, "empty.zip")
+      writeZip(zip, Seq.empty)
+      assert(collect(zip).isEmpty)
+    }
+  }
+
+  test("readEntries: zip single entry exposes its name and bytes") {
+    withTempDir { dir =>
+      val zip = new File(dir, "single.zip")
+      writeZip(zip, Seq(textEntry("only.csv", "hello\n")))
+      assert(collect(zip) == Seq("only.csv" -> "hello\n"))
+    }
+  }
+
+  test("readEntries: zip multiple entries chained in archive order") {
+    withTempDir { dir =>
+      val zip = new File(dir, "multi.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
+      assert(collect(zip) == Seq("a.csv" -> "a", "b.csv" -> "b", "c.csv" -> "c"))
+    }
+  }
+
+  test("readEntries: zip directory entries are skipped") {
+    withTempDir { dir =>
+      val zip = new File(dir, "dirs.zip")
+      writeZip(zip, Seq(
+        Entry("subdir", Array.emptyByteArray, isDir = true),
+        textEntry("subdir/data.csv", "x")))
+      assert(collect(zip) == Seq("subdir/data.csv" -> "x"))
+    }
+  }
+
+  test("readEntries: zip dotfile, underscore-marker, and prefixed-dir entries are skipped") {
+    withTempDir { dir =>
+      val zip = new File(dir, "skipped.zip")
+      writeZip(zip, Seq(
+        textEntry("._real.csv", "junk"),           // macOS AppleDouble sidecar
+        textEntry(".hidden", "ignored"),           // bare dotfile
+        textEntry("_SUCCESS", "marker"),           // _-prefixed marker (InMemoryFileIndex skips it)
+        textEntry("_temporary/part-0.csv", "tmp"), // entry under a _-prefixed dir (skipped whole)
+        textEntry("real.csv", "kept"),
+        textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
+      assert(collect(zip) == Seq("real.csv" -> "kept"))
+    }
+  }
+
+  test("readEntries: zip advances lazily, one entry at a time") {
+    withTempDir { dir =>
+      val zip = new File(dir, "lazy.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
+
+      val opened = ArrayBuffer[String]()
+      val it = ArchiveReader(new Path(zip.toURI)).readEntries(new Configuration()) { (name, _) =>
+        opened += name
+        Iterator.single(name)
+      }
+      // Construction opens only the first entry; advancing past each boundary opens the next.
+      assert(opened.toList == List("a.csv"))
+      assert(it.hasNext)
+      assert(it.next() == "a.csv")
+      assert(opened.toList == List("a.csv"))
+      assert(it.next() == "b.csv")
+      assert(opened.toList == List("a.csv", "b.csv"))
+      assert(it.next() == "c.csv")
+      assert(opened.toList == List("a.csv", "b.csv", "c.csv"))
+      assert(!it.hasNext)
+      assert(opened.size == 3)
+    }
+  }
+
+  test("readEntries: a zip parseEntry that closes its stream still advances to the next entry") {
+    withTempDir { dir =>
+      val zip = new File(dir, "close.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b")))
+
+      val seen = ArrayBuffer[String]()
+      val it = ArchiveReader(new Path(zip.toURI)).readEntries(new Configuration()) { (name, in) =>
+        val body = new String(readAll(in), StandardCharsets.UTF_8)
+        in.close() // must NOT close the underlying archive
+        seen += body
+        Iterator.single(name)
+      }
+      assert(it.toList == List("a.csv", "b.csv"))
+      assert(seen.toList == List("a", "b"))
     }
   }
 }
