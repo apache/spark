@@ -665,6 +665,21 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.isEmpty)
   }
 
+  test("validateCapturedColumns - reordered nested fields produce no error") {
+    val originStruct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("11")))
+    val currentStruct = StructType(Seq(
+      StructField("age", IntegerType).withId("11"),  // reordered
+      StructField("name", StringType).withId("10")))
+    val originCols = Array(col("person", originStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test",
+      Array(col("person", currentStruct, nullable = true)))
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.isEmpty, "reordering nested fields should not produce errors")
+  }
+
   test("validateCapturedColumns - field ID check disabled") {
     val originStruct = StructType(Seq(StructField("age", IntegerType).withId("11")))
     val originCols = Array(col("person", originStruct, nullable = true))
