@@ -31,15 +31,14 @@ class StateStoreConf(
   def this() = this(new SQLConf)
 
   /**
-   * Total number of maintenance threads. Split between the snapshot and cleanup thread
-   * pools. Each pool needs at least 1 thread, so the minimum is 2.
+   * Total number of maintenance threads. Split evenly between the snapshot
+   * and cleanup thread pools. Each pool needs at least 1 thread, so the
+   * minimum is 2.
    */
   val numStateStoreMaintenanceThreads: Int = sqlConf.numStateStoreMaintenanceThreads
 
-  /**
-   * Ratio of threads for the snapshot pool. The remainder goes to cleanup. Each pool gets at
-   * least 1 thread and the total is never exceeded.
-   */
+  /** Ratio of threads for snapshot pool. Remainder goes to cleanup.
+   *  Each pool gets at least 1 thread and the total is never exceeded. */
   val snapshotToCleanupThreadRatio: Double = sqlConf.snapshotToCleanupThreadRatio
 
   /**
