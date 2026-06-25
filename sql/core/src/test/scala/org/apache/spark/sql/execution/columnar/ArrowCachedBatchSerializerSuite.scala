@@ -28,6 +28,7 @@ import org.apache.arrow.vector.{
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -1968,11 +1969,17 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         topLevelTypeSamples.foreach { case (dt, value) =>
           assert(ArrowUtils.isSupportedByArrow(dt),
             s"test sample type $dt is expected to be claimed supported by isSupportedByArrow")
-          val df = singlePartDf(Seq(value), dt).cache()
+          // Compare the cached read against an uncached baseline built from the same input, so any
+          // corruption that preserves row count (wrong value, truncated bytes, dropped fields) is
+          // caught, not just the row count. checkAnswer does type-aware comparison, covering
+          // binary, arrays, decimals, geometry/geography, variant, etc. Use two rows including a
+          // null to also exercise null handling per type.
+          val inputs = Seq(value, null)
+          val expected = singlePartDf(inputs, dt).collect().toSeq
+          val df = singlePartDf(inputs, dt).cache()
           try {
-            // Exercise both the row read (collect) and the cache materialization (count).
-            assert(df.count() == 1, s"count mismatch for $dt (vectorized=$vectorized)")
-            assert(df.collect().length == 1, s"collect mismatch for $dt (vectorized=$vectorized)")
+            assert(df.count() == 2, s"count mismatch for $dt (vectorized=$vectorized)")
+            checkAnswer(df, expected)
           } finally {
             df.unpersist()
             InMemoryRelation.clearSerializer()
@@ -2014,12 +2021,13 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         Seq[(DataType, Any)](
           (GeometryType(4326), Geometry.fromWKB(wkbPoint, 4326)),
           (GeographyType(4326), Geography.fromWKB(wkbPoint, 4326))).foreach { case (dt, value) =>
+          val expected = singlePartDf(Seq(value, null), dt).collect().toSeq
           val df = singlePartDf(Seq(value, null), dt).cache()
           try {
-            val rows = df.collect()
-            assert(rows.length == 2, s"$dt (vectorized=$vectorized)")
-            assert(rows.count(_.get(0) != null) == 1,
-              s"$dt non-null count (vectorized=$vectorized)")
+            // Validate the actual roundtripped value (WKB + SRID), not just nullness: the cached
+            // read must equal the uncached baseline. checkAnswer compares the geometry/geography
+            // value, so a corrupted WKB or dropped SRID would fail here.
+            checkAnswer(df, expected)
             // Stats: geometry/geography reuse BinaryColumnStats, so no min/max bounds but a
             // null count of 1.
             val stats = cachedStats(df)
@@ -2079,6 +2087,41 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           InMemoryRelation.clearSerializer()
         }
       }
+    }
+  }
+
+  test("row path splits batches by record and byte limits") {
+    val schema = Seq(AttributeReference("v", IntegerType, nullable = true)())
+    val ser = new ArrowCachedBatchSerializer
+
+    // Record limit: 95 rows in one partition with maxRecordsPerBatch=10 -> ceil(95 / 10) = 10
+    // cached batches, none exceeding 10 rows.
+    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
+      val conf = spark.sessionState.conf
+      val rowRdd = spark.sparkContext.parallelize(0 until 95, 1).map(InternalRow(_))
+      val cached = ser.convertInternalRowToCachedBatch(
+        rowRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+      val batchRows = cached.map(_.numRows).collect()
+      assert(batchRows.length == 10, s"expected 10 batches, got ${batchRows.length}")
+      assert(batchRows.sum == 95, "all rows must be preserved")
+      assert(batchRows.forall(_ <= 10), "no batch may exceed the record limit")
+    }
+
+    // Byte limit: with a record limit high enough not to bind and a tiny byte limit, the batch is
+    // cut by estimated bytes instead, so more than one batch is produced and each is small. This
+    // pins that maxBytesPerBatch is honored (it was previously ignored on this path), matching the
+    // behavior of the other Arrow writers.
+    withSQLConf(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "100000",
+        SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> "64") {
+      val conf = spark.sessionState.conf
+      val rowRdd = spark.sparkContext.parallelize(0 until 95, 1).map(InternalRow(_))
+      val cached = ser.convertInternalRowToCachedBatch(
+        rowRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+      val batchRows = cached.map(_.numRows).collect()
+      assert(batchRows.length > 1,
+        s"a tiny byte limit should force multiple batches, got ${batchRows.length}")
+      assert(batchRows.sum == 95, "all rows must be preserved")
     }
   }
 

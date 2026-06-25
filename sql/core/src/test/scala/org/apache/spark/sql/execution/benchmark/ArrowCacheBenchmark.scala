@@ -211,8 +211,13 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
 
   private def cacheWithFilters(): Unit = {
     val numRows = 5000000 // 5M rows
-    runBenchmark("Cache with filter pushdown") {
-      val benchmark = new Benchmark("Cache 5M rows + filter", numRows, output = output)
+    // Each case times the whole cache build + materialization + filtered count, not the filter in
+    // isolation, and a fresh session is required per case because the cache serializer is resolved
+    // process-wide on first use. Both the default and Arrow serializers collect min/max bounds, so
+    // these numbers compare end-to-end cache+filter throughput between the two formats; they are
+    // not a measurement of partition pruning attributable to either format.
+    runBenchmark("Cache then filter") {
+      val benchmark = new Benchmark("Cache 5M rows, then filter", numRows, output = output)
 
       // Default cache filter benchmark (with compression - default)
       benchmark.addCase("Default cache - filter") { _ =>
@@ -252,7 +257,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       }
 
       // Arrow cache filter benchmark
-      benchmark.addCase("Arrow cache - filter (with stats)") { _ =>
+      benchmark.addCase("Arrow cache - filter") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
           val df = spark.range(numRows).selectExpr(

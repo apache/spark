@@ -18,18 +18,9 @@ The Arrow cache format offers several advantages over the default cache format:
 
 ## Configuration
 
-To enable Arrow cache format, set the static configuration:
-
-```scala
-spark.conf.set("spark.sql.cache.serializer",
-  "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
-```
-
-**Note**: This is a static configuration that must be set before the SparkSession is created.
-It selects the cache serializer for the whole session; once set, this serializer handles every
-cached relation. There is no automatic per-relation fallback to another cache serializer based on
-the data types involved (see [Supported Data Types](#supported-data-types) for how unsupported
-types are handled).
+`spark.sql.cache.serializer` is a static SQL configuration, so it must be set when the
+SparkSession is built and cannot be changed on a running session (`spark.conf.set` rejects static
+keys with `CANNOT_MODIFY_CONFIG`):
 
 ```scala
 val spark = SparkSession.builder()
@@ -38,6 +29,14 @@ val spark = SparkSession.builder()
     "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
   .getOrCreate()
 ```
+
+**Note**: This config selects the cache serializer for the whole session; once set, this
+serializer handles every cached relation. There is no automatic per-relation fallback to another
+cache serializer based on the data types involved (see
+[Supported Data Types](#supported-data-types) for how unsupported types are handled). The chosen
+serializer is also cached process-wide on first use, so switching cache formats within a JVM that
+has already materialized a cache requires a fresh JVM (see
+[Migration from Default Cache](#migration-from-default-cache)).
 
 ## Usage
 
@@ -107,13 +106,13 @@ authoritative, regularly regenerated numbers, see
 | Workload | Default Cache | Arrow Cache | Speedup |
 |----------|--------------|-------------|---------|
 | Write + Read (5M rows, 3 primitive columns) | 153.7 ns/row | 74.2 ns/row | **~2X faster** |
-| Filter with stats (5M rows) | 100.1 ns/row | 70.8 ns/row | **~1.4X faster** |
+| Cache then filter (5M rows) | 100.1 ns/row | 70.8 ns/row | **~1.4X faster** |
 | Columnar input from Parquet (2M rows, 3 primitive columns) | 195.3 ns/row | 113.1 ns/row | **~1.7X faster** |
 | Re-cache with zero-copy (2M rows, 2 columns) | 123.3 ns/row | 38.5 ns/row | **~3.2X faster** |
 
 **Notes**:
 - **Write + Read**: Significant improvement from efficient Arrow serialization and vectorized operations
-- **Filter improvement**: Comes from min/max statistics enabling batch skipping during partition pruning
+- **Cache then filter**: This measures end-to-end cache build plus a filtered scan, comparing the two cache formats. Both formats collect min/max statistics and can prune batches, so the difference reflects overall cache+scan throughput rather than pruning unique to Arrow
 - **Parquet caching**: Shows improvement despite Spark's Parquet reader producing `OnHeapColumnVector`/`OffHeapColumnVector` rather than `ArrowColumnVector`, due to Arrow's efficient batch processing
 - **Re-cache with zero-copy**: When caching a subset of columns from Arrow-cached data (e.g., `df.drop("column")`), the remaining columns preserve their `ArrowColumnVector` format, enabling true zero-copy extraction and achieving the best performance
 - **Zero-copy benefits** only apply when input is already `ArrowColumnVector` (e.g., Python Arrow sources, re-caching Arrow cached data with column projection)
@@ -217,20 +216,25 @@ You can monitor Arrow memory usage through Spark metrics and the Spark UI.
 
 ## Migration from Default Cache
 
-To migrate from default cache to Arrow cache:
+The cache serializer is resolved from `spark.sql.cache.serializer` only on first use and is then
+held in a process-wide field that is not reset when a SparkSession stops. As a result, **switching
+cache formats requires a fresh JVM** once any cache has been materialized -- stopping and
+rebuilding the SparkSession in the same process keeps using the originally resolved serializer.
 
-1. **Stop your SparkSession**
-2. **Uncache all DataFrames** (optional but recommended)
-3. **Update SparkSession configuration**:
+To migrate from the default cache to Arrow cache:
+
+1. **Start a new JVM / driver process** (a brand-new Spark application).
+2. **Build the SparkSession with the Arrow serializer**:
    ```scala
    val spark = SparkSession.builder()
      .config("spark.sql.cache.serializer",
        "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
      .getOrCreate()
    ```
-4. **Recache your DataFrames**
+3. **Cache your DataFrames** as usual.
 
-**Note**: Existing cached data will be invalidated when changing cache format.
+**Note**: Cache data is never shared across formats; each application caches in whichever format
+its serializer produces.
 
 ## Troubleshooting
 

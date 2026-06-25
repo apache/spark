@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
@@ -76,6 +76,7 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     // Capture config values on driver before RDD transformation
     val sparkSchema = DataTypeUtils.fromAttributes(schema)
     val maxRecordsPerBatch = conf.arrowMaxRecordsPerBatch
+    val maxBytesPerBatch = conf.arrowMaxBytesPerBatch
     val timeZoneId = conf.sessionLocalTimeZone
     val compressionCodecName = conf.arrowCompressionCodec
     val compressionLevel = conf.arrowZstdCompressionLevel
@@ -86,6 +87,7 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
         schema,
         sparkSchema,
         maxRecordsPerBatch,
+        maxBytesPerBatch,
         timeZoneId,
         compressionCodecName,
         compressionLevel)
@@ -241,6 +243,51 @@ private object ArrowCachedBatchSerializer {
     out.toByteArray
   }
 
+  /**
+   * Shut down a prefetch worker during task cleanup without leaking the root it may have produced.
+   *
+   * The prefetch worker deserializes the next batch into a fresh [[VectorSchemaRoot]] off-thread.
+   * If task completion runs while a result is in flight (e.g. a LIMIT consumer stops early),
+   * cancelling and discarding the future would drop a root that was already (or is about to be)
+   * produced, and the subsequent `allocator.close()` would fail with "Memory was leaked by query".
+   *
+   * This stops accepting new work, waits for the worker to finish so no root is produced after we
+   * stop looking, then closes any completed result. Always returns null so the caller can null out
+   * its future reference. Safe to call with a null executor or future.
+   */
+  def drainAndClosePrefetch(
+      executor: java.util.concurrent.ExecutorService,
+      future: java.util.concurrent.Future[VectorSchemaRoot]): java.util.concurrent.Future[
+        VectorSchemaRoot] = {
+    if (executor != null) {
+      // Stop accepting new tasks and wait for the in-flight deserialization to finish, rather than
+      // interrupting it: an interrupt mid-allocation can race allocator shutdown and still leak.
+      executor.shutdown()
+      try {
+        executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.NANOSECONDS)
+      } catch {
+        case _: InterruptedException =>
+          Thread.currentThread().interrupt()
+          executor.shutdownNow()
+      }
+    }
+    if (future != null) {
+      try {
+        // The worker has terminated, so this does not block; close the root it produced.
+        val root = future.get()
+        if (root != null) {
+          root.close()
+        }
+      } catch {
+        // The batch was never produced (cancelled/failed); nothing to close.
+        case _: java.util.concurrent.CancellationException =>
+        case _: java.util.concurrent.ExecutionException =>
+        case _: InterruptedException => Thread.currentThread().interrupt()
+      }
+    }
+    null
+  }
+
   def createColumnStats(dataType: DataType): ColumnStats = {
     dataType match {
       case BooleanType => new BooleanColumnStats
@@ -265,6 +312,12 @@ private object ArrowCachedBatchSerializer {
       // to collect size/count without min/max bounds. They are AtomicTypes that ColumnType
       // (used by ObjectColumnStats) does not handle, so they must be matched explicitly here.
       case _: GeometryType | _: GeographyType => new BinaryColumnStats
+      // Unwrap UDTs to the same collector their underlying type would use. isSupportedByArrow
+      // accepts a UDT whenever its sqlType is supported (including Variant/Geometry/Geography),
+      // but ObjectColumnStats -> ColumnType(udt.sqlType) only unwraps one level and has no case
+      // for those types, so it would throw UNSUPPORTED_DATATYPE during materialization. Recursing
+      // here keeps the capability check and the statistics path in agreement.
+      case udt: UserDefinedType[_] => createColumnStats(udt.sqlType)
       case _ => new ObjectColumnStats(dataType)
     }
   }
@@ -703,6 +756,7 @@ private class InternalRowToArrowCachedBatchIterator(
     schema: Seq[Attribute],
     sparkSchema: StructType,
     maxRecordsPerBatch: Long,
+    maxBytesPerBatch: Long,
     timeZoneId: String,
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
@@ -749,10 +803,16 @@ private class InternalRowToArrowCachedBatchIterator(
     }
 
     Utils.tryWithSafeFinally {
-      // Write rows to Arrow vectors and collect statistics incrementally.
-      // A nonpositive maxRecordsPerBatch means unlimited (one batch per partition), matching
-      // ArrowConverters; without the `<= 0` guard the loop would emit empty batches forever.
-      while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
+      // Write rows to Arrow vectors and collect statistics incrementally, stopping when either the
+      // record-count or estimated-byte limit is reached (whichever is hit first), so wide rows
+      // cannot form multi-gigabyte batches that exhaust memory or overflow Arrow's 32-bit
+      // variable-width offsets. A nonpositive limit means that limit is unlimited, matching
+      // ArrowConverters; the `<= 0` guards also keep the loop from emitting empty batches forever.
+      // At least one row is always written so a single oversized row still makes progress.
+      var estimatedBytes = 0L
+      def recordLimitReached: Boolean = maxRecordsPerBatch > 0 && rowCount >= maxRecordsPerBatch
+      def byteLimitReached: Boolean = maxBytesPerBatch > 0 && estimatedBytes >= maxBytesPerBatch
+      while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
         val row = rowIter.next()
         arrowWriter.write(row)
 
@@ -763,6 +823,11 @@ private class InternalRowToArrowCachedBatchIterator(
           i += 1
         }
 
+        estimatedBytes += (row match {
+          case ur: UnsafeRow => ur.getSizeInBytes.toLong
+          // Estimate non-Unsafe rows assuming 16 bytes per value, matching ArrowConverters.
+          case ir: InternalRow => ir.numFields.toLong * 16
+        })
         rowCount += 1
       }
       arrowWriter.finish()
@@ -826,26 +891,39 @@ private class ColumnarBatchToArrowCachedBatchIterator(
 
   override def next(): ArrowCachedBatch = {
     val batch = batchIter.next()
-    val rowCount = batch.numRows()
+    // Release the consumed input batch once converted. This iterator replaces the normal
+    // ColumnarToRow consumer (which calls closeIfFreeable() after each batch), so without this
+    // an Arrow-backed source's fresh off-heap vectors would stay live for every cached batch and
+    // grow executor memory until OOM. Both conversion branches finish synchronously and copy the
+    // data out (VectorUnloader / row conversion), so the input is safe to free here on success or
+    // failure; closeIfFreeable() is a no-op for reusable writable/constant vectors.
+    // One input ColumnarBatch maps to one cached batch: the upstream batch's row count is already
+    // bounded by the source's batch-size config (e.g. spark.sql.parquet.columnarReaderBatchSize),
+    // so no further record/byte splitting is needed here.
+    Utils.tryWithSafeFinally {
+      val rowCount = batch.numRows()
 
-    // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
-    // input vectors but serializes them under a schema built with largeVarTypes=false, and the
-    // read path reconstructs that same non-large schema. Large var-width vectors use 64-bit
-    // offsets, so reading them back under a 32-bit-offset schema would silently corrupt data.
-    // Fall back to the row-based conversion (which always produces standard var-width vectors)
-    // whenever any input vector is, or nests, a large var-width vector.
-    val vectors = (0 until batch.numCols()).map(batch.column)
-    val zeroCopyEligible = vectors.forall {
-      case acv: ArrowColumnVector =>
-        !ColumnarBatchToArrowCachedBatchIterator.containsLargeVarType(acv.getValueVector)
-      case _ => false
-    }
-    if (zeroCopyEligible) {
-      // Fast path: zero-copy extraction of Arrow RecordBatch
-      convertArrowBatchZeroCopy(batch, rowCount, schema, vectors)
-    } else {
-      // Slow path: convert to Arrow via rows
-      convertToArrowBatch(batch, rowCount, schema)
+      // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
+      // input vectors but serializes them under a schema built with largeVarTypes=false, and the
+      // read path reconstructs that same non-large schema. Large var-width vectors use 64-bit
+      // offsets, so reading them back under a 32-bit-offset schema would silently corrupt data.
+      // Fall back to the row-based conversion (which always produces standard var-width vectors)
+      // whenever any input vector is, or nests, a large var-width vector.
+      val vectors = (0 until batch.numCols()).map(batch.column)
+      val zeroCopyEligible = vectors.forall {
+        case acv: ArrowColumnVector =>
+          !ColumnarBatchToArrowCachedBatchIterator.containsLargeVarType(acv.getValueVector)
+        case _ => false
+      }
+      if (zeroCopyEligible) {
+        // Fast path: zero-copy extraction of Arrow RecordBatch
+        convertArrowBatchZeroCopy(batch, rowCount, schema, vectors)
+      } else {
+        // Slow path: convert to Arrow via rows
+        convertToArrowBatch(batch, rowCount, schema)
+      }
+    } {
+      batch.closeIfFreeable()
     }
   }
 
@@ -889,31 +967,24 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val arrowWriter = ArrowWriter.create(root)
     val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
-    // Collect statistics inline during row iteration, same as InternalRowToArrow path
-    val statsCollectors: Array[ColumnStats] = schema.map { attr =>
-      ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
-    }.toArray
-
     Utils.tryWithSafeFinally {
       val rowIterator = batch.rowIterator().asScala
       while (rowIterator.hasNext) {
-        val row = rowIterator.next()
-        arrowWriter.write(row)
-
-        // Collect statistics for this row inline
-        var i = 0
-        while (i < statsCollectors.length) {
-          statsCollectors(i).gatherStats(row, i)
-          i += 1
-        }
+        arrowWriter.write(rowIterator.next())
       }
       arrowWriter.finish()
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {
         val arrowData = ArrowCachedBatchSerializer.serializeBatch(recordBatch)
-        val stats = ArrowCachedBatchSerializer.buildStatisticsFromCollectors(
-          statsCollectors, schema)
+        // Derive statistics from the built Arrow vectors rather than the input rows. The input
+        // rows here are ColumnarArray/ColumnarMap/ColumnarRow views (this is the non-Arrow
+        // ColumnarBatch path, e.g. vectorized nested Parquet/ORC), which do not expose a byte
+        // size; collecting row-by-row would record zero bytes for every complex value and make a
+        // complex-only relation report sizeInBytes=0, wrongly eligible for broadcast. Reading
+        // vector.getBufferSize off the finished root accounts for the actual payload, matching the
+        // zero-copy path.
+        val stats = ArrowCachedBatchSerializer.collectStatistics(root, schema)
         ArrowCachedBatch(rowCount, arrowData, stats)
       } {
         recordBatch.close()
@@ -983,13 +1054,12 @@ private class ArrowCachedBatchToColumnarBatchIterator(
   // Register cleanup - close remaining root and allocator when task completes
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
-      if (prefetchFuture != null) {
-        prefetchFuture.cancel(true)
-        prefetchFuture = null
-      }
-      if (prefetchExecutor != null) {
-        prefetchExecutor.shutdownNow()
-      }
+      // Stop the worker and close any root it already produced before closing the allocator.
+      // A short-circuiting consumer (e.g. LIMIT) can trigger task completion while a prefetched
+      // root is in flight; simply cancelling the future would drop that root and allocator.close()
+      // would then fail with "Memory was leaked by query".
+      prefetchFuture = ArrowCachedBatchSerializer.drainAndClosePrefetch(
+        prefetchExecutor, prefetchFuture)
       if (previousRoot != null) {
         previousRoot.close()
         previousRoot = null
@@ -1041,9 +1111,19 @@ private class ArrowCachedBatchToColumnarBatchIterator(
     val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
     Utils.tryWithSafeFinally {
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      val loader = new VectorLoader(root)
-      loader.load(recordBatch)
-      root
+      // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
+      // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
+      // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
+      // fails with a leak error that masks the original exception.
+      try {
+        val loader = new VectorLoader(root)
+        loader.load(recordBatch)
+        root
+      } catch {
+        case t: Throwable =>
+          root.close()
+          throw t
+      }
     } {
       recordBatch.close()
     }
@@ -1249,13 +1329,11 @@ private class ArrowCachedBatchToInternalRowIterator(
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
-      if (prefetchFuture != null) {
-        prefetchFuture.cancel(true)
-        prefetchFuture = null
-      }
-      if (prefetchExecutor != null) {
-        prefetchExecutor.shutdownNow()
-      }
+      // Stop the worker and close any root it already produced before closing the allocator;
+      // otherwise a prefetched root produced after a short-circuiting consumer (e.g. LIMIT) stops
+      // reading would leak and allocator.close() would fail with "Memory was leaked by query".
+      prefetchFuture = ArrowCachedBatchSerializer.drainAndClosePrefetch(
+        prefetchExecutor, prefetchFuture)
       if (currentRoot != null) {
         currentRoot.close()
         currentRoot = null
@@ -1314,9 +1392,19 @@ private class ArrowCachedBatchToInternalRowIterator(
     val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
     try {
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
-      val loader = new VectorLoader(root)
-      loader.load(recordBatch)
-      root
+      // VectorLoader.load fills vectors incrementally, so a failure (malformed data, decompression
+      // error, OOM) can occur after earlier vectors have allocated buffers. Close the partially
+      // loaded root on failure, otherwise it becomes unreachable and the later allocator.close()
+      // fails with a leak error that masks the original exception.
+      try {
+        val loader = new VectorLoader(root)
+        loader.load(recordBatch)
+        root
+      } catch {
+        case t: Throwable =>
+          root.close()
+          throw t
+      }
     } finally {
       recordBatch.close()
     }
