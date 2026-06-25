@@ -1,5 +1,23 @@
 [ {
   "attempts" : [ {
+    "appSparkVersion" : "3.5.2",
+    "completed" : true,
+    "duration" : 221145,
+    "endTime" : "2026-06-23T17:34:35.148GMT",
+    "endTimeEpoch" : 1782236075148,
+    "exitCode" : 1,
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
+    "lastUpdated" : "",
+    "lastUpdatedEpoch" : 0,
+    "sparkUser" : "spark",
+    "startTime" : "2026-06-23T17:30:54.003GMT",
+    "startTimeEpoch" : 1782235854003
+  } ],
+  "id" : "local-1430917381536",
+  "name" : "Spark shell"
+}, {
+  "attempts" : [ {
     "appSparkVersion" : "4.2.0-SNAPSHOT",
     "logSourceFullPath" : "",
     "logSourceName" : "",
