@@ -104,6 +104,7 @@ case class BroadcastNearestByJoinExec(
         val rankingProj = UnsafeProjection.create(
           Seq(rankExpr), leftOutput ++ rightOutput)
         val resultProj = UnsafeProjection.create(allOutput, allOutput)
+        val rankingNeedsCopy = !UnsafeRow.isFixedLength(rankExpr.dataType)
 
         // Hoist heap outside flatMap to reduce GC pressure
         val heap = if (isDistance) {
@@ -128,9 +129,14 @@ case class BroadcastNearestByJoinExec(
           while (i < rightRows.length) {
             val rightRow = rightRows(i)
             joinedRow(leftRow, rightRow)
-            val rankingRow = rankingProj(joinedRow).copy()
+            val rankingRow = rankingProj(joinedRow)
             if (!rankingRow.isNullAt(0)) {
-              val rankingValue = rankingRow.get(0, rankExpr.dataType)
+              val rawValue = rankingRow.get(0, rankExpr.dataType)
+              val rankingValue = if (rankingNeedsCopy) {
+                rankingRow.copy().get(0, rankExpr.dataType)
+              } else {
+                rawValue
+              }
               heap.offer(HeapEntry(i, rankingValue))
               if (heap.size() > k) heap.poll()
             }
