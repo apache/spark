@@ -1199,6 +1199,39 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57159: timestampNanosToEpochNanos packs into int64 epoch-nanoseconds") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // Packs (epochMicros, nanosWithinMicro) as epochMicros * 1000 + nanosWithinMicro, including the
+    // sub-microsecond remainder boundaries 0 and 999.
+    assert(timestampNanosToEpochNanos(nanos(0L, 0)) === 0L)
+    assert(timestampNanosToEpochNanos(nanos(0L, 999)) === 999L)
+    assert(timestampNanosToEpochNanos(nanos(1L, 0)) === NANOS_PER_MICROS)
+    assert(timestampNanosToEpochNanos(nanos(1234567L, 7)) === 1234567L * NANOS_PER_MICROS + 7L)
+    // Pre-epoch (negative epochMicros) values pack linearly too.
+    assert(timestampNanosToEpochNanos(nanos(-1L, 0)) === -NANOS_PER_MICROS)
+    assert(timestampNanosToEpochNanos(nanos(-1234567L, 13)) === -1234567L * NANOS_PER_MICROS + 13L)
+
+    // Round-trips with the documented inverse (floorDiv/floorMod) that the Arrow reader uses to
+    // reconstruct the pair, for positive and pre-epoch values alike.
+    Seq(nanos(0L, 0), nanos(0L, 999), nanos(1234567L, 7), nanos(-1234567L, 13)).foreach { v =>
+      val packed = timestampNanosToEpochNanos(v)
+      assert(Math.floorDiv(packed, NANOS_PER_MICROS) === v.epochMicros)
+      assert(Math.floorMod(packed, NANOS_PER_MICROS) === v.nanosWithinMicro.toLong)
+    }
+
+    // The maximum representable instant packs exactly to Long.MaxValue.
+    assert(timestampNanosToEpochNanos(
+      nanos(Long.MaxValue / NANOS_PER_MICROS, (Long.MaxValue % NANOS_PER_MICROS).toInt)) ===
+      Long.MaxValue)
+
+    // Out-of-range values raise ArithmeticException (callers translate it into DATETIME_OVERFLOW).
+    intercept[ArithmeticException] {
+      timestampNanosToEpochNanos(nanos(Long.MaxValue / NANOS_PER_MICROS + 1, 0))
+    }
+  }
+
   test("SPARK-34903: subtract timestamps") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       Seq(
