@@ -78,6 +78,10 @@ fi
 # SPARK-43540: add current working directory into executor classpath
 SPARK_CLASSPATH="$SPARK_CLASSPATH:$PWD"
 
+# SPARK-57698: Limit glibc memory arenas to avoid excessive virtual memory usage,
+# mirroring what Hadoop does for YARN deployments.
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-4}"
+
 case "$1" in
   driver)
     shift 1
