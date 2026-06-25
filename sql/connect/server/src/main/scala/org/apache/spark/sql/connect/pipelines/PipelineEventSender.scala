@@ -70,7 +70,8 @@ class PipelineEventSender(
   private var lastDropWarningTimestamp = 0L
 
   // Overridable so tests can drive the throttle-reset path without waiting on the wall clock.
-  protected def droppedEventLogIntervalMs: Long = PipelineEventSender.DROPPED_EVENT_LOG_INTERVAL_MS
+  protected def droppedEventLogIntervalMs: Long =
+    PipelineEventSender.DROPPED_EVENT_LOG_INTERVAL_MS
 
   /**
    * Send an event async by submitting it to the executor, if the sender is not shut down.
