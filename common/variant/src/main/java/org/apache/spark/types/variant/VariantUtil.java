@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
 
@@ -505,7 +506,10 @@ public class VariantUtil {
         length = readUnsigned(value, pos + 1, U32_SIZE);
       }
       checkIndex(start + length - 1, value.length);
-      return new String(value, start, length);
+      // The string content is UTF-8 encoded (it is written by `VariantBuilder.appendString`).
+      // Decode with UTF-8 explicitly rather than relying on the JVM default charset, which is
+      // platform-dependent on Java 17.
+      return new String(value, start, length, StandardCharsets.UTF_8);
     }
     throw unexpectedType(Type.STRING);
   }
@@ -605,6 +609,8 @@ public class VariantUtil {
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
     if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
-    return new String(metadata, stringStart + offset, nextOffset - offset);
+    // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
+    // explicitly rather than relying on the platform-dependent JVM default charset.
+    return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
   }
 }
