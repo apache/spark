@@ -225,18 +225,8 @@ class OrcFileFormat
 
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
-          val orcRecordReader = {
-            val orcReader = OrcFile.createReader(
-              filePath,
-              OrcFile.readerOptions(taskConf)
-                .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(taskConf))
-                .filesystem(fs)
-                .orcTail(readerOptions.getOrcTail))
-            val options = OrcMapredInputFormat
-              .buildOptions(taskConf, orcReader, fileSplit.getStart, fileSplit.getLength)
-              .useSelected(true)
-            new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
-          }
+          val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
+            filePath, taskConf, fileSplit, readerOptions.getOrcTail)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
