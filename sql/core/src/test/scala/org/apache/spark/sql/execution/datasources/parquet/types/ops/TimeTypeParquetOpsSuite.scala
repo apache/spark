@@ -27,7 +27,10 @@ import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.types.{IntegerType, TimeType}
 
 /**
- * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
+ * Unit tests for [[TimeTypeParquetOps]]'s Parquet read guards - both the row-based
+ * [[TimeTypeParquetOps.requireCompatibleParquetType]] and the vectorized-read
+ * getVectorUpdater / getVectorUpdaterOrNull dispatch, which share the same
+ * compatible-encoding check so the two readers accept and reject the same set.
  *
  * TimeType is stored in Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false) for precision
  * 0..6 and INT64 TIME(NANOS, isAdjustedToUTC=false) for precision 7..9. The read-path guard

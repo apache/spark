@@ -167,20 +167,6 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    */
   def supportDataType: Boolean = true
 
-  /**
-   * Whether vectorized (batch) reading is supported for this type.
-   * Used by ParquetUtils.isBatchReadSupported. Default is false - types must opt in
-   * by overriding to true. When false, Spark uses the row-based read path (newConverter)
-   * which is always available.
-   *
-   * A type that returns true must also supply a batch decoder via [[getVectorUpdater]]
-   * (dispatched from ParquetVectorUpdaterFactory.getUpdater); otherwise the vectorized factory
-   * would not recognize it. TimeType returns true and overrides getVectorUpdater accordingly.
-   *
-   * @param sqlConf the active SQL configuration
-   */
-  def isBatchReadSupported(sqlConf: SQLConf): Boolean = false
-
   // ==================== Schema Clipping (Struct-Backed Types) ====================
 
   /**
@@ -199,6 +185,20 @@ private[parquet] trait ParquetTypeOps extends Serializable {
   def parquetStructSchema: Option[StructType] = None
 
   // ==================== Vectorized Read ====================
+
+  /**
+   * Whether vectorized (batch) reading is supported for this type.
+   * Used by ParquetUtils.isBatchReadSupported. Default is false - types must opt in
+   * by overriding to true. When false, Spark uses the row-based read path (newConverter)
+   * which is always available.
+   *
+   * A type that returns true must also supply a batch decoder via [[getVectorUpdater]]
+   * (dispatched from ParquetVectorUpdaterFactory.getUpdater); otherwise the vectorized factory
+   * would not recognize it. TimeType returns true and overrides getVectorUpdater accordingly.
+   *
+   * @param sqlConf the active SQL configuration
+   */
+  def isBatchReadSupported(sqlConf: SQLConf): Boolean = false
 
   /**
    * The vectorized (batch) [[ParquetVectorUpdater]] for this type, or None to fall back to the
