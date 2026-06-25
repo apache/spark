@@ -111,6 +111,14 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     yarnConf.setFloat("yarn.scheduler.capacity.maximum-am-resource-percent", 1.0f)
     yarnConf.setFloat("yarn.scheduler.capacity.root.default.maximum-am-resource-percent", 1.0f)
 
+    // Give the single mini NodeManager generous memory. By default the mini cluster advertises
+    // only a small amount of memory, so once the AM (~1.4GB) is running there is barely enough
+    // headroom left for the executors these tests request. On a busy CI runner that makes
+    // executor allocation slow/racy and the YarnClusterSuite apps time out waiting to finish.
+    // The CI hosts have plenty of RAM, so let the NM offer enough for the AM plus a few executors.
+    yarnConf.setInt("yarn.nodemanager.resource.memory-mb", 8192)
+    yarnConf.setInt("yarn.scheduler.maximum-allocation-mb", 8192)
+
     // Support both IPv4 and IPv6
     yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
 
@@ -260,6 +268,15 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
     props.put(SPARK_JARS.key, "local:" + fakeSparkJar.getAbsolutePath())
+
+    // On a busy CI runner the in-JVM mini cluster, the driver and the container JVMs all compete
+    // for CPU, and the driver's RPC server occasionally cannot accept a connection in time. With
+    // the default of 3 retries an executor that loses this race gives up and exits, which leaves
+    // the application unable to finish and the suite times out. Give the executor->driver
+    // connection a larger retry budget so a transient stall does not permanently fail the app.
+    // These are defaults; individual tests can still override them via extraConf below.
+    props.setProperty("spark.rpc.io.maxRetries", "10")
+    props.setProperty("spark.rpc.io.retryWait", "2s")
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
