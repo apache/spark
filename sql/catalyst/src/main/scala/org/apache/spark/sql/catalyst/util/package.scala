@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.connector.catalog.MetadataColumn
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -241,6 +242,7 @@ package object util extends Logging {
     AUTO_GENERATED_ALIAS,
     METADATA_COL_ATTR_KEY,
     QUALIFIED_ACCESS_ONLY,
+    FIELD_ID_METADATA_KEY,
     FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY,
     FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY,
     FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY,

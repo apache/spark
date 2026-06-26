@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.connector.catalog.SharedInMemoryTableCatalog
+import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, SharedInMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -47,6 +47,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
     // copyOnLoad: each loadTable returns a fresh copy, simulating a real
     // catalog where metadata is reloaded from the metastore on each access
     .set("spark.sql.catalog.sharedcat.copyOnLoad", "true")
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
 
   override def afterEach(): Unit = {
     try {
@@ -133,7 +134,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
         exception = intercept[AnalysisException] {
           df.collect()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map(
           "tableName" -> ".*", "errors" -> ".*"))
@@ -156,7 +157,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       // NullTableIdInMemoryTableCatalog), so column ID check catches it
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
@@ -201,7 +202,7 @@ class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSess
       // both column ID mismatches are detected
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*",
           "errors" -> "(?s).*salary.*bonus.*"))
