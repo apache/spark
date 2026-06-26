@@ -153,6 +153,9 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     widenTest(TimestampType, TimestampLTZNanosType(9), Some(TimestampLTZNanosType(9)))
     widenTest(TimestampLTZNanosType(7), TimestampNTZNanosType(9), Some(TimestampLTZNanosType(9)))
     widenTest(DateType, TimestampNTZNanosType(7), Some(TimestampNTZNanosType(7)))
+    // Two TIME operands widen to the larger fractional-seconds precision (SPARK-57585).
+    widenTest(TimeType(3), TimeType(6), Some(TimeType(6)))
+    widenTest(TimeType(0), TimeType(9), Some(TimeType(9)))
   }
 
   test("tightest common bound for types") {
@@ -247,6 +250,17 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     // nanos <-> TIME has no common datetime type.
     widenTest(TimestampLTZNanosType(9), TimeType(6), None)
     widenTest(TimestampNTZNanosType(9), TimeType(6), None)
+
+    // TIME(p) types (SPARK-57585).
+    // Two TIME operands widen to the larger fractional-seconds precision.
+    widenTest(TimeType(3), TimeType(6), Some(TimeType(6)))
+    widenTest(TimeType(6), TimeType(3), Some(TimeType(6)))
+    widenTest(TimeType(0), TimeType(9), Some(TimeType(9)))
+    widenTest(TimeType(6), TimeType(6), Some(TimeType(6)))
+    // TIME has no common datetime type with DATE or the TIMESTAMP families.
+    widenTest(TimeType(6), DateType, None)
+    widenTest(TimeType(6), TimestampType, None)
+    widenTest(TimeType(6), TimestampNTZType, None)
     // No common type with non-datetime types.
     widenTest(IntegerType, TimestampLTZNanosType(9), None)
     widenTest(StringType, TimestampNTZNanosType(9), None)
