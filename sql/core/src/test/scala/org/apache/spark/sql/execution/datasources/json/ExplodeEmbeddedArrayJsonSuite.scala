@@ -90,7 +90,8 @@ class EmbeddedArraySplitterSuite extends SparkFunSuite {
   }
 
   test("byte order mark is skipped") {
-    assert(split("\uFEFF" + """{"Records": [{"a": 1}]}""") === Seq("""{"a": 1}"""))
+    val bom = 0xFEFF.toChar.toString // byte order mark (U+FEFF)
+    assert(split(bom + """{"Records": [{"a": 1}]}""") === Seq("""{"a": 1}"""))
   }
 
   test("truncated input returns the partial record") {

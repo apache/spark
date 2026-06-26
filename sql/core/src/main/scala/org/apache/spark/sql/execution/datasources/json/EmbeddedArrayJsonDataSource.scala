@@ -75,6 +75,9 @@ object EmbeddedArrayJsonDataSource extends JsonDataSource {
       stream: InputStream,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
+    // The splitter scans characters, so it needs a decoded `Reader`. Unlike the other readers --
+    // which hand the byte stream to Jackson and let it auto-detect the charset -- we must pick the
+    // charset up front, so a non-UTF-8 file requires the `encoding` option to be set explicitly.
     val encoding = parser.options.encoding.getOrElse(StandardCharsets.UTF_8.name())
     val splitter = new EmbeddedArraySplitter(
       new InputStreamReader(stream, encoding), parser.options.explodeEmbeddedArray.get)
@@ -159,7 +162,7 @@ class EmbeddedArraySplitter(reader: Reader, arrayFieldName: String) {
    */
   private def findEmbeddedArray(): Boolean = {
     var c = nextNonWhitespace()
-    if (c == '\uFEFF') { // skip the byte order mark
+    if (c == 0xFEFF) { // skip the byte order mark
       c = nextNonWhitespace()
     }
     if (c != '{') {

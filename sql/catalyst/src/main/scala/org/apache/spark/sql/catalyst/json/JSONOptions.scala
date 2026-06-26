@@ -225,6 +225,9 @@ class JSONOptions(
   // The inferred schema names the variant column after the array field; a user-specified schema
   // may give the column any name. The file is always consumed as a whole document, so its line
   // layout is irrelevant and line-based options such as `multiLine` and `lineSep` are ignored.
+  // Unlike the other JSON readers, which let Jackson auto-detect the charset of the byte stream,
+  // this reader decodes the file to characters itself and so reads it as UTF-8 unless the
+  // `encoding` option specifies another charset.
   // Similar to `singleVariantColumn`; the two options are mutually exclusive.
   val explodeEmbeddedArray: Option[String] = parameters.get(EXPLODE_EMBEDDED_ARRAY)
 
