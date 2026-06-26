@@ -293,7 +293,7 @@ class InMemoryTableWithUnacknowledgedJoinAndSample(
 
     override def supportedPushedOperatorsForJoin(): java.util.Set[
         SupportsPushDownJoin.PushedOperator] = {
-      util.Collections.emptySet()
+      util.Set.of()
     }
   }
 }
