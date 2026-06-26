@@ -36,10 +36,17 @@ private[sql] object UpCastRule {
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
-    case (DateType, TimestampType) => true
-    case (DateType, TimestampNTZType) => true
-    case (TimestampNTZType, TimestampType) => true
-    case (TimestampType, TimestampNTZType) => true
+    // Widening DATE -> timestamp family (micro or nanos, LTZ or NTZ) is lossless; the reverse
+    // (timestamp -> DATE) drops the time-of-day and is not matched here, so it stays a non-up-cast.
+    case (DateType, t) if TimestampFamily.fractionalPrecision(t).isDefined => true
+    // Lossless widening within the timestamp family: target fractional-second precision >= source.
+    // Covers micros <-> nanos and the cross-family LTZ <-> NTZ pairs (mirroring how the micro
+    // TimestampType <-> TimestampNTZType pair is a mutual up-cast). Equal precision is handled by
+    // the `from == to` short-circuit above; lossy narrowing falls through to `case _ => false`.
+    case (f, t)
+        if TimestampFamily.fractionalPrecision(f).isDefined &&
+          TimestampFamily.fractionalPrecision(t).isDefined =>
+      TimestampFamily.fractionalPrecision(f).get <= TimestampFamily.fractionalPrecision(t).get
 
     case (s1: StringType, s2: StringType) => StringHelper.isMoreConstrained(s1, s2)
     // TODO: allow upcast from int/double/decimal to char/varchar of sufficient length
