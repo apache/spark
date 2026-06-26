@@ -552,6 +552,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final void readFixedLenByteArray(int total, int len, WritableColumnVector v, int rowId) {
+    for (int i = 0; i < total; i++) {
+      ByteBuffer buffer = getBuffer(len);
+      if (buffer.hasArray()) {
+        v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
+      } else {
+        v.putByteArray(rowId + i, buffer, buffer.position(), len);
+      }
+    }
+  }
+
+  @Override
   public void skipFixedLenByteArray(int total, int len) {
     in.skip(total * (long) len);
   }
