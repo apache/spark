@@ -524,6 +524,10 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: TimestampNTZNanosType) => false
     case (TimestampNTZType, _: TimestampLTZNanosType) => false
     case (_: AnyTimestampNanoType, _: AnyTimestampNanoType) => false
+    // SPARK-57585: widening a TIME(p) to a larger precision is lossless and allowed as a silent
+    // store assignment, while narrowing (e.g. TIME(6) -> TIME(3)) drops fractional-seconds digits
+    // and stays explicit-CAST-only. Equal precision is handled by the `from == to` short-circuit.
+    case (f: TimeType, t: TimeType) => f.precision <= t.precision
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>

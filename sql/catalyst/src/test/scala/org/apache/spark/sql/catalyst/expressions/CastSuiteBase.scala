@@ -802,6 +802,21 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57585: cross-precision TIME store-assignment and up-cast contract") {
+    for {
+      p1 <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+      p2 <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+    } {
+      // Cross-precision TIME casts are never up-casts (only equal precision is, via from == to),
+      // matching the nanos precedent; STRICT store assignment rejects them. The both-direction
+      // assertions also guard against a future blanket datetime arm in UpCastRule.
+      assert(Cast.canUpCast(TimeType(p1), TimeType(p2)) == (p1 == p2))
+      // ANSI store assignment allows lossless widening (p1 <= p2) and equal precision, but blocks
+      // lossy narrowing (p1 > p2) to avoid silently dropping fractional-seconds digits.
+      assert(Cast.canANSIStoreAssign(TimeType(p1), TimeType(p2)) == (p1 <= p2))
+    }
+  }
+
   test("cross-family nanos cast: admissibility, store-assignment and up-cast contract") {
     for {
       p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION

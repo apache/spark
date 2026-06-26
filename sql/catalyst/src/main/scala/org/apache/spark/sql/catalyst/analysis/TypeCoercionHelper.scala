@@ -245,6 +245,12 @@ abstract class TypeCoercionHelper {
 
   protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      // Two TIME operands of differing fractional-seconds precision widen to the larger precision
+      // (ANSI SQL result type for a set of comparable datetime types). Widening from a smaller to a
+      // larger precision is a lossless up-cast via truncateTimeToPrecision. Cross-family pairs
+      // (TIME vs DATE / TIMESTAMP) remain incomparable and fall through to the None arms below.
+      case (t1: TimeType, t2: TimeType) =>
+        Some(TimeType(math.max(t1.precision, t2.precision)))
       case (_, _: TimeType) => None
       case (_: TimeType, _) => None
 
