@@ -70,6 +70,10 @@ case class TryEval(child: Expression) extends UnaryExpression {
        2022-01-01
       > SELECT _FUNC_(timestamp'2021-01-01 00:00:00', interval 1 day);
        2021-01-02 00:00:00
+      > SELECT _FUNC_(time'09:00:00', interval 1 hour);
+       10:00:00
+      > SELECT _FUNC_(time'23:00:00', interval 2 hour);
+       NULL
       > SELECT _FUNC_(interval 1 year, interval 2 year);
        3-0
   """,
@@ -185,6 +189,10 @@ case class TryMod(left: Expression, right: Expression, replacement: Expression)
        2020-01-01
       > SELECT _FUNC_(timestamp'2021-01-02 00:00:00', interval 1 day);
        2021-01-01 00:00:00
+      > SELECT _FUNC_(time'09:00:00', interval 1 hour);
+       08:00:00
+      > SELECT _FUNC_(time'00:30:00', interval 1 hour);
+       NULL
       > SELECT _FUNC_(interval 2 year, interval 1 year);
        1-0
   """,
