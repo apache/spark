@@ -89,14 +89,14 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("INSERT by position computes generated column from the stored (post-cast) value") {
+  test("INSERT by position validates generated column against the stored (post-cast) value") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       sql(s"""CREATE TABLE testcat.$tblName(
              |  id INT,
              |  doubled INT GENERATED ALWAYS AS (id * 2)
              |) USING foo""".stripMargin)
-      sql(s"INSERT INTO testcat.$tblName VALUES (2.9)")
+      sql(s"INSERT INTO testcat.$tblName VALUES (2.9, 4)")
       checkAnswer(spark.table(s"testcat.$tblName"), Row(2, 4))
     }
   }
@@ -129,18 +129,19 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("INSERT by position auto-fills trailing generated column") {
+  test("INSERT by position does not auto-fill trailing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       sql(s"""CREATE TABLE testcat.$tblName(
              |  eventDate DATE,
              |  eventYear INT GENERATED ALWAYS AS (year(eventDate))
              |) USING foo""".stripMargin)
-      // Insert by position without column list -- only provide the non-generated column
-      sql(s"INSERT INTO testcat.$tblName VALUES (DATE'2024-06-15')")
-      checkAnswer(
-        spark.table(s"testcat.$tblName"),
-        Row(java.sql.Date.valueOf("2024-06-15"), 2024))
+      // By-position writes require values for all target columns. To omit generated columns,
+      // use a by-name write with an explicit column list.
+      val ex = intercept[AnalysisException] {
+        sql(s"INSERT INTO testcat.$tblName VALUES (DATE'2024-06-15')")
+      }
+      assert(ex.getMessage.contains("not enough data columns"))
     }
   }
 
@@ -371,15 +372,15 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("non-trailing generated column by position is not auto-filled") {
+  test("INSERT by position does not auto-fill non-trailing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       sql(s"""CREATE TABLE testcat.$tblName(
              |  a INT GENERATED ALWAYS AS (b + 1),
              |  b INT
              |) USING foo""".stripMargin)
-      // By position with 1 value: the missing column (a) is not trailing,
-      // so it cannot be auto-filled by position
+      // By-position writes require values for all target columns. To omit generated columns,
+      // use a by-name write with an explicit column list.
       val ex = intercept[AnalysisException] {
         sql(s"INSERT INTO testcat.$tblName VALUES (10)")
       }
@@ -526,7 +527,7 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
-  test("by-position auto-fill with type cast on source column") {
+  test("INSERT by position validates generated column with type cast on source column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
       // Table expects LONG for 'a', generation expression is a + 1
@@ -534,9 +535,9 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
              |  a LONG,
              |  b LONG GENERATED ALWAYS AS (a + 1)
              |) USING foo""".stripMargin)
-      // Insert INT value by position -- gets cast to LONG, then generation expression uses
-      // the cast value
-      sql(s"INSERT INTO testcat.$tblName VALUES (42)")
+      // Insert INT values by position -- 'a' gets cast to LONG, then the generated column
+      // constraint validates against the cast value.
+      sql(s"INSERT INTO testcat.$tblName VALUES (42, 43)")
       checkAnswer(
         spark.table(s"testcat.$tblName"),
         Row(42L, 43L))

@@ -152,12 +152,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         enforceFullOutput = true)
     } else {
       if (expected.size > query.output.size && !fillDefaultValue) {
-        // Allow if all missing trailing columns are generated columns
-        val missingCols = expected.drop(query.output.size)
-        if (!missingCols.forall(col => GeneratedColumn.isGeneratedColumn(col.metadata))) {
-          throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-            tableName, expected.map(_.name), query.output)
-        }
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tableName, expected.map(_.name), query.output)
       }
       resolveColumnsByPosition(
         tableName, query.output, expected, conf, errors += _,
@@ -509,20 +505,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         )
       }
     } else if (inputCols.size < actualExpectedCols.size && !fillDefaultValue) {
-      // Allow if all missing trailing columns are generated columns
       val missingCols = actualExpectedCols.drop(inputCols.size)
-      if (!missingCols.forall(col => GeneratedColumn.isGeneratedColumn(col.metadata))) {
-        val missingColsStr = missingCols
-          .map(col => toSQLId(col.name))
-          .mkString(", ")
-        if (colPath.isEmpty) {
-          throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
-            actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
-        } else {
-          throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
-            tableName, colPath.quoted, missingColsStr
-          )
-        }
+      val missingColsStr = missingCols
+        .map(col => toSQLId(col.name))
+        .mkString(", ")
+      if (colPath.isEmpty) {
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
+          actualExpectedCols.map(_.name), inputCols.map(_.toAttribute))
+      } else {
+        throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+          tableName, colPath.quoted, missingColsStr
+        )
       }
     }
 
