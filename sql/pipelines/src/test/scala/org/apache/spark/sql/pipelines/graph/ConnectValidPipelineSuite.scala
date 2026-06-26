@@ -661,4 +661,46 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     // Nothing leaks onto the run session.
     assert(spark.conf.getOption(key).isEmpty)
   }
+
+  test("per-flow confs reach the analyzer through the full resolveToDataflowGraph() path") {
+    val caseSensitiveKey = SQLConf.CASE_SENSITIVE.key
+    // Pin the session default so the test is self-contained under the shared session. The per-flow
+    // override below is applied to the flow's own conf, never to this session conf.
+    withSQLConf(caseSensitiveKey -> "false") {
+      // With case-insensitive resolution `SELECT Foo FROM src` matches the `foo` column. Setting
+      // spark.sql.caseSensitive=true on the consumer flow makes that flow's analysis
+      // case-sensitive, so `Foo` no longer matches `foo`. Driving this through
+      // resolveToDataflowGraph() exercises a per-flow conf on the full resolution path (not just a
+      // direct FlowAnalysis call) and shows it is consumed by Catalyst analysis, not merely stored
+      // where SQLConf.get can read it. Cross-flow isolation under concurrency is covered by the
+      // parallel test above.
+
+      // Baseline: no per-flow conf, so `Foo` matches `foo` and the graph resolves.
+      val resolved = new TestGraphRegistrationContext(spark) {
+        registerPersistedView("src", query = dfFlowFunc(spark.range(1).toDF("foo")))
+        registerPersistedView("consumer", query = sqlFlowFunc(spark, "SELECT Foo FROM src"))
+      }.resolveToDataflowGraph()
+      assert(resolved.resolved, "pipeline should resolve under the default case-insensitive conf")
+
+      // Same query, but the consumer flow sets spark.sql.caseSensitive=true, so `Foo` no longer
+      // matches `foo` and analysis of that flow fails.
+      val unresolved = new TestGraphRegistrationContext(spark) {
+        registerPersistedView("src", query = dfFlowFunc(spark.range(1).toDF("foo")))
+        registerPersistedView(
+          "consumer",
+          query = sqlFlowFunc(spark, "SELECT Foo FROM src"),
+          sqlConf = Map(caseSensitiveKey -> "true"))
+      }.resolveToDataflowGraph()
+      assert(!unresolved.resolved, "case-sensitive consumer flow should fail to resolve")
+      val ex = intercept[UnresolvedPipelineException] {
+        unresolved.validate()
+      }
+      assertAnalysisException(
+        ex.directFailures(fullyQualifiedIdentifier("consumer")),
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+      // The per-flow conf must not leak onto the run session.
+      assert(spark.conf.get(caseSensitiveKey) == "false")
+    }
+  }
 }

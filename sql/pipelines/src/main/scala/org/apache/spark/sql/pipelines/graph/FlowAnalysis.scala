@@ -78,9 +78,12 @@ object FlowAnalysis {
    * Constructs an analyzed [[DataFrame]] from a [[LogicalPlan]] by resolving Pipelines specific
    * TVFs and datasets that cannot be resolved directly by Catalyst.
    *
-   * This function shouldn't call any singleton as it will break concurrent access to graph
-   * analysis; or any thread local variables as graph analysis and this function will use
-   * different threads in python repl.
+   * This runs on the flow-resolution thread pool, which may differ from the thread that defined
+   * the flow (e.g. in a Python REPL), so it must not depend on ambient singletons or thread-locals
+   * carried over from that defining thread. The one piece of per-flow state it relies on - the
+   * flow's SQL confs - is installed on the analyzing thread by
+   * [[createFlowFunctionFromLogicalPlan]] via `SQLConf.withExistingConf`, so the Catalyst analysis
+   * this triggers reads them through `SQLConf.get`.
    *
    * @param plan     The [[LogicalPlan]] defining a flow.
    * @return An analyzed [[DataFrame]].
