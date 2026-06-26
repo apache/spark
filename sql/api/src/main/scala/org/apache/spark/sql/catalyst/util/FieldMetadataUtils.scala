@@ -15,19 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal.connector
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, GenerationExpression, IdentityColumnSpec}
-import org.apache.spark.sql.types.DataType
-
-// The standard concrete implementation of data source V2 column.
-case class ColumnImpl(
-    name: String,
-    dataType: DataType,
-    nullable: Boolean,
-    comment: String,
-    defaultValue: ColumnDefaultValue,
-    override val columnGenerationExpression: GenerationExpression,
-    identityColumnSpec: IdentityColumnSpec,
-    metadataInJSON: String,
-    override val id: String = null) extends Column
+object FieldMetadataUtils {
+  // Metadata key for the field ID used to track column identity across schema evolution
+  val FIELD_ID_METADATA_KEY = "__FIELD_ID"
+}
