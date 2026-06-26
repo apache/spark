@@ -129,16 +129,23 @@ object AggUtils {
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
-    // When partial aggregation is disabled, skip the pre-shuffle partial aggregation and run a
+    // When partial aggregation is bypassed, skip the pre-shuffle partial aggregation and run a
     // single Complete-mode aggregation after the shuffle. This can improve performance when the
     // group cardinality is high and the pre-shuffle reduction ratio is low.
+    //
+    // The bypass is only beneficial when there are grouping keys (groupingExpressions.nonEmpty):
+    // global aggregations (no GROUP BY) always produce a single output row, so the pre-shuffle
+    // partial aggregation achieves the maximum possible reduction ratio and should never be
+    // skipped. Bypassing a global aggregation would shuffle all raw rows to a single partition
+    // with no benefit, which is strictly worse than the normal Partial+Final path.
+    val hasGroupingKeys = groupingExpressions.nonEmpty
     //
     // session_window requires MergingSessionsExec (inserted below via mayAppendMergingSessionExec)
     // to sort and merge overlapping sessions before the final aggregation. The bypass is skipped
     // when a session_window grouping key is present so that the normal Partial+Merge+Final path
     // runs and MergingSessionsExec is correctly inserted.
     val hasSessionWindow = groupingExpressions.exists(_.metadata.contains(SessionWindow.marker))
-    if (child.conf.bypassPartialAggregation && !hasSessionWindow) {
+    if (child.conf.bypassPartialAggregation && hasGroupingKeys && !hasSessionWindow) {
       val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
       val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
       val completeAggregate = createAggregate(

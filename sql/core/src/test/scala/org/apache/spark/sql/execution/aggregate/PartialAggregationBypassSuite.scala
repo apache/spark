@@ -56,6 +56,27 @@ class PartialAggregationBypassSuite
     }
   }
 
+  test("bypassPartialAggregation=true does not bypass global aggregation " +
+      "(groupingExpressions.isEmpty)") {
+    // Global aggregations (no GROUP BY) always produce a single output row, so the
+    // pre-shuffle partial aggregation achieves the maximum possible reduction ratio.
+    // Bypassing it would shuffle all raw rows to a single partition with no benefit,
+    // which is strictly worse than the normal Partial+Final path. The bypass is
+    // therefore skipped for global aggregations.
+    withAndWithoutAQE {
+      withSQLConf(SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "true") {
+        val df = spark.range(100).agg(F.sum("id"), F.count("id"))
+        val aggs = aggNodes(df.queryExecution.executedPlan)
+        assert(aggs.exists(_.aggregateExpressions.exists(_.mode == Partial)),
+          "expected a Partial-mode node for global aggregation")
+        assert(aggs.exists(_.aggregateExpressions.exists(_.mode == Final)),
+          "expected a Final-mode node for global aggregation")
+        assert(!aggs.exists(_.aggregateExpressions.exists(_.mode == Complete)),
+          "expected no Complete-mode nodes for global aggregation")
+      }
+    }
+  }
+
   test("bypassPartialAggregation=false (default) produces Partial+Final plan") {
     withAndWithoutAQE {
       val df = spark.range(100).toDF("v")
