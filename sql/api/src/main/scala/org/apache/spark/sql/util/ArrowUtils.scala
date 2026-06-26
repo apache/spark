@@ -115,6 +115,11 @@ private[sql] object ArrowUtils {
   // metadata under this dedicated key (namespaced like `metadataKey`, separate from the user
   // metadata blob so user metadata is untouched) and recovered on read in `fromArrowField`.
   private val timestampNanosPrecisionKey = "SPARK::timestampNanos::precision"
+  // Arrow's Time type carries only (unit, bitWidth) and has no fractional-second precision field,
+  // so the precision of TimeType is stored in the Arrow field metadata under this dedicated key
+  // (namespaced like `metadataKey`, separate from the user metadata blob so user metadata is
+  // untouched) and recovered on read in `fromArrowField`.
+  private val timePrecisionKey = "SPARK::time::precision"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -131,19 +136,22 @@ private[sql] object ArrowUtils {
   }
 
   /**
-   * Builds an Arrow field for a nanosecond timestamp type, stashing the column precision in the
-   * field metadata (alongside the user metadata) so it can be recovered in `fromArrowField`.
+   * Builds an Arrow field for a type whose Arrow representation cannot encode its
+   * fractional-second precision (nanosecond timestamps, TIME), stashing the column precision in
+   * the field metadata under `precisionKey` (alongside the user metadata) so it can be recovered
+   * in `fromArrowField`.
    */
-  private def toTimestampNanosArrowField(
+  private def toPrecisionTaggedArrowField(
       name: String,
       dt: DataType,
       precision: Int,
+      precisionKey: String,
       nullable: Boolean,
       timeZoneId: String,
       largeVarTypes: Boolean,
       metadata: Metadata): Field = {
     val base = Option(toArrowMetaData(metadata)).map(_.asScala.toMap).getOrElse(Map.empty)
-    val md = (base + (timestampNanosPrecisionKey -> precision.toString)).asJava
+    val md = (base + (precisionKey -> precision.toString)).asJava
     val fieldType = new FieldType(nullable, toArrowType(dt, timeZoneId, largeVarTypes), null, md)
     new Field(name, fieldType, Seq.empty[Field].asJava)
   }
@@ -255,19 +263,31 @@ private[sql] object ArrowUtils {
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
       case t: TimestampNTZNanosType =>
-        toTimestampNanosArrowField(
+        toPrecisionTaggedArrowField(
           name,
           t,
           t.precision,
+          timestampNanosPrecisionKey,
           nullable,
           timeZoneId,
           largeVarTypes,
           metadata)
       case t: TimestampLTZNanosType =>
-        toTimestampNanosArrowField(
+        toPrecisionTaggedArrowField(
           name,
           t,
           t.precision,
+          timestampNanosPrecisionKey,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata)
+      case t: TimeType =>
+        toPrecisionTaggedArrowField(
+          name,
+          t,
+          t.precision,
+          timePrecisionKey,
           nullable,
           timeZoneId,
           largeVarTypes,
@@ -352,7 +372,7 @@ private[sql] object ArrowUtils {
         }
         StructType(fields.toArray)
       // Recover the exact precision of nanosecond timestamps from the field metadata written by
-      // `toTimestampNanosArrowField`. Foreign Arrow data (or an out-of-range value) has no usable
+      // `toPrecisionTaggedArrowField`. Foreign Arrow data (or an out-of-range value) has no usable
       // key, so fall back to the canonical maximum precision via `fromArrowType`.
       case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.NANOSECOND =>
         val precision = Option(field.getMetadata.get(timestampNanosPrecisionKey))
@@ -365,6 +385,16 @@ private[sql] object ArrowUtils {
           case Some(p) => TimestampLTZNanosType(p)
           case None => fromArrowType(ts)
         }
+      // Recover the exact precision of TIME from the field metadata written by `toArrowField`.
+      // Foreign Arrow data has no precision key, and a present-but-invalid value (out of [0, 9] or
+      // non-numeric) is unusable, so either way fall back to the canonical microsecond precision
+      // via `fromArrowType`.
+      case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
+        Option(field.getMetadata.get(timePrecisionKey))
+          .flatMap(s => scala.util.Try(s.toInt).toOption)
+          .filter(p => p >= TimeType.MIN_PRECISION && p <= TimeType.MAX_PRECISION)
+          .map(TimeType(_))
+          .getOrElse(fromArrowType(t))
       case arrowType => fromArrowType(arrowType)
     }
   }
