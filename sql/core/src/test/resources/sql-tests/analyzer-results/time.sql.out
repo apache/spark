@@ -2329,6 +2329,37 @@ Sort [c#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT typeof(c), c FROM (
+  SELECT '01:02:03.456' :: TIME(3) AS c
+    INTERSECT SELECT '01:02:03.456000' :: TIME(6))
+-- !query analysis
+Project [typeof(c#x) AS typeof(c)#x, c#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Intersect false
+      :- Project [cast(c#x as time(6)) AS c#x]
+      :  +- Project [cast(01:02:03.456 as time(3)) AS c#x]
+      :     +- OneRowRelation
+      +- Project [cast(01:02:03.456000 as time(6)) AS CAST(01:02:03.456000 AS TIME(6))#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    EXCEPT SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Except false
+         :- Project [cast(c#x as time(6)) AS c#x]
+         :  +- Project [cast(12:34:56.789 as time(3)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(01:02:03.456789 as time(6)) AS CAST(01:02:03.456789 AS TIME(6))#x]
+            +- OneRowRelation
+
+
+-- !query
 SELECT typeof(v), v FROM (SELECT coalesce(
   CAST(NULL AS TIME(3)), '01:02:03.456789' :: TIME(6)) AS v)
 -- !query analysis
@@ -2397,6 +2428,14 @@ Project [typeof(map(a, cast(cast(12:34:56.789 as time(3)) as time(6)), b, cast(0
 SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
 -- !query analysis
 Project [cast(cast(01:02:03.456789 as time(6)) as time(6)) IN (cast(cast(12:34:56.789 as time(3)) as time(6)),cast(cast(01:02:03.456789 as time(6)) as time(6))) AS (CAST(01:02:03.456789 AS TIME(6)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT '01:02:03.456789123' :: TIME(9) IN (
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9))
+-- !query analysis
+Project [cast(cast(01:02:03.456789123 as time(9)) as time(9)) IN (cast(cast(12:34:56.789 as time(3)) as time(9)),cast(cast(01:02:03.456789 as time(6)) as time(9)),cast(cast(01:02:03.456789123 as time(9)) as time(9))) AS (CAST(01:02:03.456789123 AS TIME(9)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)), CAST(01:02:03.456789123 AS TIME(9))))#x]
 +- OneRowRelation
 
 

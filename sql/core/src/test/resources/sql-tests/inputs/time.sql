@@ -379,6 +379,14 @@ SELECT typeof(c), c FROM (
 SELECT typeof(c), c FROM (
   SELECT '00:00:00' :: TIME(0) AS c
     UNION ALL SELECT '23:59:59.123456789' :: TIME(9)) ORDER BY c;
+-- INTERSECT widens TIME(3) and TIME(6) to TIME(6); the matching value is compared at TIME(6).
+SELECT typeof(c), c FROM (
+  SELECT '01:02:03.456' :: TIME(3) AS c
+    INTERSECT SELECT '01:02:03.456000' :: TIME(6));
+-- EXCEPT widens TIME(3) and TIME(6) to TIME(6).
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    EXCEPT SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c;
 
 -- coalesce keeps the first non-null, widened to the wider precision.
 SELECT typeof(v), v FROM (SELECT coalesce(
@@ -401,6 +409,10 @@ SELECT typeof(map('a', '12:34:56.789' :: TIME(3), 'b', '01:02:03.456789' :: TIME
 
 -- IN list resolves the common type across mixed TIME(p) elements.
 SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6));
+-- A 3-way mix folds across all precisions in findWiderCommonType, resolving the comparison at
+-- TIME(9).
+SELECT '01:02:03.456789123' :: TIME(9) IN (
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9));
 
 -- Store assignment: widening TIME(3) -> TIME(6) succeeds, narrowing TIME(6) -> TIME(3) requires
 -- an explicit cast.

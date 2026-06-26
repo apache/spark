@@ -2835,6 +2835,26 @@ time(9)	23:59:59.123456789
 
 
 -- !query
+SELECT typeof(c), c FROM (
+  SELECT '01:02:03.456' :: TIME(3) AS c
+    INTERSECT SELECT '01:02:03.456000' :: TIME(6))
+-- !query schema
+struct<typeof(c):string,c:time(6)>
+-- !query output
+time(6)	01:02:03.456
+
+
+-- !query
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    EXCEPT SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:time(6)>
+-- !query output
+time(6)	12:34:56.789
+
+
+-- !query
 SELECT typeof(v), v FROM (SELECT coalesce(
   CAST(NULL AS TIME(3)), '01:02:03.456789' :: TIME(6)) AS v)
 -- !query schema
@@ -2905,6 +2925,15 @@ map<string,time(6)>
 SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6))
 -- !query schema
 struct<(CAST(01:02:03.456789 AS TIME(6)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)))):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT '01:02:03.456789123' :: TIME(9) IN (
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9))
+-- !query schema
+struct<(CAST(01:02:03.456789123 AS TIME(9)) IN (CAST(12:34:56.789 AS TIME(3)), CAST(01:02:03.456789 AS TIME(6)), CAST(01:02:03.456789123 AS TIME(9)))):boolean>
 -- !query output
 true
 
