@@ -71,4 +71,29 @@ class BinBySuite extends QueryTest with SharedSparkSession {
         parameters = Map.empty[String, String])
     }
   }
+
+  test("BIN BY analyzes NTZ inputs and a custom ALIGN TO with renamed outputs") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      // NTZ inputs default the origin to epoch (LTZ defaults to the session-zone epoch).
+      spark.sql(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP_NTZ'2024-01-01 00:00:00', TIMESTAMP_NTZ'2024-01-01 01:00:00', 1.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
+          |  DISTRIBUTE UNIFORM (value))
+          |""".stripMargin).queryExecution.assertAnalyzed()
+
+      // Custom ALIGN TO origin with renamed output columns.
+      spark.sql(
+        """SELECT * FROM VALUES
+          |  (TIMESTAMP'2024-01-01 00:00:00', TIMESTAMP'2024-01-01 02:00:00', 10.0D, 5.0D)
+          |  AS t(ts_start, ts_end, a, b)
+          |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' HOUR
+          |  ALIGN TO TIMESTAMP'2024-01-01 00:30:00'
+          |  DISTRIBUTE UNIFORM (a, b)
+          |  BIN_START AS w_start BIN_END AS w_end
+          |  BIN_DISTRIBUTE_RATIO AS frac)
+          |""".stripMargin).queryExecution.assertAnalyzed()
+    }
+  }
 }
