@@ -967,7 +967,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)
     val tableSchema = if (forceNullable) rawSchema.asNullable else rawSchema
-    CatalogV2Util.structTypeToV2Columns(tableSchema)
+    CatalogV2Util.structTypeToV2Columns(tableSchema, keepIds = false)
   }
 
   protected def writeToTable(
