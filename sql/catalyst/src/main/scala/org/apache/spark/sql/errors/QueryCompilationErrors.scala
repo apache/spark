@@ -313,10 +313,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def binByRequiresTopLevelColumnError(columnName: String): Throwable = {
+  def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
     new AnalysisException(
       errorClass = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLExpr(reference)))
   }
 
   def binByInvalidDistributeColumnTypeError(
