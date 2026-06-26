@@ -19,8 +19,8 @@ include:
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala.
-SPARK_VERSION: 4.2.1-SNAPSHOT
-SPARK_VERSION_SHORT: 4.2.1
+SPARK_VERSION: 4.2.0
+SPARK_VERSION_SHORT: 4.2.0
 SCALA_BINARY_VERSION: "2.13"
 SCALA_VERSION: "2.13.18"
 SPARK_ISSUE_TRACKER_URL: https://issues.apache.org/jira/browse/SPARK
