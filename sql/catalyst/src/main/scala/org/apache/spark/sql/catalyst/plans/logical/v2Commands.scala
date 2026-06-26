@@ -837,7 +837,8 @@ case class CreateStreamingTable(
  * @param partitioning   Column-based partitioning for the streaming table.
  * @param tableSpec      Additional table specs.
  * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
- * @param sourceTable    The source relation providing the change events.
+ * @param source         The source relation providing the change events. Always a STREAM(...)
+ *                       source (marked as a streaming read).
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
@@ -851,19 +852,17 @@ case class CreateStreamingTableAutoCdc(
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     ifNotExists: Boolean,
-    sourceTable: LogicalPlan,
+    source: LogicalPlan,
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
     specifiedCols: Seq[UnresolvedAttribute],
     exceptCols: Seq[UnresolvedAttribute]
-) extends BinaryCommand with CreatePipelineDataset {
-  override def left: LogicalPlan = name
-  override def right: LogicalPlan = sourceTable
+) extends UnaryCommand with CreatePipelineDataset {
+  override def child: LogicalPlan = name
 
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
-    copy(name = newLeft, sourceTable = newRight)
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(name = newChild)
 }
 
 /**

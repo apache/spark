@@ -32,7 +32,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * is added (SPARK-57402).
  *
  * @param targetTable    The target table to apply changes into.
- * @param sourceTable    The source relation providing the change events.
+ * @param source         The source relation providing the change events. Always a STREAM(...)
+ *                       source (marked as a streaming read).
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  *                        When absent, all source rows are treated as upserts.
@@ -45,15 +46,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  */
 case class AutoCdcIntoCommand(
     targetTable: TableIdentifier,
-    sourceTable: LogicalPlan,
+    source: LogicalPlan,
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
     specifiedCols: Seq[UnresolvedAttribute],
     exceptCols: Seq[UnresolvedAttribute]
-) extends UnaryCommand {
-  override def child: LogicalPlan = sourceTable
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(sourceTable = newChild)
-}
+) extends LeafCommand

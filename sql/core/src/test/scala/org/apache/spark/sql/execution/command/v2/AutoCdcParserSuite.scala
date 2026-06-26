@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.analysis.{
-  AnalysisTest, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedRelation}
+  AnalysisTest, UnresolvedAttribute, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{
   AutoCdcIntoCommand,
@@ -49,7 +48,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - minimal form") {
     val plan = parser.parsePlan(
       """CREATE FLOW myflow AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (key1, key2)
         |SEQUENCE BY timestamp""".stripMargin)
 
@@ -59,8 +58,9 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     val cdc = cmd.flowOperation.asInstanceOf[AutoCdcIntoCommand]
     assert(cdc.targetTable.table == "target")
-    assert(cdc.sourceTable.isInstanceOf[UnresolvedRelation])
-    assert(cdc.sourceTable.asInstanceOf[UnresolvedRelation].isStreaming)
+    val source = cdc.source.asInstanceOf[UnresolvedRelation]
+    assert(source.multipartIdentifier == Seq("source"))
+    assert(source.isStreaming)
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isEmpty)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
@@ -68,10 +68,23 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.exceptCols.isEmpty)
   }
 
+  test("CREATE FLOW AS AUTO CDC INTO - multipart source name") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW myflow AS AUTO CDC INTO target
+        |FROM STREAM(mycat.myschema.source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val source = cdc.source.asInstanceOf[UnresolvedRelation]
+    assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
+    assert(source.isStreaming)
+  }
+
   test("CREATE FLOW AS AUTO CDC INTO - with COMMENT") {
     val plan = parser.parsePlan(
       """CREATE FLOW myflow COMMENT 'my comment' AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
@@ -82,7 +95,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - multipart flow name") {
     val plan = parser.parsePlan(
       """CREATE FLOW mycat.myschema.myflow AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
@@ -94,7 +107,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - two-part target table name") {
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO myschema.mytable
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (k)
         |SEQUENCE BY ts""".stripMargin)
 
@@ -106,7 +119,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - APPLY AS DELETE WHEN") {
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |APPLY AS DELETE WHEN op = 'DELETE'
         |SEQUENCE BY ts""".stripMargin)
@@ -119,7 +132,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - COLUMNS include list") {
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
         |COLUMNS id, name, value""".stripMargin)
@@ -132,7 +145,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - COLUMNS * EXCEPT list") {
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
@@ -145,7 +158,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   test("CREATE FLOW AS AUTO CDC INTO - all clauses combined") {
     val plan = parser.parsePlan(
       """CREATE FLOW f AS AUTO CDC INTO target
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (key1, key2)
         |APPLY AS DELETE WHEN key3 = 3
         |SEQUENCE BY timestamp
@@ -166,15 +179,16 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (key1, key2)
         |SEQUENCE BY timestamp""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
     assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
     assert(!cmd.ifNotExists)
-    assert(cmd.sourceTable.isInstanceOf[UnresolvedRelation])
-    assert(cmd.sourceTable.asInstanceOf[UnresolvedRelation].isStreaming)
+    val source = cmd.source.asInstanceOf[UnresolvedRelation]
+    assert(source.multipartIdentifier == Seq("source"))
+    assert(source.isStreaming)
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
     assert(cmd.deleteCondition.isEmpty)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
@@ -182,11 +196,25 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.exceptCols.isEmpty)
   }
 
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - multipart source name") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |FLOW AUTO CDC
+        |FROM STREAM(mycat.myschema.source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    val source = cmd.source.asInstanceOf[UnresolvedRelation]
+    assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
+    assert(source.isStreaming)
+  }
+
   test("CREATE STREAMING TABLE IF NOT EXISTS FLOW AUTO CDC") {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE IF NOT EXISTS target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
@@ -198,7 +226,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE myschema.mytable
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
@@ -210,7 +238,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |APPLY AS DELETE WHEN op = 'DELETE'
         |SEQUENCE BY ts""".stripMargin)
@@ -224,7 +252,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
         |COLUMNS id, name, value""".stripMargin)
@@ -238,7 +266,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
@@ -252,7 +280,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val plan = parser.parsePlan(
       """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (key1, key2)
         |APPLY AS DELETE WHEN key3 = 3
         |SEQUENCE BY timestamp
@@ -274,7 +302,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)""".stripMargin)
       },
       condition = "PARSE_SYNTAX_ERROR",
@@ -289,7 +317,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         parser.parsePlan(
           """CREATE STREAMING TABLE target
             |FLOW AUTO CDC
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)""".stripMargin)
       },
       condition = "PARSE_SYNTAX_ERROR",
@@ -307,7 +335,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |SEQUENCE BY ts
             |APPLY AS DELETE WHEN a = 1""".stripMargin)
@@ -323,7 +351,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |COLUMNS a, b
             |SEQUENCE BY ts""".stripMargin)
@@ -343,13 +371,99 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |SEQUENCE BY ts""".stripMargin)
       },
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
       parameters = Map("error" -> "'AUTO'", "hint" -> "")
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Error cases: source must be a STREAM(...)
+  // ---------------------------------------------------------------------------
+
+  test("CREATE FLOW AS AUTO CDC INTO - source without STREAM is not allowed") {
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'source'", "hint" -> "")
+    )
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - source without STREAM is not allowed") {
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE STREAMING TABLE target
+            |FLOW AUTO CDC
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'source'", "hint" -> "")
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Error cases: KEYS and COLUMNS only accept simple identifiers
+  // ---------------------------------------------------------------------------
+
+  test("KEYS does not accept multipart identifiers") {
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM STREAM(source)
+            |KEYS (a.id)
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'.'", "hint" -> "")
+    )
+  }
+
+  test("COLUMNS include list does not accept multipart identifiers") {
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM STREAM(source)
+            |KEYS (id)
+            |SEQUENCE BY ts
+            |COLUMNS a.name""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'.'", "hint" -> "")
+    )
+  }
+
+  test("COLUMNS * EXCEPT list does not accept multipart identifiers") {
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM STREAM(source)
+            |KEYS (id)
+            |SEQUENCE BY ts
+            |COLUMNS * EXCEPT (a.op)""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'.'", "hint" -> "")
     )
   }
 
@@ -361,7 +475,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val sql =
       """CREATE MATERIALIZED VIEW target
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -377,7 +491,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val sql =
       """CREATE STREAMING TABLE target (id INT PRIMARY KEY, name STRING)
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -396,7 +510,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       """CREATE STREAMING TABLE target
         |CLUSTERED BY (id) INTO 4 BUCKETS
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -414,7 +528,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       """CREATE STREAMING TABLE target
         |OPTIONS (key = 'value')
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -432,7 +546,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       """CREATE STREAMING TABLE target
         |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -450,7 +564,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       """CREATE STREAMING TABLE target
         |LOCATION '/tmp/data'
         |FLOW AUTO CDC
-        |FROM source
+        |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin
     checkError(
@@ -472,7 +586,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |APPLY AS TRUNCATE WHEN op = 'TRUNCATE'
             |SEQUENCE BY ts""".stripMargin)
@@ -488,7 +602,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |IGNORE NULL UPDATES
             |SEQUENCE BY ts""".stripMargin)
@@ -504,7 +618,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |SEQUENCE BY ts
             |STORED AS SCD TYPE 2""".stripMargin)
@@ -520,7 +634,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
       intercept[ParseException] {
         parser.parsePlan(
           """CREATE FLOW f AS AUTO CDC INTO target
-            |FROM source
+            |FROM STREAM(source)
             |KEYS (id)
             |SEQUENCE BY ts
             |TRACK HISTORY ON value1, value2""".stripMargin)

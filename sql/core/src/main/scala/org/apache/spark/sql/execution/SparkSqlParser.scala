@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -1585,30 +1584,22 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
   }
 
-  /**
-   * Shared helper for pipeline dataset creation statements (CREATE STREAMING TABLE,
-   * CREATE MATERIALIZED VIEW, CREATE STREAMING TABLE ... FLOW AUTO CDC).
-   *
-   * Validates and extracts column definitions, partitioning, and table spec from the common
-   * grammar elements shared by these statements.
-   *
-   * @return (colDefs, partitioning, spec, ifNotExists, tableIdent)
-   */
-  private def parsePipelineDatasetPrelude(
-      syntaxTypeErrorStr: String,
-      headerCtx: CreatePipelineDatasetHeaderContext,
-      tableProviderCtx: TableProviderContext,
-      tableElementListCtx: TableElementListContext,
-      createTableClausesCtx: CreateTableClausesContext,
-      ctx: ParserRuleContext): (
-      Seq[ColumnDefinition],
-      Seq[Transform],
-      TableSpec,
-      Boolean,
-      LogicalPlan) = {
-    val ifNotExists = headerCtx.EXISTS() != null
-    val provider = Option(tableProviderCtx).map(_.multipartIdentifier.getText)
-    val (colDefs, colConstraints) = Option(tableElementListCtx).map(visitTableElementList)
+  override def visitCreatePipelineDataset(
+      ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
+    val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
+
+    val syntaxTypeErrorStr = if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      "MATERIALIZED VIEW"
+    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
+      "STREAMING TABLE"
+    } else {
+      // Should never be possible based on grammar definition.
+      throw invalidStatement(ctx.getText, ctx)
+    }
+
+    val ifNotExists = createPipelineDatasetHeaderCtx.EXISTS() != null
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
       .getOrElse((Nil, Nil))
 
     if (colConstraints.nonEmpty) {
@@ -1619,7 +1610,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val (partTransforms, partCols, bucketSpec,
     properties, options, location, comment, collation, serdeInfoOpt,
-    clusterBySpec) = visitCreateTableClauses(createTableClausesCtx)
+    clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++
@@ -1662,35 +1653,10 @@ class SparkSqlAstBuilder extends AstBuilder {
       constraints = Seq.empty
     )
 
-    val tableIdent = withIdentClause(
-      headerCtx.identifierReference,
+    val datasetIdentifier = withIdentClause(
+      createPipelineDatasetHeaderCtx.identifierReference,
       UnresolvedIdentifier(_)
     )
-
-    (colDefs, partitioning, spec, ifNotExists, tableIdent)
-  }
-
-  override def visitCreatePipelineDataset(
-      ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
-    val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
-
-    val syntaxTypeErrorStr = if (createPipelineDatasetHeaderCtx.materializedView() != null) {
-      "MATERIALIZED VIEW"
-    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-      "STREAMING TABLE"
-    } else {
-      // Should never be possible based on grammar definition.
-      throw invalidStatement(ctx.getText, ctx)
-    }
-
-    val (colDefs, partitioning, spec, ifNotExists, datasetIdentifier) =
-      parsePipelineDatasetPrelude(
-        syntaxTypeErrorStr,
-        createPipelineDatasetHeaderCtx,
-        ctx.tableProvider,
-        ctx.tableElementList(),
-        ctx.createTableClauses(),
-        ctx)
 
     if (createPipelineDatasetHeaderCtx.materializedView() != null) {
       if (ctx.autoCdcBody() != null) {
@@ -1712,20 +1678,19 @@ class SparkSqlAstBuilder extends AstBuilder {
       )
     } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
       if (ctx.autoCdcBody() != null) {
-        val (src, keys, delete, seq, specCols, exceptCols) =
-          parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+        val params = parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
         CreateStreamingTableAutoCdc(
           name = datasetIdentifier,
           columns = colDefs,
           partitioning = partitioning,
           tableSpec = spec,
           ifNotExists = ifNotExists,
-          sourceTable = src,
-          keys = keys,
-          deleteCondition = delete,
-          sequenceByExpr = seq,
-          specifiedCols = specCols,
-          exceptCols = exceptCols
+          source = params.source,
+          keys = params.keys,
+          deleteCondition = params.deleteCondition,
+          sequenceByExpr = params.sequencing,
+          specifiedCols = params.specifiedCols,
+          exceptCols = params.exceptCols
         )
       } else {
         Option(ctx.query) match {

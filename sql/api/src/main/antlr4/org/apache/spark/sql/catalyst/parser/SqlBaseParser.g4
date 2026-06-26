@@ -761,11 +761,15 @@ autoCdcBody
     ;
 
 autoCdcParameters
-    : FROM source=relationPrimary
-        KEYS LEFT_PAREN keys=multipartIdentifierList RIGHT_PAREN
+    : FROM source=autoCdcSource
+        KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
         autoCdcDeleteClause?
         autoCdcSequenceByClause
         autoCdcColumnsClause?
+    ;
+
+autoCdcSource
+    : STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
     ;
 
 autoCdcDeleteClause
@@ -778,8 +782,8 @@ autoCdcSequenceByClause
 
 autoCdcColumnsClause
     : COLUMNS (
-        columns=multipartIdentifierList |
-        ASTERISK EXCEPT LEFT_PAREN exceptCols=multipartIdentifierList RIGHT_PAREN)
+        columns=identifierSeq |
+        ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference

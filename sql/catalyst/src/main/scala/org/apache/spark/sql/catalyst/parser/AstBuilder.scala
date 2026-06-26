@@ -1365,39 +1365,49 @@ class AstBuilder extends DataTypeAstBuilder
   protected def buildAutoCdcIntoCommand(ctx: AutoCdcCommandContext): AutoCdcIntoCommand =
     withOrigin(ctx) {
       val target = visitMultipartIdentifier(ctx.target).asTableIdentifier
-      val (src, keys, delete, seq, specCols, exceptCols) =
-        parseAutoCdcParams(ctx.autoCdcParameters())
-      AutoCdcIntoCommand(target, src, keys, delete, seq, specCols, exceptCols)
+      val params = parseAutoCdcParams(ctx.autoCdcParameters())
+      AutoCdcIntoCommand(
+        target,
+        params.source,
+        params.keys,
+        params.deleteCondition,
+        params.sequencing,
+        params.specifiedCols,
+        params.exceptCols)
     }
 
-  protected def parseAutoCdcParams(params: AutoCdcParametersContext): (
-      LogicalPlan,
-      Seq[UnresolvedAttribute],
-      Option[Expression],
-      Expression,
-      Seq[UnresolvedAttribute],
-      Seq[UnresolvedAttribute]) =
+  protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
     withOrigin(params) {
-      val sourceTable = plan(params.source) match {
-        case r: UnresolvedRelation => r.copy(isStreaming = true)
-        case other => other
-      }
-      val keys = visitMultipartIdentifierList(params.keys)
+      val source = resolveAutoCdcSource(params.source)
+      val keys = visitIdentifierSeq(params.keys).map(UnresolvedAttribute.quoted)
       val deleteCondition = Option(params.autoCdcDeleteClause())
         .map(c => expression(c.deleteCondition))
       val sequencing = expression(params.autoCdcSequenceByClause().sequence)
 
       val columnsClause = Option(params.autoCdcColumnsClause())
       val specifiedCols = columnsClause match {
-        case Some(c) if c.columns != null => visitMultipartIdentifierList(c.columns)
+        case Some(c) if c.columns != null =>
+          visitIdentifierSeq(c.columns).map(UnresolvedAttribute.quoted)
         case _ => Seq.empty
       }
       val exceptCols = columnsClause match {
-        case Some(c) if c.exceptCols != null => visitMultipartIdentifierList(c.exceptCols)
+        case Some(c) if c.exceptCols != null =>
+          visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
         case _ => Seq.empty
       }
 
-      (sourceTable, keys, deleteCondition, sequencing, specifiedCols, exceptCols)
+      AutoCdcParams(source, keys, deleteCondition, sequencing, specifiedCols, exceptCols)
+    }
+
+  /**
+   * Resolve the AUTO CDC source, which is a STREAM(multipartIdentifier). It is returned as an
+   * [[UnresolvedRelation]] marked as a streaming read via the `isStreaming` flag.
+   */
+  protected def resolveAutoCdcSource(ctx: AutoCdcSourceContext): UnresolvedRelation =
+    withOrigin(ctx) {
+      val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
+      createUnresolvedRelation(
+        ctx, ident, optionsClause = None, writePrivileges = Set.empty, isStreaming = true)
     }
 
   /**
@@ -7748,3 +7758,14 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 }
+
+/**
+ * Parameters parsed from an AUTO CDC clause.
+ */
+case class AutoCdcParams(
+    source: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequencing: Expression,
+    specifiedCols: Seq[UnresolvedAttribute],
+    exceptCols: Seq[UnresolvedAttribute])
