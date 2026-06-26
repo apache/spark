@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.read.streaming.{
 }
 import org.apache.spark.sql.connector.read.streaming.SupportsRealTimeRead.RecordStatus
 import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
+import org.apache.spark.sql.execution.streaming.Offset
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.util.{Clock, RpcUtils}
 
