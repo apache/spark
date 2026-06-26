@@ -817,7 +817,10 @@ object QueryExecution {
       plan: LogicalPlan): SparkPlan = {
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(plan)).next()
+    // Strip DelegateExpression to its definition right before planning, so the planner and every
+    // physical consumer (pushdown, columnar rules, codegen) sees the real executed expression. The
+    // wrapper is purely informational and stays in the optimized logical plan for EXPLAIN.
+    planner.plan(ReturnAnswer(LowerDelegateExpression(plan))).next()
   }
 
   /**

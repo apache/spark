@@ -39,6 +39,8 @@ object TreePattern extends Enumeration  {
   val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
+  val DELEGATE_EXPRESSION: Value = Value
+  val INPUT_TYPE_MARKER: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val COALESCE: Value = Value

@@ -325,6 +325,15 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Some(new Predicate("=", Array(FieldReference("col"), LiteralValue(true, BooleanType)))))
   }
 
+  test("SPARK-57512: V2 pushdown sees through a DelegateExpression wrapper") {
+    val pred = GreaterThan($"cint".int, Literal(1))
+    val delegate = DelegateExpression("wrap", Seq($"cint".int, Literal(1)), pred)
+    // The wrapper is unfolded to its definition, so it pushes down exactly like the bare predicate.
+    assert(DataSourceV2Strategy.translateFilterV2(delegate).isDefined)
+    assert(DataSourceV2Strategy.translateFilterV2(delegate) ==
+      DataSourceV2Strategy.translateFilterV2(pred))
+  }
+
   test("inability to convert unknown expressions and predicates") {
     val unknownExpr = new GeneralScalarExpression("UNKNOWN", Array())
     assert(V2ExpressionUtils.toCatalyst(unknownExpr).isEmpty)

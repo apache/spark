@@ -2452,29 +2452,24 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
   since = "2.3.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
-  with ImplicitCastInputTypes with BinaryLike[Expression] {
-
-  override lazy val replacement: Expression = If(
-    IsNull(str),
-    Literal(null, str.dataType),
-    If(
-      LessThanOrEqual(len, Literal(0)),
-      Literal(UTF8String.EMPTY_UTF8, str.dataType),
-      new Substring(str, UnaryMinus(len, failOnError = false))
-    )
-  )
+object Right extends DelegateFunction {
+  override val name: String = "right"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      IntegerType
-    )
-  override def left: Expression = str
-  override def right: Expression = len
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
-    copy(str = newLeft, len = newRight)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
+
+  // NOTE: runs at parse time on unresolved args, so it must not read an input's `.dataType`.
+  // The `If` branch types are unified later by type coercion.
+  override def lower(args: Seq[Expression]): Expression = {
+    val str = args(0)
+    val len = args(1)
+    If(
+      IsNull(str),
+      Literal(null, StringType),
+      If(
+        LessThanOrEqual(len, Literal(0)),
+        Literal(UTF8String.EMPTY_UTF8, StringType),
+        new Substring(str, UnaryMinus(len, failOnError = false))))
   }
 }
 

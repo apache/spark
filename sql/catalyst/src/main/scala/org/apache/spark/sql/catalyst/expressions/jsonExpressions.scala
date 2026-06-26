@@ -161,70 +161,62 @@ object GetJsonObject {
 }
 
 /**
- * Extracts multiple simple named paths from a JSON string in one parse. This is an internal
- * expression used to share sibling [[GetJsonObject]] expressions; unsupported and
- * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
+ * Builds the internal expression that extracts multiple simple named paths from a JSON string in one
+ * parse, used to share sibling [[GetJsonObject]] expressions; unsupported and prefix-conflicting
+ * paths remain as independent `GetJsonObject` expressions.
+ *
+ * It is inserted by `OptimizeCsvJsonExprs` (after analysis, so its inputs are resolved), and is the
+ * optimizer-constructed showcase for [[DelegateExpression]]: instead of hand-written eval/doGenCode,
+ * it builds a typed delegate directly -- the high-level call `multi_get_json_object(json, p1, .., pn)`
+ * stays visible via `inputs`, while the `definition` delegates evaluation to
+ * [[MultiGetJsonObjectEvaluator]] through an `Invoke`. No rewrite step: the delegate runs as-is.
  */
-case class MultiGetJsonObject(
-    json: Expression,
-    fallbackPaths: Seq[String])
-  extends UnaryExpression
-  with ExpectsInputTypes {
+object MultiGetJsonObject {
+  val name: String = "multi_get_json_object"
 
-  // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
-  require(fallbackPaths.nonEmpty)
-
-  override def child: Expression = json
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true))
-
-  override lazy val dataType: DataType = StructType(fallbackPaths.indices.map { index =>
-    StructField(s"_$index", StringType, nullable = true)
-  })
-
-  override def nullable: Boolean = true
-
-  // This internal unary expression always returns null when its JSON child is null.
-  override def nullIntolerant: Boolean = true
-
-  override def prettyName: String = "multi_get_json_object"
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
-
-  @transient
-  private lazy val namedPaths = fallbackPaths.map { path =>
-    GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
-      throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
+  def apply(json: Expression, fallbackPaths: Seq[String]): DelegateExpression = {
+    // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
+    require(fallbackPaths.nonEmpty)
+    val resultType = StructType(fallbackPaths.indices.map { index =>
+      StructField(s"_$index", StringType, nullable = true)
+    })
+    val namedPaths = fallbackPaths.map { path =>
+      GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+        throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
+      }
     }
+    val evaluator =
+      MultiGetJsonObjectEvaluator(fallbackPaths.map(UTF8String.fromString), namedPaths)
+    // `propagateNull = true` reproduces the old null-intolerant behavior: null json -> null result.
+    val definition = Invoke(
+      Literal.create(evaluator, ObjectType(classOf[MultiGetJsonObjectEvaluator])),
+      "evaluate",
+      resultType,
+      Seq(json),
+      Seq(json.dataType),
+      returnNullable = true)
+    // `inputs` keeps the high-level call visible: the json plus one string literal per path.
+    val pathInputs = fallbackPaths.map(p => Literal(UTF8String.fromString(p), StringType))
+    DelegateExpression(name, json +: pathInputs, definition)
   }
 
-  @transient
-  private lazy val evaluator = MultiGetJsonObjectEvaluator(
-    fallbackPaths.map(UTF8String.fromString),
-    namedPaths)
-
-  override def eval(input: InternalRow): Any = {
-    evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
+  /** Recovers `(json, fallbackPaths)` from a delegate produced by `apply`. */
+  def unapply(e: Expression): Option[(Expression, Seq[String])] = e match {
+    case d: DelegateExpression if d.name == name =>
+      val paths = d.inputs.tail.map {
+        case Literal(p: UTF8String, _: StringType) => p.toString
+        case other => throw new IllegalStateException(s"Unexpected path input: $other")
+      }
+      Some((d.inputs.head, paths))
+    case _ => None
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val jsonEval = json.genCode(ctx)
-    val resultType = CodeGenerator.javaType(dataType)
-    ev.copy(code = code"""
-       |${jsonEval.code}
-       |boolean ${ev.isNull} = ${jsonEval.isNull};
-       |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-       |if (!${ev.isNull}) {
-       |  ${ev.value} = ($resultType) $refEvaluator.evaluate(${jsonEval.value});
-       |  ${ev.isNull} = ${ev.value} == null;
-       |}
-       |""".stripMargin)
-  }
+  def isInstance(e: Expression): Boolean = unapply(e).isDefined
 
-  override protected def withNewChildInternal(newChild: Expression): MultiGetJsonObject =
-    copy(json = newChild)
+  def pathsOf(e: Expression): Seq[String] = unapply(e) match {
+    case Some((_, paths)) => paths
+    case None => throw new IllegalArgumentException(s"Not a multi_get_json_object: $e")
+  }
 }
 
 // scalastyle:off line.size.limit line.contains.tab

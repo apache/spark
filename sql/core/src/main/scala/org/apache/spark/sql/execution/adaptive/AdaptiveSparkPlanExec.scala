@@ -34,7 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -814,7 +814,11 @@ case class AdaptiveSparkPlanExec(
     try {
       logicalPlan.invalidateStatsCache()
       val optimized = optimizer.execute(logicalPlan)
-      val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+      // Go through QueryExecution.createSparkPlan -- the single place that strips DelegateExpression
+      // before planning -- instead of calling the planner directly, so the re-planned stage sees the
+      // real executed expression.
+      val sparkPlan = QueryExecution.createSparkPlan(
+        context.session.sessionState.planner, optimized)
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,

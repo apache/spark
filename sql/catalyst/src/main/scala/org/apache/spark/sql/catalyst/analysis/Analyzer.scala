@@ -640,7 +640,9 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
-    Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
+    Batch("Remove analysis-only markers", Once,
+      RemoveTempResolvedColumn,
+      RemoveInputTypeMarkers),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
@@ -4444,6 +4446,21 @@ object EliminateUnions extends Rule[LogicalPlan] {
     _.containsPattern(UNION), ruleId) {
     case u: Union if u.children.size == 1 => u.children.head
   }
+}
+
+/**
+ * Removes the analysis-only input-type markers ([[ImplicitCastInput]] / [[TypeCheckInput]]) that a
+ * [[DelegateFunction]] inserts to drive or check implicit cast. Once type coercion has run they have
+ * served their purpose, so we strip them at the end of analysis, leaving a clean `definition` in the
+ * [[DelegateExpression]]. Like [[RemoveTempResolvedColumn]], this just unwraps a marker to its
+ * child; it is not load-bearing -- a `DelegateExpression` is correct with or without the markers.
+ */
+object RemoveInputTypeMarkers extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveExpressionsWithPruning(_.containsPattern(INPUT_TYPE_MARKER)) {
+      case marker: ImplicitCastInput => marker.child
+      case marker: TypeCheckInput => marker.child
+    }
 }
 
 /**

@@ -27,8 +27,10 @@ import com.fasterxml.jackson.core.StreamReadConstraints
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{JsonToStructs, Literal, MultiGetJsonObject}
+import org.apache.spark.sql.catalyst.expressions.{Expression, JsonToStructs, Literal, MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.expressions.json.MultiGetJsonObjectEvaluator
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
@@ -147,7 +149,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
           get_json_object($"json", "$.d"))
         if (jsonOptimization && sharedParsing) {
           assert(query.queryExecution.optimizedPlan.exists { plan =>
-            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+            plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
           })
         }
         rows = query.collect().toSeq
@@ -231,7 +233,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
         if (sharedParsingEnabled) {
           assert(query.queryExecution.optimizedPlan.exists { plan =>
-            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+            plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
           })
         }
         rows = query.collect().toSeq
@@ -257,7 +259,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
           get_json_object($"json", "$.b"))
         if (jsonOptimization) {
           assert(query.queryExecution.optimizedPlan.exists { plan =>
-            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+            plan.expressions.exists(_.exists(MultiGetJsonObject.isInstance(_)))
           })
         }
         rows = query.collect().toSeq
@@ -310,10 +312,19 @@ class JsonFunctionsSuite extends SharedSparkSession {
         get_json_object($"json", "$.a.y"))
 
       checkAnswer(df, Row("1", "2"))
+      // The shared MultiGetJsonObject delegate is lowered before execution, so in the executed plan
+      // the shared extraction is its definition: an Invoke of MultiGetJsonObjectEvaluator.
+      def isSharedEval(e: Expression): Boolean = e.exists {
+        case i: Invoke if i.functionName == "evaluate" =>
+          i.targetObject match {
+            case Literal(_: MultiGetJsonObjectEvaluator, _) => true
+            case _ => false
+          }
+        case _ => false
+      }
       def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {
         case _: InputAdapter => false
-        case other
-            if other.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject])) => true
+        case other if other.expressions.exists(isSharedEval) => true
         case other => other.children.exists(containsSharedExtraction)
       }
       assert(df.queryExecution.executedPlan.exists {

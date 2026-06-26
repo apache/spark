@@ -94,6 +94,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   private def generateExpression(
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case literal: Literal => Some(translateLiteral(literal))
+    // DelegateExpression is a Spark-internal wrapper; push down its real definition instead.
+    case d: DelegateExpression => generateExpression(d.definition, isPredicate)
     case _ if expr.contextIndependentFoldable
         && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
       // If the expression is context independent foldable, we can convert it to a literal.
