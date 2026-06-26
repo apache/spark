@@ -876,4 +876,41 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       assert(!colsRs.next())
     }
   }
+
+  test("SPARK-57518: getTables/getColumns do not label V1 rows with a DSv2 current catalog") {
+    // getTables/getColumns list from the V1 SessionCatalog (spark_catalog). When the current
+    // catalog is a DSv2 catalog, TABLE_CAT must NOT be stamped with that catalog's name -- the
+    // listed rows belong to spark_catalog, not the DSv2 catalog. They stay legacy empty/null
+    // here; DSv2 routing for getTables/getColumns is a follow-up.
+    withJdbcStatement("v1_table") { statement =>
+      statement.execute("CREATE TABLE v1_table(id INT, name STRING)")
+      statement.execute(
+        "SET spark.sql.catalog.testcat=" +
+          "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
+      // Make the DSv2 catalog the current catalog.
+      statement.execute("USE testcat")
+
+      val metaData = statement.getConnection.getMetaData
+
+      // getTables still lists the V1 spark_catalog table; TABLE_CAT must be legacy empty/null,
+      // never "testcat".
+      val tablesRs = metaData.getTables(null, "default", "v1_table", null)
+      assert(tablesRs.next())
+      val tableCat = tablesRs.getString("TABLE_CAT")
+      assert(tableCat == null || tableCat.isEmpty,
+        s"V1-listed table must not be labeled with the DSv2 current catalog, got: $tableCat")
+      assert(tablesRs.getString("TABLE_NAME") === "v1_table")
+
+      // Same for getColumns.
+      val colsRs = metaData.getColumns(null, "default", "v1_table", null)
+      assert(colsRs.next())
+      val colCat = colsRs.getString("TABLE_CAT")
+      assert(colCat == null || colCat.isEmpty,
+        s"V1-listed column must not be labeled with the DSv2 current catalog, got: $colCat")
+      assert(colsRs.getString("COLUMN_NAME") === "id")
+
+      // Switch back so withJdbcStatement's DROP TABLE cleanup targets spark_catalog.
+      statement.execute("USE spark_catalog")
+    }
+  }
 }
