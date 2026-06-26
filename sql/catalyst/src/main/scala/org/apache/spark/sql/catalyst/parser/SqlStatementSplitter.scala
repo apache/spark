@@ -231,8 +231,7 @@ object SqlStatementSplitter {
           delimSearchStart = d + 1
         } else if (failedNonEof) {
           // Fall back to a single delimiter step so the broken statement is
-          // surfaced and the rest can still be split. Same code path as the
-          // inner walk in Trino's implementation.
+          // surfaced and the rest can still be split.
           //
           // This is also the path taken for SQL that uses grammar extensions
           // (e.g. Iceberg's `ALTER TABLE ... ADD PARTITION FIELD bucket(...)`):

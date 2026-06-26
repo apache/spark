@@ -19,11 +19,6 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 
-/**
- * Tests for [[SqlStatementSplitter]]. Modeled after Trino's
- * `io.trino.cli.lexer.TestStatementSplitter`, with Spark-specific additions for
- * SQL scripting compound blocks (`BEGIN ... END`).
- */
 class SqlStatementSplitterSuite extends SparkFunSuite {
 
   private def split(sql: String): SqlStatementSplitResult = SqlStatementSplitter.split(sql)
@@ -455,10 +450,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     // confirm as a valid compound block (no matching END found) is buffered
     // as a partial statement. Interactive callers either type END to complete
     // it, or trigger an EOF flush which forwards the partial to the backend
-    // for a proper parse error. (This differs from Trino's `containsFunction`
-    // shortcut, which can fall back to per-`;` splitting for invalid bodies
-    // because Trino's grammar lacks the `.*?` wildcards that Spark's
-    // `setResetStatement` relies on.)
+    // for a proper parse error.
     val sql = "BEGIN FROM t; SELECT 1;"
     val result = split(sql)
     assert(result.completeStatements.isEmpty)
