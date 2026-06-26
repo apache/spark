@@ -1322,12 +1322,14 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("current_date", CurrentDate())
       assertEqual("current_timestamp", CurrentTimestamp())
       assertEqual("current_time", CurrentTime())
+      assertEqual("localtime", CurrentTime())
     }
 
     def testNonAnsiBehavior(): Unit = {
       assertEqual("current_date", UnresolvedAttribute.quoted("current_date"))
       assertEqual("current_timestamp", UnresolvedAttribute.quoted("current_timestamp"))
       assertEqual("current_time", UnresolvedAttribute.quoted("current_time"))
+      assertEqual("localtime", UnresolvedAttribute.quoted("localtime"))
     }
     withSQLConf(
       SQLConf.ANSI_ENABLED.key -> "false",

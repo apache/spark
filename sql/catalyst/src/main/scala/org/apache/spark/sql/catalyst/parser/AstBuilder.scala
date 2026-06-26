@@ -3574,7 +3574,7 @@ class AstBuilder extends DataTypeAstBuilder
           CurrentDate()
         case SqlBaseParser.CURRENT_TIMESTAMP =>
           CurrentTimestamp()
-        case SqlBaseParser.CURRENT_TIME =>
+        case SqlBaseParser.CURRENT_TIME | SqlBaseParser.LOCALTIME =>
           CurrentTime()
         case SqlBaseParser.CURRENT_PATH =>
           CurrentPath()
