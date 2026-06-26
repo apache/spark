@@ -31,8 +31,8 @@ import org.apache.spark.sql.types._
 
 class ResolveBinBySuite extends AnalysisTest {
 
-  // BIN BY is gated off by default; run the resolution tests with it enabled. The dedicated
-  // gate test below uses `super.test` to observe the default-off behavior.
+  // Run the resolution tests with the operator enabled. The dedicated gate test below uses
+  // `super.test` to escape this wrapper and pins the flag off.
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
                              (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
@@ -336,9 +336,10 @@ class ResolveBinBySuite extends AnalysisTest {
       "appended BinBy attributes must have distinct exprIds across the two join sides")
   }
 
-  // `super.test` escapes the suite-wide flag-on wrapper so this runs with the default (off).
-  super.test("BIN BY is gated off by default") {
-    assert(!SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED))
-    expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
+  // `super.test` escapes the suite-wide flag-on wrapper; pin the flag off explicitly.
+  super.test("BIN BY is rejected when the operator is disabled") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+      expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
+    }
   }
 }
