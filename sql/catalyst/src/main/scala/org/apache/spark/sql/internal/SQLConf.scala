@@ -2551,6 +2551,19 @@ object SQLConf {
     .intConf
     .createWithDefault(10000)
 
+  val PIVOT_EMPTY_BUCKET_RETURNS_AGGREGATE_DEFAULT =
+    buildConf("spark.sql.pivot.emptyBucketReturnsAggregateDefault")
+      .internal()
+      .doc("When true, a pivot value with no matching rows returns the value the aggregate " +
+        "produces on empty input, e.g. 0 for count, as required by the SQL standard. The same " +
+        "applies to other aggregates with a non-null result on empty input (e.g. " +
+        "approx_count_distinct) and to expressions over them (e.g. count(x) + 1). When false, " +
+        "such cells return NULL.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val DATAFRAME_TRANSPOSE_MAX_VALUES = buildConf("spark.sql.transposeMaxValues")
     .doc("When doing a transpose without specifying values for the index column this is" +
       " the maximum number of values that will be transposed without error.")

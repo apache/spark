@@ -317,3 +317,106 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 ) pv
 JOIN years y ON pv.year = y.y;
+
+-- count: empty pivot bucket returns 0 (not NULL)
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- count(*): empty bucket returns 0
+SELECT * FROM (
+  SELECT year, course FROM courseSales
+)
+PIVOT (
+  count(*)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- count and sum: empty bucket returns 0 and NULL
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings), sum(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- sum/avg/min/max: empty bucket returns NULL
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings), avg(earnings), min(earnings), max(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- approx_count_distinct: empty bucket returns 0
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  approx_count_distinct(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- count(DISTINCT): empty bucket returns 0
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(DISTINCT earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- cast(count, double) and count + 1: empty bucket returns 0.0 and 1
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  CAST(count(earnings) AS DOUBLE), count(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- sum + 1: empty bucket returns NULL (folds to NULL)
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings) + 1
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- count + count: empty bucket returns 0
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings) + count(year)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- conditional count: empty bucket returns 0
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(CASE WHEN earnings > 15000 THEN earnings END)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+-- disable the empty-bucket default: count returns NULL again for empty buckets
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=false;
+
+SELECT * FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  count(earnings)
+  FOR course IN ('dotNET', 'Java', 'Scala')
+);
+
+SET spark.sql.pivot.emptyBucketReturnsAggregateDefault=true;
