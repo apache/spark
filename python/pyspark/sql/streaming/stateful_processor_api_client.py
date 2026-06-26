@@ -20,7 +20,7 @@ import json
 import os
 import socket
 from types import NoneType
-from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast, TYPE_CHECKING
+from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
