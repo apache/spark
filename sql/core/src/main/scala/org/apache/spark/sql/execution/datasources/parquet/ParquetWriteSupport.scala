@@ -35,13 +35,11 @@ import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_IN
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.Variant
-import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * A Parquet [[WriteSupport]] implementation that writes Catalyst [[InternalRow]]s as Parquet
@@ -191,16 +189,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
-  private def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
-    try {
-      DateTimeUtils.timestampNanosToEpochNanos(value)
-    } catch {
-      case _: ArithmeticException =>
-        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
-          value, isNtz, sink = "Parquet INT64")
-    }
-  }
-
   // `inShredded` indicates whether the current traversal is nested within a shredded Variant
   // schema. This affects how timestamp values are written.
   private def makeWriter(dataType: DataType, inShredded: Boolean): ValueWriter = {
@@ -293,18 +281,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         // For TimestampNTZType column, Spark always output as INT64 with Timestamp annotation in
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
-
-      // TIMESTAMP(NANOS) values are always proleptic Gregorian and are exempt from datetime
-      // rebasing; see the TIMESTAMP(NANOS) converters in `ParquetRowConverter` for details.
-      case _: TimestampLTZNanosType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(
-            timestampNanosToEpochNanos(row.getTimestampLTZNanos(ordinal), isNtz = false))
-
-      case _: TimestampNTZNanosType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(
-            timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal), isNtz = true))
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
