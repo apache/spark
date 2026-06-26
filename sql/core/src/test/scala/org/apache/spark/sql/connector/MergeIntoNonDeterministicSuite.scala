@@ -24,7 +24,7 @@ package org.apache.spark.sql.connector
  * MergeRows now implements SupportsNonDeterministicExpression, allowing non-deterministic
  * expressions like uuid() and rand() in MERGE action assignments.
  */
-class MergeNonDeterministicReproSuite extends MergeIntoTableSuiteBase {
+class MergeIntoNonDeterministicSuite extends MergeIntoTableSuiteBase {
 
   import testImplicits._
 
