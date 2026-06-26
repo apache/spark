@@ -36,9 +36,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -199,6 +201,24 @@ private[sql] class AvroSerializer(
           DateTimeUtils.nanosToMicros(getter.getLong(ordinal))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
+      }
+
+      case (_: TimestampLTZNanosType, LONG) => avroType.getLogicalType match {
+        // Nanosecond-precision timestamps are stored as epoch-nanoseconds (Long). They are always
+        // proleptic Gregorian, so they are exempt from datetime rebasing.
+        case _: LogicalTypes.TimestampNanos => (getter, ordinal) =>
+          timestampNanosToEpochNanos(getter.getTimestampLTZNanos(ordinal), isNtz = false)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimestampLTZNanosType().sql} cannot be converted to " +
+          s"Avro logical type $other")
+      }
+
+      case (_: TimestampNTZNanosType, LONG) => avroType.getLogicalType match {
+        case _: LogicalTypes.LocalTimestampNanos => (getter, ordinal) =>
+          timestampNanosToEpochNanos(getter.getTimestampNTZNanos(ordinal), isNtz = true)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimestampNTZNanosType().sql} cannot be converted to " +
+          s"Avro logical type $other")
       }
 
       case (ArrayType(et, containsNull), ARRAY) =>
@@ -413,5 +433,20 @@ private[sql] class AvroSerializer(
 
   private def nonNullUnionTypes(avroType: Schema): Set[Type] = {
     nonNullUnionBranches(avroType).map(_.getType).toSet
+  }
+
+  /**
+   * Packs a [[TimestampNanosVal]] into a single epoch-nanoseconds Long for Avro storage. Values
+   * outside the signed-int64 epoch-nanos range (~1677-09-21 .. 2262-04-11) overflow and are
+   * surfaced as a `DATETIME_OVERFLOW` error.
+   */
+  private def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
+    try {
+      DateTimeUtils.timestampNanosToEpochNanos(value)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          value, isNtz, sink = "Avro")
+    }
   }
 }

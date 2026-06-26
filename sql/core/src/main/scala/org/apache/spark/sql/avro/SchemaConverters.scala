@@ -131,6 +131,26 @@ object SchemaConverters extends Logging {
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _: LocalTimestampMillis | _: LocalTimestampMicros =>
           SchemaType(TimestampNTZType, nullable = false)
+        case _: LogicalTypes.TimestampNanos =>
+          // Avro stores nanoseconds-since-epoch in a long. The precision (7-9) is carried via the
+          // spark.sql.catalyst.type property; external files without it default to nanoseconds.
+          val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+          val nanosType = if (catalystTypeAttrValue == null) {
+            TimestampLTZNanosType()
+          } else {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+              .asInstanceOf[TimestampLTZNanosType]
+          }
+          SchemaType(nanosType, nullable = false)
+        case _: LogicalTypes.LocalTimestampNanos =>
+          val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+          val nanosType = if (catalystTypeAttrValue == null) {
+            TimestampNTZNanosType()
+          } else {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+              .asInstanceOf[TimestampNTZNanosType]
+          }
+          SchemaType(nanosType, nullable = false)
         case _: LogicalTypes.TimeMicros =>
           // Falls back to default precision for backward compatibility with
           // Avro files written by external tools.
@@ -334,6 +354,14 @@ object SchemaConverters extends Logging {
         LogicalTypes.timestampMicros().addToSchema(builder.longType())
       case TimestampNTZType =>
         LogicalTypes.localTimestampMicros().addToSchema(builder.longType())
+      case t: TimestampLTZNanosType =>
+        val tsSchema = LogicalTypes.timestampNanos().addToSchema(builder.longType())
+        tsSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
+        tsSchema
+      case t: TimestampNTZNanosType =>
+        val tsSchema = LogicalTypes.localTimestampNanos().addToSchema(builder.longType())
+        tsSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
+        tsSchema
       case t: TimeType =>
         val timeSchema = LogicalTypes.timeMicros().addToSchema(builder.longType())
         timeSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
@@ -466,6 +494,14 @@ object SchemaConverters extends Logging {
       case DateType => LogicalTypes.date().addToSchema(builder.intType())
       case TimestampType => LogicalTypes.timestampMicros().addToSchema(builder.longType())
       case TimestampNTZType => LogicalTypes.localTimestampMicros().addToSchema(builder.longType())
+      case t: TimestampLTZNanosType =>
+        val tsSchema = LogicalTypes.timestampNanos().addToSchema(builder.longType())
+        tsSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
+        tsSchema
+      case t: TimestampNTZNanosType =>
+        val tsSchema = LogicalTypes.localTimestampNanos().addToSchema(builder.longType())
+        tsSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
+        tsSchema
 
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)

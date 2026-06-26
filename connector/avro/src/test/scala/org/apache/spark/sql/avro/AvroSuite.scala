@@ -33,12 +33,12 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkArithmeticException, SparkConf, SparkException, SparkRuntimeException, SparkThrowable, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.avro.AvroCompressionCodec._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
@@ -52,7 +52,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
@@ -3192,41 +3191,158 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in Avro") {
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+  test("SPARK-57459: nanosecond timestamp types round-trip through Avro (v1 and v2)") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      nanosTypes.foreach { nanosType =>
-        val expectedType = s""""${nanosType.sql}""""
-        withTempDir { dir =>
-          // Write path: a nanos-typed column cannot be written. The nanos literal is built
-          // directly from its internal value to avoid relying on cast/parser support.
-          val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-          val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-          val writeDir = new File(dir, "write").getCanonicalPath
-          checkError(
-            exception = intercept[AnalysisException] {
-              df.write.format("avro").mode("overwrite").save(writeDir)
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "Avro"))
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "avro" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          Seq(7, 8, 9).foreach { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  // Build the row from an external java.time value; the column schema carries the
+                  // precision and truncates the sub-microsecond digits, matching the ORC suites.
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(java.time.ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value), Row(null))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"avro_nanos_${nanosType.typeName}").getCanonicalPath
+                  df.write.format("avro").mode("overwrite").save(path)
+                  // The inferred schema preserves the declared precision via the catalyst prop.
+                  val inferred = spark.read.format("avro").load(path)
+                  assert(inferred.schema("ts").dataType == nanosType)
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("avro").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
 
-          // Read path: a user-specified nanos schema is rejected. Write a benign file first
-          // so schema validation (not file listing) is what fails.
-          val readDir = new File(dir, "read").getCanonicalPath
-          Seq("a").toDF("ts").write.format("avro").mode("overwrite").save(readDir)
+  test("SPARK-57459: nanosecond timestamps are written as unit-correct epoch-nanos") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // LocalDateTime at the epoch plus 567890123 ns, truncated to each precision.
+      val wallClock = LocalDateTime.of(1970, 1, 1, 0, 0, 0, 567890123)
+      val expectedNanos = Map(7 -> 567890100L, 8 -> 567890120L, 9 -> 567890123L)
+      Seq(
+        (false, "timestamp-nanos"),
+        (true, "local-timestamp-nanos")).foreach { case (isNtz, logicalName) =>
+        Seq(7, 8, 9).foreach { p =>
+          withTempPath { dir =>
+            val nanosType: DataType =
+              if (isNtz) TimestampNTZNanosType(p) else TimestampLTZNanosType(p)
+            val value: Any =
+              if (isNtz) wallClock else wallClock.toInstant(java.time.ZoneOffset.UTC)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("t", nanosType))
+            df.write.format("avro").save(dir.toString)
+
+            val avroFile = dir.listFiles()
+              .filter(f => f.isFile && f.getName.endsWith("avro"))
+              .head
+            val reader = new DataFileReader[GenericRecord](
+              avroFile, new GenericDatumReader[GenericRecord]())
+            try {
+              val fieldSchema = reader.getSchema.getField("t").schema()
+              val tsSchema = if (fieldSchema.getType == Type.UNION) {
+                fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+              } else {
+                fieldSchema
+              }
+              assert(tsSchema.getLogicalType.getName == logicalName,
+                s"$nanosType should be written with the $logicalName logical type")
+              assert(reader.hasNext)
+              val stored = reader.next().get("t").asInstanceOf[Long]
+              assert(stored == expectedNanos(p),
+                s"$nanosType should store epoch-nanos ${expectedNanos(p)}, but was $stored")
+            } finally {
+              reader.close()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamps read from a plain Avro file (no catalyst prop)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Build Avro files the way an external tool would: a nanos logical type on a long with no
+      // `spark.sql.catalyst.type` property. Spark must default to nanosecond precision and convert
+      // the stored epoch-nanoseconds back to its internal (epochMicros, nanosWithinMicro) form.
+      val epochNanos = 567890123L
+      Seq(
+        ("timestamp-nanos", TimestampLTZNanosType(9),
+          java.time.Instant.ofEpochSecond(0L, epochNanos)),
+        ("local-timestamp-nanos", TimestampNTZNanosType(9),
+          LocalDateTime.of(1970, 1, 1, 0, 0, 0, epochNanos.toInt))).foreach {
+        case (logicalName, expectedType, expectedValue) =>
+          withTempDir { dir =>
+            val avroSchema = new Schema.Parser().parse(
+              s"""
+                |{
+                |  "type": "record",
+                |  "name": "top",
+                |  "fields": [
+                |    {"name": "t", "type": {"type": "long", "logicalType": "$logicalName"}}
+                |  ]
+                |}
+              """.stripMargin)
+            val avroFile = new File(dir, "external.avro")
+            val datumWriter = new GenericDatumWriter[GenericRecord](avroSchema)
+            val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+            dataFileWriter.create(avroSchema, avroFile)
+            try {
+              val record = new GenericData.Record(avroSchema)
+              record.put("t", epochNanos)
+              dataFileWriter.append(record)
+            } finally {
+              dataFileWriter.close()
+            }
+
+            val readDf = spark.read.format("avro").load(dir.toString)
+            assert(readDf.schema("t").dataType == expectedType)
+            checkAnswer(readDf, Row(expectedValue))
+          }
+      }
+    }
+  }
+
+  test("SPARK-57459: writing an out-of-range nanosecond timestamp fails loudly") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+        withTempPath { dir =>
+          // Year 9999 is far outside the signed-int64 epoch-nanos range (~2262).
+          val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
+          val e = intercept[SparkException] {
+            df.write.format("avro").save(dir.getCanonicalPath)
+          }
+          var cause: Throwable = e
+          while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+            cause = cause.getCause
+          }
+          assert(cause != null,
+            s"Expected a DATETIME_OVERFLOW error for $typeName, but got: ${e.getMessage}")
+          // NTZ renders without a zone; LTZ renders as a UTC instant with a trailing `Z`.
+          val renderedValue =
+            if (typeName == "TIMESTAMP_NTZ") "9999-12-31T23:59:59.999999999"
+            else "9999-12-31T23:59:59.999999999Z"
           checkError(
-            exception = intercept[AnalysisException] {
-              spark.read.schema(new StructType().add("ts", nanosType))
-                .format("avro").load(readDir).collect()
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "Avro"))
+            exception = cause.asInstanceOf[SparkArithmeticException],
+            condition = "DATETIME_OVERFLOW",
+            parameters = Map("operation" ->
+              (s"write the timestamp value $renderedValue as Avro epoch-nanoseconds " +
+                "(supported range: 1677-09-21T00:12:43.145224192Z to " +
+                "2262-04-11T23:47:16.854775807Z)")))
         }
       }
     }
