@@ -22,7 +22,8 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryTableWithJoinAndSampleCatalog,
   InMemoryTableWithLegacyJoinAndSampleCatalog,
   InMemoryTableWithLegacyTableSampleCatalog,
-  InMemoryTableWithTableSampleCatalog}
+  InMemoryTableWithTableSampleCatalog,
+  InMemoryTableWithUnacknowledgedJoinAndSampleCatalog}
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -267,6 +268,32 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(noOpSample)
+
+        val realSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinNotPushed(realSample)
+        checkSamplePushed(realSample, pushed = true)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-56504: join pushdown requires acknowledging pushed samples") {
+    val joinSampleCatalog = "testunackjoinandsample"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithUnacknowledgedJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val noSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(noSample)
 
         val realSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +

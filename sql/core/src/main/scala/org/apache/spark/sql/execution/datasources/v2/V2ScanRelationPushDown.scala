@@ -218,16 +218,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
         )}")
 
+      val joinPushDownInfo = toJoinPushDownInfo(
+        leftHolder.pushedSample, rightHolder.pushedSample)
+      val pushedOperatorsSupported = lBuilder.supportedPushedOperatorsForJoin()
+        .containsAll(joinPushDownInfo.requiredPushedOperators())
+
       if (translatedJoinType.isDefined &&
         translatedCondition.isDefined &&
+        pushedOperatorsSupported &&
         lBuilder.pushDownJoin(
           rBuilder,
           translatedJoinType.get,
           leftSideRequiredColumnsWithAliases,
           rightSideRequiredColumnsWithAliases,
           translatedCondition.get,
-          toJoinTableSample(leftHolder.pushedSample),
-          toJoinTableSample(rightHolder.pushedSample))
+          joinPushDownInfo)
       ) {
         val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
         val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
@@ -1161,6 +1166,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
       sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
       sHolder.joinedRelationsPushedDownOperators, optRelationName)
+  }
+
+  private def toJoinPushDownInfo(
+      leftSample: Option[TableSampleInfo],
+      rightSample: Option[TableSampleInfo]): SupportsPushDownJoin.JoinPushDownInfo = {
+    new SupportsPushDownJoin.JoinPushDownInfo(
+      new SupportsPushDownJoin.JoinSideInfo(toJoinTableSample(leftSample)),
+      new SupportsPushDownJoin.JoinSideInfo(toJoinTableSample(rightSample)))
   }
 
   private def toJoinTableSample(

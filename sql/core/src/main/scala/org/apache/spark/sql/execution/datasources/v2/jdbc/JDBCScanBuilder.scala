@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import java.util.Collections
+
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -188,8 +190,12 @@ case class JDBCScanBuilder(
       leftSideRequiredColumnsWithAliases,
       rightSideRequiredColumnsWithAliases,
       condition,
-      null,
-      null)
+      SupportsPushDownJoin.JoinPushDownInfo.empty())
+  }
+
+  override def supportedPushedOperatorsForJoin(): java.util.Set[
+      SupportsPushDownJoin.PushedOperator] = {
+    Collections.singleton(SupportsPushDownJoin.PushedOperator.TABLE_SAMPLE)
   }
 
   override def pushDownJoin(
@@ -198,8 +204,7 @@ case class JDBCScanBuilder(
       leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate,
-      leftSample: SupportsPushDownJoin.TableSample,
-      rightSample: SupportsPushDownJoin.TableSample): Boolean = {
+      joinPushDownInfo: SupportsPushDownJoin.JoinPushDownInfo): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
     }
@@ -224,12 +229,6 @@ case class JDBCScanBuilder(
     }
 
     val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
-    if ((leftSample != null && tableSampleClause.isEmpty) ||
-        (rightSample != null && otherJdbcScanBuilder.tableSampleClause.isEmpty)) {
-      logError(log"Failed to push down join to JDBC because a pushed table sample " +
-        log"could not be represented in the join query")
-      return false
-    }
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
     var requiredSchema = StructType(Seq())

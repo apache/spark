@@ -196,8 +196,12 @@ class InMemoryTableWithJoinAndSample(
         leftSideRequiredColumnsWithAliases,
         rightSideRequiredColumnsWithAliases,
         condition,
-        null,
-        null)
+        SupportsPushDownJoin.JoinPushDownInfo.empty())
+    }
+
+    override def supportedPushedOperatorsForJoin(): java.util.Set[
+        SupportsPushDownJoin.PushedOperator] = {
+      util.Collections.singleton(SupportsPushDownJoin.PushedOperator.TABLE_SAMPLE)
     }
 
     override def pushDownJoin(
@@ -206,8 +210,10 @@ class InMemoryTableWithJoinAndSample(
         leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         condition: Predicate,
-        leftSample: SupportsPushDownJoin.TableSample,
-        rightSample: SupportsPushDownJoin.TableSample): Boolean = {
+        joinPushDownInfo: SupportsPushDownJoin.JoinPushDownInfo): Boolean = {
+      val leftSample = joinPushDownInfo.leftSideInfo().sample()
+      val rightSample = joinPushDownInfo.rightSideInfo().sample()
+
       if (Option(leftSample).exists(_.withReplacement()) ||
           Option(rightSample).exists(_.withReplacement())) {
         return false
@@ -261,6 +267,33 @@ class InMemoryTableWithJoinAndSample(
       override def description(): String = {
         Seq(super.description(), sampleDescription).filter(_.nonEmpty).mkString(" ")
       }
+    }
+  }
+}
+
+/**
+ * An in-memory table that supports TABLESAMPLE pushdown and the sample-aware JOIN pushdown API,
+ * but does not acknowledge preserving pushed samples during JOIN pushdown.
+ */
+class InMemoryTableWithUnacknowledgedJoinAndSample(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String])
+  extends InMemoryTableWithJoinAndSample(name, columns, partitioning, properties) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new InMemoryUnacknowledgedJoinAndSampleScanBuilder(schema, options)
+  }
+
+  class InMemoryUnacknowledgedJoinAndSampleScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
+    extends InMemoryJoinAndSampleScanBuilder(tableSchema, options) {
+
+    override def supportedPushedOperatorsForJoin(): java.util.Set[
+        SupportsPushDownJoin.PushedOperator] = {
+      util.Collections.emptySet()
     }
   }
 }

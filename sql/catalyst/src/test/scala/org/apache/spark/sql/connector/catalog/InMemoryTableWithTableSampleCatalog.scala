@@ -101,6 +101,33 @@ class InMemoryTableWithLegacyJoinAndSampleCatalog extends InMemoryTableCatalog {
   }
 }
 
+class InMemoryTableWithUnacknowledgedJoinAndSampleCatalog extends InMemoryTableCatalog {
+  import CatalogV2Implicits._
+
+  override def createTable(
+      ident: Identifier,
+      columns: Array[Column],
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    if (tables.containsKey(ident)) {
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
+    }
+
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
+
+    val tableName = s"$name.${ident.quoted}"
+    val table = new InMemoryTableWithUnacknowledgedJoinAndSample(
+      tableName, columns, partitions, properties)
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
+  }
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties)
+  }
+}
+
 class InMemoryTableWithLegacyTableSampleCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 

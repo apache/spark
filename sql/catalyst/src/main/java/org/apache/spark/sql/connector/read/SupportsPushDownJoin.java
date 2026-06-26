@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
@@ -54,7 +58,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @param rightSideRequiredColumnsWithAliases required output of the
    *                                            right side {@code SupportsPushDownJoin}
    * @param condition join condition. Columns are named after the specified aliases in
-   * {@code leftSideRequiredColumnWithAliases} and {@code rightSideRequiredColumnWithAliases}
+   * {@code leftSideRequiredColumnsWithAliases} and {@code rightSideRequiredColumnsWithAliases}
    * @return True if join has been successfully pushed down.
    */
   boolean pushDownJoin(
@@ -66,8 +70,21 @@ public interface SupportsPushDownJoin extends ScanBuilder {
   );
 
   /**
+   * Returns pushed operators this data source can preserve when pushing down a join.
+   * <p>
+   * Spark uses this as a safety check before attempting join push down. If the join input
+   * already contains pushed operators not listed here, Spark will not push down the join.
+   * This prevents a data source from silently dropping pushed state it does not understand.
+   *
+   * @since 4.3.0
+   */
+  default Set<PushedOperator> supportedPushedOperatorsForJoin() {
+    return Collections.emptySet();
+  }
+
+  /**
    * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
-   * {@code SupportsPushDownJoin}, with pushed samples from either side.
+   * {@code SupportsPushDownJoin}, with information about pushed operators from each side.
    *
    * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
    * gets joined with.
@@ -77,9 +94,8 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @param rightSideRequiredColumnsWithAliases required output of the
    *                                            right side {@code SupportsPushDownJoin}
    * @param condition join condition. Columns are named after the specified aliases in
-   * {@code leftSideRequiredColumnWithAliases} and {@code rightSideRequiredColumnWithAliases}
-   * @param leftSample pushed sample from the left side, or null if there is no pushed sample.
-   * @param rightSample pushed sample from the right side, or null if there is no pushed sample.
+   * {@code leftSideRequiredColumnsWithAliases} and {@code rightSideRequiredColumnsWithAliases}
+   * @param joinPushDownInfo information about pushed operators from each side of the join.
    * @return True if join has been successfully pushed down.
    *
    * @since 4.3.0
@@ -90,10 +106,10 @@ public interface SupportsPushDownJoin extends ScanBuilder {
       ColumnWithAlias[] leftSideRequiredColumnsWithAliases,
       ColumnWithAlias[] rightSideRequiredColumnsWithAliases,
       Predicate condition,
-      @Nullable TableSample leftSample,
-      @Nullable TableSample rightSample) {
-    if ((leftSample == null || leftSample.isNoOp()) &&
-        (rightSample == null || rightSample.isNoOp())) {
+      JoinPushDownInfo joinPushDownInfo) {
+    JoinPushDownInfo info =
+        joinPushDownInfo == null ? JoinPushDownInfo.empty() : joinPushDownInfo;
+    if (info.requiredPushedOperators().isEmpty()) {
       return pushDownJoin(
           other,
           joinType,
@@ -102,6 +118,90 @@ public interface SupportsPushDownJoin extends ScanBuilder {
           condition);
     }
     return false;
+  }
+
+  /**
+   * Pushed operators that may need to be preserved when pushing down a join.
+   *
+   * @since 4.3.0
+   */
+  enum PushedOperator {
+    TABLE_SAMPLE
+  }
+
+  /**
+   * Information about pushed operators from each side of the join.
+   *
+   * @since 4.3.0
+   */
+  final class JoinPushDownInfo {
+    private static final JoinPushDownInfo EMPTY =
+        new JoinPushDownInfo(JoinSideInfo.empty(), JoinSideInfo.empty());
+
+    private final JoinSideInfo leftSideInfo;
+    private final JoinSideInfo rightSideInfo;
+
+    public JoinPushDownInfo(JoinSideInfo leftSideInfo, JoinSideInfo rightSideInfo) {
+      this.leftSideInfo = leftSideInfo == null ? JoinSideInfo.empty() : leftSideInfo;
+      this.rightSideInfo = rightSideInfo == null ? JoinSideInfo.empty() : rightSideInfo;
+    }
+
+    public static JoinPushDownInfo empty() {
+      return EMPTY;
+    }
+
+    public JoinSideInfo leftSideInfo() {
+      return leftSideInfo;
+    }
+
+    public JoinSideInfo rightSideInfo() {
+      return rightSideInfo;
+    }
+
+    /**
+     * Returns result-affecting pushed operators that must be preserved by join push down.
+     */
+    public Set<PushedOperator> requiredPushedOperators() {
+      EnumSet<PushedOperator> operators = EnumSet.noneOf(PushedOperator.class);
+      operators.addAll(leftSideInfo.requiredPushedOperators());
+      operators.addAll(rightSideInfo.requiredPushedOperators());
+      return Collections.unmodifiableSet(operators);
+    }
+  }
+
+  /**
+   * Information about pushed operators from one side of the join.
+   *
+   * @since 4.3.0
+   */
+  final class JoinSideInfo {
+    private static final JoinSideInfo EMPTY = new JoinSideInfo(null);
+
+    @Nullable
+    private final TableSample sample;
+
+    public JoinSideInfo(@Nullable TableSample sample) {
+      this.sample = sample;
+    }
+
+    public static JoinSideInfo empty() {
+      return EMPTY;
+    }
+
+    @Nullable
+    public TableSample sample() {
+      return sample;
+    }
+
+    /**
+     * Returns result-affecting pushed operators from this side of the join.
+     */
+    public Set<PushedOperator> requiredPushedOperators() {
+      if (sample != null && !sample.isNoOp()) {
+        return Collections.unmodifiableSet(EnumSet.of(PushedOperator.TABLE_SAMPLE));
+      }
+      return Collections.emptySet();
+    }
   }
 
   /**
