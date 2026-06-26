@@ -202,9 +202,14 @@ private[parquet] trait ParquetTypeOps extends Serializable {
 
   /**
    * The vectorized (batch) [[ParquetVectorUpdater]] for this type, or None to fall back to the
-   * built-in `ParquetVectorUpdaterFactory`. A type that returns Some here should also return
-   * true from [[isBatchReadSupported]]. Dispatched (Spark DataType -> ops) at the top of
+   * built-in `ParquetVectorUpdaterFactory`. Dispatched (Spark DataType -> ops) at the top of
    * `ParquetVectorUpdaterFactory.getUpdater`, before its built-in cases.
+   *
+   * This and [[isBatchReadSupported]] form a two-way contract: returning Some here without also
+   * returning true from isBatchReadSupported leaves the vectorized path unreachable (the row path
+   * is used), while returning true from isBatchReadSupported without supplying an updater here
+   * (and without legacy factory support for the type) routes into a factory that does not
+   * recognize the type. A framework type that opts into vectorized reads must do both.
    *
    * @param descriptor the Parquet column descriptor being read
    */

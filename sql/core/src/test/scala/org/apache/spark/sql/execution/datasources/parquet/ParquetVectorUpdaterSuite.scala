@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 
@@ -492,5 +493,30 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
       86_400_000_000L,     // 1970-01-02 00:00:00 UTC
       -86_400_000_000L)    // 1969-12-31 00:00:00 UTC
     assert(readViaDateToTimestampNTZUpdater(input) === expected)
+  }
+
+  test("SPARK-55444: factory rejects an incompatible TIME encoding (no silent mis-read)") {
+    // getVectorUpdaterOrNull returns null for any encoding other than INT64 TIME(MICROS/NANOS),
+    // so ParquetVectorUpdaterFactory.getUpdater - the entry point the vectorized reader calls -
+    // falls through to a clean SchemaColumnConvertNotSupportedException rather than silently
+    // decoding (e.g. readLongs over an INT32 column). Guarding the factory entry point directly
+    // means a future broad TimeType arm / catch-all that reintroduced the silent mis-read would
+    // fail here, not just at the framework-hook unit level.
+    val incompatible = Seq(
+      // INT32 TIME(MILLIS): wrong primitive width.
+      Types.primitive(PrimitiveTypeName.INT32, Repetition.OPTIONAL)
+        .as(LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MILLIS)).named("col"),
+      // raw INT64 with no TIME annotation.
+      Types.primitive(PrimitiveTypeName.INT64, Repetition.OPTIONAL).named("col"),
+      // INT64 carrying a TIMESTAMP (not TIME) annotation.
+      Types.primitive(PrimitiveTypeName.INT64, Repetition.OPTIONAL)
+        .as(LogicalTypeAnnotation.timestampType(false, LogicalTypeAnnotation.TimeUnit.MICROS)).named("col")
+    )
+    incompatible.foreach { pt =>
+      val desc = new ColumnDescriptor(Array("col"), pt, 0, 1)
+      intercept[SchemaColumnConvertNotSupportedException] {
+        newFactory(desc).getUpdater(desc, TimeType())
+      }
+    }
   }
 }
