@@ -27,6 +27,14 @@ SELECT try_add(timestamp_ntz'2021-01-01 00:00:00', interval 2 second);
 SELECT try_add(interval 2 year, timestamp_ltz'2021-01-01 00:00:00');
 SELECT try_add(interval 2 second, timestamp_ntz'2021-01-01 00:00:00');
 
+-- Time + Interval
+SELECT try_add(time'08:00:00', interval 1 hour);
+SELECT try_add(interval 1 hour, time'08:00:00');
+SELECT try_add(time'23:59:59.999999', interval 1 hour);
+SELECT try_add(time'00:00:00', interval -1 second);
+SELECT try_add(time'08:30:00', null);
+SELECT try_add(null, interval 1 hour);
+
 -- Interval + Interval
 SELECT try_add(interval 2 year, interval 2 year);
 SELECT try_add(interval 2 second, interval 2 second);
@@ -71,6 +79,17 @@ SELECT try_subtract(interval 2 year, interval 3 year);
 SELECT try_subtract(interval 3 second, interval 2 second);
 SELECT try_subtract(interval 2147483647 month, interval -2 month);
 SELECT try_subtract(interval 106751991 day, interval -3 day);
+
+-- Time - Interval
+SELECT try_subtract(time'10:00:00', interval 1 hour);
+SELECT try_subtract(time'00:30:00', interval 1 hour);
+SELECT try_subtract(time'00:00:00', interval 1 second);
+SELECT try_subtract(time'10:00:00', null);
+
+-- Time - Time
+SELECT try_subtract(time'10:00:00', time'08:00:00');
+SELECT try_subtract(time'08:00:00.123456', time'10:00:00');
+SELECT try_subtract(null, time'08:00:00');
 
 -- Numeric * Numeric
 SELECT try_multiply(2, 3);
