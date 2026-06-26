@@ -561,6 +561,11 @@ It also supports reading the following Avro [logical types](https://avro.apache.
     <td>TimestampType</td>
   </tr>
   <tr>
+    <td>time-micros</td>
+    <td>long</td>
+    <td>TimeType</td>
+  </tr>
+  <tr>
     <td>decimal</td>
     <td>fixed</td>
     <td>DecimalType</td>
@@ -602,6 +607,11 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
     <td>TimestampType</td>
     <td>long</td>
     <td>timestamp-micros</td>
+  </tr>
+  <tr>
+    <td>TimeType</td>
+    <td>long</td>
+    <td>time-micros</td>
   </tr>
   <tr>
     <td>DecimalType</td>
