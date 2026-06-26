@@ -269,15 +269,6 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     val props = new Properties()
     props.put(SPARK_JARS.key, "local:" + fakeSparkJar.getAbsolutePath())
 
-    // On a busy CI runner the in-JVM mini cluster, the driver and the container JVMs all compete
-    // for CPU, and the driver's RPC server occasionally cannot accept a connection in time. With
-    // the default of 3 retries an executor that loses this race gives up and exits, which leaves
-    // the application unable to finish and the suite times out. Give the executor->driver
-    // connection a larger retry budget so a transient stall does not permanently fail the app.
-    // These are defaults; individual tests can still override them via extraConf below.
-    props.setProperty("spark.rpc.io.maxRetries", "10")
-    props.setProperty("spark.rpc.io.retryWait", "2s")
-
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
         logConfDir.getAbsolutePath() +
@@ -309,6 +300,18 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
         props.setProperty(k, v)
       }
     }
+
+    // On a busy CI runner the in-JVM mini cluster, the driver and the container JVMs all compete
+    // for CPU, and the driver's RPC server occasionally cannot accept a connection in time. With
+    // the default of 3 retries an executor that loses this race gives up and exits, which leaves
+    // the application unable to finish and the suite times out. Give the executor->driver
+    // connection a larger retry budget so a transient stall does not permanently fail the app.
+    // Set after the spark.* JVM properties are copied above so these values are not silently
+    // overridden by an inherited -Dspark.rpc.io.* flag; individual tests can still override them
+    // via extraConf below.
+    props.setProperty("spark.rpc.io.maxRetries", "10")
+    props.setProperty("spark.rpc.io.retryWait", "2s")
+
     extraConf.foreach { case (k, v) => props.setProperty(k, v) }
 
     val propsFile = File.createTempFile("spark", ".properties", tempDir)
