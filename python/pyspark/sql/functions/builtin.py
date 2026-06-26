@@ -22944,7 +22944,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
-    |[1, 20, 3, 5]|[1, 5, 20, 3]|
+    |[1, 20, 3, 5]|[5, 1, 20, 3]|
     +-------------+-------------+
 
     Example 2: Shuffling an array with null values
