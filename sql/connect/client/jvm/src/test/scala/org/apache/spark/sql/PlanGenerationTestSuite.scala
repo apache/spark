@@ -3453,9 +3453,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
       fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
       fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
       fn.lit(
-        Array(
-          java.time.LocalTime.of(23, 59, 59, 999999999),
-          java.time.LocalTime.of(12, 0, 0))),
+        Array(java.time.LocalTime.of(23, 59, 59, 999999999), java.time.LocalTime.of(12, 0, 0))),
       fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 
