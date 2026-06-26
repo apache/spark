@@ -312,14 +312,21 @@ class SparkConnectClientTestCase(unittest.TestCase):
             resp.arrow_batch.row_count = self._declared_row_count
             return [resp]
 
+    def _client_with_multi_batch_stub(self, values, declared_row_count):
+        # Build a client whose stub returns ``values`` split across multiple
+        # RecordBatches in a single arrow batch message, declaring
+        # ``declared_row_count`` rows.
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+        client._stub = self.MultiBatchMockService(
+            client._session_id, values, declared_row_count=declared_row_count
+        )
+        return client
+
     def test_multiple_record_batches_in_single_arrow_batch(self):
         # An Arrow IPC stream may carry multiple RecordBatches; row_count is the total
         # across them and must be validated only after the stream is fully consumed.
-        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         values = [1, 2, 3, 4]
-        client._stub = self.MultiBatchMockService(
-            client._session_id, values, declared_row_count=len(values)
-        )
+        client = self._client_with_multi_batch_stub(values, declared_row_count=len(values))
 
         table, _, _ = client.to_table(proto.Plan(), {})
         self.assertEqual(table.num_rows, len(values))
@@ -328,11 +335,8 @@ class SparkConnectClientTestCase(unittest.TestCase):
     def test_multiple_record_batches_row_count_mismatch_raises(self):
         # The validation this fix targets: when the declared row_count does not match
         # the total rows across all RecordBatches in the stream, it must still raise.
-        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         values = [1, 2, 3, 4]
-        client._stub = self.MultiBatchMockService(
-            client._session_id, values, declared_row_count=len(values) + 1
-        )
+        client = self._client_with_multi_batch_stub(values, declared_row_count=len(values) + 1)
 
         with self.assertRaises(SparkConnectException) as ctx:
             client.to_table(proto.Plan(), {})
