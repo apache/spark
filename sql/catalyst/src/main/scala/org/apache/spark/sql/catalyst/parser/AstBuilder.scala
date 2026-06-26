@@ -1367,13 +1367,13 @@ class AstBuilder extends DataTypeAstBuilder
       val target = visitMultipartIdentifier(ctx.target).asTableIdentifier
       val params = parseAutoCdcParams(ctx.autoCdcParameters())
       AutoCdcIntoCommand(
-        target,
-        params.source,
-        params.keys,
-        params.deleteCondition,
-        params.sequencing,
-        params.includeColumns,
-        params.excludeColumns)
+        targetTable = target,
+        source = params.source,
+        keys = params.keys,
+        deleteCondition = params.deleteCondition,
+        sequenceByExpr = params.sequencing,
+        includeColumns = params.includeColumns,
+        excludeColumns = params.excludeColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1394,7 +1394,13 @@ class AstBuilder extends DataTypeAstBuilder
           visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
       }
 
-      AutoCdcParams(source, keys, deleteCondition, sequencing, includeColumns, excludeColumns)
+      AutoCdcParams(
+        source = source,
+        keys = keys,
+        deleteCondition = deleteCondition,
+        sequencing = sequencing,
+        includeColumns = includeColumns,
+        excludeColumns = excludeColumns)
     }
 
   /**
