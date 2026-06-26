@@ -123,21 +123,13 @@ public class GcmTransportCipher implements TransportCipher {
             this.ciphertextBuffer.limit(0);
 
             this.bytesToRead = getReadableBytes();
-            // Tink's expectedCiphertextSize(P) internally adds getCiphertextOffset() (the 24-byte
-            // streaming header) to P before computing the segment count:
-            //   fullSegments = (P + getCiphertextOffset()) / plaintextSegmentSize
-            // This formula counts the header as occupying capacity in the first segment, so the
-            // effective plaintext capacity of segment 0 is (plaintextSegmentSize -
-            // getCiphertextOffset()) = 32728 bytes rather than 32752.
-            //
-            // However, transferTo() writes the streaming header separately (via headerByteBuffer)
-            // and passes all P bytes to encryptSegment() calls. For P in (32728, 32752], Tink's
-            // formula predicts two ciphertext segments but transferTo() produces only one,
-            // inflating encryptedCount by TAG_SIZE_IN_BYTES (16 bytes). The receiver then waits
-            // indefinitely for 16 bytes that were never written, causing a shuffle fetch stall.
-            //
-            // Fix: subtract getCiphertextOffset() before calling expectedCiphertextSize(), then
-            // add getHeaderLength() explicitly to account for the separately-written header.
+            // expectedCiphertextSize(P) adds getCiphertextOffset() when counting segments
+            // (fullSegments = (P + getCiphertextOffset()) / plaintextSegmentSize), assuming
+            // the Tink header fills part of segment 0. Because transferTo() writes the header
+            // separately via headerByteBuffer, all P bytes occupy full-capacity segments;
+            // subtracting getCiphertextOffset() cancels that internal addition and gives the
+            // correct count. The function excludes the header from its result, so
+            // getHeaderLength() adds it back for the bytes headerByteBuffer actually writes.
             this.encryptedCount = LENGTH_HEADER_BYTES
                     + aesGcmHkdfStreaming.getHeaderLength()
                     + aesGcmHkdfStreaming.expectedCiphertextSize(
