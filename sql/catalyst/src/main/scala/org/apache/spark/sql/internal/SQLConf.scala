@@ -3876,7 +3876,8 @@ object SQLConf {
       "When false (default), uses a two-phase Partial+Final aggregation across a shuffle. " +
       "This setting has no effect on queries containing DISTINCT aggregate functions, where " +
       "the partial aggregation phases are required for correctness and are always applied.")
-    .version("3.3.1")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
     .createWithDefault(false)
 

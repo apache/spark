@@ -69,40 +69,40 @@ class PartialAggregationBypassSuite
     }
   }
 
-  test("results are identical with and without partial aggregation — SUM") {
+  test("results are identical with and without partial aggregation - SUM") {
     withAndWithoutAQE {
       val data = spark.range(1000).selectExpr("id % 7 as k", "id as v")
       val expected = data.groupBy("k").sum("v").orderBy("k").collect()
       withSQLConf(SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "true") {
-        val actual = data.groupBy("k").sum("v").orderBy("k").collect()
-        assert(actual.toSeq == expected.toSeq)
+        val actual = data.groupBy("k").sum("v").orderBy("k")
+        checkAnswer(actual, expected)
       }
     }
   }
 
-  test("results are identical with and without partial aggregation — COUNT") {
+  test("results are identical with and without partial aggregation - COUNT") {
     withAndWithoutAQE {
       val data = spark.range(1000).selectExpr("id % 13 as k")
       val expected = data.groupBy("k").count().orderBy("k").collect()
       withSQLConf(SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "true") {
-        val actual = data.groupBy("k").count().orderBy("k").collect()
-        assert(actual.toSeq == expected.toSeq)
+        val actual = data.groupBy("k").count().orderBy("k")
+        checkAnswer(actual, expected)
       }
     }
   }
 
-  test("results are identical with and without partial aggregation — AVG") {
+  test("results are identical with and without partial aggregation - AVG") {
     withAndWithoutAQE {
       val data = spark.range(1000).selectExpr("id % 5 as k", "id as v")
       val expected = data.groupBy("k").avg("v").orderBy("k").collect()
       withSQLConf(SQLConf.BYPASS_PARTIAL_AGGREGATION.key -> "true") {
-        val actual = data.groupBy("k").avg("v").orderBy("k").collect()
-        assert(actual.toSeq == expected.toSeq)
+        val actual = data.groupBy("k").avg("v").orderBy("k")
+        checkAnswer(actual, expected)
       }
     }
   }
 
-  test("results are identical with and without partial aggregation — collect_list " +
+  test("results are identical with and without partial aggregation - collect_list " +
       "(TypedImperativeAggregate via ObjectHashAggregateExec)") {
     // collect_list is a TypedImperativeAggregate whose buffer cannot be expressed as fixed-width
     // slots, so createAggregate routes it through ObjectHashAggregateExec rather than
@@ -120,7 +120,10 @@ class PartialAggregationBypassSuite
           "expected ObjectHashAggregateExec for TypedImperativeAggregate")
         assert(aggs.forall(_.aggregateExpressions.forall(_.mode != Partial)),
           "expected no Partial-mode aggregation nodes")
-        // collect_list output order within each group may differ between runs; sort before compare.
+        // checkAnswer is not used here because it does not sort nested arrays, and
+        // collect_list output order within each group is non-deterministic: it depends
+        // on row processing order which can differ between Partial+Final and Complete
+        // aggregation paths. Sort the arrays before comparing.
         val actual = df.collect()
         assert(actual.length == expected.length)
         actual.zip(expected).foreach { case (a, e) =>
@@ -140,8 +143,8 @@ class PartialAggregationBypassSuite
     // One event for key "b" stands alone.
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:39", 2, "a"), // within 10s of the first "a" — same session
-      ("2016-03-27 19:39:56", 3, "a"), // > 10s gap — separate session
+      ("2016-03-27 19:39:39", 2, "a"), // within 10s of the first "a" -- same session
+      ("2016-03-27 19:39:56", 3, "a"), // > 10s gap -- separate session
       ("2016-03-27 19:39:27", 4, "b")
     ).toDF("time", "value", "id")
 
@@ -167,11 +170,7 @@ class PartialAggregationBypassSuite
             "CAST(session_window.start AS STRING)",
             "CAST(session_window.end AS STRING)",
             "id", "cnt", "total")
-          .collect()
-
-        assert(actual.toSeq == expected.toSeq,
-          s"session_window results differ with bypassPartialAggregation=true.\n" +
-            s"Expected:\n${expected.mkString("\n")}\nActual:\n${actual.mkString("\n")}")
+        checkAnswer(actual, expected)
       }
     }
   }
