@@ -868,11 +868,11 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
             )
         else:
             # Pure Arrow stream I/O; output struct wrapping is handled in the
-            # mapper below.
+            # func below.
             ser = ArrowStreamSerializer(write_start_stream=True)
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         # Pure Arrow stream I/O; table-arg flattening and output coercion
-        # are handled in the mapper below.
+        # are handled in the func below.
         ser = ArrowStreamSerializer(write_start_stream=True)
     else:
         # Each row is a group so do not batch but send one by one.
