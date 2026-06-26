@@ -25,15 +25,16 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * Logical plan node for an AUTO CDC INTO command, used by Spark Declarative Pipelines.
  *
  * This represents a CDC (Change Data Capture) operation that applies an ordered change event
- * stream from [[sourceTable]] into [[targetTable]] using SCD Type 1 (upsert) semantics.
+ * stream from [[source]] into [[targetTable]] using SCD Type 1 (upsert) semantics.
  *
  * This node serves as a parse-time placeholder for a pipeline CDC definition and cannot be
  * executed directly. It will be interpreted by the pipeline submodule once execution support
- * is added (SPARK-57402).
+ * is added (SPARK-57402). The [[source]] relation is exposed as the node's child so the analyzer
+ * resolves it through the normal plan resolution path.
  *
  * @param targetTable    The target table to apply changes into.
  * @param source         The source relation providing the change events. Always a STREAM(...)
- *                       source (marked as a streaming read).
+ *                       source (marked as a streaming read). Exposed as the node's child.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  *                        When absent, all source rows are treated as upserts.
@@ -54,4 +55,9 @@ case class AutoCdcIntoCommand(
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
     excludeColumns: Option[Seq[UnresolvedAttribute]]
-) extends LeafCommand
+) extends UnaryCommand {
+  override def child: LogicalPlan = source
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): AutoCdcIntoCommand =
+    copy(source = newChild)
+}

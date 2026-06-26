@@ -832,13 +832,18 @@ case class CreateStreamingTable(
  *
  * The target of the CDC operation is the streaming table itself (given by [[name]]).
  *
- * @param name           The streaming table name, which also serves as the CDC target.
+ * [[name]] and [[source]] are exposed as the node's children (left and right respectively) so the
+ * analyzer resolves them through the normal plan resolution path, mirroring how
+ * [[CreatePipelineDatasetAsSelect]] exposes its name and query.
+ *
+ * @param name           The streaming table name, which also serves as the CDC target. Exposed as
+ *                       the node's left child.
  * @param columns        User-specified columns for the streaming table.
  * @param partitioning   Column-based partitioning for the streaming table.
  * @param tableSpec      Additional table specs.
  * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
  * @param source         The source relation providing the change events. Always a STREAM(...)
- *                       source (marked as a streaming read).
+ *                       source (marked as a streaming read). Exposed as the node's right child.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
@@ -859,11 +864,13 @@ case class CreateStreamingTableAutoCdc(
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
     excludeColumns: Option[Seq[UnresolvedAttribute]]
-) extends UnaryCommand with CreatePipelineDataset {
-  override def child: LogicalPlan = name
+) extends BinaryCommand with CreatePipelineDataset {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(name = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateStreamingTableAutoCdc =
+    copy(name = newLeft, source = newRight)
 }
 
 /**
