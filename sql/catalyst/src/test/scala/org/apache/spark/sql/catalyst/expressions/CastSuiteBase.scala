@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
@@ -2499,6 +2500,215 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       for (tp <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Cast(child, TimeType(sp)), TimeType(tp))
+      }
+    }
+  }
+
+  test("cast between TIME and TIMESTAMP_NTZ / TIMESTAMP_LTZ is allowed") {
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      // try_cast inherits the allowed pairs (canTryCast delegates to canAnsiCast for atomic types).
+      // These casts never fail, so try_cast behaves exactly like cast.
+      Seq(TimestampNTZType, TimestampType).foreach { micro =>
+        assert(Cast.canCast(TimeType(p), micro))
+        assert(Cast.canCast(micro, TimeType(p)))
+        assert(Cast.canAnsiCast(TimeType(p), micro))
+        assert(Cast.canAnsiCast(micro, TimeType(p)))
+        assert(Cast.canTryCast(TimeType(p), micro))
+        assert(Cast.canTryCast(micro, TimeType(p)))
+      }
+      foreachNanosPrecision { q =>
+        Seq(TimestampNTZNanosType(q), TimestampLTZNanosType(q)).foreach { nanos =>
+          assert(Cast.canCast(TimeType(p), nanos))
+          assert(Cast.canCast(nanos, TimeType(p)))
+          assert(Cast.canAnsiCast(TimeType(p), nanos))
+          assert(Cast.canAnsiCast(nanos, TimeType(p)))
+          assert(Cast.canTryCast(TimeType(p), nanos))
+          assert(Cast.canTryCast(nanos, TimeType(p)))
+        }
+      }
+    }
+    // TIME -> TIMESTAMP_NTZ depends on the session time zone (CURRENT_DATE); the reverse direction
+    // extracts the UTC wall-clock time-of-day and is zone-independent. Both directions of
+    // TIME <-> TIMESTAMP_LTZ depend on the session zone (the LTZ value is an absolute instant).
+    assert(Cast.needsTimeZone(TimeType(0), TimestampNTZType))
+    assert(Cast.needsTimeZone(TimeType(9), TimestampNTZNanosType(9)))
+    assert(!Cast.needsTimeZone(TimestampNTZType, TimeType(0)))
+    assert(!Cast.needsTimeZone(TimestampNTZNanosType(9), TimeType(9)))
+    assert(Cast.needsTimeZone(TimeType(0), TimestampType))
+    assert(Cast.needsTimeZone(TimestampType, TimeType(0)))
+    assert(Cast.needsTimeZone(TimeType(9), TimestampLTZNanosType(9)))
+    assert(Cast.needsTimeZone(TimestampLTZNanosType(9), TimeType(9)))
+  }
+
+  test("isTimeToTimestampNTZ identifies only TIME -> TIMESTAMP_NTZ") {
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      // True only for TIME -> TIMESTAMP_NTZ (the current-date-dependent direction).
+      assert(Cast.isTimeToTimestampNTZ(TimeType(p), TimestampNTZType))
+      // The reverse direction is zone-independent, and TIMESTAMP_LTZ is not a counterpart.
+      assert(!Cast.isTimeToTimestampNTZ(TimestampNTZType, TimeType(p)))
+      assert(!Cast.isTimeToTimestampNTZ(TimeType(p), TimestampType))
+      assert(!Cast.isTimeToTimestampNTZ(TimestampType, TimeType(p)))
+      foreachNanosPrecision { q =>
+        assert(Cast.isTimeToTimestampNTZ(TimeType(p), TimestampNTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampNTZ(TimestampNTZNanosType(q), TimeType(p)))
+        assert(!Cast.isTimeToTimestampNTZ(TimeType(p), TimestampLTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampNTZ(TimestampLTZNanosType(q), TimeType(p)))
+      }
+    }
+    // Pairs that involve neither a TIME source nor a TIMESTAMP_NTZ target are false.
+    assert(!Cast.isTimeToTimestampNTZ(DateType, TimestampNTZType))
+    assert(!Cast.isTimeToTimestampNTZ(TimestampNTZType, TimestampNTZType))
+  }
+
+  test("isTimeToTimestampLTZ identifies only TIME -> TIMESTAMP_LTZ") {
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      // True only for TIME -> TIMESTAMP_LTZ (the current-date-dependent direction). q = 6 is the
+      // micro TimestampType.
+      assert(Cast.isTimeToTimestampLTZ(TimeType(p), TimestampType))
+      // The reverse direction is handled by the eval/codegen path, and TIMESTAMP_NTZ is not a
+      // counterpart of this predicate.
+      assert(!Cast.isTimeToTimestampLTZ(TimestampType, TimeType(p)))
+      assert(!Cast.isTimeToTimestampLTZ(TimeType(p), TimestampNTZType))
+      assert(!Cast.isTimeToTimestampLTZ(TimestampNTZType, TimeType(p)))
+      foreachNanosPrecision { q =>
+        assert(Cast.isTimeToTimestampLTZ(TimeType(p), TimestampLTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampLTZ(TimestampLTZNanosType(q), TimeType(p)))
+        assert(!Cast.isTimeToTimestampLTZ(TimeType(p), TimestampNTZNanosType(q)))
+        assert(!Cast.isTimeToTimestampLTZ(TimestampNTZNanosType(q), TimeType(p)))
+      }
+    }
+    // Pairs that involve neither a TIME source nor a TIMESTAMP_LTZ target are false.
+    assert(!Cast.isTimeToTimestampLTZ(DateType, TimestampType))
+    assert(!Cast.isTimeToTimestampLTZ(TimestampType, TimestampType))
+  }
+
+  test("cast timestamp_ntz to time") {
+    // Per ANSI rule 15.d the time-of-day fields are extracted and truncated to the target
+    // precision; the operation is deterministic and time-zone independent.
+    val ldts = Seq(
+      LocalDateTime.of(2020, 5, 17, 12, 34, 56, 789012345),
+      LocalDateTime.of(1969, 12, 31, 23, 59, 59, 123456789),
+      LocalDateTime.of(1, 1, 1, 0, 0, 0, 1))
+    ldts.foreach { ldt =>
+      for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        // q = 6: the micro TimestampNTZType. Its time-of-day has microsecond resolution.
+        val micros = DateTimeUtils.localDateTimeToMicros(ldt)
+        val expectedFromMicros =
+          truncateTimeToPrecision(localTimeToNanos(microsToLocalDateTime(micros).toLocalTime), p)
+        checkEvaluation(
+          cast(Literal.create(micros, TimestampNTZType), TimeType(p)), expectedFromMicros)
+
+        // q in [7, 9]: the nanosecond TimestampNTZNanosType.
+        foreachNanosPrecision { q =>
+          val truncatedLdt = ldt.withNano(nanoOfSecTruncator(q)(ldt.getNano))
+          val v = localDateTimeToNanosVal(truncatedLdt)
+          val expected = truncateTimeToPrecision(localTimeToNanos(truncatedLdt.toLocalTime), p)
+          checkEvaluation(cast(Literal.create(v, TimestampNTZNanosType(q)), TimeType(p)), expected)
+        }
+      }
+    }
+
+    // Interpreted vs codegen consistency (zone-independent reverse direction).
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (child: Expression) => Cast(child, TimeType(p)), TimestampNTZType)
+      foreachNanosPrecision { q =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Cast(child, TimeType(p)), TimestampNTZNanosType(q))
+      }
+    }
+  }
+
+  test("cast time to timestamp_ntz and back") {
+    // TIME -> TIMESTAMP_NTZ takes the date from CURRENT_DATE, which cancels out on the round trip
+    // back to TIME, so these assertions are deterministic regardless of the current date.
+    val times = Seq(
+      localTime(0, 0, 0),
+      localTime(12, 34, 56, 789012),
+      localTime(12, 34, 56, 789012, 345),
+      localTime(23, 59, 59, 999999, 999))
+    times.foreach { nanos =>
+      // q = 6 keeps microsecond resolution.
+      checkEvaluation(
+        cast(cast(Literal(nanos, TimeType(9)), TimestampNTZType, UTC_OPT), TimeType(9)),
+        truncateTimeToPrecision(nanos, 6))
+      // q in [7, 9] keeps the corresponding sub-microsecond digits.
+      foreachNanosPrecision { q =>
+        checkEvaluation(
+          cast(cast(Literal(nanos, TimeType(9)), TimestampNTZNanosType(q), UTC_OPT), TimeType(9)),
+          truncateTimeToPrecision(nanos, q))
+      }
+    }
+  }
+
+  test("cast timestamp_ltz to time") {
+    // The LTZ value is an absolute instant; its time-of-day is the local wall clock observed in the
+    // session time zone, truncated to the target precision. Use a fixed non-UTC zone to exercise
+    // the zone-dependent path; the instants below avoid DST transitions in that zone.
+    val zone = LA
+    val zid = Option(zone.getId)
+    val instants = Seq(
+      timestampLTZ(2020, 5, 17, 12, 34, 56, 789012345, zone),
+      timestampLTZ(1969, 12, 31, 23, 59, 59, 123456789, zone),
+      timestampLTZ(1, 1, 1, 0, 0, 0, 1, zone))
+    instants.foreach { inst =>
+      for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+        // q = 6: the micro TimestampType. Its time-of-day has microsecond resolution.
+        val micros = DateTimeUtils.instantToMicros(inst)
+        val expectedFromMicros = truncateTimeToPrecision(
+          DateTimeUtils.microsToInstant(micros).atZone(zone).toLocalTime.toNanoOfDay, p)
+        checkEvaluation(
+          cast(Literal.create(micros, TimestampType), TimeType(p), zid), expectedFromMicros)
+
+        // q in [7, 9]: the nanosecond TimestampLTZNanosType.
+        foreachNanosPrecision { q =>
+          val truncatedInst =
+            inst.minusNanos((inst.getNano - nanoOfSecTruncator(q)(inst.getNano)).toLong)
+          val v = instantToNanosVal(truncatedInst)
+          val expected =
+            truncateTimeToPrecision(truncatedInst.atZone(zone).toLocalTime.toNanoOfDay, p)
+          checkEvaluation(
+            cast(Literal.create(v, TimestampLTZNanosType(q)), TimeType(p), zid), expected)
+        }
+      }
+    }
+
+    // Interpreted vs codegen consistency for the zone-dependent reverse direction.
+    for (p <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      checkConsistencyBetweenInterpretedAndCodegen(
+        (child: Expression) => Cast(child, TimeType(p), zid), TimestampType)
+      foreachNanosPrecision { q =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Cast(child, TimeType(p), zid), TimestampLTZNanosType(q))
+      }
+    }
+  }
+
+  test("cast time to timestamp_ltz and back") {
+    // TIME -> TIMESTAMP_LTZ takes the date from CURRENT_DATE, which cancels out on the round trip
+    // back to TIME. Pin the zone to UTC so no DST transition can shift the wall clock, making these
+    // assertions deterministic regardless of the current date.
+    val times = Seq(
+      localTime(0, 0, 0),
+      localTime(12, 34, 56, 789012),
+      localTime(12, 34, 56, 789012, 345),
+      localTime(23, 59, 59, 999999, 999))
+    times.foreach { nanos =>
+      // Both casts are pinned to UTC: unlike the NTZ reverse direction, TIMESTAMP_LTZ -> TIME is
+      // zone-dependent, so the outer cast must read the time-of-day in the same zone the inner cast
+      // used to build the instant.
+      // q = 6 keeps microsecond resolution.
+      checkEvaluation(
+        cast(cast(Literal(nanos, TimeType(9)), TimestampType, UTC_OPT), TimeType(9), UTC_OPT),
+        truncateTimeToPrecision(nanos, 6))
+      // q in [7, 9] keeps the corresponding sub-microsecond digits.
+      foreachNanosPrecision { q =>
+        checkEvaluation(
+          cast(
+            cast(Literal(nanos, TimeType(9)), TimestampLTZNanosType(q), UTC_OPT),
+            TimeType(9),
+            UTC_OPT),
+          truncateTimeToPrecision(nanos, q))
       }
     }
   }

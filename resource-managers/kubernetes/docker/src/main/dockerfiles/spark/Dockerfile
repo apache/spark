@@ -36,7 +36,7 @@ ARG spark_uid=185
 RUN set -ex && \
     apt-get update && \
     ln -s /lib /lib64 && \
-    apt install -y --no-install-recommends bash tini libc6 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
+    apt install -y --no-install-recommends bash tini libc6 libjemalloc2 libpam-modules krb5-user libnss3 procps net-tools logrotate libssl-dev && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/examples && \
     mkdir -p /opt/spark/work-dir && \

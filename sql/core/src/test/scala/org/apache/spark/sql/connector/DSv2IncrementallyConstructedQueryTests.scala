@@ -234,7 +234,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
   // ---------------------------------------------------------------------------
   // Scenario 4: external drop and recreate table.
   // 4a: table ID detects it, TABLE_ID_MISMATCH in classic, succeeds in Connect
-  // 4b: column IDs detect it, COLUMN_ID_MISMATCH in classic, succeeds in Connect
+  // 4b: column IDs detect it, COLUMNS_MISMATCH in classic, succeeds in Connect
   // 4c: no IDs, goes undetected, join succeeds (both modes)
   // ---------------------------------------------------------------------------
 
@@ -321,7 +321,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             exception = intercept[AnalysisException] {
               df1.join(df2, df1("id") === df2("id")).collect()
             },
-            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
             matchPVals = true,
             parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
@@ -364,7 +364,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(2, 200, 2, 200)))
         } else {
-          // Classic: neither TABLE_ID_MISMATCH nor COLUMN_ID_MISMATCH fires, so the
+          // Classic: neither TABLE_ID_MISMATCH nor COLUMNS_MISMATCH fires, so the
           // drop and recreate goes undetected. df1 keeps its pre-drop snapshot
           // (1, 100) while df2 reads the recreated table (2, 200), so the join finds
           // no matching ids and returns no rows.
@@ -378,7 +378,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   // ---------------------------------------------------------------------------
   // Scenario 5: external drop+re-add column.
-  // 5a: column IDs detect it, COLUMN_ID_MISMATCH in classic, succeeds in Connect
+  // 5a: column IDs detect it, COLUMNS_MISMATCH in classic, succeeds in Connect
   // 5b: no IDs, goes undetected, join succeeds (both modes)
   // ---------------------------------------------------------------------------
 
@@ -411,7 +411,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             exception = intercept[AnalysisException] {
               df1.join(df2, df1("id") === df2("id")).collect()
             },
-            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
             matchPVals = true,
             parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
@@ -438,7 +438,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = session.table(nullBothT)
 
-        // Neither TABLE_ID_MISMATCH nor COLUMN_ID_MISMATCH fires.
+        // Neither TABLE_ID_MISMATCH nor COLUMNS_MISMATCH fires.
         // The change goes undetected and the join succeeds.
         checkRows(
           df1.join(df2, df1("id") === df2("id")),
@@ -449,10 +449,9 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   // ---------------------------------------------------------------------------
   // Scenario 6: external type change (drop INT column, add STRING column).
-  // The delete removes the old column ID and the add assigns a fresh one,
-  // so the column ID check fires (COLUMN_ID_MISMATCH) in classic before schema
-  // validation gets a chance to compare data types.
-  // Connect re-resolves both sides with the new column ID.
+  // The drop removes the old column ID and the add assigns a fresh one,
+  // so schema validation reports both an ID change and a type change in COLUMNS_MISMATCH.
+  // Connect re-resolves both sides with the new column.
   // ---------------------------------------------------------------------------
 
   test(s"${testPrefix}SPARK-54157: join after external drop+re-add different-type column" +
@@ -485,7 +484,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             exception = intercept[AnalysisException] {
               df1.join(df2, df1("id") === df2("id")).collect()
             },
-            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+            condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
             matchPVals = true,
             parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }

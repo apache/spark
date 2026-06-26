@@ -2585,7 +2585,7 @@ case class ParseToDate(
        NULL
   """,
   group = "datetime_funcs",
-  since = "4.0.0")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 object TryToDateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -3028,6 +3028,123 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
 
   override def prettyName: String = "make_timestamp_ntz"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a nanosecond-precision `TIMESTAMP_NTZ(precision)` (precision in [7, 9]) from a date and
+ * a local time, preserving the time's sub-microsecond digits up to `precision`. This is the
+ * nanosecond counterpart of [[MakeTimestampNTZ]]. It is an internal expression used by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] to rewrite
+ * `CAST(time AS TIMESTAMP_NTZ(precision))` with a query-stable current date; it is not registered
+ * as a SQL function.
+ */
+case class MakeTimestampNTZNanos(left: Expression, right: Expression, precision: Int)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampNTZNanosType(precision),
+    "makeTimestampNTZNanos",
+    Seq(left, right, Literal(precision)),
+    Seq(left.dataType, right.dataType, IntegerType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ntz_nanos"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a `TIMESTAMP_LTZ` (micro `TimestampType`) from a date and a local time interpreted in the
+ * session time zone. This is the LTZ counterpart of [[MakeTimestampNTZ]]; because the result is an
+ * absolute instant it is time-zone aware. It is an internal expression used by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] to rewrite
+ * `CAST(time AS TIMESTAMP_LTZ)` with a query-stable current date; it is not registered as a SQL
+ * function.
+ */
+case class MakeTimestampLTZ(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampType,
+    "makeTimestamp",
+    Seq(left, right, Literal.create(zoneId.getId, StringType)),
+    Seq(left.dataType, right.dataType, StringType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ltz"
+
+  // TimeZoneAwareExpression's `final override val nodePatterns` wins in linearization and would
+  // otherwise drop RUNTIME_REPLACEABLE; re-add it via this hook, mirroring the other
+  // RuntimeReplaceable + TimeZoneAwareExpression siblings (e.g. ParseToDate, ParseToTimestamp).
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a nanosecond-precision `TIMESTAMP_LTZ(precision)` (precision in [7, 9]) from a date and a
+ * local time interpreted in the session time zone, preserving the time's sub-microsecond digits up
+ * to `precision`. This is the nanosecond, time-zone aware counterpart of [[MakeTimestampLTZ]]. It
+ * is an internal expression used by [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]
+ * to rewrite `CAST(time AS TIMESTAMP_LTZ(precision))` with a query-stable current date; it is not
+ * registered as a SQL function.
+ */
+case class MakeTimestampLTZNanos(
+    left: Expression,
+    right: Expression,
+    precision: Int,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampLTZNanosType(precision),
+    "makeTimestampLTZNanos",
+    Seq(left, right, Literal(precision), Literal.create(zoneId.getId, StringType)),
+    Seq(left.dataType, right.dataType, IntegerType, StringType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ltz_nanos"
+
+  // See MakeTimestampLTZ: re-add RUNTIME_REPLACEABLE that TimeZoneAwareExpression's final
+  // nodePatterns would otherwise drop in linearization.
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = {
