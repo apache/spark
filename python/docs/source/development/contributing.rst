@@ -29,7 +29,7 @@ Contributing by Testing Releases
 --------------------------------
 
 Before the official release, PySpark release candidates are shared in the `dev@spark.apache.org <https://mail-archives.apache.org/mod_mbox/spark-dev/>`_ mailing list to vote on.
-This release candidates can be easily installed via pip. For example, in case of Spark 3.0.0 RC1, you can install as below:
+These release candidates can be easily installed via pip. For example, in case of Spark 3.0.0 RC1, you can install as below:
 
 .. code-block:: bash
 
@@ -48,7 +48,7 @@ Contributing Documentation Changes
 
 The release documentation is located under Spark's `docs <https://github.com/apache/spark/tree/master/docs>`_ directory.
 `README.md <https://github.com/apache/spark/blob/master/docs/README.md>`_ describes the required dependencies and steps
-to generate the documentations. Usually, PySpark documentation is tested with the command below
+to generate the documentation. Usually, PySpark documentation is tested with the command below
 under the `docs <https://github.com/apache/spark/tree/master/docs>`_ directory:
 
 .. code-block:: bash
@@ -81,7 +81,7 @@ Additionally, there are a couple of additional notes to keep in mind when contri
     Apache Spark is an unified engine that provides a consistent API layer. In general, the APIs are consistently supported across other languages.
 
 * PySpark-specific APIs can be accepted
-    As long as they are Pythonic and do not conflict with other existent APIs, it is fine to raise a API request, for example, decorator usage of UDFs.
+    As long as they are Pythonic and do not conflict with other existent APIs, it is fine to raise an API request, for example, decorator usage of UDFs.
 
 * Adjust the corresponding type hints if you extend or modify public API
     See `Contributing and Maintaining Type Hints`_ for details.
