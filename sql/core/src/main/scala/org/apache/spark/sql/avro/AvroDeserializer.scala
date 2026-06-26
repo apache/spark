@@ -33,14 +33,14 @@ import org.apache.avro.util.Utf8
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeConstants, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
@@ -219,7 +219,8 @@ private[sql] class AvroDeserializer(
         // nanosWithinMicro in [0, 999] for pre-epoch values. Nanos timestamps are always proleptic
         // Gregorian, so they are exempt from datetime rebasing.
         case _: LogicalTypes.TimestampNanos => (updater, ordinal, value) =>
-          updater.set(ordinal, epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type " +
           s"${TimestampLTZNanosType().sql}.")
@@ -227,7 +228,8 @@ private[sql] class AvroDeserializer(
 
       case (LONG, t: TimestampNTZNanosType) => avroType.getLogicalType match {
         case _: LogicalTypes.LocalTimestampNanos => (updater, ordinal, value) =>
-          updater.set(ordinal, epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type " +
           s"${TimestampNTZNanosType().sql}.")
@@ -433,18 +435,6 @@ private[sql] class AvroDeserializer(
 
       case _ => throw new IncompatibleSchemaException(incompatibleMsg)
     }
-  }
-
-  /**
-   * Unpacks an Avro epoch-nanoseconds Long into a [[TimestampNanosVal]], truncating the
-   * sub-microsecond digits to the requested precision.
-   */
-  private def epochNanosToTimestampNanos(epochNanos: Long, precision: Int): TimestampNanosVal = {
-    val epochMicros = Math.floorDiv(epochNanos, DateTimeConstants.NANOS_PER_MICROS)
-    val rawNanosWithinMicro = Math.floorMod(epochNanos, DateTimeConstants.NANOS_PER_MICROS).toInt
-    val nanosWithinMicro =
-      DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
-    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
   // TODO: move the following method in Decimal object on creating Decimal from BigDecimal?

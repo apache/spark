@@ -24,7 +24,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter}
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
@@ -115,12 +115,7 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
     val p = precision
     new ParquetPrimitiveConverter(updater) {
       override def addLong(value: Long): Unit = {
-        val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
-        val rawNanosWithinMicro =
-          Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toInt
-        val nanosWithinMicro =
-          DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, p)
-        this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort))
+        this.updater.set(DateTimeUtils.epochNanosToTimestampNanos(value, p))
       }
     }
   }

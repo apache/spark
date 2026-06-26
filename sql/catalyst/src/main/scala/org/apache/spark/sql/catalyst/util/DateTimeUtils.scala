@@ -332,6 +332,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Unpacks a single int64 of nanoseconds since the epoch (the representation used by the Arrow
+   * nanosecond timestamp vectors and the Parquet / Avro INT64 epoch-nanoseconds encodings) back
+   * into a [[TimestampNanosVal]], truncating the sub-microsecond digits to the given `precision`
+   * (in [7, 9]). This is the inverse of [[timestampNanosToEpochNanos]]. `floorDiv` / `floorMod`
+   * keep `nanosWithinMicro` in [0, 999] for pre-epoch (negative) values too.
+   */
+  def epochNanosToTimestampNanos(epochNanos: Long, precision: Int): TimestampNanosVal = {
+    val epochMicros = Math.floorDiv(epochNanos, NANOS_PER_MICROS)
+    val rawNanosWithinMicro = Math.floorMod(epochNanos, NANOS_PER_MICROS).toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
