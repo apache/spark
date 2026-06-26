@@ -1209,7 +1209,7 @@ case class DayName(child: Expression) extends GetDateField with DefaultStringPro
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   arguments = """
     Arguments:
-      * timestamp - A date/timestamp or string to be converted to the given format.
+      * timestamp - A date, time, timestamp or string to be converted to the given format.
       * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid date
               and time format patterns.
   """,
@@ -1217,6 +1217,8 @@ case class DayName(child: Expression) extends GetDateField with DefaultStringPro
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
+      > SELECT _FUNC_(TIME'14:30:45', 'HH:mm:ss');
+       14:30:45
   """,
   group = "datetime_funcs",
   since = "1.5.0")
@@ -3874,11 +3876,11 @@ object DatePart {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
+  usage = "_FUNC_(field, source) - Extracts a part of the date, time, timestamp, or interval source.",
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted, and supported string values are as same as the fields of the equivalent function `EXTRACT`.
-      * source - a date/timestamp or interval column from where `field` should be extracted
+      * source - a date, time, timestamp, or interval column from where `field` should be extracted
   """,
   examples = """
     Examples:
@@ -3898,6 +3900,8 @@ object DatePart {
        11
       > SELECT _FUNC_('MINUTE', INTERVAL '123 23:55:59.002001' DAY TO SECOND);
        55
+      > SELECT _FUNC_('HOUR', TIME'09:08:01.000001');
+       9
   """,
   note = """
     The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`

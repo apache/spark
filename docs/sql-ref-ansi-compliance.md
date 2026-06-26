@@ -257,6 +257,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
+The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
+
 Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 This is a graphical depiction of the precedence list as a directed tree:
