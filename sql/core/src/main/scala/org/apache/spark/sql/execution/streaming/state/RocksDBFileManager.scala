@@ -991,11 +991,14 @@ class RocksDBFileManager(
         // with the snapshotStartBatchId option immediately after writing). Enrich the error with
         // the snapshot/changelog files that ARE present in DFS, so the situation is diagnosable
         // straight from the logs (in particular for intermittent failures in scheduled jobs).
-        throw new FileNotFoundException(
+        // e.getMessage already names the missing zip path, so we do not repeat it; the original
+        // exception is preserved as the cause so its stack trace is not lost.
+        val enriched = new FileNotFoundException(
           s"${e.getMessage}\nFailed to load the snapshot file for version $version" +
           checkpointUniqueId.map(id => s" (checkpointUniqueId=$id)").getOrElse("") +
-          s" from ${dfsBatchZipFile(version, checkpointUniqueId)}. " +
-          s"Files currently present in $dfsRootDir: ${listDfsFilesForDiagnostics()}")
+          s". Files currently present in $dfsRootDir: ${listDfsFilesForDiagnostics()}")
+        enriched.initCause(e)
+        throw enriched
     }
   }
 

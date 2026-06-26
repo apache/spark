@@ -1847,6 +1847,26 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     assert(ex.getMessage.contains("Files currently present"))
     // The version-1 snapshot that does exist must be surfaced in the diagnostic.
     assert(ex.getMessage.contains("snapshots=[1.zip]"))
+
+    // Also cover the checkpointUniqueId (state checkpoint v2) path, which loads the snapshot via
+    // fm.open instead of fs.open. The diagnostic should still fire and name the unique id.
+    val v2RemoteDir = Utils.createTempDir().toString
+    val v2FileManager = new RocksDBFileManager(v2RemoteDir, Utils.createTempDir(), hadoopConf)
+    val v2FileMapping = new RocksDBFileMapping()
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    saveCheckpointFiles(
+      v2FileManager, Seq("001.sst" -> 10), version = 1, numKeys = 10, v2FileMapping,
+      checkpointUniqueId = checkpointUniqueId)
+
+    val v2Ex = intercept[FileNotFoundException] {
+      v2FileManager.loadCheckpointFromDfs(
+        2, Utils.createTempDir(), v2FileMapping, checkpointUniqueId = checkpointUniqueId)
+    }
+    assert(v2Ex.getMessage.contains("Failed to load the snapshot file for version 2"))
+    assert(v2Ex.getMessage.contains(s"checkpointUniqueId=${checkpointUniqueId.get}"))
+    assert(v2Ex.getMessage.contains("Files currently present"))
+    // The version-1 snapshot that does exist (named with the unique id) must be surfaced.
+    assert(v2Ex.getMessage.contains(s"1_${checkpointUniqueId.get}.zip"))
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
