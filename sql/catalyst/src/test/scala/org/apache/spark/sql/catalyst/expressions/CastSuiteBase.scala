@@ -926,6 +926,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57303: try-cast nullability follows up-cast admissibility for the timestamp family") {
+    // `Cast.nullable`'s try-cast branch keys on `Cast.canUpCast`: an up-cast (lossless widening
+    // within the timestamp family, or DATE -> ts) never fails, so a non-null child stays non-null;
+    // a lossy narrowing is not an up-cast, so the try-cast is conservatively nullable.
+    def tryCast(from: DataType, to: DataType): Cast =
+      Cast(AttributeReference("c", from, nullable = false)(), to, evalMode = EvalMode.TRY)
+    foreachNanosPrecision { p =>
+      // Lossless widening micros -> nanos(p) and DATE -> nanos(p): non-null child stays non-null.
+      assert(!tryCast(TimestampNTZType, TimestampNTZNanosType(p)).nullable)
+      assert(!tryCast(TimestampType, TimestampLTZNanosType(p)).nullable)
+      assert(!tryCast(DateType, TimestampNTZNanosType(p)).nullable)
+      // Lossy narrowing nanos(p) -> micros is not an up-cast, so the try-cast is nullable.
+      assert(tryCast(TimestampNTZNanosType(p), TimestampNTZType).nullable)
+      assert(tryCast(TimestampLTZNanosType(p), TimestampType).nullable)
+    }
+  }
+
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
     " overflow") {
     Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
