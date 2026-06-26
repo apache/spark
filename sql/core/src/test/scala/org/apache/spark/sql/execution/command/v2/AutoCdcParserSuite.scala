@@ -64,8 +64,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isEmpty)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
-    assert(cdc.specifiedCols.isEmpty)
-    assert(cdc.exceptCols.isEmpty)
+    assert(cdc.includeColumns.isEmpty)
+    assert(cdc.excludeColumns.isEmpty)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - multipart source name") {
@@ -138,8 +138,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |COLUMNS id, name, value""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
-    assert(cdc.specifiedCols.map(_.name) == Seq("id", "name", "value"))
-    assert(cdc.exceptCols.isEmpty)
+    assert(cdc.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
+    assert(cdc.excludeColumns.isEmpty)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - COLUMNS * EXCEPT list") {
@@ -151,8 +151,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
-    assert(cdc.specifiedCols.isEmpty)
-    assert(cdc.exceptCols.map(_.name) == Seq("op", "ts"))
+    assert(cdc.includeColumns.isEmpty)
+    assert(cdc.excludeColumns.get.map(_.name) == Seq("op", "ts"))
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - all clauses combined") {
@@ -168,7 +168,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isDefined)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
-    assert(cdc.specifiedCols.map(_.name) == Seq("key1", "key2", "key3", "timestamp"))
+    assert(cdc.includeColumns.get.map(_.name) == Seq("key1", "key2", "key3", "timestamp"))
   }
 
   // ---------------------------------------------------------------------------
@@ -192,8 +192,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
     assert(cmd.deleteCondition.isEmpty)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
-    assert(cmd.specifiedCols.isEmpty)
-    assert(cmd.exceptCols.isEmpty)
+    assert(cmd.includeColumns.isEmpty)
+    assert(cmd.excludeColumns.isEmpty)
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - multipart source name") {
@@ -258,8 +258,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |COLUMNS id, name, value""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
-    assert(cmd.specifiedCols.map(_.name) == Seq("id", "name", "value"))
-    assert(cmd.exceptCols.isEmpty)
+    assert(cmd.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
+    assert(cmd.excludeColumns.isEmpty)
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - COLUMNS * EXCEPT list") {
@@ -272,8 +272,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
-    assert(cmd.specifiedCols.isEmpty)
-    assert(cmd.exceptCols.map(_.name) == Seq("op", "ts"))
+    assert(cmd.includeColumns.isEmpty)
+    assert(cmd.excludeColumns.get.map(_.name) == Seq("op", "ts"))
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - all clauses combined") {
@@ -290,7 +290,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
     assert(cmd.deleteCondition.isDefined)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
-    assert(cmd.exceptCols.map(_.name) == Seq("key4"))
+    assert(cmd.excludeColumns.get.map(_.name) == Seq("key4"))
   }
 
   // ---------------------------------------------------------------------------

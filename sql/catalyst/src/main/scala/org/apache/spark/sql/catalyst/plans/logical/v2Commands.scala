@@ -842,9 +842,10 @@ case class CreateStreamingTable(
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
- * @param specifiedCols  An explicit list of source columns to include. Mutually exclusive with
- *                       [[exceptCols]].
- * @param exceptCols     Source columns to exclude. Mutually exclusive with [[specifiedCols]].
+ * @param includeColumns An explicit list of source columns to include. [[None]] when no COLUMNS
+ *                       clause was specified. Mutually exclusive with [[excludeColumns]].
+ * @param excludeColumns Source columns to exclude. [[None]] when no COLUMNS clause was specified.
+ *                       Mutually exclusive with [[includeColumns]].
  */
 case class CreateStreamingTableAutoCdc(
     name: LogicalPlan,
@@ -856,8 +857,8 @@ case class CreateStreamingTableAutoCdc(
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
-    specifiedCols: Seq[UnresolvedAttribute],
-    exceptCols: Seq[UnresolvedAttribute]
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]]
 ) extends UnaryCommand with CreatePipelineDataset {
   override def child: LogicalPlan = name
 

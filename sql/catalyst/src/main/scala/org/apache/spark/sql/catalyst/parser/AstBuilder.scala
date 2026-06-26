@@ -1372,8 +1372,8 @@ class AstBuilder extends DataTypeAstBuilder
         params.keys,
         params.deleteCondition,
         params.sequencing,
-        params.specifiedCols,
-        params.exceptCols)
+        params.includeColumns,
+        params.excludeColumns)
     }
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
@@ -1385,18 +1385,16 @@ class AstBuilder extends DataTypeAstBuilder
       val sequencing = expression(params.autoCdcSequenceByClause().sequence)
 
       val columnsClause = Option(params.autoCdcColumnsClause())
-      val specifiedCols = columnsClause match {
-        case Some(c) if c.columns != null =>
+      val includeColumns = columnsClause.collect {
+        case c if c.columns != null =>
           visitIdentifierSeq(c.columns).map(UnresolvedAttribute.quoted)
-        case _ => Seq.empty
       }
-      val exceptCols = columnsClause match {
-        case Some(c) if c.exceptCols != null =>
+      val excludeColumns = columnsClause.collect {
+        case c if c.exceptCols != null =>
           visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
-        case _ => Seq.empty
       }
 
-      AutoCdcParams(source, keys, deleteCondition, sequencing, specifiedCols, exceptCols)
+      AutoCdcParams(source, keys, deleteCondition, sequencing, includeColumns, excludeColumns)
     }
 
   /**
@@ -7767,5 +7765,5 @@ case class AutoCdcParams(
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequencing: Expression,
-    specifiedCols: Seq[UnresolvedAttribute],
-    exceptCols: Seq[UnresolvedAttribute])
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]])

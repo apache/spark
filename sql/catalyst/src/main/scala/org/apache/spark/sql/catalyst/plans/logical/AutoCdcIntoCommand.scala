@@ -39,10 +39,12 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *                        When absent, all source rows are treated as upserts.
  * @param sequenceByExpr Expression that orders CDC events to correctly resolve out-of-order
  *                       arrivals. Must evaluate to a sortable type. Required.
- * @param specifiedCols  An explicit list of source columns to include in the target table.
- *                       Mutually exclusive with [[exceptCols]].
- * @param exceptCols     Source columns to exclude from the target table (i.e., all columns
- *                       except these). Mutually exclusive with [[specifiedCols]].
+ * @param includeColumns An explicit list of source columns to include in the target table.
+ *                       [[None]] when no COLUMNS clause was specified. Mutually exclusive with
+ *                       [[excludeColumns]].
+ * @param excludeColumns Source columns to exclude from the target table (i.e., all columns
+ *                       except these). [[None]] when no COLUMNS clause was specified. Mutually
+ *                       exclusive with [[includeColumns]].
  */
 case class AutoCdcIntoCommand(
     targetTable: TableIdentifier,
@@ -50,6 +52,6 @@ case class AutoCdcIntoCommand(
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
-    specifiedCols: Seq[UnresolvedAttribute],
-    exceptCols: Seq[UnresolvedAttribute]
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]]
 ) extends LeafCommand

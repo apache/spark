@@ -1689,8 +1689,8 @@ class SparkSqlAstBuilder extends AstBuilder {
           keys = params.keys,
           deleteCondition = params.deleteCondition,
           sequenceByExpr = params.sequencing,
-          specifiedCols = params.specifiedCols,
-          exceptCols = params.exceptCols
+          includeColumns = params.includeColumns,
+          excludeColumns = params.excludeColumns
         )
       } else {
         Option(ctx.query) match {
