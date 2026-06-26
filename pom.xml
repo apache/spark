@@ -344,6 +344,7 @@
       --sun-misc-unsafe-memory-access=allow
       --enable-native-access=ALL-UNNAMED
       -XX:+EnableDynamicAgentLoading
+      -XX:CompileCommand=exclude,org.apache.kafka.clients.producer.KafkaProducer::waitOnMetadata
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
