@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.time.LocalTime
+
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 import org.apache.spark.connect.proto
@@ -51,6 +53,31 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     for (v <- values) {
       assertResult(v)(LiteralValueProtoConverter.toScalaValue(toLiteralProto(v)))
     }
+  }
+
+  test("SPARK-57566: TIME literal proto and catalyst value round-trip") {
+    val times = Seq(
+      LocalTime.of(0, 0, 0),
+      LocalTime.of(12, 13, 14),
+      LocalTime.of(23, 59, 59, 999999999))
+    for (t <- times) {
+      val literalProto = toLiteralProto(t, TimeType())
+      // The literal carries the TIME proto type with the expected precision.
+      assert(literalProto.getTime.getPrecision == TimeType.DEFAULT_PRECISION)
+      // Proto -> Scala value round-trips back to the original LocalTime.
+      assertResult(t)(LiteralValueProtoConverter.toScalaValue(literalProto))
+      // Proto -> Catalyst expression matches a directly-built catalyst literal.
+      val convert = CatalystTypeConverters.createToCatalystConverter(TimeType())
+      val expected = expressions.Literal(convert(t), TimeType())
+      assertResult(expected)(LiteralExpressionProtoConverter.toCatalystExpression(literalProto))
+    }
+  }
+
+  test("SPARK-57566: TIME literal proto propagates a non-default precision") {
+    val literalProto = toLiteralProto(LocalTime.of(1, 2, 3), TimeType(3))
+    assert(literalProto.getTime.getPrecision == 3)
+    assertResult(LocalTime.of(1, 2, 3))(
+      LiteralValueProtoConverter.toScalaValue(literalProto))
   }
 
   // The goal of this test is to check that converting a Scala value -> Proto -> Catalyst value

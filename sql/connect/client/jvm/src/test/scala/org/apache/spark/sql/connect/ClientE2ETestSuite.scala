@@ -1745,6 +1745,52 @@ class ClientE2ETestSuite
     checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
   }
 
+  test("SPARK-57566: make_time builtin returns a TIME value over Connect") {
+    val df = spark.range(1).select(make_time(lit(12), lit(13), lit(14)).as("t"))
+    assert(df.schema.fields.head.dataType.isInstanceOf[TimeType])
+    checkAnswer(df, Row(LocalTime.of(12, 13, 14)))
+  }
+
+  test("SPARK-57566: hour, minute and second extract fields from a TIME value over Connect") {
+    val df = spark
+      .range(1)
+      .select(make_time(lit(12), lit(13), lit(14)).as("t"))
+      .select(hour(col("t")), minute(col("t")), second(col("t")))
+    checkAnswer(df, Row(12, 13, 14))
+  }
+
+  test("SPARK-57566: current_time returns a TIME-typed column over Connect") {
+    val df = spark.sql("SELECT current_time()")
+    assert(df.schema.fields.head.dataType.isInstanceOf[TimeType])
+  }
+
+  test("SPARK-57566: TIME column round-trips via createDataFrame over Connect") {
+    val schema = StructType(Array(StructField("t", TimeType())))
+    val rows = Seq(
+      Row(LocalTime.of(1, 2, 3)),
+      Row(LocalTime.of(23, 59, 59)),
+      Row(LocalTime.of(12, 30, 45, 123456000)))
+    val df = spark.createDataFrame(rows.asJava, schema)
+    assert(df.schema.fields.head.dataType === TimeType())
+    checkAnswer(df, rows)
+  }
+
+  test("SPARK-57566: TIME column round-trips through a parquet datasource over Connect") {
+    val schema = StructType(Array(StructField("t", TimeType())))
+    val rows = Seq(
+      Row(LocalTime.of(1, 2, 3)),
+      Row(LocalTime.of(23, 59, 59)),
+      Row(LocalTime.of(12, 30, 45, 123456000)))
+    withTempPath { file =>
+      val path = file.toPath.toAbsolutePath.toString
+      spark.createDataFrame(rows.asJava, schema).write.parquet(path)
+
+      val df = spark.read.parquet(path)
+      assert(df.schema.fields.head.dataType === TimeType())
+      checkAnswer(df, rows)
+    }
+  }
+
   test("SPARK-53054: DataFrameReader defaults to spark.sql.sources.default") {
     withTempPath { file =>
       val path = file.getAbsoluteFile.toURI.toString
