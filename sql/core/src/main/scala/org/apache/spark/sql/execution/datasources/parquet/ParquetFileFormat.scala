@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{Closeable, FileNotFoundException}
+import java.io.{Closeable, File, FileNotFoundException, IOException}
 import java.time.ZoneId
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -41,12 +43,13 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
@@ -86,7 +89,84 @@ class ParquetFileFormat
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val parquetOptions = new ParquetOptions(parameters, getSqlConf(sparkSession))
+    if (parquetOptions.archiveFormatEnabled &&
+        files.exists(f => ArchiveReader.isArchivePath(f.getPath))) {
+      return inferArchiveSchema(sparkSession, parameters, files, parquetOptions.mergeSchema,
+        parquetOptions.ignoreCorruptFiles, parquetOptions.ignoreMissingFiles)
+    }
     ParquetUtils.inferSchema(sparkSession, parameters, files)
+  }
+
+  /**
+   * Schema inference when the inputs include archives. Loose files use the standard
+   * [[ParquetUtils.inferSchema]] path and seed the merge; each archive's entries fold in one at a
+   * time via [[ParquetFileFormat.mergeArchiveEntrySchemas]], bounding disk to one entry.
+   * `mergeSchema = false` samples a single schema. A corrupt/missing archive is skipped under the
+   * matching `ignore*` flag.
+   */
+  private def inferArchiveSchema(
+      sparkSession: SparkSession,
+      parameters: Map[String, String],
+      files: Seq[FileStatus],
+      mergeSchema: Boolean,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean): Option[StructType] = {
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+    val (archives, nonArchives) = files.partition(f => ArchiveReader.isArchivePath(f.getPath))
+    val tempDir = Utils.createTempDir(namePrefix = "parquet-archive-infer")
+
+    // Folds one archive's entries (at most `limit`) into `seed`, always closing the archive stream
+    // (the driver has no TaskContext to do it); skips the archive under the matching ignore flag.
+    def foldArchive(
+        archive: FileStatus, seed: Option[StructType], limit: Int): Option[StructType] = {
+      try {
+        val entries = ArchiveReader(archive.getPath)
+          .localizeEntries(conf, tempDir, ParquetFileFormat.isParquetArchiveEntry)
+        try ParquetFileFormat.mergeArchiveEntrySchemas(
+          sparkSession, parameters, entries.take(limit), seed)
+        finally entries match {
+          case c: Closeable => c.close()
+          case _ =>
+        }
+      } catch {
+        case e: Exception if ignoreMissingFiles &&
+            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+          logWarning(log"Skipping missing archive during inference: " +
+            log"${MDC(PATH, archive.getPath.toString)}", e)
+          seed
+        case NonFatal(e) =>
+          Utils.getRootCause(e) match {
+            // A missing archive is a FileNotFoundException (a subtype of IOException); it must be
+            // governed by ignoreMissingFiles (handled above), not silently dropped as corrupt under
+            // ignoreCorruptFiles -- matching FileScanRDD, which rethrows missing-file errors
+            // regardless of ignoreCorruptFiles.
+            case _: FileNotFoundException => throw e
+            case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
+              logWarning(log"Skipping corrupt archive during inference: " +
+                log"${MDC(PATH, archive.getPath.toString)}", e)
+              seed
+            case _ => throw e
+          }
+      }
+    }
+
+    try {
+      val looseSchema =
+        if (nonArchives.nonEmpty) ParquetUtils.inferSchema(sparkSession, parameters, nonArchives)
+        else None
+      if (mergeSchema) {
+        archives.foldLeft(looseSchema)((acc, a) => foldArchive(a, acc, Int.MaxValue))
+      } else if (looseSchema.isDefined) {
+        // Not merging: the loose schema already samples one, so leave the archives unopened.
+        looseSchema
+      } else {
+        // Sample the first archive entry that yields a schema.
+        archives.iterator.map(foldArchive(_, None, 1)).find(_.isDefined).flatten
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   /**
@@ -113,6 +193,12 @@ class ParquetFileFormat
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
+    // An archive is read by unpacking its entries, so the archive itself is a single split
+    // rather than carved into byte ranges.
+    val parquetOptions = new ParquetOptions(options, getSqlConf(sparkSession))
+    if (parquetOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+      return false
+    }
     true
   }
 
@@ -204,6 +290,7 @@ class ParquetFileFormat
     val parquetOptions = new ParquetOptions(options, sqlConf)
     val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
     val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
+    val archiveFormatEnabled = parquetOptions.archiveFormatEnabled
 
     // Should always be set by FileSourceScanExec creating this.
     // Check conf before checking option, to allow working around an issue by changing conf.
@@ -219,7 +306,7 @@ class ParquetFileFormat
       assert(supportBatch(sparkSession, resultSchema))
     }
 
-    (file: PartitionedFile) => {
+    val readSingleFile: PartitionedFile => Iterator[InternalRow] = (file: PartitionedFile) => {
       assert(file.partitionValues.numFields == partitionSchema.size)
 
       val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
@@ -306,6 +393,25 @@ class ParquetFileFormat
         if (shouldCloseInputStream.get) {
           openedFooter.inputStreamOpt.ifPresent(Utils.closeQuietly)
         }
+      }
+    }
+
+    // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
+    // the plain JVM reader -- Parquet needs random access to its footer, so it cannot be streamed.
+    // ArchiveReader.readLocalizedEntries owns the unpack/iterate/cleanup; the per-entry read reuses
+    // readSingleFile, which keeps `input_file_name()` / `_metadata` pointing at the archive path.
+    def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
+      ArchiveReader.readLocalizedEntries(
+        file, broadcastedHadoopConf.value.value,
+        ParquetFileFormat.isParquetArchiveEntry, "parquet-archive") {
+        entryFile => readSingleFile(entryFile)
+      }
+
+    (file: PartitionedFile) => {
+      if (archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+        readArchiveFile(file)
+      } else {
+        readSingleFile(file)
       }
     }
   }
@@ -445,6 +551,16 @@ class ParquetFileFormat
 }
 
 object ParquetFileFormat extends Logging {
+
+  /**
+   * Whether an archive entry is a Parquet data file. Skips non-Parquet sidecars an archive may
+   * contain (e.g. `_SUCCESS`, `_committed_*`, `_common_metadata`) so an archive reads like a
+   * directory of Parquet part-files. The read path and schema inference must use the same
+   * predicate, or the inferred schema would not match the data that is read.
+   */
+  private[parquet] def isParquetArchiveEntry(name: String): Boolean =
+    name.toLowerCase(Locale.ROOT).endsWith(".parquet")
+
   val ROW_INDEX = "row_index"
 
   // A name for a temporary column that holds row indexes computed by the file format reader
@@ -567,6 +683,19 @@ object ParquetFileFormat extends Logging {
       parameters: Map[String, String],
       filesToTouch: Seq[FileStatus],
       sparkSession: SparkSession): Option[StructType] = {
+    val reader = buildSchemaReader(sparkSession)
+    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, parameters, filesToTouch, reader)
+  }
+
+  /**
+   * Builds the Parquet footer-reading function, shared by the distributed merge
+   * ([[mergeSchemasInParallel]]) and the sequential archive-entry merge
+   * ([[mergeArchiveEntrySchemas]]). `SQLConf` is read here so the returned closure stays
+   * serializable.
+   */
+  private[parquet] def buildSchemaReader(
+      sparkSession: SparkSession)
+      : (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType] = {
     val sqlConf = SessionStateHelper.getSqlConf(sparkSession)
     val assumeBinaryIsString = sqlConf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlConf.isParquetINT96AsTimestamp
@@ -576,7 +705,7 @@ object ParquetFileFormat extends Logging {
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
 
-    val reader = (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+    (files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
         ignoreMissingFiles: Boolean) => {
       // Converter used to convert Parquet `MessageType` to Spark SQL `StructType`
       val converter = new ParquetToSparkSchemaConverter(
@@ -590,8 +719,46 @@ object ParquetFileFormat extends Logging {
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
+  }
 
-    SchemaMergeUtils.mergeSchemasInParallel(sparkSession, parameters, filesToTouch, reader)
+  /**
+   * Driver-side, sequential analog of [[mergeSchemasInParallel]] for archive entries: they unpack
+   * to a driver-local temp dir that executors can't read, so the schemas can't be merged in a
+   * distributed job. Reads each lazily-unpacked entry's footer and deletes it before pulling the
+   * next, so disk holds one entry at a time; `seed` is the starting schema (loose files). The
+   * caller owns closing `entries`.
+   */
+  private[sql] def mergeArchiveEntrySchemas(
+      sparkSession: SparkSession,
+      parameters: Map[String, String],
+      entries: Iterator[(String, File)],
+      seed: Option[StructType]): Option[StructType] = {
+    val caseSensitive = SessionStateHelper.getSqlConf(sparkSession).caseSensitiveAnalysis
+    val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(parameters))
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+    val reader = buildSchemaReader(sparkSession)
+
+    var merged = seed
+    entries.foreach { case (_, file) =>
+      try {
+        // The footer reader needs only a path and length (cf. mergeSchemasInParallel).
+        val status = new FileStatus(
+          file.length(), false, 0, 0, file.lastModified(), 0, null, null, null,
+          new Path(file.toURI))
+        reader(Seq(status), conf, fileSourceOptions.ignoreCorruptFiles,
+            fileSourceOptions.ignoreMissingFiles).foreach { schema =>
+          merged = Some(merged.fold(schema) { acc =>
+            try acc.merge(schema, caseSensitive) catch {
+              case e: Throwable =>
+                throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(acc, schema, e)
+            }
+          })
+        }
+      } finally {
+        file.delete()
+      }
+    }
+    merged
   }
 
   /**

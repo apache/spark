@@ -343,19 +343,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       }
     }
 
-    test("archive inference widens a column's type across entries like a directory") {
-      // The column is integral in the first entry and string in the second; inference over all
-      // entries widens the merged type to string, exactly as a directory read would.
-      withArchiveFile() { archive =>
-        writeArchive(archive, Seq(
-          entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
-          entryName(1) -> encodeFile(Seq("x").toDF("c"))))
-        val schema = inferredSchema(Seq(archive.getCanonicalPath))
-        assert(schema.length == 1 && schema.head.dataType == StringType,
-          s"expected the column widened to string across entries, got $schema")
-      }
-    }
-
     test("inference merges archive entries with loose files in the same directory") {
       // An archive entry and a loose file with the same schema infer one combined schema, matching
       // a directory read of the same files.
@@ -379,6 +366,22 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   // ----- shared schema-merge tests (run when `supportsSchemaMerge`) ----------
 
   if (supportsSchemaMerge) {
+    test("archive inference widens a column's type across entries like a directory") {
+      // The column is integral in the first entry and string in the second; inference over all
+      // entries widens the merged type to string, exactly as a directory read would. This is a
+      // schema-merge behavior (cross-entry type reconciliation), so it is gated by
+      // `supportsSchemaMerge` rather than `supportsSchemaInference`: a format can infer a single
+      // file's schema without reconciling differing types across files (e.g. Parquet).
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(
+          entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
+          entryName(1) -> encodeFile(Seq("x").toDF("c"))))
+        val schema = inferredSchema(Seq(archive.getCanonicalPath))
+        assert(schema.length == 1 && schema.head.dataType == StringType,
+          s"expected the column widened to string across entries, got $schema")
+      }
+    }
+
     test("archive entries with differing fields read like a directory") {
       // One entry carries an extra field the other lacks; read under a schema covering both, the
       // missing field reads back null -- exactly as a directory read of the same files does.
