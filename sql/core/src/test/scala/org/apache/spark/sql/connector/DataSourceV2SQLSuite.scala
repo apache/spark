@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -457,6 +457,44 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CreateTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    // Use a non-numeric marker so it can never clash with InMemoryTable's sequential numeric IDs.
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
+    }
+  }
+
   test("CreateTableAsSelect: do not double execute on collect(), take() and other queries") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
@@ -612,6 +650,44 @@ class DataSourceV2SQLSuiteV1Filter
           spark.internalCreateDataFrame(rdd,
             CatalogV2Util.v2ColumnsToStructType(replacedTable.columns)),
           spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 

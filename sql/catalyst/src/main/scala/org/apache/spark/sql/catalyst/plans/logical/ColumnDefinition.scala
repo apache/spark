@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, Expre
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, IdentityColumn, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.validateDefaultValueExpr
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.sql.connector.catalog.{Column => V2Column, ColumnDefaultValue, DefaultValue, IdentityColumnSpec}
@@ -31,6 +32,7 @@ import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * User-specified column definition for CREATE/REPLACE TABLE commands. This is an expression so that
@@ -39,6 +41,9 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructFi
  * For CREATE/REPLACE TABLE commands, columns are created from scratch, so we store the
  * user-specified default value as both the current default and exists default, in methods
  * `toV1Column` and `toV2Column`.
+ *
+ * Note that ColumnDefinition is meant to be used in DDL statements like CREATE or REPLACE.
+ * That's why it does not have a notion of column IDs as they must be assigned by connectors.
  */
 case class ColumnDefinition(
     name: String,
@@ -69,7 +74,8 @@ case class ColumnDefinition(
       defaultValue.map(_.toV2(statement, name)).orNull,
       generationExpression.orNull,
       identityColumnSpec.orNull,
-      if (metadata == Metadata.empty) null else metadata.json)
+      if (metadata == Metadata.empty) null else metadata.json,
+      id = null /* must be assigned by connectors */)
   }
 
   def toV1Column: StructField = {
@@ -128,6 +134,7 @@ object ColumnDefinition {
   def fromV1Column(col: StructField, parser: ParserInterface): ColumnDefinition = {
     val metadataBuilder = new MetadataBuilder().withMetadata(col.metadata)
     metadataBuilder.remove("comment")
+    metadataBuilder.remove(FIELD_ID_METADATA_KEY)
     metadataBuilder.remove(CURRENT_DEFAULT_COLUMN_METADATA_KEY)
     metadataBuilder.remove(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
     metadataBuilder.remove(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY)
@@ -158,7 +165,7 @@ object ColumnDefinition {
     }
     ColumnDefinition(
       col.name,
-      col.dataType,
+      SchemaUtils.clearFieldIds(col.dataType),
       col.nullable,
       col.getComment(),
       defaultValue,
