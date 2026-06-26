@@ -19,7 +19,6 @@ from enum import Enum
 import json
 import os
 import socket
-from types import NoneType
 from typing import IO, Any, Dict, List, Union, Optional, Tuple, Iterator, cast
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
@@ -39,10 +38,10 @@ try:
     import numpy as np
 
     has_numpy = True
+    SCALAR_TYPES = (bool, int, float, str, bytes, datetime, type(None))
 
     def _normalize_state_value(v: Any) -> Any:
-        # Fast path for common scalar values.
-        if isinstance(v, (bool, int, float, str, bytes, datetime, NoneType)):
+        if type(v) in SCALAR_TYPES:  # Fast path for common scalar values.
             return v
         # Convert NumPy scalar values to Python primitive values.
         if isinstance(v, np.generic):
