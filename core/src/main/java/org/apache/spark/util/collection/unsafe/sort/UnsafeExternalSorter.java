@@ -28,12 +28,14 @@ import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
@@ -600,16 +602,31 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       // Original single-round merge: open all spill readers at once
       logger.info("Merging {} spill files in single round",
           MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()));
-      final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
-        recordComparatorSupplier.get(), prefixComparator, spillWriters.size());
-      for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
-        spillMerger.addSpillIfNotEmpty(spillWriter.getReader(serializerManager));
+      final boolean useLoserTree = SparkEnv.get() != null && (boolean) SparkEnv.get().conf().get(
+          package$.MODULE$.UNSAFE_SORTER_SPILL_MERGER_USE_LOSER_TREE());
+      if (useLoserTree) {
+        final UnsafeLoserTreeSpillMerger spillMerger = new UnsafeLoserTreeSpillMerger(
+          recordComparatorSupplier.get(), prefixComparator, spillCount());
+        for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
+          spillMerger.addSpillIfNotEmpty(spillWriter.getReader(serializerManager));
+        }
+        if (inMemSorter != null) {
+          readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+          spillMerger.addSpillIfNotEmpty(readingIterator);
+        }
+        return spillMerger.getSortedIterator();
+      } else {
+        final UnsafeSorterSpillMerger spillMerger = new UnsafeSorterSpillMerger(
+          recordComparatorSupplier.get(), prefixComparator, spillWriters.size());
+        for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
+          spillMerger.addSpillIfNotEmpty(spillWriter.getReader(serializerManager));
+        }
+        if (inMemSorter != null) {
+          readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+          spillMerger.addSpillIfNotEmpty(readingIterator);
+        }
+        return spillMerger.getSortedIterator();
       }
-      if (inMemSorter != null) {
-        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
-        spillMerger.addSpillIfNotEmpty(readingIterator);
-      }
-      return spillMerger.getSortedIterator();
     }
   }
 
@@ -665,6 +682,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       inMemIter = readingIterator;
     }
     return new BoundedMergerContext(snapshot, inMemIter, merger);
+  }
+
+  private int spillCount() {
+    return spillWriters.size() + (inMemSorter != null ? 1 : 0);
   }
 
   @VisibleForTesting boolean hasSpaceForAnotherRecord() {

@@ -1965,6 +1965,18 @@ package object config {
         "The merge factor must be -1 (disabled) or at least 2.")
       .createWithDefault(-1)
 
+  private[spark] val UNSAFE_SORTER_SPILL_MERGER_USE_LOSER_TREE =
+    ConfigBuilder("spark.unsafe.sorter.spill.merger.useLoserTree")
+      .internal()
+      .doc("If true, use a loser tree based k-way merger when reading multiple spill files " +
+        "in UnsafeExternalSorter; otherwise use the original priority-queue based merger. " +
+        "Loser tree performs one comparison per replay versus two for heap sift-down, which " +
+        "can be faster when there are many spills.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
   private[spark] val PLUGINS =
