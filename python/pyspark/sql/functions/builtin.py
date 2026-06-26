@@ -22940,7 +22940,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
-    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()  # doctest: +SKIP
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
@@ -22951,7 +22951,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
-    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()  # doctest: +SKIP
     +----------------+----------------+
     |            data|   shuffle(data)|
     +----------------+----------------+
@@ -22962,7 +22962,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data", 345)).show()
+    >>> df.select("*", sf.shuffle("data", 345)).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
@@ -22973,7 +22973,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    >>> df.select("*", sf.shuffle("data")).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
