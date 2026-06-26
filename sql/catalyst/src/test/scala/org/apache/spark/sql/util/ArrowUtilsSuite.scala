@@ -154,6 +154,48 @@ class ArrowUtilsSuite extends SparkFunSuite {
       ArrowUtils.toArrowSchema(schemaWithMeta, null, true, false)) === schemaWithMeta)
   }
 
+  test("time") {
+    // Arrow's Time type has no precision field, so TIME(p) precision is preserved via field
+    // metadata; the Arrow type itself stays Time(NANOSECOND, 64).
+    Seq(0, 3, 6, 7, 9).foreach { p =>
+      val schema = new StructType().add("value", TimeType(p))
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, null, true, false)
+      val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Time]
+      assert(fieldType.getUnit === TimeUnit.NANOSECOND)
+      assert(fieldType.getBitWidth === 8 * 8)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    // Fallback: a nanosecond Arrow time without precision metadata maps to canonical TIME(6).
+    def timeField: Field = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(ArrowUtils.fromArrowField(timeField) === TimeType(TimeType.MICROS_PRECISION))
+
+    // Fallback also covers a present-but-invalid precision key (out of [0, 9] or non-numeric):
+    // the value is unusable, so the type maps to the canonical TIME(6) just like the no-metadata
+    // case.
+    def timeFieldWithPrecision(precision: String): Field = new Field(
+      "value",
+      new FieldType(
+        true,
+        new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8),
+        null,
+        java.util.Collections.singletonMap("SPARK::time::precision", precision)),
+      java.util.Collections.emptyList[Field]())
+    val micros = TimeType(TimeType.MICROS_PRECISION)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("-1")) === micros)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("10")) === micros)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("x")) === micros)
+
+    // The precision metadata key does not leak into the reconstructed column Metadata.
+    val md = new MetadataBuilder().putString("city", "beijing").build()
+    val schemaWithMeta = new StructType().add("value", TimeType(3), nullable = true, md)
+    assert(ArrowUtils.fromArrowSchema(
+      ArrowUtils.toArrowSchema(schemaWithMeta, null, true, false)) === schemaWithMeta)
+  }
+
   test("array") {
     roundtrip(ArrayType(IntegerType, containsNull = true))
     roundtrip(ArrayType(IntegerType, containsNull = false))
