@@ -27,17 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
-  /**
-   * The maximum size in bytes used to bound an estimated size. Operators such as joins multiply
-   * their children's sizes, so the estimate can grow without limit when a plan repeatedly combines
-   * its own output (e.g. a sequence of self-joins). Left unbounded, the backing `BigInt` keeps
-   * growing until its arithmetic overflows (SPARK-52163). We cap the estimate at `Long.MaxValue`
-   * (8 EiB), which is far larger than any physical dataset.
-   */
-  private val MAX_SIZE_IN_BYTES: BigInt = BigInt(Long.MaxValue)
-
   private def cappedStats(sizeInBytes: BigInt): Statistics =
-    Statistics(sizeInBytes = sizeInBytes.min(MAX_SIZE_IN_BYTES))
+    Statistics(sizeInBytes = sizeInBytes.min(EstimationUtils.MAX_SIZE_IN_BYTES))
 
   /**
    * A default, commonly used estimation for unary nodes. We assume the input row number is the
@@ -67,7 +58,11 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
-      val sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product
+      // Bound each child's size before the product so the intermediate `BigInt` cannot explode.
+      val sizeInBytes = p.children
+        .map(_.stats.sizeInBytes.min(EstimationUtils.MAX_SIZE_IN_BYTES))
+        .filter(_ > 0L)
+        .product
       cappedStats(sizeInBytes)
   }
 

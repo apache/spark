@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -952,6 +952,32 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val newExpectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
         attributeStats = buildExpectedColumnStats(newLogicalRDD.output))
       assert(newStats === newExpectedStats)
+    }
+  }
+
+  test("SPARK-52163: repeated self-joins with checkpoint do not overflow size estimate") {
+    withTempDir { checkpointDir =>
+      val sc = spark.sparkContext
+      val originalCheckpointDir = sc.getCheckpointDir
+      sc.setCheckpointDir(checkpointDir.getCanonicalPath)
+      try {
+        val schema = StructType(Seq(
+          StructField("id", IntegerType, nullable = true),
+          StructField("name", StringType, nullable = true)))
+        var df = spark.createDataFrame(sc.emptyRDD[Row], schema)
+        (1 to 6).foreach { _ =>
+          df = df.select(col("id"))
+          df = df.join(df, Seq("id"))
+          df = df.select(col("id"))
+          // Truncate the lineage so the estimate is recomputed from the LogicalRDD each iteration.
+          df = df.checkpoint(eager = true)
+        }
+        // Should not throw due to BigInt overflow (SPARK-52163).
+        df.explain("cost")
+        assert(df.queryExecution.optimizedPlan.stats.sizeInBytes <= BigInt(Long.MaxValue))
+      } finally {
+        originalCheckpointDir.foreach(sc.setCheckpointDir)
+      }
     }
   }
 }

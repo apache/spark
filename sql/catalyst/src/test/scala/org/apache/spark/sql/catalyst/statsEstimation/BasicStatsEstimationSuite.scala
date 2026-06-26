@@ -217,6 +217,31 @@ test("range with invalid long value") {
     }
   }
 
+  test("SPARK-52163: cap estimated stats with CBO on to avoid BigInt overflow") {
+    val hugeAttr = attr("id")
+    // A leaf node whose estimated size and row count are already at the maximum physical size.
+    val hugePlan = StatsTestPlan(
+      outputList = Seq(hugeAttr),
+      attributeStats = AttributeMap(Seq(hugeAttr -> colStat)),
+      rowCount = BigInt(Long.MaxValue),
+      size = Some(BigInt(Long.MaxValue)))
+
+    // With CBO on, joins flow through JoinEstimation, which multiplies children's row counts and
+    // sizes. The composite estimate must stay bounded across repeated self-joins.
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      var node: LogicalPlan = hugePlan
+      (1 to 30).foreach { _ =>
+        val joined = node.join(node, Inner, None)
+        joined.invalidateStatsCache()
+        assert(joined.stats.sizeInBytes === BigInt(Long.MaxValue))
+        assert(joined.stats.rowCount.forall(_ <= BigInt(Long.MaxValue)))
+        node = joined.select(hugeAttr)
+        assert(node.stats.sizeInBytes <= BigInt(Long.MaxValue))
+        assert(node.stats.rowCount.forall(_ <= BigInt(Long.MaxValue)))
+      }
+    }
+  }
+
   test("windows") {
     val windows = plan.window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
