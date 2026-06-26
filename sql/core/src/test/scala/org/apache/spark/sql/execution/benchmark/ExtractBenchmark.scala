@@ -64,6 +64,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   private def castExpr(from: String): String = from match {
     case "timestamp" => "timestamp_seconds(id)"
     case "date" => "cast(timestamp_seconds(id) as date)"
+    case "time" => "make_time(cast(mod(id, 24) as int), cast(mod(id, 60) as int), " +
+      "cast(mod(id, 60) as decimal(8,6)))"
     case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
       "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
@@ -92,9 +94,11 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
       "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
     val intervalFields = Seq("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
+    val timeFields = Seq("HOUR", "MINUTE", "SECOND")
     val settings = Map(
       "timestamp" -> datetimeFields,
       "date" -> datetimeFields,
+      "time" -> timeFields,
       "interval" -> intervalFields)
 
     for {(dataType, fields) <- settings; func <- Seq("extract", "date_part")} {

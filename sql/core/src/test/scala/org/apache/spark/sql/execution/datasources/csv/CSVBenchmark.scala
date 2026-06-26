@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.{Column, Dataset, Row}
@@ -190,6 +190,26 @@ object CSVBenchmark extends SqlBasedBenchmark {
         dates.write.option("header", true).mode("overwrite").csv(dateDir)
       }
 
+      val timeDir = new File(path, "time").getAbsolutePath
+
+      def times = {
+        spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
+          iter.map(t => LocalTime.ofNanoOfDay((t % 86400000000L) * 1000000L))
+        }.select($"value".as("time"))
+      }
+
+      writeBench.addCase("Create a dataset of times", numIters) { _ =>
+        times.noop()
+      }
+
+      writeBench.addCase("to_csv(time)", numIters) { _ =>
+        times.select(to_csv(struct($"time"))).noop()
+      }
+
+      writeBench.addCase("write times to files", numIters) { _ =>
+        times.write.option("header", true).mode("overwrite").csv(timeDir)
+      }
+
       writeBench.run()
 
       val readBench = new Benchmark("Read dates and timestamps", rowsNum, output = output)
@@ -321,6 +341,20 @@ object CSVBenchmark extends SqlBasedBenchmark {
           spark.read.option("header", false)
             .option("inferSchema", true).csv(errorTimestampStr).noop()
         }
+      }
+
+      val timeSchema = new StructType().add("time", TimeType())
+
+      readBench.addCase("read time text from files", numIters) { _ =>
+        spark.read.text(timeDir).noop()
+      }
+
+      readBench.addCase("read time from files", numIters) { _ =>
+        val ds = spark.read
+          .option("header", true)
+          .schema(timeSchema)
+          .csv(timeDir)
+        ds.noop()
       }
 
       readBench.run()
