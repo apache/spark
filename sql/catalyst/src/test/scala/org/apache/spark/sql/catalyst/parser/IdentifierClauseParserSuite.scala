@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, ExpressionWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedInlineTable, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, LambdaFunction, Literal, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, OneRowRelation, Pivot, Project, SubqueryAlias, Unpivot}
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
