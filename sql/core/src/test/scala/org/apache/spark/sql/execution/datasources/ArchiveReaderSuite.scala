@@ -81,6 +81,47 @@ class ArchiveReaderSuite extends SparkFunSuite {
     } finally out.close()
   }
 
+  /**
+   * Writes a zip with one STORED (uncompressed) entry that uses a data descriptor: general-purpose
+   * bit 3 is set and the local header's crc/size fields are zeroed, so the real values live only in
+   * the trailing data descriptor. `ZipArchiveInputStream` cannot stream such an entry -- it has no
+   * size to bound the read -- so `read` throws rather than yielding truncated bytes. This is the
+   * non-streamable case `ZipArchiveReader` documents; `ZipArchiveOutputStream` cannot produce it
+   * (it rejects an unsized STORED entry, or rewrites the header when the sink is seekable), so the
+   * bytes are assembled by hand.
+   */
+  private def writeStoredEntryWithDataDescriptor(file: File, name: String, body: String): Unit = {
+    val nameBytes = name.getBytes(StandardCharsets.UTF_8)
+    val data = body.getBytes(StandardCharsets.UTF_8)
+    val crc = { val c = new java.util.zip.CRC32(); c.update(data); c.getValue }
+    val out = new ByteArrayOutputStream()
+    def u16(v: Int): Unit = { out.write(v & 0xFF); out.write((v >>> 8) & 0xFF) }
+    def u32(v: Long): Unit = {
+      out.write((v & 0xFF).toInt); out.write(((v >>> 8) & 0xFF).toInt)
+      out.write(((v >>> 16) & 0xFF).toInt); out.write(((v >>> 24) & 0xFF).toInt)
+    }
+    // Local file header: GP bit 3 set (data descriptor), STORED method, sizes zeroed here.
+    val localHeaderOffset = out.size()
+    u32(0x04034b50L); u16(10); u16(0x0008); u16(0); u16(0); u16(0)
+    u32(0); u32(0); u32(0)
+    u16(nameBytes.length); u16(0)
+    out.write(nameBytes); out.write(data)
+    // Data descriptor (with optional signature): the real crc and sizes.
+    u32(0x08074b50L); u32(crc); u32(data.length.toLong); u32(data.length.toLong)
+    // Central directory.
+    val cdOffset = out.size()
+    u32(0x02014b50L); u16(20); u16(10); u16(0x0008); u16(0); u16(0); u16(0)
+    u32(crc); u32(data.length.toLong); u32(data.length.toLong)
+    u16(nameBytes.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(localHeaderOffset.toLong)
+    out.write(nameBytes)
+    val cdSize = out.size() - cdOffset
+    // End of central directory.
+    u32(0x06054b50L); u16(0); u16(0); u16(1); u16(1)
+    u32(cdSize.toLong); u32(cdOffset.toLong); u16(0)
+    val fos = new FileOutputStream(file)
+    try fos.write(out.toByteArray) finally fos.close()
+  }
+
   private def textEntry(name: String, body: String): Entry =
     Entry(name, body.getBytes(StandardCharsets.UTF_8))
 
@@ -384,6 +425,18 @@ class ArchiveReaderSuite extends SparkFunSuite {
       }
       assert(it.toList == List("a.csv", "b.csv"))
       assert(seen.toList == List("a", "b"))
+    }
+  }
+
+  test("readEntries: a non-streamable zip entry fails loudly rather than yielding garbled bytes") {
+    withTempDir { dir =>
+      val zip = new File(dir, "stored-dd.zip")
+      writeStoredEntryWithDataDescriptor(zip, "a.csv", "hello")
+      // A stored entry sized only by a trailing data descriptor is the documented non-streamable
+      // case: ZipArchiveInputStream throws on read instead of returning truncated/garbled bytes.
+      val ex = intercept[java.io.IOException](collect(zip))
+      assert(ex.getMessage != null && ex.getMessage.contains("data descriptor"),
+        s"expected a clear unsupported-feature error, got $ex")
     }
   }
 }

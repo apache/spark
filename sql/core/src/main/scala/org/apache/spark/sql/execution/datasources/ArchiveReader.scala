@@ -293,7 +293,7 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
  * container (the container itself is not gzip-wrapped), so `ZipArchiveInputStream` decompresses
  * entries as they are streamed and no Hadoop codec layer is applied. The stream reads local file
  * headers sequentially rather than the central directory, matching the tar reader's pure-streaming
- * model: a few unusual zips (e.g. a deflated entry whose size is recorded only in a trailing data
+ * model: a few unusual zips (e.g. a stored entry whose size is recorded only in a trailing data
  * descriptor) are not streamable this way.
  */
 class ZipArchiveReader(path: Path) extends ArchiveReader(path) {
