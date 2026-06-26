@@ -1699,12 +1699,17 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       "org.apache.spark.sql.execution.datasources.jdbc"))
 
     // Test for empty and whitespace-only paths
-    Seq("", " ", "\t", "\n", "\t\n", " \t ").foreach { location =>
-      val e = intercept[AnalysisException] {
-        sql(s"select id from json.`$location`")
-      }
-      assert(e.message.contains("The location name cannot be empty string"))
-      assert(e.message.contains(s"`$location`"))
+    Seq("", " ", "\t", "\n", "\t\n", " \t ").foreach { file_path =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select id from json.`$file_path`")
+        },
+        condition = "INVALID_EMPTY_LOCATION",
+        parameters = Map("location" -> file_path),
+        queryContext = Array(ExpectedContext(
+          fragment = s"json.`$file_path`",
+          start = 15,
+          stop = 15 + s"json.`$file_path`".length - 1)))
     }
   }
 
