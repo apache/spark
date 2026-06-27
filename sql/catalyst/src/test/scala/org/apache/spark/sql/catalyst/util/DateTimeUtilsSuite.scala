@@ -1232,6 +1232,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-57459: epochNanosToTimestampNanos unpacks int64 epoch-nanoseconds") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // At full (nanosecond) precision it is the exact inverse of timestampNanosToEpochNanos.
+    assert(epochNanosToTimestampNanos(0L, 9) === nanos(0L, 0))
+    assert(epochNanosToTimestampNanos(999L, 9) === nanos(0L, 999))
+    assert(epochNanosToTimestampNanos(NANOS_PER_MICROS, 9) === nanos(1L, 0))
+    assert(epochNanosToTimestampNanos(1234567L * NANOS_PER_MICROS + 7L, 9) === nanos(1234567L, 7))
+    // Pre-epoch values use floor semantics, keeping nanosWithinMicro in [0, 999].
+    assert(epochNanosToTimestampNanos(-1L, 9) === nanos(-1L, 999))
+    assert(epochNanosToTimestampNanos(-NANOS_PER_MICROS, 9) === nanos(-1L, 0))
+
+    // Lower precisions truncate the sub-microsecond digits.
+    assert(epochNanosToTimestampNanos(123456789L, 9) === nanos(123456L, 789))
+    assert(epochNanosToTimestampNanos(123456789L, 8) === nanos(123456L, 780))
+    assert(epochNanosToTimestampNanos(123456789L, 7) === nanos(123456L, 700))
+
+    // Truncation operates on the floored nanosWithinMicro, so it composes with floor semantics for
+    // pre-epoch values too (-123456211 -> floor (-123457, 789) -> truncate the 789).
+    assert(epochNanosToTimestampNanos(-123456211L, 9) === nanos(-123457L, 789))
+    assert(epochNanosToTimestampNanos(-123456211L, 8) === nanos(-123457L, 780))
+    assert(epochNanosToTimestampNanos(-123456211L, 7) === nanos(-123457L, 700))
+
+    // The int64 extremes decode without overflow: floor keeps nanosWithinMicro in [0, 999].
+    assert(epochNanosToTimestampNanos(Long.MaxValue, 9) === nanos(9223372036854775L, 807))
+    assert(epochNanosToTimestampNanos(Long.MinValue, 9) === nanos(-9223372036854776L, 192))
+
+    // Round-trips with timestampNanosToEpochNanos at full precision. Long.MinValue is excluded: its
+    // decode (-9223372036854776, 192) re-encodes through an intermediate epochMicros * 1000 that
+    // overflows Long, an existing limitation of the multiplyExact-based pack path.
+    Seq(
+      0L, 999L, 1234567L * NANOS_PER_MICROS + 7L, -1234567L * NANOS_PER_MICROS + 13L,
+      Long.MaxValue).foreach { epochNanos =>
+      assert(timestampNanosToEpochNanos(epochNanosToTimestampNanos(epochNanos, 9)) === epochNanos)
+    }
+
+    // Precision outside [7, 9] is an internal-only contract violation and fails loudly.
+    checkError(
+      exception = intercept[SparkException] {
+        epochNanosToTimestampNanos(123456789L, 6)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Fractional second precision 6 is out of range [7, 9]."))
+  }
+
   test("SPARK-34903: subtract timestamps") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       Seq(
