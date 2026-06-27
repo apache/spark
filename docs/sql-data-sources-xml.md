@@ -189,6 +189,13 @@ Data source options of XML can be set via:
   </tr>
 
   <tr>
+    <td><code>timeFormat</code></td>
+    <td><code>HH:mm:ss</code></td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+
+  <tr>
     <td><code>locale</code></td>
     <td><code>en-US</code></td>
     <td>Sets a locale as a language tag in IETF BCP 47 format. For instance, locale is used while parsing dates and timestamps. </td>

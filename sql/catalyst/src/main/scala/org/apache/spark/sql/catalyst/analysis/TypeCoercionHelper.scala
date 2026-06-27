@@ -83,6 +83,7 @@ import org.apache.spark.sql.types.{
   StringType,
   StringTypeExpression,
   StructType,
+  TimestampFamily,
   TimestampLTZNanosType,
   TimestampNTZNanosType,
   TimestampNTZType,
@@ -245,6 +246,12 @@ abstract class TypeCoercionHelper {
 
   protected def findWiderDateTimeType(d1: DatetimeType, d2: DatetimeType): Option[DatetimeType] =
     (d1, d2) match {
+      // Two TIME operands of differing fractional-seconds precision widen to the larger precision
+      // (ANSI SQL result type for a set of comparable datetime types). Widening from a smaller to a
+      // larger precision is a lossless up-cast via truncateTimeToPrecision. Cross-family pairs
+      // (TIME vs DATE / TIMESTAMP) remain incomparable and fall through to the None arms below.
+      case (t1: TimeType, t2: TimeType) =>
+        Some(TimeType(math.max(t1.precision, t2.precision)))
       case (_, _: TimeType) => None
       case (_: TimeType, _) => None
 
@@ -258,27 +265,21 @@ abstract class TypeCoercionHelper {
       // The (family, precision) pair then maps back to a concrete type: precision 6 yields the
       // micro type, precision in [7, 9] yields the nanos type.
       //
-      // Note: this common-type resolution is intentionally more permissive than the nanosecond
-      // conversion rules in Cast.canUpCast / Cast.canANSIStoreAssign, which keep cross-family and
-      // DATE <-> nanos casts explicit-CAST-only while the nanos types are unreleased (SPARK-57323
-      // etc.). Coercion here mirrors the microsecond precedent so that UNION / CASE / coalesce /
-      // IN / comparison resolve a common type the same way they do for the micro families; the
-      // stricter explicit-only stance is deliberately scoped to up-cast and store assignment, not
-      // to common-type resolution.
+      // Note: common-type resolution here is symmetric and widens to the maximum precision, while
+      // Cast.canUpCast / Cast.canANSIStoreAssign are directional (they block lossy narrowing). Both
+      // now agree on admissibility across the timestamp family -- including the cross-family
+      // LTZ <-> NTZ pairs and DATE <-> nanos (SPARK-57303) -- mirroring the microsecond precedent
+      // so that UNION / CASE / coalesce / IN / comparison resolve a common type the same way they
+      // do for the micro families.
       case _ =>
-        // Fractional-seconds precision of the microsecond timestamp types; the nanos types carry
-        // 7-9. DATE has no time component and is treated as the micro precision so that
-        // DATE <-> micro widens to the micro type and DATE <-> nanos to the nanos type.
+        // Fractional-seconds precision of the timestamp family (micros: 6, nanos: 7-9). DATE has no
+        // time component and is treated as the micro precision (getOrElse) so that DATE <-> micro
+        // widens to the micro type and DATE <-> nanos to the nanos type.
         val MicrosPrecision = 6
-        def isLtz(d: DatetimeType): Boolean =
-          d.isInstanceOf[TimestampType] || d.isInstanceOf[TimestampLTZNanosType]
-        def isNtz(d: DatetimeType): Boolean =
-          d.isInstanceOf[TimestampNTZType] || d.isInstanceOf[TimestampNTZNanosType]
-        def precisionOf(d: DatetimeType): Int = d match {
-          case t: TimestampLTZNanosType => t.precision
-          case t: TimestampNTZNanosType => t.precision
-          case _ => MicrosPrecision // DateType / TimestampType / TimestampNTZType
-        }
+        def isLtz(d: DatetimeType): Boolean = TimestampFamily.isLtz(d)
+        def isNtz(d: DatetimeType): Boolean = TimestampFamily.isNtz(d)
+        def precisionOf(d: DatetimeType): Int =
+          TimestampFamily.fractionalPrecision(d).getOrElse(MicrosPrecision)
         // Beyond TimeType (handled above), the only datetime types are DATE and the micro/nanos
         // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead
         // of being silently mis-widened (treated as a family-neutral precision-6 type and folded

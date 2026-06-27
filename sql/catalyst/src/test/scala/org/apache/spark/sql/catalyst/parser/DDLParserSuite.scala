@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after,
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType, TimeType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -131,6 +131,37 @@ class DDLParserSuite extends AnalysisTest {
           "configKey" -> "spark.sql.timestampNanosTypes.enabled",
           "configValue" -> "true"))
     }
+  }
+
+  test("SPARK-57564: TIME type in CREATE TABLE / ALTER TABLE columns") {
+    Seq(
+      "TIME" -> TimeType(),
+      "TIME(0)" -> TimeType(0),
+      "TIME(3)" -> TimeType(3),
+      "TIME(6)" -> TimeType(6)).foreach {
+      case (spelling, expected) =>
+        // CREATE TABLE column.
+        val created = parsePlan(s"CREATE TABLE t (c $spelling) USING parquet")
+        assert(created.asInstanceOf[CreateTable].columns.head.dataType === expected)
+        // ALTER TABLE ... ADD COLUMNS.
+        val added = parsePlan(s"ALTER TABLE t ADD COLUMNS (c $spelling)")
+        assert(added.asInstanceOf[AddColumns].columnsToAdd.head.dataType === expected)
+        // ALTER TABLE ... ALTER COLUMN ... TYPE.
+        val altered = parsePlan(s"ALTER TABLE t ALTER COLUMN c TYPE $spelling")
+        assert(altered.asInstanceOf[AlterColumns].specs.head.newDataType === Some(expected))
+    }
+    // A column DEFAULT declared with a TIME type and a TIME typed-literal default.
+    val withDefault = parsePlan(
+      "CREATE TABLE t (c TIME DEFAULT TIME '12:34:56') USING parquet")
+    val colDef = withDefault.asInstanceOf[CreateTable].columns.head
+    assert(colDef.dataType === TimeType())
+    assert(colDef.defaultValue.isDefined)
+    // PARTITIONED BY a TIME column.
+    val partitioned = parsePlan(
+      "CREATE TABLE t (id INT, c TIME) USING parquet PARTITIONED BY (c)")
+    val createTable = partitioned.asInstanceOf[CreateTable]
+    assert(createTable.columns.exists(col => col.name == "c" && col.dataType === TimeType()))
+    assert(createTable.partitioning === Seq(IdentityTransform(FieldReference("c"))))
   }
 
   test("create/replace table - with IF NOT EXISTS") {

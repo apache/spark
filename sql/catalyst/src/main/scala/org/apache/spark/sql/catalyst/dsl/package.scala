@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 
 import scala.language.implicitConversions
 
@@ -176,6 +176,7 @@ package object dsl extends SQLConfHelper {
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def timestampNTZToLiteral(l: LocalDateTime): Literal = Literal(l)
+    implicit def localTimeToLiteral(t: LocalTime): Literal = Literal(t)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
     implicit def periodToLiteral(p: Period): Literal = Literal(p)

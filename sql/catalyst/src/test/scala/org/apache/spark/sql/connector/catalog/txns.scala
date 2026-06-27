@@ -119,13 +119,10 @@ class TxnTable(
   // The starting version should be the delegate version.
   setVersion(delegate.version())
 
-  // Preserve column IDs from the delegate so that column ID validation can correctly detect
-  // drop-and-re-add scenarios (different IDs) and pass when columns are unchanged (same IDs).
-  // Uses assignMissingIds to keep the delegate's IDs for existing columns while assigning
-  // fresh IDs for any new columns added by schema evolution.
-  updateColumns(InMemoryBaseTable.assignMissingIds(
-    oldColumns = delegate.columns(),
-    newColumns = columns()))
+  // Column IDs for existing columns are preserved through the StructType round-trip via
+  // metadata encoding. assignMissingIds assigns fresh IDs to any new columns added by
+  // schema evolution.
+  updateColumns(InMemoryBaseTable.assignMissingIds(columns()))
 
   alterTableWithData(delegate.data, schema)
 

@@ -249,6 +249,16 @@ class ResolveBinBySuite extends AnalysisTest {
       "UNRESOLVED_COLUMN.WITH_SUGGESTION")
   }
 
+  test("UNRESOLVED_COLUMN suggestions are ordered by similarity to the missing name") {
+    // `valeu` is one edit away from `value`, so `value` is suggested first and the remaining
+    // columns follow by edit distance.
+    val ex = intercept[SparkThrowable](
+      ResolveBinBy.apply(unresolved(rangeStart = UnresolvedAttribute("valeu"))))
+    assert(ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    assert(ex.getMessageParameters.get("objectName") == "`valeu`")
+    assert(ex.getMessageParameters.get("proposal") == "`value`, `label`, `ts_end`, `ts_start`")
+  }
+
   test("rejects nested column refs through the full analyzer (RULE_ORDERING_DEPENDENCIES)") {
     val structCol = AttributeReference(
       "outer",
@@ -268,7 +278,7 @@ class ResolveBinBySuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       plan,
       "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
-      Map("columnName" -> "`ts_start`"))
+      Map("columnName" -> "\"outer.ts_start\""))
   }
 
   test("rejects non-timestamp or mismatched RANGE columns") {

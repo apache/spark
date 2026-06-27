@@ -22,7 +22,6 @@ import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription}
-import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
@@ -89,7 +88,8 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = file.toPath
 
-    val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf)._1)(_.getSchema)
+    val (orcSchemaReader, readerOptions) = createORCReader(filePath, conf)
+    val orcSchema = Utils.tryWithResource(orcSchemaReader)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
@@ -104,11 +104,10 @@ case class OrcPartitionReaderFactory(
       val taskConf = new Configuration(conf)
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
-      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-      val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val orcRecordReader = new OrcInputFormat[OrcStruct]
-        .createRecordReader(fileSplit, taskAttemptContext)
+      val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
+        filePath, taskConf, fileSplit, readerOptions)
+
       val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
