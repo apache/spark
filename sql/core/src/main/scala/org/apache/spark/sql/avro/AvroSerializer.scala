@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, LocalTimestampNanos, TimestampMicros, TimestampMillis, TimestampNanos}
 import org.apache.avro.Schema.Type
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
@@ -204,7 +204,7 @@ private[sql] class AvroSerializer(
       case (_: TimestampLTZNanosType, LONG) => avroType.getLogicalType match {
         // Nanosecond-precision timestamps are stored as epoch-nanoseconds (Long). They are always
         // proleptic Gregorian, so they are exempt from datetime rebasing.
-        case _: LogicalTypes.TimestampNanos => (getter, ordinal) =>
+        case _: TimestampNanos => (getter, ordinal) =>
           DateTimeUtils.timestampNanosToEpochNanos(
             getter.getTimestampLTZNanos(ordinal), isNtz = false, sink = "Avro")
         case other => throw new IncompatibleSchemaException(errorPrefix +
@@ -213,7 +213,7 @@ private[sql] class AvroSerializer(
       }
 
       case (_: TimestampNTZNanosType, LONG) => avroType.getLogicalType match {
-        case _: LogicalTypes.LocalTimestampNanos => (getter, ordinal) =>
+        case _: LocalTimestampNanos => (getter, ordinal) =>
           DateTimeUtils.timestampNanosToEpochNanos(
             getter.getTimestampNTZNanos(ordinal), isNtz = true, sink = "Avro")
         case other => throw new IncompatibleSchemaException(errorPrefix +

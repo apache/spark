@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, LocalTimestampNanos, TimestampMicros, TimestampMillis, TimestampNanos}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -218,7 +218,7 @@ private[sql] class AvroDeserializer(
         // represented internally as (epochMicros, nanosWithinMicro). Floor semantics keep
         // nanosWithinMicro in [0, 999] for pre-epoch values. Nanos timestamps are always proleptic
         // Gregorian, so they are exempt from datetime rebasing.
-        case _: LogicalTypes.TimestampNanos => (updater, ordinal, value) =>
+        case _: TimestampNanos => (updater, ordinal, value) =>
           updater.set(ordinal,
             DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
         case other => throw new IncompatibleSchemaException(errorPrefix +
@@ -227,7 +227,7 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, t: TimestampNTZNanosType) => avroType.getLogicalType match {
-        case _: LogicalTypes.LocalTimestampNanos => (updater, ordinal, value) =>
+        case _: LocalTimestampNanos => (updater, ordinal, value) =>
           updater.set(ordinal,
             DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
         case other => throw new IncompatibleSchemaException(errorPrefix +

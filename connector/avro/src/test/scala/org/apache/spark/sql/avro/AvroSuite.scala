@@ -3348,6 +3348,103 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-57459: nanosecond timestamps round-trip at the maximum supported instant") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Long.MaxValue epoch-nanoseconds = 2262-04-11T23:47:16.854775807Z, the largest instant the
+      // INT64 epoch-nanos encoding can represent. The lower bound Long.MinValue is intentionally
+      // not exercised: re-encoding its floored epoch-microseconds overflows Long (see
+      // DateTimeUtilsSuite), so it is not writable.
+      val maxInstant = java.time.Instant.ofEpochSecond(9223372036L, 854775807L)
+      val maxLocal = LocalDateTime.ofEpochSecond(9223372036L, 854775807, java.time.ZoneOffset.UTC)
+      Seq(
+        (TimestampLTZNanosType(9), maxInstant: Any),
+        (TimestampNTZNanosType(9), maxLocal: Any)).foreach { case (nanosType, value) =>
+        withTempPath { dir =>
+          val df = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+            new StructType().add("ts", nanosType))
+          df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+          val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+            .format("avro").load(dir.getCanonicalPath)
+          checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: TIMESTAMP_LTZ nanos on-disk value is independent of the session time zone") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // TIMESTAMP_LTZ is an absolute instant, so the stored epoch-nanoseconds and the read-back
+      // value must not depend on the session time zone.
+      val instant = LocalDateTime.of(2024, 6, 15, 12, 34, 56, 789012345)
+        .toInstant(java.time.ZoneOffset.UTC)
+      val schema = new StructType().add("ts", TimestampLTZNanosType(9))
+
+      def writeAndReadStored(zone: String, dir: File): Long = {
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+          val df = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(instant: Any)), numSlices = 1), schema)
+          df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+          // The instant reads back unchanged regardless of the session zone.
+          val readBack = spark.read.schema(schema).format("avro").load(dir.getCanonicalPath)
+          checkAnswer(readBack, Row(instant))
+        }
+        val avroFile = dir.listFiles()
+          .filter(f => f.isFile && f.getName.endsWith("avro"))
+          .head
+        val reader = new DataFileReader[GenericRecord](
+          avroFile, new GenericDatumReader[GenericRecord]())
+        try {
+          val fieldSchema = reader.getSchema.getField("ts").schema()
+          val tsSchema = if (fieldSchema.getType == Type.UNION) {
+            fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+          } else {
+            fieldSchema
+          }
+          assert(tsSchema.getLogicalType.getName == "timestamp-nanos")
+          reader.next().get("ts").asInstanceOf[Long]
+        } finally {
+          reader.close()
+        }
+      }
+
+      withTempPath { utcDir =>
+        withTempPath { laDir =>
+          val storedUtc = writeAndReadStored("UTC", utcDir)
+          val storedLa = writeAndReadStored("America/Los_Angeles", laDir)
+          assert(storedUtc === storedLa,
+            "TIMESTAMP_LTZ epoch-nanoseconds must not depend on the session time zone")
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: nanosecond timestamp types in nested and complex Avro structures") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val ntz = LocalDateTime.of(2024, 1, 2, 3, 4, 5, 123456789)
+      val ltz = ntz.toInstant(java.time.ZoneOffset.UTC)
+      val schema = new StructType()
+        .add("s", new StructType()
+          .add("a", TimestampNTZNanosType(9))
+          .add("b", TimestampLTZNanosType(8)))
+        .add("arr", ArrayType(TimestampNTZNanosType(7)))
+        .add("m", MapType(StringType, TimestampLTZNanosType(9)))
+      val row = Row(
+        Row(ntz, ltz),
+        Seq(ntz, null, ntz),
+        Map("k1" -> ltz, "k2" -> null))
+      withTempPath { dir =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(row), numSlices = 1), schema)
+        df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+        val readBack = spark.read.schema(schema).format("avro").load(dir.getCanonicalPath)
+        checkAnswer(readBack, df)
+      }
+    }
+  }
+
   test("TIME type read/write with Avro format") {
     withTempPath { dir =>
       // Test boundary values and NULL handling

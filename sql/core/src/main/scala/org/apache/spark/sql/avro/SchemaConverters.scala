@@ -131,7 +131,7 @@ object SchemaConverters extends Logging {
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _: LocalTimestampMillis | _: LocalTimestampMicros =>
           SchemaType(TimestampNTZType, nullable = false)
-        case _: LogicalTypes.TimestampNanos =>
+        case _: TimestampNanos =>
           // Avro stores nanoseconds-since-epoch in a long. The precision (7-9) is carried via the
           // spark.sql.catalyst.type property; external files without it default to nanoseconds.
           val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
@@ -142,7 +142,7 @@ object SchemaConverters extends Logging {
               .asInstanceOf[TimestampLTZNanosType]
           }
           SchemaType(nanosType, nullable = false)
-        case _: LogicalTypes.LocalTimestampNanos =>
+        case _: LocalTimestampNanos =>
           val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
           val nanosType = if (catalystTypeAttrValue == null) {
             TimestampNTZNanosType()
