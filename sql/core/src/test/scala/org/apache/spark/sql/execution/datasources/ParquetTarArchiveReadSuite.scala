@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.File
+import java.nio.file.Files
+
 import org.apache.spark.sql.functions.input_file_name
 import org.apache.spark.sql.internal.SQLConf
 
@@ -74,5 +77,26 @@ class ParquetTarArchiveReadSuite
     val idOnly = Seq(3).toDF("id")
     assertArchiveMatchesDir(
       Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idOnly)))
+  }
+
+  test("archive inference unions differing fields across entries with mergeSchema=true") {
+    // Parquet does not union schemas during default inference, but `mergeSchema=true` folds every
+    // entry's schema; over an archive that folds each unpacked entry one at a time. The unioned
+    // schema must match a directory read of the same files under the same option.
+    val withName = sampleDf((1, "Alice"), (2, "Bob"))
+    val idExtra = Seq((3, 30)).toDF("id", "extra")
+    val entries = Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idExtra))
+    val merge = Map("mergeSchema" -> "true")
+    withArchiveFile() { archive =>
+      writeArchive(archive, entries)
+      val archiveSchema = inferredSchema(Seq(archive.getCanonicalPath), merge)
+      withTempDir { dir =>
+        entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
+        assert(archiveSchema.fieldNames.toSet == Set("id", "name", "extra"),
+          s"expected the union of entry fields, got $archiveSchema")
+        assert(archiveSchema == inferredSchema(Seq(dir.getCanonicalPath), merge),
+          s"archive mergeSchema inference diverged from a directory read; got $archiveSchema")
+      }
+    }
   }
 }

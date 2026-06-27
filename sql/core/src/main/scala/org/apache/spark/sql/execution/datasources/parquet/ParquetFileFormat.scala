@@ -39,7 +39,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GRO
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.util.HadoopInputFile
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
@@ -749,8 +749,8 @@ object ParquetFileFormat extends Logging {
             fileSourceOptions.ignoreMissingFiles).foreach { schema =>
           merged = Some(merged.fold(schema) { acc =>
             try acc.merge(schema, caseSensitive) catch {
-              case e: Throwable =>
-                throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(acc, schema, e)
+              case cause: SparkException =>
+                throw QueryExecutionErrors.failedMergingSchemaError(acc, schema, cause)
             }
           })
         }
