@@ -130,6 +130,44 @@ class AttributeResolutionSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57725: resolution does not fail when an attribute has a null name") {
+    // An AttributeReference can carry a null name (e.g. from a StructField built with a null name
+    // via the DataFrame API). Such an attribute is unaddressable by any column reference -- name
+    // parts are never null -- so it must simply be skipped by the case-insensitive name maps
+    // rather than causing a NullPointerException in groupBy(_.name.toLowerCase(...)).
+    val a = AttributeReference("a", IntegerType)()
+    val nullNamed = AttributeReference(null, IntegerType)()
+
+    // Plain (no qualifier) -> exercises the `direct` map.
+    val attrs = Seq(a, nullNamed)
+    attrs.resolve(Seq("a"), resolver) match {
+      case Some(attr) => assert(attr.semanticEquals(a))
+      case _ => fail()
+    }
+    assert(attrs.resolve(Seq("b"), resolver).isEmpty)
+
+    // 2-part qualifier -> exercises the `qualified` map.
+    val qa = AttributeReference("a", IntegerType)(qualifier = Seq("ns1", "t1"))
+    val qNullNamed = AttributeReference(null, IntegerType)(qualifier = Seq("ns1", "t1"))
+    val qattrs = Seq(qa, qNullNamed)
+    qattrs.resolve(Seq("t1", "a"), resolver) match {
+      case Some(attr) => assert(attr.semanticEquals(qa))
+      case _ => fail()
+    }
+
+    // 3-part qualifier -> forces the `qualified3Part` (3-part lookup) and `qualified4Part`
+    // (4-part lookup) maps, so their population is also exercised with a null-named sibling.
+    val q3a = AttributeReference("a", IntegerType)(qualifier = Seq("cat", "db", "tbl"))
+    val q3NullNamed = AttributeReference(null, IntegerType)(qualifier = Seq("cat", "db", "tbl"))
+    val q3attrs = Seq(q3a, q3NullNamed)
+    Seq(Seq("db", "tbl", "a"), Seq("cat", "db", "tbl", "a")).foreach { nameParts =>
+      q3attrs.resolve(nameParts, resolver) match {
+        case Some(attr) => assert(attr.semanticEquals(q3a))
+        case _ => fail()
+      }
+    }
+  }
+
   test("attribute resolution should try to match the longest qualifier") {
     // We have two attributes:
     // 1) "a.b" where "a" is the name and "b" is the nested field.

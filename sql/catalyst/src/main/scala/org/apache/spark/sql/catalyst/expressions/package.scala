@@ -100,6 +100,13 @@ package object expressions  {
     // to an array.
     @transient private lazy val attrsArray = attrs.toArray
 
+    // Attributes with a null name (e.g. produced from a StructField built with a null name via
+    // the DataFrame API) are unaddressable by any column reference, whose name parts are never
+    // null. Exclude them from the case-insensitive name maps below so that grouping by the
+    // lower-cased name does not throw a NullPointerException during resolution (SPARK-57725).
+    // Filter attrsArray (not attrs) to avoid re-traversing a possibly linked-list attrs.
+    @transient private lazy val namedAttrs: Seq[Attribute] = attrsArray.filter(_.name != null).toSeq
+
     @transient private lazy val exprIdToOrdinal = {
       val arr = attrsArray
       val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
@@ -131,13 +138,13 @@ package object expressions  {
 
     /** Map to use for direct case insensitive attribute lookups. */
     @transient private lazy val direct: Map[String, Seq[Attribute]] = {
-      unique(attrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
+      unique(namedAttrs.groupBy(_.name.toLowerCase(Locale.ROOT)))
     }
 
     /** Map to use for qualified case insensitive attribute lookups with 2 part key */
     @transient private lazy val qualified: Map[(String, String), Seq[Attribute]] = {
       // key is 2 part: table/alias and name
-      val grouped = attrs.filter(_.qualifier.nonEmpty).groupBy {
+      val grouped = namedAttrs.filter(_.qualifier.nonEmpty).groupBy {
         a => (a.qualifier.last.toLowerCase(Locale.ROOT), a.name.toLowerCase(Locale.ROOT))
       }
       unique(grouped)
@@ -146,7 +153,7 @@ package object expressions  {
     /** Map to use for qualified case insensitive attribute lookups with 3 part key */
     @transient private lazy val qualified3Part: Map[(String, String, String), Seq[Attribute]] = {
       // key is 3 part: database name, table name and name
-      val grouped = attrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
+      val grouped = namedAttrs.filter(a => a.qualifier.length >= 2 && a.qualifier.length <= 3)
         .groupBy { a =>
           val qualifier = if (a.qualifier.length == 2) {
             a.qualifier
@@ -164,7 +171,7 @@ package object expressions  {
     @transient
     private lazy val qualified4Part: Map[(String, String, String, String), Seq[Attribute]] = {
       // key is 4 part: catalog name, database name, table name and name
-      val grouped = attrs.filter(_.qualifier.length == 3).groupBy { a =>
+      val grouped = namedAttrs.filter(_.qualifier.length == 3).groupBy { a =>
         a.qualifier match {
           case Seq(catalog, db, tbl) =>
             (catalog.toLowerCase(Locale.ROOT),
