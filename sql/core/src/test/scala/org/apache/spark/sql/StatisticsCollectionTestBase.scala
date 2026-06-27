@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -71,10 +70,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest {
   // Time test values
   private val time1Str = "10:30:45.123456"
   private val time1 = LocalTime.parse(time1Str)
-  private val time1Internal = localTimeToNanos(time1)
+  private val time1Internal = DateTimeUtils.localTimeToNanos(time1)
   private val time2Str = "14:45:30.987654"
   private val time2 = LocalTime.parse(time2Str)
-  private val time2Internal = localTimeToNanos(time2)
+  private val time2Internal = DateTimeUtils.localTimeToNanos(time2)
 
   private val double1 = 1.123456789
   private val double2 = 6.987654321
@@ -155,6 +154,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest {
     colStats.update("ctimestamp_ntz", stats("ctimestamp_ntz").copy(histogram =
       Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
         HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
+    colStats.update("ctime", stats("ctime").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(time1Internal.toDouble, time1Internal.toDouble, 1),
+        HistogramBin(time1Internal.toDouble, time2Internal.toDouble, 1))))))
     colStats
   }
 
@@ -276,7 +278,9 @@ abstract class StatisticsCollectionTestBase extends QueryTest {
     "spark.sql.statistics.colStats.ctimestamp.histogram" ->
       HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get),
     "spark.sql.statistics.colStats.ctimestamp_ntz.histogram" ->
-      HistogramSerializer.serialize(statsWithHgms("ctimestamp_ntz").histogram.get)
+      HistogramSerializer.serialize(statsWithHgms("ctimestamp_ntz").histogram.get),
+    "spark.sql.statistics.colStats.ctime.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("ctime").histogram.get)
   )
 
   private val randomName = new Random(31)

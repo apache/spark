@@ -601,7 +601,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("TimeType column statistics collection and precisions") {
     val table = "time_stats_table"
     withTable(table) {
-      // Test all precisions (0-6) with NULL handling
+      // Test all precisions (0-9) with NULL handling
       sql(s"""
         CREATE TABLE $table (
           id INT,
@@ -611,30 +611,83 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           time_p3 TIME(3),
           time_p4 TIME(4),
           time_p5 TIME(5),
-          time_p6 TIME(6)
+          time_p6 TIME(6),
+          time_p7 TIME(7),
+          time_p8 TIME(8),
+          time_p9 TIME(9)
         ) USING parquet
       """)
 
       sql(s"""
         INSERT INTO $table VALUES
-          (1, TIME '08:30:00', TIME '08:30:00.1', TIME '08:30:00.12',
-              TIME '08:30:00.123', TIME '08:30:00.1234', TIME '08:30:00.12345',
-              TIME '08:30:00.123456'),
-          (2, TIME '17:45:30', TIME '17:45:30.9', TIME '17:45:30.98',
-              TIME '17:45:30.987', TIME '17:45:30.9876', TIME '17:45:30.98765',
-              TIME '17:45:30.987654'),
-          (3, TIME '12:00:00', TIME '12:00:00.5', TIME '12:00:00.5',
-              TIME '12:00:00.5', TIME '12:00:00.5', TIME '12:00:00.5',
-              TIME '12:00:00.5'),
-          (4, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
+          (1,
+           CAST(TIME '08:30:00' AS TIME(0)),
+           CAST(TIME '08:30:00.1' AS TIME(1)),
+           CAST(TIME '08:30:00.12' AS TIME(2)),
+           CAST(TIME '08:30:00.123' AS TIME(3)),
+           CAST(TIME '08:30:00.1234' AS TIME(4)),
+           CAST(TIME '08:30:00.12345' AS TIME(5)),
+           CAST(TIME '08:30:00.123456' AS TIME(6)),
+           CAST(TIME '08:30:00.1234567' AS TIME(7)),
+           CAST(TIME '08:30:00.12345678' AS TIME(8)),
+           CAST(TIME '08:30:00.123456789' AS TIME(9))),
+          (2,
+           CAST(TIME '17:45:30' AS TIME(0)),
+           CAST(TIME '17:45:30.9' AS TIME(1)),
+           CAST(TIME '17:45:30.98' AS TIME(2)),
+           CAST(TIME '17:45:30.987' AS TIME(3)),
+           CAST(TIME '17:45:30.9876' AS TIME(4)),
+           CAST(TIME '17:45:30.98765' AS TIME(5)),
+           CAST(TIME '17:45:30.987654' AS TIME(6)),
+           CAST(TIME '17:45:30.9876543' AS TIME(7)),
+           CAST(TIME '17:45:30.98765432' AS TIME(8)),
+           CAST(TIME '17:45:30.987654321' AS TIME(9))),
+          (3,
+           CAST(TIME '12:00:00' AS TIME(0)),
+           CAST(TIME '12:00:00.5' AS TIME(1)),
+           CAST(TIME '12:00:00.5' AS TIME(2)),
+           CAST(TIME '12:00:00.5' AS TIME(3)),
+           CAST(TIME '12:00:00.5' AS TIME(4)),
+           CAST(TIME '12:00:00.5' AS TIME(5)),
+           CAST(TIME '12:00:00.5' AS TIME(6)),
+           CAST(TIME '12:00:00.5' AS TIME(7)),
+           CAST(TIME '12:00:00.5' AS TIME(8)),
+           CAST(TIME '12:00:00.5' AS TIME(9))),
+          (4, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
       """)
 
       sql(s"""ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS
-        time_p0, time_p1, time_p2, time_p3, time_p4, time_p5, time_p6""")
+        time_p0, time_p1, time_p2, time_p3, time_p4, time_p5, time_p6,
+        time_p7, time_p8, time_p9""")
 
       val catalogTable = getCatalogTable(table)
 
-      for (precision <- 0 to 6) {
+      val expectedMins = Map(
+        0 -> "08:30:00",
+        1 -> "08:30:00.1",
+        2 -> "08:30:00.12",
+        3 -> "08:30:00.123",
+        4 -> "08:30:00.1234",
+        5 -> "08:30:00.12345",
+        6 -> "08:30:00.123456",
+        7 -> "08:30:00.1234567",
+        8 -> "08:30:00.12345678",
+        9 -> "08:30:00.123456789"
+      )
+      val expectedMaxs = Map(
+        0 -> "17:45:30",
+        1 -> "17:45:30.9",
+        2 -> "17:45:30.98",
+        3 -> "17:45:30.987",
+        4 -> "17:45:30.9876",
+        5 -> "17:45:30.98765",
+        6 -> "17:45:30.987654",
+        7 -> "17:45:30.9876543",
+        8 -> "17:45:30.98765432",
+        9 -> "17:45:30.987654321"
+      )
+
+      for (precision <- 0 to 9) {
         val col = s"time_p$precision"
         val stats = catalogTable.stats.get.colStats(col)
 
@@ -646,13 +699,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(stats.avgLen == Some(8), s"Avg length should be 8 bytes for $col")
         assert(stats.maxLen == Some(8), s"Max length should be 8 bytes for $col")
 
-        // Verify format for each precision
+        // Verify exact min/max values for each precision
         val minStr = stats.min.get.asInstanceOf[String]
         val maxStr = stats.max.get.asInstanceOf[String]
-        assert(minStr.matches("\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?"),
-          s"Min should be time format for $col, got: $minStr")
-        assert(maxStr.matches("\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?"),
-          s"Max should be time format for $col, got: $maxStr")
+        assert(minStr == expectedMins(precision), s"Wrong min for $col: $minStr")
+        assert(maxStr == expectedMaxs(precision), s"Wrong max for $col: $maxStr")
 
         // Test plan stats conversion for ALL precisions
         val planStat = stats.toPlanStat(col, TimeType(precision))
@@ -716,6 +767,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       // For all-null columns, min and max are not computed (None)
       assert(stats.min.isEmpty, "Min should be None for all-null column")
       assert(stats.max.isEmpty, "Max should be None for all-null column")
+    }
+  }
+
+  test("TimeType column statistics histogram") {
+    val table = "time_histogram_test"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (time_col TIME(6)) USING parquet")
+      sql(s"""INSERT INTO $table VALUES
+        (TIME '08:00:00.000001'),
+        (TIME '12:00:00.000000'),
+        (TIME '18:00:00.000001'),
+        (TIME '20:00:00.000000'),
+        (NULL)""")
+      withSQLConf(
+        SQLConf.HISTOGRAM_ENABLED.key -> "true",
+        SQLConf.HISTOGRAM_NUM_BINS.key -> "2") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_col")
+        val stats = getCatalogTable(table).stats.get.colStats("time_col")
+        assert(stats.histogram.isDefined, "Histogram should be generated for TIME column")
+        val hgm = stats.histogram.get
+        assert(hgm.bins.length == 2, "Should have 2 bins")
+      }
+      // Histogram disabled: should produce None
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "false") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS time_col")
+        val stats = getCatalogTable(table).stats.get.colStats("time_col")
+        assert(stats.histogram.isEmpty, "Histogram should be None when disabled")
+      }
     }
   }
 
