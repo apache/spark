@@ -3315,6 +3315,50 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-57459: reading a foreign nanos Avro file with an explicit lower-precision schema") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // A full-precision (9-digit) foreign value read with an explicit TIMESTAMP_*(7) schema must
+      // truncate the sub-microsecond digits (123 -> 100), mirroring ParquetTimestampNanosSuite's
+      // "explicit lower-precision read schema" case.
+      val epochNanos = 567890123L
+      Seq(
+        ("timestamp-nanos", TimestampLTZNanosType(7),
+          java.time.Instant.ofEpochSecond(0L, 567890100L)),
+        ("local-timestamp-nanos", TimestampNTZNanosType(7),
+          LocalDateTime.of(1970, 1, 1, 0, 0, 0, 567890100))).foreach {
+        case (logicalName, readType, expectedValue) =>
+          withTempDir { dir =>
+            val avroSchema = new Schema.Parser().parse(
+              s"""
+                |{
+                |  "type": "record",
+                |  "name": "top",
+                |  "fields": [
+                |    {"name": "t", "type": {"type": "long", "logicalType": "$logicalName"}}
+                |  ]
+                |}
+              """.stripMargin)
+            val avroFile = new File(dir, "external.avro")
+            val datumWriter = new GenericDatumWriter[GenericRecord](avroSchema)
+            val dataFileWriter = new DataFileWriter[GenericRecord](datumWriter)
+            dataFileWriter.create(avroSchema, avroFile)
+            try {
+              val record = new GenericData.Record(avroSchema)
+              record.put("t", epochNanos)
+              dataFileWriter.append(record)
+            } finally {
+              dataFileWriter.close()
+            }
+
+            val readDf = spark.read.schema(new StructType().add("t", readType))
+              .format("avro").load(dir.toString)
+            assert(readDf.schema("t").dataType == readType)
+            checkAnswer(readDf, Row(expectedValue))
+          }
+      }
+    }
+  }
+
   test("SPARK-57459: writing an out-of-range nanosecond timestamp fails loudly") {
     withSQLConf(
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
@@ -3369,6 +3413,39 @@ abstract class AvroSuite
           val readBack = spark.read.schema(new StructType().add("ts", nanosType))
             .format("avro").load(dir.getCanonicalPath)
           checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57459: pre-epoch and minimum-instant nanosecond timestamp round-trips") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The smallest *writable* instant: Long.MinValue epoch-nanoseconds floor to an epochMicros
+      // whose re-encode overflows Long, so the practical minimum is the next whole microsecond up
+      // (~1677-09-21), the symmetric counterpart of the maximum-instant test above.
+      val minEpochNanos = (Long.MinValue / 1000L) * 1000L
+      // Pre-epoch full-precision value: 1969-12-31T23:59:59.999999999Z (= -1 epoch-nanosecond),
+      // exercising the floor semantics end to end (mirrors the Parquet/ORC suites).
+      Seq(-1L, minEpochNanos).foreach { epochNanos =>
+        val seconds = Math.floorDiv(epochNanos, 1000000000L)
+        val nanoOfSecond = Math.floorMod(epochNanos, 1000000000L).toInt
+        val instant = java.time.Instant.ofEpochSecond(seconds, nanoOfSecond.toLong)
+        val localDateTime =
+          LocalDateTime.ofEpochSecond(seconds, nanoOfSecond, java.time.ZoneOffset.UTC)
+        Seq(
+          (TimestampLTZNanosType(9), instant: Any),
+          (TimestampNTZNanosType(9), localDateTime: Any)).foreach { case (nanosType, value) =>
+          withTempPath { dir =>
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value)), numSlices = 1),
+              new StructType().add("ts", nanosType))
+            df.write.format("avro").mode("overwrite").save(dir.getCanonicalPath)
+            val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+              .format("avro").load(dir.getCanonicalPath)
+            checkAnswer(readBack, df)
+          }
         }
       }
     }
