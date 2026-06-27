@@ -79,7 +79,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @since 4.3.0
    */
   default Set<PushedOperator> supportedPushedOperatorsForJoin() {
-    return Collections.emptySet();
+    return Set.of();
   }
 
   /**
@@ -200,7 +200,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
       if (sample != null && !sample.isNoOp()) {
         return Collections.unmodifiableSet(EnumSet.of(PushedOperator.TABLE_SAMPLE));
       }
-      return Collections.emptySet();
+      return Set.of();
     }
   }
 
