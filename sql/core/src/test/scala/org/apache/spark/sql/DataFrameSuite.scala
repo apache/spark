@@ -2785,6 +2785,17 @@ class DataFrameSuite extends SharedSparkSession
     val df1 = df.select("a").orderBy("b").orderBy("all")
     checkAnswer(df1, Seq(Row(1), Row(4)))
   }
+
+  test("SPARK-57725: resolve columns when the input plan has a null-named attribute") {
+    // A null-named AttributeReference can reach the analyzer (e.g. via a StructField built with a
+    // null name). Selecting another column must still resolve through the full analyzer path
+    // instead of failing with an internal NullPointerException from the case-insensitive name
+    // maps in AttributeSeq.
+    val attrs = Seq(AttributeReference(null, IntegerType)(), AttributeReference("b", IntegerType)())
+    val relation = LocalRelation.fromExternalRows(attrs, Seq(Row(1, 2)))
+    val df = classic.Dataset.ofRows(spark, relation)
+    checkAnswer(df.select("b"), Row(2))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
