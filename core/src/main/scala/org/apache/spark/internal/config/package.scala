@@ -2313,7 +2313,7 @@ package object config {
       "Compression will use spark.io.compression.codec")
     .version("0.6.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
