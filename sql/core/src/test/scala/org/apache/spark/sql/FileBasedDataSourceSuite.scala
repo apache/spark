@@ -1341,7 +1341,7 @@ class FileBasedDataSourceSuite extends SharedSparkSession
 
   test("SPARK-57166: nanosecond timestamp types are not supported in selected file data sources") {
     // Parquet and ORC support nanosecond-capable timestamps, while these formats still reject them.
-    val unsupportedDataSources = Seq("json", "csv", "xml")
+    val unsupportedDataSources = Seq("json", "xml")
     val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Test both v1 and v2 data sources.
@@ -1422,6 +1422,48 @@ class FileBasedDataSourceSuite extends SharedSparkSession
                   df.write.format("orc").mode("overwrite").save(path)
                   val readBack = spark.read.schema(new StructType().add("ts", nanosType))
                     .format("orc").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57457: CSV supports nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "csv" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            // CSV is text-based: the format string must carry enough fractional-second digits to
+            // represent the full precision. Use exactly `precision` S-characters so the emitted
+            // string is compact and unambiguously round-trips at the given precision.
+            val fracPat = "S" * precision
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"csv_nanos_${nanosType.typeName}").getCanonicalPath
+                  val (fmtKey, fmtVal) = nanosType match {
+                    case _: TimestampNTZNanosType =>
+                      ("timestampNTZFormat", s"yyyy-MM-dd'T'HH:mm:ss.$fracPat")
+                    case _: TimestampLTZNanosType =>
+                      ("timestampFormat", s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX")
+                  }
+                  df.write.format("csv").option(fmtKey, fmtVal).mode("overwrite").save(path)
+                  val readBack = spark.read
+                    .schema(new StructType().add("ts", nanosType))
+                    .option(fmtKey, fmtVal)
+                    .format("csv").load(path)
                   checkAnswer(readBack, df)
                 }
             }
