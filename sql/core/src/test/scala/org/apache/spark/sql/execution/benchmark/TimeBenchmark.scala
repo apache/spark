@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import java.time.LocalTime
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Synthetic benchmark for TIME data type functions.
@@ -48,6 +49,7 @@ object TimeBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    spark.conf.set(SQLConf.TIME_TYPE_ENABLED.key, "true")
     val N = 10000000
     // Generate TIME values using make_time(hour, minute, decimal_seconds)
     val timeExpr = "make_time(cast(mod(id, 24) as int), cast(mod(id, 60) as int), " +

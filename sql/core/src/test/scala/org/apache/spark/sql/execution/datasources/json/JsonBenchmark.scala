@@ -365,6 +365,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
   }
 
   private def datetimeBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    spark.conf.set(SQLConf.TIME_TYPE_ENABLED.key, "true")
     def timestamps = {
       spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
         iter.map(Instant.ofEpochSecond(_))
@@ -411,7 +412,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
       def times = {
         spark.range(0, rowsNum, 1, 1).mapPartitions { iter =>
-          iter.map(t => LocalTime.ofNanoOfDay((t % 86400000000L) * 1000000L))
+          iter.map(t => LocalTime.ofNanoOfDay(t % 86400000000000L))
         }.select($"value".as("time"))
       }
 

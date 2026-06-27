@@ -69,7 +69,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     case "interval" => "(cast(timestamp_seconds(id) as date) - date'0001-01-01') + " +
       "(timestamp_seconds(id) - timestamp'1000-01-01 01:02:03.123456')"
     case other => throw new IllegalArgumentException(
-      s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
+      s"Unsupported column type $other. Valid column types are " +
+        "'timestamp', 'date', 'time', and 'interval'")
   }
 
   private def run(
@@ -90,6 +91,7 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    spark.conf.set(SQLConf.TIME_TYPE_ENABLED.key, "true")
     val N = 10000000L
     val datetimeFields = Seq("YEAR", "YEAROFWEEK", "QUARTER", "MONTH", "WEEK", "DAY", "DAYOFWEEK",
       "DOW", "DOW_ISO", "DAYOFWEEK_ISO", "DOY", "HOUR", "MINUTE", "SECOND")
