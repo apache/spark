@@ -1126,10 +1126,10 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         // DAGScheduler notifies the job waiter -- unblocking the failing action on this thread --
         // *before* it posts SparkListenerJobEnd to the listener bus (see
         // DAGScheduler.failJobAndIndependentStages). That trailing JobEnd can therefore still be in
-        // flight when this thread calls waitUntilEmpty() above; if it is enqueued just after the bus
-        // is drained, the failed execution never reaches the cleanup threshold and lingers in
-        // liveExecutions. Poll with eventually() so the trailing end event is delivered and the live
-        // entries drain, rather than asserting once immediately.
+        // flight when this thread calls waitUntilEmpty() above; if it is enqueued just after the
+        // bus is drained, the failed execution never reaches the cleanup threshold and lingers in
+        // liveExecutions. Poll with eventually() so the trailing end event is delivered and the
+        // live entries drain, rather than asserting once immediately.
         eventually(timeout(5.seconds), interval(10.milliseconds)) {
           assert(statusStore.listener.get.noLiveData())
         }
