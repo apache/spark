@@ -2091,7 +2091,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress serialized RDD partitions (e.g. for
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
