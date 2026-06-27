@@ -31,8 +31,7 @@ import org.apache.spark.sql.types._
 
 class ResolveBinBySuite extends AnalysisTest {
 
-  // Run the resolution tests with the operator enabled. The dedicated gate test below uses
-  // `super.test` to escape this wrapper and pins the flag off.
+  // Enable the operator for all tests here (the gate test opts out via `super.test`).
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
                              (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
