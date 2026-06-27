@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -65,15 +66,18 @@ trait ConstraintHelper {
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
     predicates.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+      case eq @ EqualTo(l: Attribute, r: Attribute)
+          if isBinaryStable(l.dataType) && isBinaryStable(r.dataType) =>
         // Also remove EqualNullSafe with the same l and r to avoid Once strategy's idempotence
         // is broken. l = r and l <=> r can infer l <=> l and r <=> r which is useless.
         val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
+      case eq @ EqualTo(l @ Cast(lc: Attribute, _, _, _), r: Attribute)
+          if isBinaryStable(lc.dataType) && isBinaryStable(r.dataType) =>
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
-      case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
+      case eq @ EqualTo(l: Attribute, r @ Cast(rc: Attribute, _, _, _))
+          if isBinaryStable(l.dataType) && isBinaryStable(rc.dataType) =>
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
       case _ => // No inference
     }

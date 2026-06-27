@@ -2440,6 +2440,18 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-57727: constraint inference does not substitute non-binary-stable attributes") {
+    withTable("t1") {
+      sql("CREATE TABLE t1 (a STRING COLLATE UTF8_LCASE, b STRING COLLATE UTF8_LCASE)")
+      sql("INSERT INTO t1 VALUES ('hello', 'HELLO')")
+
+      checkAnswer(
+        sql("SELECT a, b FROM t1 WHERE a = b AND a = 'hello' COLLATE UTF8_BINARY"),
+        Row("hello", "HELLO")
+      )
+    }
+  }
+
   test("ConstantPropagation: replaces binary-stable attributes with contradicting predicates") {
     withTable("t1") {
       sql("CREATE TABLE t1 (c STRING)")
