@@ -2043,11 +2043,18 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
             // value, so a corrupted WKB or dropped SRID would fail here.
             checkAnswer(df, expected)
             // Stats: geometry/geography use GeoColumnStats, so no min/max bounds but a
-            // null count of 1.
+            // null count of 1. Stats layout: [lower(0), upper(1), nullCount(2), count(3),
+            // sizeInBytes(4)].
             val stats = cachedStats(df)
             assert(stats.isNullAt(0), s"$dt should have null lower bound")
             assert(stats.isNullAt(1), s"$dt should have null upper bound")
             assert(stats.getInt(2) == 1, s"$dt null count should be 1")
+            // sizeInBytes must reflect the BinaryView payload via getBinaryView, not be zero.
+            // The non-null value contributes its WKB byte length, so the total must exceed the
+            // WKB size; a regression to row.getBinary or a skipped size would fail this.
+            assert(stats.getLong(4) > wkbPoint.length,
+              s"$dt sizeInBytes (${stats.getLong(4)}) should exceed the WKB length " +
+                s"(${wkbPoint.length})")
           } finally {
             df.unpersist()
             InMemoryRelation.clearSerializer()
