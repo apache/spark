@@ -506,7 +506,7 @@ object OrcUtils extends Logging {
             case ShortType => new ShortWritable(value.toShort)
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
-            // ORC stores TIME as LONG (micros-of-day), so its stats are
+            // ORC stores TIME as LONG (nanos-of-day), so its stats are
             // IntegerColumnStatistics. OrcDeserializer converts the LongWritable
             // back to the Spark TimeType.
             case _: TimeType => new LongWritable(value)
