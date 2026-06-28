@@ -34,8 +34,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
+@SlowHiveTest
 class HivePartitionFilteringSuite(version: String)
     extends HiveVersionSuite(version) with SQLHelper {
 
