@@ -683,6 +683,31 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-57556: TIME type is unsupported when writing to a Hive serde directory") {
+    // Disable native data source conversion so that the write goes through the Hive serde
+    // path (HiveFileFormat) instead of a native data source that may support TIME.
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withTempDir { dir =>
+        // InsertIntoHiveDirCommand wraps the failure in a SparkException, so assert on the cause.
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+               |STORED AS PARQUET
+               |SELECT TIME'12:01:02' AS c
+             """.stripMargin)
+        }
+        checkError(
+          exception = e.getCause.asInstanceOf[AnalysisException],
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`c`",
+            "columnType" -> s"\"${TimeType().sql}\"",
+            "format" -> "Hive"))
+      }
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
