@@ -11611,11 +11611,6 @@
       "Dictionary encoding does not support String"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3192" : {
-    "message" : [
-      "Datatype not supported <dt>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3198" : {
     "message" : [
       "Cannot grow BufferHolder by size <neededSize> because the size is negative"
