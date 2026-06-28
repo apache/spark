@@ -750,6 +750,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-57736: CreateNamedStruct.dataType is null-safe when a field name is null") {
+    val struct = CreateNamedStruct(Seq(Literal.create(null, StringType), Literal(1)))
+    val dt = struct.dataType
+    assert(dt.length == 1)
+    assert(dt.head.name == null)
+  }
+
   test("test dsl for complex type") {
     def quickResolve(u: UnresolvedExtractValue): Expression = {
       ExtractValue(u.child, u.extraction, _ == _)
