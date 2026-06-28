@@ -24,7 +24,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter}
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
@@ -96,7 +96,8 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
     // RecordConsumer is null during init() and set later in prepareForWrite().
     (row: SpecializedGetters, ordinal: Int) =>
       recordConsumer().addLong(
-        TimestampNanosParquetOps.timestampNanosToEpochNanos(getNanos(row, ordinal), isNtz))
+        DateTimeUtils.timestampNanosToEpochNanos(
+          getNanos(row, ordinal), isNtz, sink = "Parquet INT64"))
 
   // ==================== Row-Based Read ====================
 
@@ -115,12 +116,7 @@ private[parquet] trait TimestampNanosParquetOps extends ParquetTypeOps {
     val p = precision
     new ParquetPrimitiveConverter(updater) {
       override def addLong(value: Long): Unit = {
-        val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
-        val rawNanosWithinMicro =
-          Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toInt
-        val nanosWithinMicro =
-          DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, p)
-        this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort))
+        this.updater.set(DateTimeUtils.epochNanosToTimestampNanos(value, p))
       }
     }
   }
@@ -170,20 +166,4 @@ private[ops] object TimestampNanosParquetOps {
         case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
         case _ => false
       })
-
-  /**
-   * Combines the `(epochMicros, nanosWithinMicro)` pair into a single INT64 epoch-nanoseconds
-   * value for Parquet storage. Delegates the exact-arithmetic packing to
-   * [[DateTimeUtils.timestampNanosToEpochNanos]]; values outside the signed-int64 epoch-nanos
-   * range (~1677-09-21 .. 2262-04-11) throw `timestampNanosEpochNanosOverflowError`.
-   */
-  private[ops] def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
-    try {
-      DateTimeUtils.timestampNanosToEpochNanos(value)
-    } catch {
-      case _: ArithmeticException =>
-        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
-          value, isNtz, sink = "Parquet INT64")
-    }
-  }
 }
