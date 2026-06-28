@@ -10,28 +10,28 @@ OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 9V74 80-Core Processor
 Cache 5M rows with primitives:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-Default cache - write + read                          1832           1900          96          2.7         366.5       1.0X
-Default cache - write + read (uncompressed)           1179           1183           6          4.2         235.7       1.6X
-Arrow cache - write + read                            1208           1210           3          4.1         241.6       1.5X
-Arrow cache - write + read (zstd level -1)            1636           1654          26          3.1         327.1       1.1X
-Arrow cache - write + read (zstd level 1)             1710           1726          23          2.9         342.0       1.1X
-Arrow cache - write + read (zstd level 3)             1768           1783          22          2.8         353.6       1.0X
+Default cache - write + read                          1765           1794          41          2.8         353.0       1.0X
+Default cache - write + read (uncompressed)           1154           1168          20          4.3         230.9       1.5X
+Arrow cache - write + read                            1279           1290          15          3.9         255.9       1.4X
+Arrow cache - write + read (zstd level -1)            1736           1736           1          2.9         347.1       1.0X
+Arrow cache - write + read (zstd level 1)             1795           1815          28          2.8         359.0       1.0X
+Arrow cache - write + read (zstd level 3)             1858           1862           6          2.7         371.5       1.0X
 
 
 ================================================================================================
-Cache with filter pushdown
+Cache then filter
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 9V74 80-Core Processor
-Cache 5M rows + filter:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Cache 5M rows, then filter:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Default cache - filter                             1516           1578          89          3.3         303.2       1.0X
-Default cache - filter (uncompressed)              1299           1320          29          3.8         259.9       1.2X
-Arrow cache - filter (with stats)                  1297           1319          32          3.9         259.4       1.2X
-Arrow cache - filter (zstd level -1)               1690           1712          30          3.0         338.1       0.9X
-Arrow cache - filter (zstd level 1)                1738           1847         154          2.9         347.5       0.9X
-Arrow cache - filter (zstd level 3)                1776           1789          18          2.8         355.2       0.9X
+Default cache - filter                             1454           1478          33          3.4         290.9       1.0X
+Default cache - filter (uncompressed)              1312           1315           4          3.8         262.5       1.1X
+Arrow cache - filter                               1391           1394           4          3.6         278.2       1.0X
+Arrow cache - filter (zstd level -1)               1737           1751          21          2.9         347.4       0.8X
+Arrow cache - filter (zstd level 1)                1808           1814           7          2.8         361.7       0.8X
+Arrow cache - filter (zstd level 3)                1874           1874           0          2.7         374.8       0.8X
 
 
 ================================================================================================
@@ -42,12 +42,12 @@ OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 9V74 80-Core Processor
 Cache 2M rows from Parquet:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-Default cache - columnar input                          1481           1501          29          1.4         740.5       1.0X
-Default cache - columnar input (uncompressed)           1278           1283           8          1.6         638.8       1.2X
-Arrow cache - columnar input                            1289           1302          19          1.6         644.4       1.1X
-Arrow cache - columnar input (zstd level -1)            1504           1513          12          1.3         752.2       1.0X
-Arrow cache - columnar input (zstd level 1)             1553           1573          29          1.3         776.6       1.0X
-Arrow cache - columnar input (zstd level 3)             1590           1622          45          1.3         795.1       0.9X
+Default cache - columnar input                          1492           1498           8          1.3         746.1       1.0X
+Default cache - columnar input (uncompressed)           1263           1264           2          1.6         631.4       1.2X
+Arrow cache - columnar input                            1318           1318           0          1.5         658.9       1.1X
+Arrow cache - columnar input (zstd level -1)            1541           1542           1          1.3         770.7       1.0X
+Arrow cache - columnar input (zstd level 1)             1556           1565          12          1.3         778.1       1.0X
+Arrow cache - columnar input (zstd level 3)             1621           1625           5          1.2         810.5       0.9X
 
 
 ================================================================================================
@@ -58,12 +58,12 @@ OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 9V74 80-Core Processor
 Re-cache 2M rows (zero-copy):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-Default cache - cache a cached DF                           401            409           8          5.0         200.3       1.0X
-Default cache - cache a cached DF (uncompressed)            206            224          22          9.7         103.0       1.9X
-Arrow cache - cache a cached DF (zero-copy)                 166            173           6         12.1          82.9       2.4X
-Arrow cache - cache a cached DF (zstd level -1)             343            353          15          5.8         171.7       1.2X
-Arrow cache - cache a cached DF (zstd level 1)              353            371          16          5.7         176.5       1.1X
-Arrow cache - cache a cached DF (zstd level 3)              362            368           7          5.5         181.1       1.1X
+Default cache - cache a cached DF                           402            413          11          5.0         201.2       1.0X
+Default cache - cache a cached DF (uncompressed)            208            225          28          9.6         103.9       1.9X
+Arrow cache - cache a cached DF (zero-copy)                 144            155          17         13.9          72.2       2.8X
+Arrow cache - cache a cached DF (zstd level -1)             343            346           4          5.8         171.5       1.2X
+Arrow cache - cache a cached DF (zstd level 1)              356            367          15          5.6         178.0       1.1X
+Arrow cache - cache a cached DF (zstd level 3)              364            366           1          5.5         181.9       1.1X
 
 
 ================================================================================================
@@ -74,12 +74,12 @@ OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 9V74 80-Core Processor
 Cache 5M rows, select 1 column:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-Default cache - select 1 of 20 columns                 10140          10185          63          0.5        2028.1       1.0X
-Default cache - select 1 of 20 (uncompressed)           4088           4114          36          1.2         817.7       2.5X
-Arrow cache - select 1 of 20                            4024           4097         103          1.2         804.8       2.5X
-Arrow cache - select 1 of 20 (zstd level -1)            8487           8575         125          0.6        1697.4       1.2X
-Arrow cache - select 1 of 20 (zstd level 1)             8701           8722          31          0.6        1740.2       1.2X
-Arrow cache - select 1 of 20 (zstd level 3)             8923           8950          39          0.6        1784.6       1.1X
+Default cache - select 1 of 20 columns                 10187          10276         126          0.5        2037.4       1.0X
+Default cache - select 1 of 20 (uncompressed)           4115           4129          19          1.2         823.1       2.5X
+Arrow cache - select 1 of 20                            4927           4931           6          1.0         985.4       2.1X
+Arrow cache - select 1 of 20 (zstd level -1)            9043           9098          77          0.6        1808.6       1.1X
+Arrow cache - select 1 of 20 (zstd level 1)             9139           9216         109          0.5        1827.9       1.1X
+Arrow cache - select 1 of 20 (zstd level 3)             9420           9453          47          0.5        1884.0       1.1X
 
 
 
