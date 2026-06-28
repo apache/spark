@@ -3705,6 +3705,35 @@ class FunctionsTestsMixin:
         )
 
     def test_session_window(self):
+        df = self.spark.createDataFrame(
+            [(datetime.datetime(2016, 3, 11, 9, 0, 7),)], ["date"]
+        )
+        expected_15_seconds = [
+            Row(
+                session_window=Row(
+                    start=datetime.datetime(2016, 3, 11, 9, 0, 7),
+                    end=datetime.datetime(2016, 3, 11, 9, 0, 22),
+                )
+            )
+        ]
+        expected_1_minute = [
+            Row(
+                session_window=Row(
+                    start=datetime.datetime(2016, 3, 11, 9, 0, 7),
+                    end=datetime.datetime(2016, 3, 11, 9, 1, 7),
+                )
+            )
+        ]
+
+        assertDataFrameEqual(
+            df.select(F.session_window("date", "15 seconds").alias("session_window")),
+            expected_15_seconds,
+        )
+        assertDataFrameEqual(
+            df.select(F.session_window(df.date, "1 minute").alias("session_window")),
+            expected_1_minute,
+        )
+
         with self.assertRaises(PySparkTypeError) as pe:
             F.session_window("date", 5)
 
