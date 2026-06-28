@@ -882,7 +882,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             searchable = rs.getShort("SEARCHABLE"),
             minScale = rs.getShort("MINIMUM_SCALE"),
             maxScale = rs.getShort("MAXIMUM_SCALE"),
-            numPrecRadix = Option(rs.getObject("NUM_PREC_RADIX")).map(_.asInstanceOf[Integer].toInt))
+            numPrecRadix =
+              Option(rs.getObject("NUM_PREC_RADIX")).map(_.asInstanceOf[Integer].toInt))
         }.toSeq
 
         // results are ordered by DATA_TYPE
