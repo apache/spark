@@ -76,7 +76,7 @@ trait ParserInterface extends DataTypeParserInterface {
   def parseTemporalTableIdentifier(sqlText: String): TemporalIdentifier = {
     // Default implementation does not recognize the time travel suffix. Concrete
     // implementations can override this to support it.
-    TemporalIdentifier(parseMultipartIdentifier(sqlText), None)
+    TemporalIdentifier(parseMultipartIdentifier(sqlText), None, None)
   }
 
   /**

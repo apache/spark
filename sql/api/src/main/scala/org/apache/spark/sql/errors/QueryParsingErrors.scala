@@ -878,6 +878,14 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidAtSyntaxTimestamp(
+      timestamp: String, format: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      messageParameters = Map("timestamp" -> timestamp, "format" -> format),
+      ctx)
+  }
+
   def multipleTimeTravelSpec(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "MULTIPLE_TIME_TRAVEL_SPEC",
