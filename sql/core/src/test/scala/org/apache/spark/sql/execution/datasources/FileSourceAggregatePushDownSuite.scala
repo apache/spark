@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
@@ -618,6 +618,47 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  // Aggregate push-down only happens with the DSv2 file source, so this test lives in the V2
+  // suite. It writes a Parquet file with column statistics disabled, which leaves both the
+  // min/max values and the number of nulls unavailable for push-down.
+  test("SPARK-57746: aggregate push-down fails when Parquet statistics are missing") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).selectExpr("CAST(id AS INT) AS i").coalesce(1)
+          .write.option("parquet.column.statistics.enabled", "false").parquet(path)
+        withTempView("t") {
+          spark.read.parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkErrorMatchPVals(
+              exception = interceptAggPushDownError("SELECT min(i) FROM t"),
+              condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
+              parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+            checkErrorMatchPVals(
+              exception = interceptAggPushDownError("SELECT count(i) FROM t"),
+              condition = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_NUM_NULLS",
+              parameters = Map("filePath" -> ".*", "config" -> aggPushDownEnabledKey))
+          }
+        }
+      }
+    }
+  }
+
+  // The error originates in the executor-side partition reader, so it may be wrapped in a
+  // higher-level exception. Walk the cause chain to find the structured Spark exception.
+  private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException = {
+    val e = intercept[Exception](spark.sql(query).collect())
+    var cause: Throwable = e
+    while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+      cause = cause.getCause
+    }
+    assert(cause != null,
+      s"Expected a SparkUnsupportedOperationException but got: $e")
+    cause.asInstanceOf[SparkUnsupportedOperationException]
+  }
 }
 
 abstract class OrcAggregatePushDownSuite extends OrcTest with FileSourceAggregatePushDownSuite {
