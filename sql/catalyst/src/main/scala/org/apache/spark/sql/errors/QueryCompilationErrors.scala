@@ -313,10 +313,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def binByRequiresTopLevelColumnError(columnName: String): Throwable = {
+  def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
     new AnalysisException(
       errorClass = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLExpr(reference)))
   }
 
   def binByInvalidDistributeColumnTypeError(
@@ -2325,17 +2325,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "currentTableId" -> currentTableId))
   }
 
-  def columnIdMismatchAfterAnalysis(
-      tableName: String,
-      errors: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-      messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("- ", "\n- ", "")))
-  }
-
-  def columnsMissingOrAddedAfterAnalysis(
+  def columnsChangedAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
     new AnalysisException(

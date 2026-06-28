@@ -26,6 +26,7 @@ import time
 import inspect
 import itertools
 import json
+import warnings
 from collections.abc import Iterator
 from typing import (
     Any,
@@ -82,7 +83,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPandasInitStateSerializer,
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
-    ArrowStreamAggPandasUDFSerializer,
     ArrowStreamUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
@@ -644,24 +644,6 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
     return lambda k, v, s: [(wrapped(k, v, s), return_type)]
 
 
-def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    def wrapped(series_iter):
-        import pandas as pd
-
-        # series_iter: Iterator[pd.Series] (single column) or
-        # Iterator[Tuple[pd.Series, ...]] (multiple columns)
-        # This has already been adapted by the mapper function in read_udfs
-        result = func(series_iter)
-        return pd.Series([result])
-
-    return (
-        args_kwargs_offsets,
-        lambda *a: (wrapped(*a), return_type),
-    )
-
-
 def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
     if len(kwargs_offsets):
         keys = list(kwargs_offsets.keys())
@@ -856,12 +838,9 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
     ):
         return func, args_offsets, kwargs_offsets, return_type
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-        return wrap_grouped_agg_pandas_iter_udf(
-            func, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
     elif eval_type in (
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
@@ -2058,6 +2037,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type in (
@@ -2065,14 +2045,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-            ser = ArrowStreamAggPandasUDFSerializer(
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-            )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
@@ -2381,6 +2353,52 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     safecheck=runner_conf.safecheck,
                     arrow_cast=True,
                     prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
+        import pyarrow as pa
+        import pandas as pd
+
+        assert num_udfs == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
+        udf_func, args_offsets, _, return_type = udfs[0]
+
+        output_schema = StructType([StructField("_0", return_type)])
+
+        def extract_series(
+            batch: "pa.RecordBatch",
+        ) -> Union["pd.Series", tuple["pd.Series", ...]]:
+            # Convert one RecordBatch to a pandas Series per column, then select args:
+            # - pd.Series for a single column
+            # - tuple[pd.Series, ...] for multiple columns
+            all_series = ArrowBatchTransformer.to_pandas(
+                batch,
+                timezone=runner_conf.timezone,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+            )
+            series = tuple(all_series[o] for o in args_offsets)
+            return series[0] if len(series) == 1 else series
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                series_iter = map(extract_series, group)
+                result = udf_func(series_iter)
+                # Drain remaining batches to maintain stream position
+                for _ in series_iter:
+                    pass
+                yield PandasToArrowConversion.convert(
+                    [pd.Series([result])],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=False,
                     assign_cols_by_name=runner_conf.assign_cols_by_name,
                     int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 )
@@ -3621,30 +3639,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             return f(keys, vals, state)
 
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-        # We assume there is only one UDF here because grouped agg doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        arg_offsets, f = udfs[0]
-
-        # Convert to iterator of pandas Series:
-        # - Iterator[pd.Series] for single column
-        # - Iterator[Tuple[pd.Series, ...]] for multiple columns
-        def mapper(batch_iter):
-            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
-            # Convert to Iterator[pd.Series] or Iterator[Tuple[pd.Series, ...]] based on arg_offsets
-            if len(arg_offsets) == 1:
-                # Single column: Iterator[Tuple[pd.Series, ...]] -> Iterator[pd.Series]
-                series_iter = (batch_series[arg_offsets[0]] for batch_series in batch_iter)
-            else:
-                # Multiple columns: Iterator[Tuple[pd.Series, ...]] ->
-                # Iterator[Tuple[pd.Series, ...]]
-                series_iter = (
-                    tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
-                )
-            return f(series_iter)
-
     else:
 
         def mapper(a):
@@ -3731,12 +3725,108 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 
+        def pipelined_process():
+            """
+            Pipelined variant of process() that pre-fetches input batches in a background
+            reader thread while the main thread computes the UDF and writes output.
+            This allows input deserialization to overlap with UDF computation.
+            """
+            import queue
+            import threading
+
+            queue_depth = int(os.environ.get("SPARK_PIPELINED_UDF_QUEUE_DEPTH", "2"))
+            _SENTINEL = object()
+            input_queue = queue.Queue(maxsize=queue_depth)
+            reader_error = [None]
+            # Event to signal the reader thread to stop (set by main thread on
+            # exception or completion). The reader checks this after each failed
+            # put attempt instead of polling with a timeout.
+            stop_event = threading.Event()
+
+            def _reader_thread():
+                try:
+                    for batch in deserializer.load_stream(input_data_stream):
+                        # Some serializers (e.g., ArrowStreamGroupSerializer,
+                        # ArrowStreamAggPandasUDFSerializer) yield lazy iterators
+                        # that still read from the input stream. Materialize them here so
+                        # the main thread can consume them without touching the stream.
+                        if hasattr(batch, "__next__"):
+                            batch = list(batch)
+                        # Block on put, but wake up when stop_event is set.
+                        # stop_event.wait() returns immediately if already set.
+                        while not stop_event.is_set():
+                            try:
+                                input_queue.put(batch, timeout=0.1)
+                                break
+                            except queue.Full:
+                                continue
+                        if stop_event.is_set():
+                            return
+                except Exception as e:
+                    reader_error[0] = e
+                finally:
+                    # Enqueue sentinel so the consumer knows we're done.
+                    while not stop_event.is_set():
+                        try:
+                            input_queue.put(_SENTINEL, timeout=0.1)
+                            break
+                        except queue.Full:
+                            continue
+
+            t = threading.Thread(
+                target=_reader_thread, name="pyspark-pipelined-reader", daemon=True
+            )
+            t.start()
+
+            def _queued_iter():
+                while True:
+                    item = input_queue.get()
+                    if item is _SENTINEL:
+                        if reader_error[0] is not None:
+                            raise reader_error[0]
+                        return
+                    yield item
+
+            out_iter = func(init_info.split_index, _queued_iter())
+            try:
+                serializer.dump_stream(out_iter, outfile)
+            finally:
+                if hasattr(out_iter, "close"):
+                    out_iter.close()
+                # Signal reader thread to stop, drain the queue so it can unblock,
+                # then wait for it to finish.
+                stop_event.set()
+                try:
+                    while not input_queue.empty():
+                        input_queue.get_nowait()
+                except Exception:
+                    pass
+                # If the reader is still blocked in input_data_stream.read(), the stop_event
+                # check only fires between put attempts -- it cannot interrupt a syscall.
+                # Force-closing the stream here would break worker reuse (the next task uses
+                # the same socket fd), so we settle for a bounded join and a loud warning
+                # so an undetected leak shows up in the worker log.
+                t.join(timeout=5)
+                if t.is_alive():
+                    warnings.warn(
+                        "pipelined reader thread did not exit within 5s; "
+                        "it may still be blocked in input_data_stream.read() and could "
+                        "read data intended for a subsequent reused-worker task. "
+                        "Consider disabling spark.python.worker.reuse if this recurs.",
+                        RuntimeWarning,
+                    )
+
+        is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
+        if is_pipelined and hasattr(serializer, "_flush_per_batch"):
+            serializer._flush_per_batch = True
+        run_process = pipelined_process if is_pipelined else process
+
         processing_start_time = time.time()
         with capture_outputs():
             if profiler:
-                profiler.profile(process)
+                profiler.profile(run_process)
             else:
-                process()
+                run_process()
         processing_time_ms = int(1000 * (time.time() - processing_start_time))
 
         # Cleanup

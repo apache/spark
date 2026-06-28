@@ -1419,6 +1419,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     "caching on disk" -> StorageLevel.DISK_ONLY
   ).foreach { case (name, storageLevel) =>
     encryptionTest(s"test putBlockDataAsStream with $name") { conf =>
+      conf.set(RDD_COMPRESS, false)
       init(conf)
       val ioEncryptionKey =
         if (conf.get(IO_ENCRYPTION_ENABLED)) Some(CryptoStreamUtils.createKey(conf)) else None

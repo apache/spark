@@ -500,30 +500,17 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
-    // SPARK-57490: same-family cross-precision nanosecond casts: widening (e.g. TIMESTAMP_NTZ(7) ->
-    // TIMESTAMP_NTZ(9)) is lossless and allowed as a silent store assignment, while narrowing
-    // (e.g. (9) -> (7)) drops sub-microsecond digits and stays explicit-only. Equal precision is
-    // handled by the `from == to` short-circuit above; micros -> nanos widening (e.g. TIMESTAMP_NTZ
-    // -> TIMESTAMP_NTZ(9)) is lossless and falls to the catch-all below.
-    case (f: TimestampNTZNanosType, t: TimestampNTZNanosType) => f.precision <= t.precision
-    case (f: TimestampLTZNanosType, t: TimestampLTZNanosType) => f.precision <= t.precision
-    // SPARK-57323: DATE <-> nanosecond-precision timestamp requires an explicit CAST in both
-    // directions (nanos -> DATE drops fields; DATE -> nanos is lossless but kept explicit-only
-    // while the nanos types are unreleased). Stricter than micro DATE <-> TIMESTAMP[_NTZ], which
-    // the catch-all below allows.
-    case (DateType, _: AnyTimestampNanoType) => false
-    case (_: AnyTimestampNanoType, DateType) => false
-    // SPARK-57293/57511: narrowing any nanosecond timestamp to a microsecond timestamp drops the
-    // sub-microsecond digits, and cross-family casts additionally reinterpret the value against the
-    // session time zone; both stay explicit-only rather than silent store assignments while the
-    // nanos types are unreleased. This covers same-family narrowing (nanos -> micro), cross-family
-    // nanos <-> nanos, and the mixed micro/nanos pairs at the precision-6 boundary; everything
-    // matched here is explicit-only. The all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair and micros ->
-    // nanos same-family widening stay store-assignable via the catch-all below.
-    case (_: AnyTimestampNanoType, t) if AnyTimestampType.acceptsType(t) => false
-    case (TimestampType, _: TimestampNTZNanosType) => false
-    case (TimestampNTZType, _: TimestampLTZNanosType) => false
-    case (_: AnyTimestampNanoType, _: AnyTimestampNanoType) => false
+    // SPARK-57303: block lossy narrowing across the whole timestamp family (LTZ/NTZ, micros and
+    // nanos, including the cross-family LTZ <-> NTZ pairs) so store assignment never silently drops
+    // sub-microsecond digits. Lossless widening, equal precision, and DATE <-> timestamp (DATE has
+    // no fractional precision, so it never matches here) all fall through to the DatetimeType arm
+    // below, mirroring the micro TIMESTAMP <-> TIMESTAMP_NTZ behavior.
+    case (f, t) if TimestampFamily.fractionalPrecision(f)
+        .exists(fp => TimestampFamily.fractionalPrecision(t).exists(fp > _)) => false
+    // SPARK-57585: widening a TIME(p) to a larger precision is lossless and allowed as a silent
+    // store assignment, while narrowing (e.g. TIME(6) -> TIME(3)) drops fractional-seconds digits
+    // and stays explicit-CAST-only. Equal precision is handled by the `from == to` short-circuit.
+    case (f: TimeType, t: TimeType) => f.precision <= t.precision
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
