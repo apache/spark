@@ -222,6 +222,36 @@ class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPl
     }
   }
 
+  test("cache nanosecond-precision timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq("TIMESTAMP_NTZ(9)", "TIMESTAMP_LTZ(9)").foreach { typeName =>
+        Seq("false", "true").foreach { vectorized =>
+          withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            withTempView("nanos") {
+              // Include sub-microsecond precision and a null to exercise the full payload and
+              // null handling through the cache.
+              val df = sql(
+                s"""SELECT * FROM VALUES
+                   |  (cast('2020-01-01 00:00:00.123456789' as $typeName)),
+                   |  (cast('1999-12-31 23:59:59.987654321' as $typeName)),
+                   |  (cast(null as $typeName))
+                   |  as t(ts)""".stripMargin)
+              df.createOrReplaceTempView("nanos")
+              val expected = sql("SELECT ts FROM nanos").collect().toSeq
+
+              spark.catalog.cacheTable("nanos")
+              try {
+                checkAnswer(sql("SELECT ts FROM nanos"), expected)
+              } finally {
+                spark.catalog.uncacheTable("nanos")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
