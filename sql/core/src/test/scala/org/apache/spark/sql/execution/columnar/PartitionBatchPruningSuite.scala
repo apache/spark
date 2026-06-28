@@ -224,23 +224,27 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
         val rows = (1 to 100).map { k =>
           Tuple1(s"2020-01-01 00:00:00.${"%09d".format(k)}")
         }
+        // Boundary chosen so only the last batch (values 91..100) qualifies.
+        val boundary = "cast('2020-01-01 00:00:00.000000090' as TIMESTAMP_NTZ(9))"
+
+        // Compute the expected result BEFORE caching, so it cannot hit the cache (the CacheManager
+        // matches by logical plan, not by DataFrame identity, so evaluating an equivalent query
+        // after caching could be served from the InMemoryRelation).
+        val expected = sparkContext.makeRDD(rows, 1).toDF("s")
+          .selectExpr("cast(s as TIMESTAMP_NTZ(9)) as ts")
+          .where(s"ts > $boundary").orderBy("ts").collect().toSeq
+        assert(expected.nonEmpty && expected.size < 100,
+          "test boundary should select a strict, non-empty subset")
+
         sparkContext.makeRDD(rows, 1).toDF("s")
           .selectExpr("cast(s as TIMESTAMP_NTZ(9)) as ts")
           .createOrReplaceTempView("nanosPruning")
         spark.catalog.cacheTable("nanosPruning")
         try {
-          // Boundary chosen so only the last batch (values 91..100) qualifies.
-          val boundary = "cast('2020-01-01 00:00:00.000000090' as TIMESTAMP_NTZ(9))"
-          val query = sql(s"SELECT ts FROM nanosPruning WHERE ts > $boundary ORDER BY ts")
-
-          // Correctness: results match an uncached evaluation of the same predicate.
-          val uncachedExpected = sparkContext.makeRDD(rows, 1).toDF("s")
-            .selectExpr("cast(s as TIMESTAMP_NTZ(9)) as ts")
-            .where(s"ts > $boundary").orderBy("ts").collect().toSeq
-          assert(query.collect().toSeq === uncachedExpected,
-            "cached + pruned result must match uncached evaluation")
-          assert(uncachedExpected.nonEmpty && uncachedExpected.size < 100,
-            "test boundary should select a strict, non-empty subset")
+          // Correctness: the cached + pruned read matches the pre-cache evaluation.
+          val cached = sql(s"SELECT ts FROM nanosPruning WHERE ts > $boundary ORDER BY ts")
+          assert(cached.collect().toSeq === expected,
+            "cached + pruned result must match the uncached evaluation")
 
           // Pruning: the same range query reads fewer batches with in-memory partition pruning on
           // than off. (With bounds-less stats the counts would be equal because no batch can be
