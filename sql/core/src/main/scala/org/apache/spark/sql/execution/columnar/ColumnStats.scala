@@ -327,9 +327,18 @@ private[columnar] final class IntervalColumnStats extends ColumnStats {
 }
 
 private[columnar] final class TimestampNanosColumnStats extends ColumnStats {
+  protected var upper: TimestampNanosVal = null
+  protected var lower: TimestampNanosVal = null
+
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      // Fixed-width payload (epochMicros + nanosWithinMicro); no min/max bounds.
+      // TimestampNanosVal has a total order matching calendar order, so collect min/max bounds
+      // (like DecimalColumnStats, not IntervalColumnStats) to enable partition pruning, matching
+      // the micro-precision timestamp path (LongColumnStats). NTZ and LTZ share the same physical
+      // payload, so a single getter reads the value for both.
+      val value = row.getTimestampNTZNanos(ordinal)
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
       sizeInBytes += TimestampNanosVal.SIZE_IN_BYTES
       count += 1
     } else {
@@ -338,7 +347,7 @@ private[columnar] final class TimestampNanosColumnStats extends ColumnStats {
   }
 
   override def collectedStatistics: Array[Any] =
-    Array[Any](null, null, nullCount, count, sizeInBytes)
+    Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {
