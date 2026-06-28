@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap, ColumnarRow}
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
 
 class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
@@ -288,6 +288,28 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
     if (!row.isNullAt(ordinal)) {
       val size = BINARY.actualSize(row, ordinal)
       sizeInBytes += size
+      count += 1
+    } else {
+      gatherNullStats()
+    }
+  }
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
+/**
+ * Size collector for Geometry/Geography columns. Their Catalyst physical value is a
+ * [[BinaryView]] (this is what ArrowWriter consumes via getBinaryView), so BinaryColumnStats,
+ * which reads row.getBinary, would throw a ClassCastException on a row that actually stores a
+ * BinaryView (e.g. a GenericInternalRow from a row-based reader or direct serializer use). Read
+ * the value through getBinaryView and use its byte length for the size; no min/max bounds.
+ */
+private[columnar] final class GeoColumnStats extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      val view: BinaryView = row.getBinaryView(ordinal)
+      sizeInBytes += view.numBytes() + 4
       count += 1
     } else {
       gatherNullStats()

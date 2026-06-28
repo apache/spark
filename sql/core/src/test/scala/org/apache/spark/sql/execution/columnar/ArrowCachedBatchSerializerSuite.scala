@@ -26,10 +26,10 @@ import org.apache.arrow.vector.{
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
@@ -37,7 +37,8 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.types.variant.VariantBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, VariantVal}
+import org.apache.spark.util.Utils
 
 /** UDT whose sqlType is Arrow-supported (ArrayType(DoubleType)). */
 private class SupportedUDT extends UserDefinedType[Array[Double]] {
@@ -417,59 +418,46 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("supportsColumnarInput with supported types") {
+  test("supportsColumnarInput selects the input path and does not gate type support") {
+    // supportsColumnarInput is a path selector, not a capability gate: it returns true regardless
+    // of schema, and the actual type support is enforced by checkSupportedSchema at the convert
+    // entry points. (There is no per-type fallback to another serializer, so gating here would
+    // not help anyway.)
     val serializer = new ArrowCachedBatchSerializer()
-
-    // All primitive types should be supported
-    val primitiveSchema = Seq(
-      AttributeReference("bool", BooleanType)(),
-      AttributeReference("byte", ByteType)(),
-      AttributeReference("short", ShortType)(),
-      AttributeReference("int", IntegerType)(),
-      AttributeReference("long", LongType)(),
-      AttributeReference("float", FloatType)(),
-      AttributeReference("double", DoubleType)(),
-      AttributeReference("string", StringType)(),
-      AttributeReference("binary", BinaryType)()
-    )
-    assert(serializer.supportsColumnarInput(primitiveSchema))
-
-    // Temporal types should be supported
-    val temporalSchema = Seq(
-      AttributeReference("date", DateType)(),
-      AttributeReference("timestamp", TimestampType)(),
-      AttributeReference("timestampNtz", TimestampNTZType)()
-    )
-    assert(serializer.supportsColumnarInput(temporalSchema))
-
-    // Decimal should be supported
-    val decimalSchema = Seq(
-      AttributeReference("decimal", DecimalType(10, 2))()
-    )
-    assert(serializer.supportsColumnarInput(decimalSchema))
-
-    // Complex types should be supported
-    val complexSchema = Seq(
-      AttributeReference("array", ArrayType(IntegerType))(),
-      AttributeReference("struct", StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", StringType)
-      )))(),
-      AttributeReference("map", MapType(StringType, IntegerType))()
-    )
-    assert(serializer.supportsColumnarInput(complexSchema))
-
-    // Nested complex types should be supported
-    val nestedSchema = Seq(
-      AttributeReference("nested", ArrayType(StructType(Seq(
-        StructField("x", IntegerType),
-        StructField("y", ArrayType(StringType))
-      ))))()
-    )
-    assert(serializer.supportsColumnarInput(nestedSchema))
+    assert(serializer.supportsColumnarInput(Seq(AttributeReference("int", IntegerType)())))
+    assert(serializer.supportsColumnarInput(
+      Seq(AttributeReference("obj", ObjectType(classOf[AnyRef]))())))
   }
 
-  test("supportsColumnarInput correctly validates all types") {
+  test("checkSupportedSchema accepts supported types and rejects unsupported ones") {
+    // Supported schemas (primitive, temporal, decimal, complex, nested) must not throw.
+    val supported = Seq(
+      Seq(AttributeReference("bool", BooleanType)(), AttributeReference("long", LongType)(),
+        AttributeReference("string", StringType)(), AttributeReference("binary", BinaryType)()),
+      Seq(AttributeReference("date", DateType)(), AttributeReference("ts", TimestampType)(),
+        AttributeReference("tsNtz", TimestampNTZType)()),
+      Seq(AttributeReference("decimal", DecimalType(10, 2))()),
+      Seq(AttributeReference("array", ArrayType(IntegerType))(),
+        AttributeReference("map", MapType(StringType, IntegerType))()),
+      Seq(AttributeReference("nested", ArrayType(StructType(Seq(
+        StructField("x", IntegerType), StructField("y", ArrayType(StringType))))))())
+    )
+    supported.foreach(ArrowCachedBatchSerializer.checkSupportedSchema)
+
+    // An unsupported type (ObjectType, also via an unsupported-sqlType UDT) must throw a clear
+    // error rather than failing deeper in conversion.
+    val e = intercept[SparkException] {
+      ArrowCachedBatchSerializer.checkSupportedSchema(
+        Seq(AttributeReference("obj", ObjectType(classOf[AnyRef]))()))
+    }
+    assert(e.getMessage.contains("Arrow cache does not support"))
+    intercept[SparkException] {
+      ArrowCachedBatchSerializer.checkSupportedSchema(
+        Seq(AttributeReference("udt", new UnsupportedUDT())()))
+    }
+  }
+
+  test("isSupportedByArrow correctly validates all types") {
     // Verify that isSupportedByArrow handles all standard Spark SQL types
     assert(ArrowUtils.isSupportedByArrow(BooleanType))
     assert(ArrowUtils.isSupportedByArrow(ByteType))
@@ -1154,6 +1142,11 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       CalendarIntervalType).isInstanceOf[IntervalColumnStats])
     assert(ArrowCachedBatchSerializer.createColumnStats(VariantType)
       .isInstanceOf[VariantColumnStats])
+    // Geometry/Geography use a BinaryView-aware collector (their physical value is a BinaryView).
+    assert(ArrowCachedBatchSerializer.createColumnStats(GeometryType(4326))
+      .isInstanceOf[GeoColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(GeographyType(4326))
+      .isInstanceOf[GeoColumnStats])
 
     // Complex types and UDT: no natural ordering -> ObjectColumnStats (null bounds).
     assert(ArrowCachedBatchSerializer.createColumnStats(
@@ -1165,6 +1158,27 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(ArrowCachedBatchSerializer.createColumnStats(
       new ExamplePointUDT()).isInstanceOf[ObjectColumnStats])
     assert(ArrowCachedBatchSerializer.createColumnStats(NullType).isInstanceOf[ObjectColumnStats])
+  }
+
+  test("GeoColumnStats reads a BinaryView value from a generic row") {
+    // The Catalyst physical value for Geometry/Geography is a BinaryView. A row-based reader or
+    // direct serializer use can hand the stats collector a GenericInternalRow holding that
+    // BinaryView; reading it via getBinary (as BinaryColumnStats does) would throw
+    // ClassCastException. GeoColumnStats must read it via getBinaryView and account for its size.
+    val stats = ArrowCachedBatchSerializer.createColumnStats(GeometryType(4326))
+    assert(stats.isInstanceOf[GeoColumnStats])
+    val view = BinaryView.fromBytes(Array[Byte](1, 2, 3, 4, 5))
+    val nonNull = new GenericInternalRow(Array[Any](view))
+    val nullRow = new GenericInternalRow(Array[Any](null))
+    stats.gatherStats(nonNull, 0)
+    stats.gatherStats(nullRow, 0)
+    val collected = stats.collectedStatistics
+    // Layout: [lowerBound, upperBound, nullCount, count, sizeInBytes]; no min/max for geo.
+    // count is the total row count (null + non-null), matching ColumnStats.gatherNullStats.
+    assert(collected(0) == null && collected(1) == null, "geo has no min/max bounds")
+    assert(collected(2) == 1, "one null value")
+    assert(collected(3) == 2, "two rows total (one non-null, one null)")
+    assert(collected(4).asInstanceOf[Long] >= 5L, "size must account for the 5-byte payload")
   }
 
   test("row path stats: orderable types produce correct min/max bounds") {
@@ -2028,7 +2042,7 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
             // read must equal the uncached baseline. checkAnswer compares the geometry/geography
             // value, so a corrupted WKB or dropped SRID would fail here.
             checkAnswer(df, expected)
-            // Stats: geometry/geography reuse BinaryColumnStats, so no min/max bounds but a
+            // Stats: geometry/geography use GeoColumnStats, so no min/max bounds but a
             // null count of 1.
             val stats = cachedStats(df)
             assert(stats.isNullAt(0), s"$dt should have null lower bound")
@@ -2070,6 +2084,32 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         s"expected [hello, world] but got [${values.mkString(", ")}]")
     } finally {
       cached.unpersist()
+    }
+  }
+
+  test("CalendarInterval microsecond overflow produces a clear diagnostic") {
+    // Arrow stores intervals in nanoseconds, so a CalendarInterval whose microseconds exceed
+    // Long.MaxValue/1000 overflows when written. The serializer must surface a clear error naming
+    // the type/limit rather than an opaque "long overflow" ArithmeticException. A normal-range
+    // value must still cache fine.
+    val normal = new CalendarInterval(1, 2, 3000000L)
+    val normalDf = singlePartDf(Seq(normal), CalendarIntervalType).cache()
+    try {
+      assert(normalDf.count() == 1)
+    } finally {
+      normalDf.unpersist()
+      InMemoryRelation.clearSerializer()
+    }
+
+    val overflow = new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L)
+    val overflowDf = singlePartDf(Seq(overflow), CalendarIntervalType).cache()
+    try {
+      val e = intercept[Exception](overflowDf.count())
+      assert(Utils.exceptionString(e).contains("Arrow cache cannot represent a CalendarInterval"),
+        s"expected a clear CalendarInterval overflow message, got: ${Utils.exceptionString(e)}")
+    } finally {
+      overflowDf.unpersist()
+      InMemoryRelation.clearSerializer()
     }
   }
 
@@ -2195,6 +2235,31 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         cached.unpersist()
       }
     }
+  }
+
+  test("drainAndClosePrefetch closes the produced root even on an interrupted thread") {
+    // Reproduces the killed-task race: the cleanup listener can run with the task thread already
+    // interrupted. drainAndClosePrefetch must still join the worker and close the root it produced,
+    // so the child allocator can be closed without "Memory was leaked by query", and must restore
+    // the interrupt afterwards.
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      StructType(Seq(StructField("v", IntegerType))), "UTC", false, false)
+    val alloc = ArrowUtils.rootAllocator.newChildAllocator("test-drain-interrupt", 0, Long.MaxValue)
+    val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    val future = executor.submit(new java.util.concurrent.Callable[VectorSchemaRoot] {
+      override def call(): VectorSchemaRoot = {
+        val root = VectorSchemaRoot.create(arrowSchema, alloc)
+        root.allocateNew() // allocate buffers so a leak would be detected on alloc.close()
+        root
+      }
+    })
+    // Interrupt the current thread before cleanup, then assert cleanup still drains/closes.
+    Thread.currentThread().interrupt()
+    val result = ArrowCachedBatchSerializer.drainAndClosePrefetch(executor, future)
+    assert(result == null)
+    assert(Thread.interrupted(), "the interrupt status must be restored (and cleared here)")
+    // If the produced root was not closed, this throws "Memory was leaked by query".
+    alloc.close()
   }
 }
 

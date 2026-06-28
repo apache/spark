@@ -31,7 +31,7 @@ import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
@@ -63,16 +63,21 @@ import org.apache.spark.util.Utils
  */
 class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 
-  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = {
-    // Check if all data types in the schema are supported by Arrow
-    schema.forall(attr => ArrowUtils.isSupportedByArrow(attr.dataType))
-  }
+  // supportsColumnarInput selects the columnar-vs-row input path; it does not gate which schemas
+  // this serializer accepts. The cache framework has no per-type fallback to another serializer
+  // (whatever spark.sql.cache.serializer selects handles every cached relation), so returning
+  // false here only routes input through convertInternalRowToCachedBatch, which is still this
+  // serializer. Type support is enforced once per partition by checkSupportedSchema below; the
+  // only real precondition for columnar input is that the plan can produce columnar output, which
+  // InMemoryRelation already checks via cachedPlan.supportsColumnar before calling this.
+  override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = true
 
   override def convertInternalRowToCachedBatch(
       input: RDD[InternalRow],
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
+    ArrowCachedBatchSerializer.checkSupportedSchema(schema)
     // Capture config values on driver before RDD transformation
     val sparkSchema = DataTypeUtils.fromAttributes(schema)
     val maxRecordsPerBatch = conf.arrowMaxRecordsPerBatch
@@ -99,6 +104,7 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
       schema: Seq[Attribute],
       storageLevel: StorageLevel,
       conf: SQLConf): RDD[CachedBatch] = {
+    ArrowCachedBatchSerializer.checkSupportedSchema(schema)
     // Capture config values on driver before RDD transformation
     val sparkSchema = DataTypeUtils.fromAttributes(schema)
     val timeZoneId = conf.sessionLocalTimeZone
@@ -217,6 +223,49 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
  */
 private object ArrowCachedBatchSerializer {
 
+  /**
+   * Run an Arrow write block, translating a CalendarInterval microsecond overflow into a clear
+   * error. Arrow's IntervalMonthDayNano representation is nanosecond-based, so writing a
+   * CalendarInterval multiplies its microseconds by 1000 with Math.multiplyExact; Spark allows the
+   * full Long microsecond domain, so values beyond Long.MaxValue/1000 overflow and otherwise abort
+   * with an opaque "long overflow" ArithmeticException. The catch is only installed when the schema
+   * actually contains a CalendarInterval column (hasInterval), so there is no per-row cost and no
+   * effect on schemas without intervals; the try is entered once per batch, not per row.
+   */
+  def withIntervalOverflowTranslation[T](hasInterval: Boolean)(block: => T): T = {
+    if (!hasInterval) {
+      block
+    } else {
+      try {
+        block
+      } catch {
+        case e: ArithmeticException =>
+          throw SparkException.internalError(
+            "Arrow cache cannot represent a CalendarInterval whose microseconds exceed " +
+              "+/-(Long.MaxValue / 1000): Arrow stores intervals in nanoseconds and the " +
+              s"conversion overflows. Original error: ${e.getMessage}")
+      }
+    }
+  }
+
+  /** Whether the schema has a top-level CalendarInterval column (the only overflow-prone type). */
+  def hasCalendarInterval(schema: Seq[Attribute]): Boolean =
+    schema.exists(_.dataType == CalendarIntervalType)
+
+  /**
+   * Fail fast, once per partition on the driver-facing entry points, if any column type cannot be
+   * represented by the Arrow cache. This is the actual capability gate (supportsColumnarInput only
+   * chooses the input path). Without it, an unsupported type would otherwise surface as a less
+   * obvious failure deeper in schema conversion or statistics collection.
+   */
+  def checkSupportedSchema(schema: Seq[Attribute]): Unit = {
+    schema.find(attr => !ArrowUtils.isSupportedByArrow(attr.dataType)).foreach { attr =>
+      throw SparkException.internalError(
+        s"Arrow cache does not support column '${attr.name}' of type ${attr.dataType.sql}. " +
+          "Use the default cache serializer for this data, or cast the column to a supported type.")
+    }
+  }
+
   // scalastyle:off caselocale
   def createCompressionCodec(
       codecName: String,
@@ -259,30 +308,45 @@ private object ArrowCachedBatchSerializer {
       executor: java.util.concurrent.ExecutorService,
       future: java.util.concurrent.Future[VectorSchemaRoot]): java.util.concurrent.Future[
         VectorSchemaRoot] = {
-    if (executor != null) {
-      // Stop accepting new tasks and wait for the in-flight deserialization to finish, rather than
-      // interrupting it: an interrupt mid-allocation can race allocator shutdown and still leak.
-      executor.shutdown()
-      try {
-        executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.NANOSECONDS)
-      } catch {
-        case _: InterruptedException =>
-          Thread.currentThread().interrupt()
-          executor.shutdownNow()
-      }
-    }
-    if (future != null) {
-      try {
-        // The worker has terminated, so this does not block; close the root it produced.
-        val root = future.get()
-        if (root != null) {
-          root.close()
+    // Drain and join the worker uninterruptibly, then close any root it produced, before the
+    // caller closes the allocator. This runs from a task-completion listener, which can fire with
+    // the task thread already interrupted (e.g. a killed task). If we let awaitTermination or
+    // future.get observe the interrupt and bail early, the worker could still be allocating into,
+    // or have already returned, a root that we then neither join nor close -- and the subsequent
+    // allocator.close() would race the worker or fail with "Memory was leaked by query". So we
+    // clear the interrupt for the duration and restore it only at the end.
+    val wasInterrupted = Thread.interrupted()
+    try {
+      if (executor != null) {
+        executor.shutdown()
+        var terminated = false
+        while (!terminated) {
+          try {
+            terminated =
+              executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.NANOSECONDS)
+          } catch {
+            // Re-clear and keep waiting: we must not leave the worker running.
+            case _: InterruptedException => Thread.interrupted()
+          }
         }
-      } catch {
-        // The batch was never produced (cancelled/failed); nothing to close.
-        case _: java.util.concurrent.CancellationException =>
-        case _: java.util.concurrent.ExecutionException =>
-        case _: InterruptedException => Thread.currentThread().interrupt()
+      }
+      if (future != null) {
+        try {
+          // The worker has terminated, so this does not block; close the root it produced.
+          val root = future.get()
+          if (root != null) {
+            root.close()
+          }
+        } catch {
+          // The batch was never produced (cancelled/failed); nothing to close.
+          case _: java.util.concurrent.CancellationException =>
+          case _: java.util.concurrent.ExecutionException =>
+          case _: InterruptedException => // already terminated; nothing in flight
+        }
+      }
+    } finally {
+      if (wasInterrupted) {
+        Thread.currentThread().interrupt()
       }
     }
     null
@@ -308,10 +372,12 @@ private object ArrowCachedBatchSerializer {
       case _: DayTimeIntervalType => new LongColumnStats  // stored as Long
       case _: TimeType => new LongColumnStats  // Time is stored as Long (nanoseconds)
       case VariantType => new VariantColumnStats
-      // Geometry/Geography are stored as binary (WKB) internally, so reuse BinaryColumnStats
-      // to collect size/count without min/max bounds. They are AtomicTypes that ColumnType
-      // (used by ObjectColumnStats) does not handle, so they must be matched explicitly here.
-      case _: GeometryType | _: GeographyType => new BinaryColumnStats
+      // Geometry/Geography collect size/count without min/max bounds. Their physical value is a
+      // BinaryView (not Array[Byte]), so GeoColumnStats reads it via getBinaryView rather than
+      // BinaryColumnStats' getBinary, which would throw ClassCastException on a row that stores a
+      // BinaryView. They are also AtomicTypes that ColumnType (used by ObjectColumnStats) does not
+      // handle, so they must be matched explicitly here.
+      case _: GeometryType | _: GeographyType => new GeoColumnStats
       // Unwrap UDTs to the same collector their underlying type would use. isSupportedByArrow
       // accepts a UDT whenever its sqlType is supported (including Variant/Geometry/Geography),
       // but ObjectColumnStats -> ColumnType(udt.sqlType) only unwraps one level and has no case
@@ -780,6 +846,9 @@ private class InternalRowToArrowCachedBatchIterator(
     ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
   }.toArray
 
+  // Computed once: only CalendarInterval columns can overflow when written to Arrow nanoseconds.
+  private val hasCalendarInterval = ArrowCachedBatchSerializer.hasCalendarInterval(schema)
+
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
@@ -804,33 +873,33 @@ private class InternalRowToArrowCachedBatchIterator(
 
     Utils.tryWithSafeFinally {
       // Write rows to Arrow vectors and collect statistics incrementally, stopping when either the
-      // record-count or estimated-byte limit is reached (whichever is hit first), so wide rows
-      // cannot form multi-gigabyte batches that exhaust memory or overflow Arrow's 32-bit
-      // variable-width offsets. A nonpositive limit means that limit is unlimited, matching
-      // ArrowConverters; the `<= 0` guards also keep the loop from emitting empty batches forever.
-      // At least one row is always written so a single oversized row still makes progress.
-      var estimatedBytes = 0L
+      // record-count or byte limit is reached (whichever is hit first), so wide rows cannot form
+      // multi-gigabyte batches that exhaust memory or overflow Arrow's 32-bit variable-width
+      // offsets. A nonpositive limit means that limit is unlimited; the `<= 0` guards also keep the
+      // loop from emitting empty batches forever. At least one row is always written so a single
+      // oversized row still makes progress. The byte limit is measured from the actual bytes
+      // already written to the Arrow vectors (arrowWriter.sizeInBytes), which is accurate for every
+      // row type -- a row-size estimate would undercount large values in a GenericInternalRow (e.g.
+      // a multi-megabyte string) and let the batch grow past the limit.
       def recordLimitReached: Boolean = maxRecordsPerBatch > 0 && rowCount >= maxRecordsPerBatch
-      def byteLimitReached: Boolean = maxBytesPerBatch > 0 && estimatedBytes >= maxBytesPerBatch
-      while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
-        val row = rowIter.next()
-        arrowWriter.write(row)
+      def byteLimitReached: Boolean =
+        maxBytesPerBatch > 0 && arrowWriter.sizeInBytes() >= maxBytesPerBatch
+      ArrowCachedBatchSerializer.withIntervalOverflowTranslation(hasCalendarInterval) {
+        while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
+          val row = rowIter.next()
+          arrowWriter.write(row)
 
-        // Collect statistics for this row
-        var i = 0
-        while (i < statsCollectors.length) {
-          statsCollectors(i).gatherStats(row, i)
-          i += 1
+          // Collect statistics for this row
+          var i = 0
+          while (i < statsCollectors.length) {
+            statsCollectors(i).gatherStats(row, i)
+            i += 1
+          }
+
+          rowCount += 1
         }
-
-        estimatedBytes += (row match {
-          case ur: UnsafeRow => ur.getSizeInBytes.toLong
-          // Estimate non-Unsafe rows assuming 16 bytes per value, matching ArrowConverters.
-          case ir: InternalRow => ir.numFields.toLong * 16
-        })
-        rowCount += 1
+        arrowWriter.finish()
       }
-      arrowWriter.finish()
 
       // Get the Arrow RecordBatch with compression
       val recordBatch = unloader.getRecordBatch()
@@ -879,6 +948,9 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     Long.MaxValue)
 
   private val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, false, false)
+
+  // Computed once: only CalendarInterval columns can overflow when written to Arrow nanoseconds.
+  private val hasCalendarInterval = ArrowCachedBatchSerializer.hasCalendarInterval(schema)
 
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
@@ -968,11 +1040,13 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
     Utils.tryWithSafeFinally {
-      val rowIterator = batch.rowIterator().asScala
-      while (rowIterator.hasNext) {
-        arrowWriter.write(rowIterator.next())
+      ArrowCachedBatchSerializer.withIntervalOverflowTranslation(hasCalendarInterval) {
+        val rowIterator = batch.rowIterator().asScala
+        while (rowIterator.hasNext) {
+          arrowWriter.write(rowIterator.next())
+        }
+        arrowWriter.finish()
       }
-      arrowWriter.finish()
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {

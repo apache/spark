@@ -1,4 +1,23 @@
-# Apache Arrow Cache Format for Spark
+---
+layout: global
+title: Apache Arrow Cache Format
+displayTitle: Apache Arrow Cache Format
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+---
 
 ## Overview
 
@@ -137,7 +156,12 @@ Arrow cache supports the following data types:
 ### Interval Types
 - YearMonthIntervalType
 - DayTimeIntervalType
-- CalendarIntervalType
+- CalendarIntervalType (see the value-range note below)
+
+`CalendarIntervalType` is stored through Arrow's nanosecond-based interval representation, so its
+microsecond component must fit within +/-(`Long.MaxValue` / 1000). Caching a value beyond that range
+fails with a clear error rather than silently corrupting the value. The default cache serializer
+does not have this restriction.
 
 ### String and Binary
 - StringType (including collated strings)
@@ -190,22 +214,29 @@ df.filter("id > 5000000").count()
 
 ## Memory Management
 
-Arrow cache uses off-heap memory managed by Apache Arrow allocators. This is a fundamental design choice in Apache Arrow and is not configurable for on-heap memory.
+The cached data itself lives on the JVM heap, not off-heap. Each cached batch is stored as a
+serialized Arrow IPC byte array (`Array[Byte]`), and the default `Dataset.cache()` storage level is
+the deserialized `MEMORY_AND_DISK`, so those bytes are retained as ordinary heap objects (and spill
+to disk under memory pressure). Arrow's off-heap allocators are used only for the transient
+`VectorSchemaRoot`s created while encoding a batch for caching and while decoding a batch on read;
+these are released as soon as the encode/decode completes.
 
-**Memory Efficiency**:
-- Despite requiring off-heap memory, Arrow cache is often **more memory-efficient** than default cache:
-  - Efficient compression with zstd/lz4 codecs
-  - Compact columnar format without Java object overhead
-  - Better compression ratios, especially for strings and complex types
-- If you have limited off-heap memory, increase `spark.executor.memoryOverhead` to allocate more off-heap memory
+**Sizing implications**:
+- Size the JVM heap (executor memory) for the cached data, since that is where it resides. This is
+  the main knob for cache capacity.
+- `spark.executor.memoryOverhead` covers the transient off-heap encode/decode buffers, which are
+  proportional to a single batch, not to the total cached size. It generally does not need to grow
+  with the size of the cache.
+- Arrow cache is often **more memory-efficient** than the default cache for the heap-resident bytes:
+  efficient zstd/lz4 compression, a compact columnar layout without per-value Java object overhead,
+  and better compression ratios for strings and complex types.
 
 **Memory Cleanup**:
-Arrow memory is automatically cleaned up when:
-- Tasks complete
-- DataFrames are unpersisted
-- SparkSession is stopped
+- The transient off-heap encode/decode roots are released when each task completes.
+- The heap-resident cached bytes are released when the DataFrame is unpersisted or evicted, like any
+  other cached block.
 
-You can monitor Arrow memory usage through Spark metrics and the Spark UI.
+You can monitor cache block sizes through the Storage tab in the Spark UI.
 
 ## Limitations and Considerations
 
@@ -266,10 +297,14 @@ If Arrow cache is slower than expected:
    spark.conf.set("spark.sql.inMemoryColumnarStorage.enableVectorizedReader", "true")
    ```
 
-2. Try different compression codec:
+2. Reduce or disable compression (decompression is part of every read):
    ```scala
-   spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")  // Faster than zstd
+   spark.conf.set("spark.sql.execution.arrow.compression.zstd.level", "1") // faster, less ratio
+   // or, for read-heavy workloads where memory is not the constraint:
+   spark.conf.set("spark.sql.execution.arrow.compression.codec", "none")
    ```
+   Note: `lz4` is not recommended unless the native LZ4 library is on the classpath. Without it,
+   Arrow falls back to the pure-Java Commons Compress LZ4, which is far slower than zstd.
 
 3. Increase batch size (if memory allows):
    ```scala
@@ -331,9 +366,9 @@ object ArrowCacheExample {
 
 1. **Use with Columnar Sources**: Maximum benefit with Parquet/ORC
 2. **Enable Statistics**: Let Arrow cache collect min/max for filter pushdown
-3. **Monitor Memory**: Watch off-heap memory usage in production
+3. **Monitor Memory**: Watch cache block sizes in the Spark UI Storage tab; the cached data lives on the JVM heap
 4. **Test First**: Benchmark your workload before production deployment
-5. **Compression**: Start with `lz4` for balanced performance
+5. **Compression**: Start with `none` for read-heavy workloads, or `zstd` (default level 3) when memory matters; avoid `lz4` unless the native LZ4 library is on the classpath
 6. **Vectorization**: Enable vectorized reader for primitive-heavy workloads
 
 ## Further Reading
