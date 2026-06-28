@@ -3907,18 +3907,6 @@ class DataSourceV2SQLSuiteV1Filter
       }
     }
 
-    val ts1 = DateTimeUtils.stringToTimestampAnsi(
-      UTF8String.fromString("2019-01-29 00:37:58"),
-      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-    val t3 = s"testcat.t$ts1"
-    withTable(t3) {
-      sql(s"CREATE TABLE $t3 (id int) USING foo")
-      sql(s"INSERT INTO $t3 VALUES (5), (6)")
-
-      checkAnswer(sql("SELECT * FROM t@20190129003758000"), Seq(Row(5), Row(6)))
-      checkAnswer(spark.read.table("t@20190129003758000"), Seq(Row(5), Row(6)))
-    }
-
     intercept[ParseException](sql("SELECT * FROM t@foo"))
     intercept[ParseException](spark.read.table("t@foo"))
     withTable("testcat.`weird@v1`") {

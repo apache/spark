@@ -1244,14 +1244,12 @@ tableIdentifier
     ;
 
 temporalTableIdentifier
-    : id=multipartIdentifier AT_SIGN timestamp=INTEGER_VALUE
-    | id=multipartIdentifier AT_VERSION version
+    : id=multipartIdentifier AT_VERSION version
     | id=multipartIdentifier
     ;
 
 temporalTableIdentifierReference
-    : identifierReference AT_SIGN timestamp=INTEGER_VALUE
-    | identifierReference AT_VERSION version
+    : identifierReference AT_VERSION version
     | identifierReference
     ;
 

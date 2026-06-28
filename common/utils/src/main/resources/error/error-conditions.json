@@ -5062,12 +5062,6 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT" : {
-    "message" : [
-      "The provided timestamp <timestamp> doesn't match the expected syntax <format>."
-    ],
-    "sqlState" : "22000"
-  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
