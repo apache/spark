@@ -628,6 +628,35 @@ trait FileSourceAggregatePushDownSuite
       LocalTime.of(1, 2, 3, 123456789), LocalTime.of(23, 59, 59, 999999999))
   }
 
+  test("SPARK-57568: aggregate push down - TIME over an empty file") {
+    // Aggregating a TIME column over zero rows: MIN/MAX return NULL and COUNT returns 0 on every
+    // engine. This pins the no-data path, which the precision test above (always >= 1 row) does
+    // not reach. An all-null but non-empty file is intentionally not asserted here: that is
+    // pre-existing, type-agnostic behavior shared by all push-down types (Parquet rejects MIN/MAX
+    // push-down on an all-null block while ORC returns NULL), unchanged by this PR.
+    Seq(6, 9).foreach { precision =>
+      val schema = StructType(Seq(StructField("TimeCol", TimeType(precision))))
+      val rdd = sparkContext.parallelize(Seq.empty[Row])
+      withTempPath { file =>
+        spark.createDataFrame(rdd, schema).write.format(format).save(file.getCanonicalPath)
+        withTempView("time_empty") {
+          spark.read.format(format).load(file.getCanonicalPath)
+            .createOrReplaceTempView("time_empty")
+          Seq("false", "true").foreach { enableVectorizedReader =>
+            withSQLConf(aggPushDownEnabledKey -> "true",
+              vectorizedReaderEnabledKey -> enableVectorizedReader) {
+              val df = sql(
+                "SELECT min(TimeCol), max(TimeCol), count(TimeCol), count(*) FROM time_empty")
+              checkPushedInfo(df,
+                "PushedAggregation: [MIN(TimeCol), MAX(TimeCol), COUNT(TimeCol), COUNT(*)]")
+              checkAnswer(df, Seq(Row(null, null, 0, 0)))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-57568: aggregate not push down - TIME with filter or expression") {
     val schema = StructType(Seq(StructField("TimeCol", TimeType(6))))
     val rows = Seq(
