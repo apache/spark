@@ -179,6 +179,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       transform(proto.Relation.newBuilder.setRead(streamingRead).build())
     }
     assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
+
+    // A non-time-travel '@' suffix is a parse error.
+    val badRead = read.toBuilder
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name@foo").build())
+      .build()
+    val pe = intercept[AnalysisException] {
+      transform(proto.Relation.newBuilder.setRead(badRead).build())
+    }
+    assert(pe.getCondition === "PARSE_SYNTAX_ERROR")
+
+    // A backticked '@' name stays a literal table name.
+    val quotedRead = read.toBuilder
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("`name@v1`").build())
+      .build()
+    transform(proto.Relation.newBuilder.setRead(quotedRead).build()) match {
+      case u: UnresolvedRelation => assert(u.multipartIdentifier === Seq("name@v1"))
+      case other => fail(s"Expected a literal UnresolvedRelation but got: $other")
+    }
   }
 
   test("Simple Table with options") {

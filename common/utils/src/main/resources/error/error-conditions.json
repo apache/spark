@@ -5010,12 +5010,6 @@
     ],
     "sqlState" : "42K0F"
   },
-  "INVALID_TIMESTAMP_FORMAT" : {
-    "message" : [
-      "The provided timestamp <timestamp> doesn't match the expected syntax <format>."
-    ],
-    "sqlState" : "22000"
-  },
   "INVALID_TIMESTAMP_LITERAL_PRECISION" : {
     "message" : [
       "The timestamp literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a timestamp literal is 9 (nanoseconds)."
@@ -5067,6 +5061,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT" : {
+    "message" : [
+      "The provided timestamp <timestamp> doesn't match the expected syntax <format>."
+    ],
+    "sqlState" : "22000"
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [

@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, C
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
@@ -1675,7 +1675,7 @@ class SparkConnectPlanner(
           parser.parseTemporalTableIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         if (temporalIdent.isTemporal && rel.getIsStreaming) {
           throw QueryCompilationErrors.timeTravelUnsupportedError(
-            QuotingUtils.quoteNameParts(temporalIdent.nameParts))
+            QueryCompilationErrors.toSQLId(temporalIdent.nameParts))
         }
         val relation = UnresolvedRelation(
           temporalIdent.nameParts,

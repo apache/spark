@@ -2217,6 +2217,12 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("SELECT * FROM `t@v1`",
       Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("t@v1"))))
 
+    // A non-time-travel '@' suffix is always a parse error.
+    Seq("SELECT * FROM a@foo", "SELECT * FROM a@", "SELECT * FROM a@v").foreach { q =>
+      assert(intercept[ParseException](parsePlan(q)).getCondition == "PARSE_SYNTAX_ERROR",
+        s"expected PARSE_SYNTAX_ERROR for: $q")
+    }
+
     checkError(
       exception = parseException("SELECT * FROM t@v1 VERSION AS OF 2"),
       condition = "MULTIPLE_TIME_TRAVEL_SPEC",
@@ -2225,9 +2231,15 @@ class PlanParserSuite extends AnalysisTest {
 
     checkError(
       exception = parseException("SELECT * FROM t@123"),
-      condition = "INVALID_TIMESTAMP_FORMAT",
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
       parameters = Map("timestamp" -> "123", "format" -> "yyyyMMddHHmmssSSS"),
       context = ExpectedContext(fragment = "t@123", start = 14, stop = 18))
+
+    checkError(
+      exception = parseException("SELECT * FROM t@20191301000000000"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20191301000000000", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20191301000000000", start = 14, stop = 32))
 
     assert(intercept[ParseException] {
       parsePlan("INSERT INTO t@v1 VALUES (1)")
@@ -2254,7 +2266,9 @@ class PlanParserSuite extends AnalysisTest {
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     assert(parseTemporalTableIdentifier("t@20190129003758000") ===
       TemporalIdentifier(Seq("t"), Some(Literal(micros, TimestampType)), None))
-    intercept[ParseException](parseTemporalTableIdentifier("a.b@x"))
+    Seq("a.b@x", "a@foo", "a@", "a@v").foreach { s =>
+      intercept[ParseException](parseTemporalTableIdentifier(s))
+    }
   }
 
   test("CHANGES clause - version range") {

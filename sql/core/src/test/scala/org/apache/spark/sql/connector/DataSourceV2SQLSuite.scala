@@ -3919,6 +3919,15 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(spark.read.table("t@20190129003758000"), Seq(Row(5), Row(6)))
     }
 
+    intercept[ParseException](sql("SELECT * FROM t@foo"))
+    intercept[ParseException](spark.read.table("t@foo"))
+    withTable("testcat.`weird@v1`") {
+      sql("CREATE TABLE testcat.`weird@v1` (id int) USING foo")
+      sql("INSERT INTO testcat.`weird@v1` VALUES (42)")
+      checkAnswer(sql("SELECT * FROM `weird@v1`"), Row(42))
+      checkAnswer(spark.read.table("`weird@v1`"), Row(42))
+    }
+
     withTempView("v") {
       spark.range(1).createOrReplaceTempView("v")
       checkError(

@@ -22,11 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * Result of parsing a table name that may carry an '@' time travel suffix:
- * `name@v<version>` reads a specific version of the table, and `name@<yyyyMMddHHmmssSSS>`
- * reads the table as of a timestamp. `timestamp` is an already-converted TimestampType
- * literal (the digits are interpreted in the session time zone at parse time). At most one
- * of `timestamp` and `version` is set.
+ * Result of parsing a table name that may carry an '@' time travel suffix: `name@v<version>`
+ * or `name@<yyyyMMddHHmmssSSS>`. At most one of `timestamp` and `version` is set.
  */
 case class TemporalIdentifier(
     nameParts: Seq[String],
@@ -39,4 +36,9 @@ case class TemporalIdentifier(
   def wrapTimeTravel(plan: LogicalPlan): LogicalPlan = {
     if (isTemporal) RelationTimeTravel(plan, timestamp, version) else plan
   }
+}
+
+object TemporalIdentifier {
+  /** The fixed timestamp format accepted in the suffix. */
+  val TimestampFormat: String = "yyyyMMddHHmmssSSS"
 }

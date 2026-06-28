@@ -2641,23 +2641,30 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val ttCtx = ctx.temporalTableIdentifierReference
-    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.timestamp, ttCtx.version)
-    val hasAtSpec = atTimestamp.isDefined || atVersion.isDefined
-    if (hasAtSpec && ctx.temporalClause != null) {
-      withOrigin(ctx.temporalClause) {
-        throw QueryParsingErrors.multipleTimeTravelSpec(ctx.temporalClause)
-      }
-    }
     val relation = createUnresolvedRelation(ttCtx.identifierReference, Option(ctx.optionsClause))
-    val withAtSpec = if (hasAtSpec) {
-      RelationTimeTravel(relation, atTimestamp, atVersion)
-    } else {
-      relation
-    }
-    val table = mayApplyAliasPlan(
-      ctx.tableAlias, withAtSpec.optionalMap(ctx.temporalClause)(withTimeTravel))
+    val withTimeTravelSpec = withTableTimeTravel(relation, ttCtx, ctx.temporalClause)
+    val table = mayApplyAliasPlan(ctx.tableAlias, withTimeTravelSpec)
     val sample = table.optionalMap(ctx.sample)(withSample)
     sample.optionalMap(ctx.watermarkClause)(withWatermark)
+  }
+
+  /**
+   * Applies the table-name '@' time travel suffix and/or the `AS OF` clause to `relation`.
+   */
+  private def withTableTimeTravel(
+      relation: LogicalPlan,
+      ttCtx: TemporalTableIdentifierReferenceContext,
+      clause: TemporalClauseContext): LogicalPlan = {
+    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.timestamp, ttCtx.version)
+    val hasAtSpec = atTimestamp.isDefined || atVersion.isDefined
+    if (hasAtSpec && clause != null) {
+      withOrigin(clause) {
+        throw QueryParsingErrors.multipleTimeTravelSpec(clause)
+      }
+    }
+    val withAtSpec =
+      if (hasAtSpec) RelationTimeTravel(relation, atTimestamp, atVersion) else relation
+    withAtSpec.optionalMap(clause)(withTimeTravel)
   }
 
   override def visitTemporalTableIdentifier(
@@ -2666,15 +2673,14 @@ class AstBuilder extends DataTypeAstBuilder
     TemporalIdentifier(visitMultipartIdentifier(ctx.id), timestamp, version)
   }
 
-  private val atSyntaxTimestampFormat = "yyyyMMddHHmmssSSS"
-
   /**
    * Parse the digits of an '@' time travel timestamp (format yyyyMMddHHmmssSSS) to
    * microseconds since epoch in the session time zone.
    */
   private def parseAtSyntaxTimestamp(text: String, ctx: ParserRuleContext): Long = {
-    if (text.length != atSyntaxTimestampFormat.length) {
-      throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, atSyntaxTimestampFormat, ctx)
+    val format = TemporalIdentifier.TimestampFormat
+    if (text.length != format.length) {
+      throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
     }
     try {
       val localDateTime = LocalDateTime.of(
@@ -2689,7 +2695,7 @@ class AstBuilder extends DataTypeAstBuilder
         localDateTime.atZone(getZoneId(conf.sessionLocalTimeZone)).toInstant)
     } catch {
       case _: DateTimeException =>
-        throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, atSyntaxTimestampFormat, ctx)
+        throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
     }
   }
 
