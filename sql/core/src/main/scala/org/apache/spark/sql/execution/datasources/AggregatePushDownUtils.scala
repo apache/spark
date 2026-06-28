@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggr
 import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
-import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ByteType, DateType, DoubleType, FloatType, IntegerType, LongType, ShortType, StructField, StructType, TimeType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
@@ -74,8 +74,10 @@ object AggregatePushDownUtils {
         // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
         // could be Spark StringType, BinaryType or DecimalType.
         // not push down for ORC with same reason.
+        // TIME is INT64/LONG-backed with a defined sort order, so real min/max
+        // statistics exist in the footer for both Parquet and ORC.
         case BooleanType | ByteType | ShortType | IntegerType
-             | LongType | FloatType | DoubleType | DateType =>
+             | LongType | FloatType | DoubleType | DateType | _: TimeType =>
           finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
           true
         case _ =>
