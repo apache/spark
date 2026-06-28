@@ -3705,9 +3705,7 @@ class FunctionsTestsMixin:
         )
 
     def test_session_window(self):
-        df = self.spark.createDataFrame(
-            [(datetime.datetime(2016, 3, 11, 9, 0, 7),)], ["date"]
-        )
+        df = self.spark.createDataFrame([(datetime.datetime(2016, 3, 11, 9, 0, 7),)], ["date"])
         expected_15_seconds = [
             Row(
                 session_window=Row(
