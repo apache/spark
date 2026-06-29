@@ -700,7 +700,10 @@ object SQLConf {
       .doc("When statistics are not available or configured not to be used, this config will be " +
         "used as the fallback filter ratio for computing the data size of the partitioned table " +
         "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-        "subquery as the pruning filter if broadcast reuse is not applicable.")
+        "subquery as the pruning filter if broadcast reuse is not applicable. This fallback " +
+        "ratio only applies when the filtering side has a selective predicate; a materialized " +
+        "filtering side without one obtains dynamic partition pruning through broadcast reuse " +
+        "only.")
       .version("3.0.0")
       .doubleConf
       .createWithDefault(0.5)
