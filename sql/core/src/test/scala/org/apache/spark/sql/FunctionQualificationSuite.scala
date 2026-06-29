@@ -1321,6 +1321,34 @@ class FunctionQualificationSuite extends SharedSparkSession {
     // Extension table functions (stored as builtins) also resolve unqualified.
     checkAnswer(sql("SELECT * FROM test_ext_table_func()"), Seq(Row(0L), Row(1L), Row(2L)))
   }
+
+  test("SECTION 17c: SPARK-57758 fast-path is bypassed when a catalog precedes system.builtin") {
+    // SPARK-57758 regression guard: the built-in fast-path is safe only when `system.builtin` is
+    // the FIRST path entry. A custom `SET PATH` can place a catalog/schema before `system.builtin`,
+    // and an unqualified name found there must win over the built-in -- the fast-path must not
+    // short-circuit to the built-in. (The default `sessionOrder` modes always keep catalogs after
+    // `system.builtin`, so only a custom SET PATH exercises this.)
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_abs_shadow") {
+        sql("CREATE DATABASE path_abs_shadow")
+        // Persistent function shadowing the built-in `abs`.
+        sql("CREATE FUNCTION path_abs_shadow.abs(x INT) RETURNS INT RETURN x * 10")
+        try {
+          // Catalog before system.builtin: the persistent `abs` must win (50), not the
+          // built-in (5). Pre-fix, the fast-path returned the built-in here.
+          sql("SET PATH = spark_catalog.path_abs_shadow, system.builtin")
+          checkAnswer(sql("SELECT abs(5)"), Row(50))
+          // system.builtin first: the fast-path is enabled and resolves the built-in (abs(-5) = 5),
+          // confirming the optimization still applies when builtin leads the path.
+          sql("SET PATH = system.builtin, spark_catalog.path_abs_shadow")
+          checkAnswer(sql("SELECT abs(-5)"), Row(5))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_abs_shadow.abs")
+        }
+      }
+    }
+  }
 }
 
 /**
