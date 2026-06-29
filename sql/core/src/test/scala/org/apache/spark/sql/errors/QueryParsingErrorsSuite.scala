@@ -788,4 +788,48 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
         start = 33,
         stop = 41))
   }
+
+  test("MISSING_CLAUSES_FOR_OPERATION: metric view creation without WITH METRICS") {
+    val query =
+      """CREATE VIEW mv
+        |LANGUAGE YAML
+        |AS
+        |$$
+        |version: 0.1
+        |$$""".stripMargin
+
+    checkError(
+      exception = parseException(query),
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      sqlState = "42601",
+      parameters = Map(
+        "clauses" -> "WITH METRICS",
+        "operation" -> "METRIC VIEW CREATION"),
+      context = ExpectedContext(
+        fragment = query,
+        start = 0,
+        stop = query.length - 1))
+  }
+
+  test("MISSING_CLAUSES_FOR_OPERATION: metric view creation without LANGUAGE") {
+    val query =
+      """CREATE VIEW mv
+        |WITH METRICS
+        |AS
+        |$$
+        |version: 0.1
+        |$$""".stripMargin
+
+    checkError(
+      exception = parseException(query),
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      sqlState = "42601",
+      parameters = Map(
+        "clauses" -> "LANGUAGE",
+        "operation" -> "METRIC VIEW CREATION"),
+      context = ExpectedContext(
+        fragment = query,
+        start = 0,
+        stop = query.length - 1))
+  }
 }
