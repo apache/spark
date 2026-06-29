@@ -470,7 +470,11 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
           case gsf: GetStructField => gsf.metadata
           case _ => Metadata.empty
         }
-        StructField(name.toString, expr.dataType, expr.nullable, metadata)
+        // A null field name is invalid input (checkInputDataTypes flags it as UNEXPECTED_NULL),
+        // but dataType is evaluated eagerly by the encoder before type checking; keep it null-safe
+        // and preserve the null name rather than throwing a NullPointerException (SPARK-57736).
+        StructField(if (name == null) null else name.toString, expr.dataType, expr.nullable,
+          metadata)
     }
     StructType(fields)
   }
