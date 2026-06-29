@@ -108,7 +108,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
         .filter(_ => userProvidedGenCols.exists(n => resolver(n, col.name)))
         .map { genExpr =>
           val catalystExpr = buildGenerationCatalystExpression(genExpr)
-          val colRef = UnresolvedAttribute(col.name)
+          val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
           CheckInvariant(

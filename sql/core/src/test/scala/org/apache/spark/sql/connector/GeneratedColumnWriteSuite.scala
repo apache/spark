@@ -59,6 +59,233 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  private def sqlDate(str: String): java.sql.Date = java.sql.Date.valueOf(str)
+
+  private def sqlTimestamp(str: String): java.sql.Timestamp = java.sql.Timestamp.valueOf(str)
+
+  // Default Spark DSV2 generated-column write table used by the write-path cases below.
+  private def createDefaultGeneratedColumnWriteTable(tableName: String): Unit = {
+    sql(s"""CREATE TABLE testcat.$tableName(
+           |  c1 BIGINT,
+           |  c2_g BIGINT GENERATED ALWAYS AS (c1 + 10),
+           |  c3_p STRING,
+           |  c4_g_p DATE GENERATED ALWAYS AS (CAST(c5 AS DATE)),
+           |  c5 TIMESTAMP,
+           |  c6 INT,
+           |  c7_g_p INT GENERATED ALWAYS AS (c6 * 10),
+           |  c8 DATE
+           |) USING foo PARTITIONED BY (c3_p, c4_g_p, c7_g_p)""".stripMargin)
+  }
+
+  private def defaultGeneratedColumnWriteRow: Row = {
+    Row(1L, 11L, "foo", sqlDate("2020-10-11"),
+      sqlTimestamp("2020-10-11 12:30:30"), 100, 1000, sqlDate("2020-11-12"))
+  }
+
+  private def testGeneratedColumnWrite(
+      testName: String)(updateFunc: String => Seq[Row]): Unit = {
+    test(s"DSV2 generated column write - $testName") {
+      val tableName = testName
+      withTable(s"testcat.$tableName") {
+        createDefaultGeneratedColumnWriteTable(tableName)
+        val expected = updateFunc(s"testcat.$tableName")
+        checkAnswer(spark.table(s"testcat.$tableName"), expected)
+      }
+    }
+  }
+
+  private def testGeneratedColumnDynamicOverwrite(
+      testName: String)(updateFunc: String => Seq[Row]): Unit = {
+    testGeneratedColumnWrite(s"dpo_$testName") { table =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+          SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        updateFunc(table)
+      }
+    }
+  }
+
+  testGeneratedColumnWrite("append_data_v2") { table =>
+    import testImplicits._
+    Seq(Tuple5(1L, "foo", "2020-10-11 12:30:30", 100, "2020-11-12"))
+      .toDF("c1", "c3_p", "c5", "c6", "c8")
+      .withColumn("c5", $"c5".cast("timestamp"))
+      .withColumn("c8", $"c8".cast("date"))
+      .writeTo(table)
+      .append()
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("append_data_in_different_column_order_v2") { table =>
+    import testImplicits._
+    Seq(Tuple5("2020-10-11 12:30:30", 100, "2020-11-12", 1L, "foo"))
+      .toDF("c5", "c6", "c8", "c1", "c3_p")
+      .withColumn("c5", $"c5".cast("timestamp"))
+      .withColumn("c8", $"c8".cast("date"))
+      .writeTo(table)
+      .append()
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_values_provide_all_columns") { table =>
+    sql(s"""INSERT INTO $table VALUES (
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_by_name_provide_all_columns") { table =>
+    sql(s"""INSERT INTO $table (c5, c6, c7_g_p, c8, c1, c2_g, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12',
+           |  1L, 11L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_by_name_not_provide_generated_columns") { table =>
+    sql(s"""INSERT INTO $table (c6, c8, c1, c3_p, c5)
+           |VALUES (100, DATE'2020-11-12', 1L, 'foo',
+           |  TIMESTAMP'2020-10-11 12:30:30')""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_by_name_with_some_generated_columns") { table =>
+    sql(s"""INSERT INTO $table (c5, c6, c8, c1, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, DATE'2020-11-12',
+           |  1L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_select_provide_all_columns") { table =>
+    sql(s"""INSERT INTO $table SELECT
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_into_by_name_not_provide_normal_columns") { table =>
+    withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+      val ex = intercept[AnalysisException] {
+        sql(s"INSERT INTO $table (c6, c8, c1, c3_p) " +
+          s"VALUES (100, DATE'2020-11-12', 1L, 'foo')")
+      }
+      assert(ex.getMessage.contains("c5"))
+    }
+    Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_values_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table VALUES (
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_select_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table SELECT
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_by_name_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c5, c6, c7_g_p, c8, c1, c2_g, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12',
+           |  1L, 11L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_by_name_not_provide_generated_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c6, c8, c1, c3_p, c5)
+           |VALUES (100, DATE'2020-11-12', 1L, 'foo',
+           |  TIMESTAMP'2020-10-11 12:30:30')""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_by_name_with_some_generated_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c5, c6, c8, c1, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, DATE'2020-11-12',
+           |  1L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnWrite("insert_overwrite_by_name_not_provide_normal_columns") { table =>
+    withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+      val ex = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE $table (c6, c8, c1, c3_p) " +
+          s"VALUES (100, DATE'2020-11-12', 1L, 'foo')")
+      }
+      assert(ex.getMessage.contains("c5"))
+    }
+    Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite("insert_overwrite_values_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table VALUES (
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite("insert_overwrite_select_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table SELECT
+           |  1L, 11L, 'foo', DATE'2020-10-11',
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12'
+           |""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite(
+    "insert_overwrite_by_name_values_provide_all_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c5, c6, c7_g_p, c8, c1, c2_g, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, 1000, DATE'2020-11-12',
+           |  1L, 11L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite(
+    "insert_overwrite_by_name_not_provide_generated_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c6, c8, c1, c3_p, c5)
+           |VALUES (100, DATE'2020-11-12', 1L, 'foo',
+           |  TIMESTAMP'2020-10-11 12:30:30')""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite(
+    "insert_overwrite_by_name_with_some_generated_columns") { table =>
+    sql(s"""INSERT OVERWRITE $table (c5, c6, c8, c1, c3_p, c4_g_p)
+           |VALUES (
+           |  TIMESTAMP'2020-10-11 12:30:30', 100, DATE'2020-11-12',
+           |  1L, 'foo', DATE'2020-10-11'
+           |)""".stripMargin)
+    defaultGeneratedColumnWriteRow :: Nil
+  }
+
+  testGeneratedColumnDynamicOverwrite(
+    "insert_overwrite_by_name_not_provide_normal_columns") { table =>
+    withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+      val ex = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE $table (c6, c8, c1, c3_p) " +
+          s"VALUES (100, DATE'2020-11-12', 1L, 'foo')")
+      }
+      assert(ex.getMessage.contains("c5"))
+    }
+    Nil
+  }
+
   test("INSERT by name auto-fills missing generated column") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -226,6 +453,65 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("DataFrame writeTo append auto-fills generated columns with input columns reordered") {
+    import testImplicits._
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c STRING,
+             |  d INT GENERATED ALWAYS AS (length(c))
+             |) USING foo""".stripMargin)
+      Seq(("hello", 7), ("spark", 3)).toDF("c", "a").writeTo(s"testcat.$tblName").append()
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row(7, 8, "hello", 5) :: Row(3, 4, "spark", 5) :: Nil)
+    }
+  }
+
+  test("DataFrame writeTo append obeys allowNullableIngest for missing non-generated column") {
+    import testImplicits._
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  optional STRING,
+             |  b INT GENERATED ALWAYS AS (a + 1)
+             |) USING foo""".stripMargin)
+
+      Seq((1, "one")).toDF("a", "optional").writeTo(s"testcat.$tblName").append()
+      Seq(2).toDF("a").writeTo(s"testcat.$tblName").append()
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row(1, "one", 2) :: Row(2, null, 3) :: Nil)
+
+      withSQLConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST.key -> "false") {
+        val ex = intercept[AnalysisException] {
+          Seq(3).toDF("a").writeTo(s"testcat.$tblName").append()
+        }
+        assert(ex.getMessage.contains("optional"))
+      }
+    }
+  }
+
+  test("missing NOT NULL column fails with generated columns") {
+    import testImplicits._
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT NOT NULL,
+             |  required STRING NOT NULL,
+             |  b INT GENERATED ALWAYS AS (a + 1) NOT NULL
+             |) USING foo""".stripMargin)
+
+      val ex = intercept[AnalysisException] {
+        Seq(1).toDF("a").writeTo(s"testcat.$tblName").append()
+      }
+      assert(ex.getMessage.contains("required"))
+    }
+  }
+
   test("works alongside table CHECK constraints") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -357,6 +643,72 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("INSERT OVERWRITE by name with all generated columns validates constraints") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c STRING,
+             |  d INT GENERATED ALWAYS AS (length(c))
+             |) USING foo""".stripMargin)
+
+      sql(s"INSERT INTO testcat.$tblName(a, c) VALUES (1, 'old')")
+      sql(s"INSERT OVERWRITE testcat.$tblName(d, c, b, a) VALUES (3, 'new', 8, 7)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(7, 8, "new", 3))
+
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE testcat.$tblName(d, c, b, a) VALUES (3, 'bad', 99, 7)")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      assert(ex.getMessage.contains("Generated Column"))
+    }
+  }
+
+  test("INSERT OVERWRITE by name with some generated columns auto-fills the rest") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c INT GENERATED ALWAYS AS (a * 10)
+             |) USING foo""".stripMargin)
+
+      sql(s"INSERT INTO testcat.$tblName(a) VALUES (1)")
+      sql(s"INSERT OVERWRITE testcat.$tblName(c, a) VALUES (70, 7)")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(7, 8, 70))
+
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE testcat.$tblName(c, a) VALUES (99, 7)")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("INSERT OVERWRITE SELECT with all generated column values validates constraints") {
+    val tblName = "my_tab"
+    val srcName = "src_tab"
+    withTable(s"testcat.$tblName", s"testcat.$srcName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c STRING
+             |) USING foo""".stripMargin)
+      sql(s"CREATE TABLE testcat.$srcName(a INT, b INT, c STRING) USING foo")
+      sql(s"INSERT INTO testcat.$tblName(a, c) VALUES (0, 'old')")
+      sql(s"INSERT INTO testcat.$srcName VALUES (1, 2, 'ok')")
+      sql(s"INSERT OVERWRITE testcat.$tblName SELECT a, b, c FROM testcat.$srcName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(1, 2, "ok"))
+
+      sql(s"INSERT OVERWRITE testcat.$srcName VALUES (2, 99, 'bad')")
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT OVERWRITE testcat.$tblName SELECT a, b, c FROM testcat.$srcName")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      assert(ex.getMessage.contains("Generated Column"))
+    }
+  }
+
   test("DataFrame writeTo append with missing generated column") {
     import testImplicits._
     val tblName = "my_tab"
@@ -418,6 +770,29 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       checkAnswer(
         spark.table(s"testcat.$tblName"),
         Row(1, 10) :: Row(2, 20) :: Row(3, 30) :: Nil)
+    }
+  }
+
+  test("INSERT SELECT with all generated column values validates constraints") {
+    val tblName = "my_tab"
+    val srcName = "src_tab"
+    withTable(s"testcat.$tblName", s"testcat.$srcName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c STRING
+             |) USING foo""".stripMargin)
+      sql(s"CREATE TABLE testcat.$srcName(a INT, b INT, c STRING) USING foo")
+      sql(s"INSERT INTO testcat.$srcName VALUES (1, 2, 'ok')")
+      sql(s"INSERT INTO testcat.$tblName SELECT a, b, c FROM testcat.$srcName")
+      checkAnswer(spark.table(s"testcat.$tblName"), Row(1, 2, "ok"))
+
+      sql(s"INSERT OVERWRITE testcat.$srcName VALUES (2, 99, 'bad')")
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName SELECT a, b, c FROM testcat.$srcName")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+      assert(ex.getMessage.contains("Generated Column"))
     }
   }
 
@@ -501,6 +876,93 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
       checkAnswer(
         spark.table(s"testcat.$tgt"),
         Row(3, 5, 8))
+    }
+  }
+
+  test("generated column constraint supports null values") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  c1 STRING,
+             |  c2 STRING GENERATED ALWAYS AS (concat(c1, 'y'))
+             |) USING foo""".stripMargin)
+      sql(s"INSERT INTO testcat.$tblName VALUES ('x', 'xy')")
+      sql(s"INSERT INTO testcat.$tblName VALUES (NULL, NULL)")
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row("x", "xy") :: Row(null, null) :: Nil)
+
+      val ex1 = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName VALUES ('foo', NULL)")
+      }
+      assert(ex1.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+
+      val ex2 = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName VALUES (NULL, 'foo')")
+      }
+      assert(ex2.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("generated column with dotted column names and case-insensitive insert columns") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  `a.b` STRING GENERATED ALWAYS AS (concat(`c.d`, 'y')),
+             |  `c.d` STRING
+             |) USING foo""".stripMargin)
+
+      sql(s"INSERT INTO testcat.$tblName VALUES ('xy', 'x')")
+      sql(s"INSERT INTO testcat.$tblName(`c.D`, `a.B`) VALUES ('x', 'xy')")
+      sql(s"INSERT INTO testcat.$tblName(`c.D`) VALUES ('x')")
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row("xy", "x") :: Row("xy", "x") :: Row("xy", "x") :: Nil)
+
+      val ex = intercept[SparkRuntimeException] {
+        sql(s"INSERT INTO testcat.$tblName(`a.B`) VALUES ('xy')")
+      }
+      assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+    }
+  }
+
+  test("generated column with complex type extractors") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"""CREATE TABLE testcat.$tblName(
+             |  `a.b` STRING,
+             |  a STRUCT<b: INT, c: STRING>,
+             |  array ARRAY<INT>,
+             |  c1 STRING GENERATED ALWAYS AS (concat(`a.b`, 'b')),
+             |  c2 INT GENERATED ALWAYS AS (a.b + 100),
+             |  c3 INT GENERATED ALWAYS AS (array[1])
+             |) USING foo""".stripMargin)
+      sql(s"""INSERT INTO testcat.$tblName(`a.b`, a, array)
+             |VALUES ('a', named_struct('b', 100, 'c', 'foo'), array(1000, 1001))
+             |""".stripMargin)
+      checkAnswer(
+        spark.table(s"testcat.$tblName"),
+        Row("a", Row(100, "foo"), Seq(1000, 1001), "ab", 200, 1001))
+    }
+  }
+
+  test("TIME type in generated columns is not supported") {
+    val tblName = "my_tab"
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"""CREATE TABLE testcat.$tblName(
+                   |  id INT,
+                   |  event_time TIME GENERATED ALWAYS AS (CAST('12:00:00' AS TIME))
+                   |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "event_time",
+            "expressionStr" -> "CAST('12:00:00' AS TIME)",
+            "reason" -> "TIME type is not supported in generated columns"))
+      }
     }
   }
 
