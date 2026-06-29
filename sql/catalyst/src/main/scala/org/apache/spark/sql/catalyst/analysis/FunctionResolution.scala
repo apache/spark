@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
@@ -126,13 +127,23 @@ class FunctionResolution(
    * between passes, and each pass (and each view / SQL-function body) runs under a fresh
    * [[AnalysisContext]] object (see [[AnalysisContext.reset]], `withAnalysisContext`,
    * `withNewAnalysisContext`). We therefore key the cache on the identity of the current
-   * [[AnalysisContext]] and recompute when it changes, which also avoids any staleness.
+   * [[AnalysisContext]] and recompute when it changes. This is stale-free only because the cached
+   * values derive solely from the context's immutable fields (`resolutionPathEntries`,
+   * `catalogAndNamespace`); a scope change always allocates a new context. Other context fields
+   * (e.g. `relationCache`, `referredTempFunctionNames`) DO mutate under a stable identity, so
+   * nothing derived from them may be cached under this key.
+   *
+   * The reference to the [[AnalysisContext]] is held weakly: during a pass the context is strongly
+   * reachable via its own thread-local, but [[AnalysisContext.reset]] clears that thread-local
+   * between passes. Keying weakly lets the finished pass's context (and its `relationCache` plan
+   * graph) be collected rather than pinned on this pooled thread until the next query overwrites
+   * the entry; a cleared reference simply reads as a miss and recomputes.
    *
    * A [[ThreadLocal]] is used because a single [[FunctionResolution]] instance is shared across
    * concurrent query threads, each with its own [[AnalysisContext]] thread-local.
    */
   private case class ResolutionPathCache(
-      context: AnalysisContext,
+      contextRef: WeakReference[AnalysisContext],
       pathEntries: Seq[Seq[String]],
       builtinFastPathSafe: Boolean)
 
@@ -141,13 +152,13 @@ class FunctionResolution(
   private def currentResolutionPathCache: ResolutionPathCache = {
     val context = AnalysisContext.get
     val cached = resolutionPathCache.get()
-    if (cached != null && (cached.context eq context)) {
+    if (cached != null && (cached.contextRef.get eq context)) {
       cached
     } else {
       val pathEntries = catalogManager.resolutionPathEntriesForAnalysis(
         context.resolutionPathEntries, context.catalogAndNamespace)
       val fresh = ResolutionPathCache(
-        context, pathEntries, computeBuiltinFastPathSafe(pathEntries))
+        new WeakReference(context), pathEntries, computeBuiltinFastPathSafe(pathEntries))
       resolutionPathCache.set(fresh)
       fresh
     }
@@ -166,7 +177,7 @@ class FunctionResolution(
    * correctly disabled. Only a custom `SET PATH` can place another entry before `system.builtin`.
    */
   private def computeBuiltinFastPathSafe(pathEntries: Seq[Seq[String]]): Boolean =
-    pathEntries.headOption.exists(CatalogManager.isSystemBuiltinPathEntry)
+    CatalogManager.isBuiltinFirstOnPath(pathEntries)
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
