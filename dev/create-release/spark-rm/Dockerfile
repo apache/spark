@@ -15,14 +15,14 @@
 # limitations under the License.
 #
 
-# Spark master (4.2-SNAPSHOT) release image
+# Spark master (5.0.0-SNAPSHOT) release image
 # Extends the base image with:
 # - Java 17
 # - Python 3.10 with required packages
 
 FROM spark-rm-base:latest
 
-# Install Java 17 for Spark 4.x
+# Install Java 17 for Spark 5.x
 RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
