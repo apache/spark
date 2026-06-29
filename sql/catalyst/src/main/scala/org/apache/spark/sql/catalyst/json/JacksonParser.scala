@@ -382,6 +382,9 @@ class JacksonParser(
 
     case t: TimestampLTZNanosType =>
       (parser: JsonParser) => parseJsonToken[TimestampNanosVal](parser, dataType) {
+        // Unlike the microsecond TimestampType, the nanosecond types accept only string input.
+        // The numeric-epoch shorthand (a JSON integer read as epoch seconds) is legacy
+        // TimestampType behavior and is intentionally not carried over to the nanos types.
         case VALUE_STRING if parser.getTextLength >= 1 =>
           timestampFormatter.parseNanos(parser.getText, t.precision)
       }
