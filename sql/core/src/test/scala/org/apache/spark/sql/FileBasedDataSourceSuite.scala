@@ -1665,6 +1665,59 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-57458: XML rejects nanosecond timestamps under the LEGACY time parser policy") {
+    // The legacy timestamp formatter cannot represent sub-microsecond digits, so the nanos
+    // formatter methods raise TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER. Only the LTZ formatter
+    // is legacy under this policy (the NTZ formatter always uses the ISO-8601 path), so this
+    // covers TimestampLTZNanosType. XML is v1-only so there is no v1/v2 branching to test.
+    def rootNanosError(e: Throwable): SparkUnsupportedOperationException = {
+      var cause: Throwable = e
+      while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+        cause = cause.getCause
+      }
+      assert(cause != null,
+        s"Expected TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER, but got: ${e.getMessage}")
+      cause.asInstanceOf[SparkUnsupportedOperationException]
+    }
+
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val nanosType = TimestampLTZNanosType(9)
+      val schema = new StructType().add("ts", nanosType)
+      val expectedParameters =
+        Map("config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+      withTempDir { dir =>
+        // Write path.
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(
+            Seq(Row(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 1).toInstant(ZoneOffset.UTC)))),
+          schema)
+        val writeDir = new File(dir, "write").getCanonicalPath
+        checkError(
+          exception = rootNanosError(intercept[SparkException] {
+            df.write.format("xml").option("rowTag", "row").mode("overwrite").save(writeDir)
+          }),
+          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+          parameters = expectedParameters)
+
+        // Read path: write a benign file first so schema-driven parsing is what fails. Use
+        // FAILFAST so the unsupported-feature error surfaces instead of being swallowed as a
+        // null record by the permissive bad-record handling.
+        val readDir = new File(dir, "read").getCanonicalPath
+        Seq("a").toDF("ts").write.format("xml").option("rowTag", "row")
+          .mode("overwrite").save(readDir)
+        checkError(
+          exception = rootNanosError(intercept[SparkException] {
+            spark.read.schema(schema).option("mode", "FAILFAST").option("rowTag", "row")
+              .format("xml").load(readDir).collect()
+          }),
+          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+          parameters = expectedParameters)
+      }
+    }
+  }
 }
 
 object TestingUDT {
