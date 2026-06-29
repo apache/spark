@@ -16,6 +16,7 @@
 #
 import gc
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -101,13 +102,19 @@ class UtilTests(PySparkTestCase):
         # Source the script twice and print a marker afterwards. If the script
         # calls `exit 0` while sourced, the outer shell terminates and the
         # marker is never emitted.
+        quoted_script_path = shlex.quote(script_path)
         cmd = (
             f"export SPARK_HOME=/some/value && "
-            f"source {script_path} && "
-            f"source {script_path} && "
+            f"source {quoted_script_path} && "
+            f"source {quoted_script_path} && "
             f"echo SOURCED_OK"
         )
         completed = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, check=False)
+        # The SOURCED_OK marker is the load-bearing assertion. On master the sourced
+        # `exit 0` terminates the `bash -c` shell itself with status 0, so the return
+        # code stays 0 whether or not the bug is present; only the absent marker exposes
+        # it. The returncode check is a secondary guard that surfaces stderr if the
+        # script errors out (e.g. a syntax error).
         self.assertEqual(completed.returncode, 0, msg=completed.stderr)
         self.assertIn("SOURCED_OK", completed.stdout)
 
