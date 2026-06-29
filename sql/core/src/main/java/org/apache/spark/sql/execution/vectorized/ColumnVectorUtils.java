@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
@@ -237,7 +238,7 @@ public class ColumnVectorUtils {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
       } else {
         throw new SparkUnsupportedOperationException(
-          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", t.toString()));
+          "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
       }
     }
   }

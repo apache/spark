@@ -18,6 +18,7 @@
 package org.apache.spark.sql.errors
 
 import java.io.{File, IOException}
+import java.lang.reflect.InvocationTargetException
 import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.time.LocalDateTime
@@ -48,15 +49,32 @@ import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
+import org.apache.spark.sql.execution.vectorized.{
+  ColumnVectorUtils,
+  ConstantColumnVector,
+  MutableColumnarRow,
+  OnHeapColumnVector,
+  WritableColumnVector}
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{
+  ArrayType,
+  BooleanType,
+  DataType,
+  DecimalType,
+  IntegerType,
+  LongType,
+  MetadataBuilder,
+  ObjectType,
+  StructField,
+  StructType,
+  TimestampNTZNanosType}
 import org.apache.spark.sql.vectorized.ColumnarArray
+import org.apache.spark.sql.vectorized.ColumnVector
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
@@ -867,6 +885,63 @@ class QueryExecutionErrorsSuite
           "StructType()[1.1] failure: 'TimestampType' expected but 'S' found\n\nStructType()\n^"
       ),
       sqlState = "0A000")
+  }
+
+  test("SPARK-57745: unsupported datatype in ColumnVectorUtils.appendValue") {
+    val objectType = ObjectType(classOf[java.lang.Integer])
+    val column = new OnHeapColumnVector(1, IntegerType)
+    try {
+      val appendValue = classOf[ColumnVectorUtils].getDeclaredMethod(
+        "appendValue",
+        classOf[WritableColumnVector],
+        classOf[DataType],
+        classOf[Object])
+      appendValue.setAccessible(true)
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          try {
+            appendValue.invoke(null, column, objectType, Integer.valueOf(1))
+          } catch {
+            case e: InvocationTargetException => throw e.getCause
+          }
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+    } finally {
+      column.close()
+    }
+  }
+
+  test("SPARK-57745: unsupported datatype in MutableColumnarRow.get and update") {
+    val objectType = ObjectType(classOf[java.lang.Integer])
+    val column = new OnHeapColumnVector(1, IntegerType)
+    try {
+      val dataTypeField = classOf[ColumnVector].getDeclaredField("type")
+      dataTypeField.setAccessible(true)
+      dataTypeField.set(column, objectType)
+
+      val row = new MutableColumnarRow(Array[WritableColumnVector](column))
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          row.get(0, objectType)
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          row.update(0, Integer.valueOf(1))
+        },
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> toSQLType(objectType)),
+        sqlState = "0A000")
+    } finally {
+      column.close()
+    }
   }
 
   test("RENAME_SRC_PATH_NOT_FOUND: rename the file which source path does not exist") {
