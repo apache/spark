@@ -2255,6 +2255,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DUPLICATE_GRAPH_ELEMENT" : {
+    "message" : [
+      "Found duplicate <graphElementType> '<graphElementName>'."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
