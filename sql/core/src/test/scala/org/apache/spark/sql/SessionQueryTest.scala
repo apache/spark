@@ -34,7 +34,7 @@ import org.apache.spark.SparkFunSuite
  *
  * For classic-specific tests, use [[classic.SessionQueryTest]].
  *
- * For example usage, see [[ExampleSessionAgnosticSuite]] and its connect variant.
+ * For example usage, see the `ExampleSessionAgnosticSuite` example suites in sql/connect.
  */
 trait SessionQueryTest
   extends SparkFunSuite
