@@ -111,9 +111,60 @@ class FunctionResolution(
    * aligned with relation order.
    */
   private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
-    catalogManager.resolutionPathEntriesForAnalysis(
-      AnalysisContext.get.resolutionPathEntries,
-      AnalysisContext.get.catalogAndNamespace)
+    currentResolutionPathCache.pathEntries
+
+  /**
+   * Per-analysis-pass cache of the resolution search path and the derived
+   * "built-in precedes session" flag.
+   *
+   * Computing the path (reading the [[AnalysisContext]] thread-local, the live
+   * [[CatalogManager]], and several confs, then allocating `Seq`s) used to run once per
+   * [[UnresolvedFunction]] -- and, under Spark Connect, once per node on every re-analysis of
+   * the growing plan. That per-node recomputation is the SPARK-57758 regression.
+   *
+   * The path is stable within a single analysis pass: `SET PATH` / `USE` / conf changes happen
+   * between passes, and each pass (and each view / SQL-function body) runs under a fresh
+   * [[AnalysisContext]] object (see [[AnalysisContext.reset]], `withAnalysisContext`,
+   * `withNewAnalysisContext`). We therefore key the cache on the identity of the current
+   * [[AnalysisContext]] and recompute when it changes, which also avoids any staleness.
+   *
+   * A [[ThreadLocal]] is used because a single [[FunctionResolution]] instance is shared across
+   * concurrent query threads, each with its own [[AnalysisContext]] thread-local.
+   */
+  private case class ResolutionPathCache(
+      context: AnalysisContext,
+      pathEntries: Seq[Seq[String]],
+      builtinBeforeSession: Boolean)
+
+  private val resolutionPathCache = new ThreadLocal[ResolutionPathCache]()
+
+  private def currentResolutionPathCache: ResolutionPathCache = {
+    val context = AnalysisContext.get
+    val cached = resolutionPathCache.get()
+    if (cached != null && (cached.context eq context)) {
+      cached
+    } else {
+      val pathEntries = catalogManager.resolutionPathEntriesForAnalysis(
+        context.resolutionPathEntries, context.catalogAndNamespace)
+      val fresh = ResolutionPathCache(
+        context, pathEntries, computeBuiltinBeforeSession(pathEntries))
+      resolutionPathCache.set(fresh)
+      fresh
+    }
+  }
+
+  /**
+   * True when `system.builtin` appears in the effective path and no `system.session` entry
+   * precedes it. In that case a single-part name that resolves to a built-in cannot be shadowed
+   * by a session/temporary function, and built-ins always precede persistent catalogs in every
+   * `sessionOrder`, so the built-in fast-path in [[resolveFunction]] / [[resolveTableFunction]]
+   * cannot change resolution precedence.
+   */
+  private def computeBuiltinBeforeSession(pathEntries: Seq[Seq[String]]): Boolean = {
+    val builtinIdx = pathEntries.indexWhere(CatalogManager.isSystemBuiltinPathEntry)
+    val sessionIdx = pathEntries.indexWhere(CatalogManager.isSystemSessionPathEntry)
+    builtinIdx >= 0 && (sessionIdx < 0 || builtinIdx < sessionIdx)
+  }
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
@@ -186,6 +237,22 @@ class FunctionResolution(
           case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" =>
             // The internal registry throws AnalysisException when the function is not found;
             // fall through to standard resolution.
+        }
+      }
+
+      // Fast-path (SPARK-57758): an unqualified, non-internal name that resolves to a built-in
+      // is by far the common case. When `system.builtin` precedes `system.session` in the
+      // effective path, a built-in hit cannot be shadowed by a session/temporary function (and a
+      // built-in always precedes persistent catalogs in every `sessionOrder`), so it can be
+      // resolved with a single registry lookup instead of building and iterating the candidate
+      // search path. A miss falls through to the full candidate resolution below.
+      if (unresolvedFunc.nameParts.size == 1 && !unresolvedFunc.isInternal &&
+          currentResolutionPathCache.builtinBeforeSession) {
+        val builtin = v1SessionCatalog.resolveScalarFunctionByIdentifier(
+          FunctionRegistry.builtinFunctionIdentifier(unresolvedFunc.nameParts.head),
+          unresolvedFunc.arguments)
+        if (builtin.isDefined) {
+          return validateFunction(builtin.get, unresolvedFunc.arguments.length, unresolvedFunc)
         }
       }
 
@@ -263,6 +330,16 @@ class FunctionResolution(
   def resolveTableFunction(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
+    // Fast-path (SPARK-57758): see `resolveFunction`. Short-circuit a single-part name to a
+    // built-in table function when `system.builtin` precedes `system.session` in the path; a
+    // miss (including a built-in scalar of the same name) falls through to the candidate loop,
+    // which preserves the NOT_A_TABLE_FUNCTION semantics.
+    if (nameParts.size == 1 && currentResolutionPathCache.builtinBeforeSession) {
+      val builtin = v1SessionCatalog.resolveTableFunctionByIdentifier(
+        FunctionRegistry.builtinFunctionIdentifier(nameParts.head), arguments)
+      if (builtin.isDefined) return builtin
+    }
+
     val candidates = resolutionCandidates(nameParts)
     for (nameParts <- candidates) {
       resolveTableFunctionCandidate(nameParts, arguments) match {

@@ -1290,6 +1290,37 @@ class FunctionQualificationSuite extends SharedSparkSession {
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
     }
   }
+
+  test("SECTION 17a: SPARK-57758 built-in fast-path respects dynamic session order") {
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT 1 AS id")
+      // Register a temp function shadowing builtin `abs` (overrideIfExists allows any order).
+      spark.udf.register("abs", (x: Int) => x + 100)
+      try {
+        // Default order (second): builtin precedes session, so the fast-path returns the builtin
+        // and the temp is reachable only via `session.` qualification.
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+          checkAnswer(sql("SELECT abs(-5) FROM t"), Row(5))
+          checkAnswer(sql("SELECT session.abs(-5) FROM t"), Row(95))
+        }
+        // first: session precedes builtin, so the fast-path is bypassed and the temp shadows the
+        // builtin for unqualified names. Same session, so this also exercises per-pass recompute.
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
+          checkAnswer(sql("SELECT abs(-5) FROM t"), Row(95))
+          checkAnswer(sql("SELECT builtin.abs(-5) FROM t"), Row(5))
+        }
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SECTION 17b: SPARK-57758 built-in table-function fast-path") {
+    // Built-in table function resolves via the fast path.
+    checkAnswer(sql("SELECT * FROM range(3)"), Seq(Row(0), Row(1), Row(2)))
+    // Extension table functions (stored as builtins) also resolve unqualified.
+    checkAnswer(sql("SELECT * FROM test_ext_table_func()"), Seq(Row(0L), Row(1L), Row(2L)))
+  }
 }
 
 /**
