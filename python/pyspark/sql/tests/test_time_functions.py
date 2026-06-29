@@ -16,17 +16,22 @@
 #
 
 import datetime
+import unittest
 
-from pyspark.sql import functions as F, Row
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    IntegerType,
-    LongType,
-    StringType,
     StructField,
     StructType,
     TimeType,
 )
+from pyspark.errors import DateTimeException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
 class TimeFunctionsTestsMixin:
@@ -231,6 +236,10 @@ class TimeFunctionsTestsMixin:
         result = df.collect()
         self.assertEqual(result[0][0], t)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_arrow_roundtrip(self):
         """Test that TIME values survive Arrow-based createDataFrame -> toPandas round-trip."""
         data = [
@@ -281,7 +290,11 @@ class TimeFunctionsTestsMixin:
 
     def test_time_to_millis(self):
         """Test time_to_millis function."""
-        data = [(datetime.time(0, 0, 0),), (datetime.time(1, 0, 0),), (datetime.time(12, 30, 45, 500000),)]
+        data = [
+            (datetime.time(0, 0, 0),),
+            (datetime.time(1, 0, 0),),
+            (datetime.time(12, 30, 45, 500000),),
+        ]
         schema = StructType([StructField("t", TimeType())])
         df = self.spark.createDataFrame(data, schema=schema)
         result = df.select(F.time_to_millis("t")).collect()
@@ -299,7 +312,11 @@ class TimeFunctionsTestsMixin:
 
     def test_time_to_micros(self):
         """Test time_to_micros function."""
-        data = [(datetime.time(0, 0, 0),), (datetime.time(1, 0, 0),), (datetime.time(12, 30, 45, 500000),)]
+        data = [
+            (datetime.time(0, 0, 0),),
+            (datetime.time(1, 0, 0),),
+            (datetime.time(12, 30, 45, 500000),),
+        ]
         schema = StructType([StructField("t", TimeType())])
         df = self.spark.createDataFrame(data, schema=schema)
         result = df.select(F.time_to_micros("t")).collect()
@@ -325,6 +342,70 @@ class TimeFunctionsTestsMixin:
         # Filter
         filtered = df.filter(F.hour("t") >= 12).collect()
         self.assertEqual(len(filtered), 3)
+
+    def test_to_time_error_on_invalid_input(self):
+        """Test to_time raises error on unparseable input."""
+        df = self.spark.range(1).select(
+            F.lit("invalid_time").alias("s")
+        )
+        with self.assertRaises(DateTimeException) as ctx:
+            df.select(F.to_time("s")).collect()
+        self.assertIn("CANNOT_PARSE_TIME", ctx.exception.getErrorClass())
+
+    def test_time_diff_error_on_invalid_unit(self):
+        """Test time_diff raises error on invalid unit."""
+        df = self.spark.range(1).select(
+            F.lit("invalid_unit").alias("unit"),
+            F.lit(datetime.time(10, 0, 0)).alias("t1"),
+            F.lit(datetime.time(12, 0, 0)).alias("t2"),
+        )
+        with self.assertRaises(IllegalArgumentException) as ctx:
+            df.select(F.time_diff("unit", "t1", "t2")).collect()
+        self.assertIn(
+            "INVALID_PARAMETER_VALUE.TIME_UNIT",
+            ctx.exception.getErrorClass(),
+        )
+
+    def test_time_trunc_error_on_invalid_unit(self):
+        """Test time_trunc raises error on invalid unit."""
+        df = self.spark.range(1).select(
+            F.lit("invalid_unit").alias("unit"),
+            F.lit(datetime.time(10, 30, 45)).alias("t"),
+        )
+        with self.assertRaises(IllegalArgumentException) as ctx:
+            df.select(F.time_trunc("unit", "t")).collect()
+        self.assertIn(
+            "INVALID_PARAMETER_VALUE.TIME_UNIT",
+            ctx.exception.getErrorClass(),
+        )
+
+    def test_time_diff_multiple_units(self):
+        """Test time_diff with SECOND and MICROSECOND units."""
+        df = self.spark.range(1).select(
+            F.lit(datetime.time(10, 0, 0)).alias("t1"),
+            F.lit(datetime.time(10, 0, 30)).alias("t2"),
+        )
+
+        # SECOND unit
+        result = df.select(
+            F.time_diff(F.lit("second"), "t1", "t2")
+        ).collect()
+        self.assertEqual(result[0][0], 30)
+
+        # MICROSECOND unit
+        result = df.select(
+            F.time_diff(F.lit("microsecond"), "t1", "t2")
+        ).collect()
+        self.assertEqual(result[0][0], 30000000)
+
+    def test_time_trunc_second(self):
+        """Test time_trunc to SECOND level."""
+        df = self.spark.range(1).select(
+            F.lit(datetime.time(10, 30, 45, 123456)).alias("t")
+        )
+
+        result = df.select(F.time_trunc(F.lit("second"), "t")).collect()
+        self.assertEqual(result[0][0], datetime.time(10, 30, 45))
 
 
 class TimeFunctionsTests(TimeFunctionsTestsMixin, ReusedSQLTestCase):
