@@ -28,7 +28,6 @@ trait SharedSparkSession extends QueryTest with classic.SparkSessionBinder {
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
   // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
-  @deprecated("rarely used", "4.2.0")
   def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
     val statusStore = spark.sharedState.statusStore
     val oldCount = statusStore.executionsList().size

@@ -72,7 +72,7 @@ trait CheckAnswerHelper extends Assertions {
       case df: classic.DataFrame =>
         df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
       case _ =>
-        // isDfSorted should be overriden by connect so that this case can't be reached.
+        // isDfSorted should be overridden by connect so that this case can't be reached.
         throw new RuntimeException(
           s"""Cannot determine whether df is sorted: $df.
              |Maybe the suite is missing the connect.SessionQueryTest mixin?""".stripMargin)
@@ -152,9 +152,9 @@ trait CheckAnswerHelper extends Assertions {
   }
 
   private def genError(
-                        expectedAnswer: Seq[Row],
-                        sparkAnswer: Seq[Row],
-                        isSorted: Boolean = false): String = {
+      expectedAnswer: Seq[Row],
+      sparkAnswer: Seq[Row],
+      isSorted: Boolean = false): String = {
     val getRowType: Option[Row] => String = row =>
       row.map(row =>
         if (row.schema == null) {
@@ -204,9 +204,10 @@ trait CheckAnswerHelper extends Assertions {
     case (a, b) => a == b
   }
 
-  private def sameRows( expectedAnswer: Seq[Row],
-                        sparkAnswer: Seq[Row],
-                        isSorted: Boolean = false): Option[String] = {
+  private def sameRows(
+      expectedAnswer: Seq[Row],
+      sparkAnswer: Seq[Row],
+      isSorted: Boolean = false): Option[String] = {
     if (!compare(prepareAnswer(expectedAnswer, isSorted), prepareAnswer(sparkAnswer, isSorted))) {
       return Some(genError(expectedAnswer, sparkAnswer, isSorted))
     }

@@ -21,7 +21,6 @@ package org.apache.spark.sql
 import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.CheckErrorHelper
-import org.apache.spark.sql.catalyst.SQLConfHelper
 // scalastyle:on
 
 /**

@@ -29,7 +29,7 @@ import org.apache.spark.util.SparkErrorUtils
 trait QueryCleanupHelper extends SparkSessionProvider with Assertions {
 
   /**
-   * Drops table `tableName` after calling `f`.
+   * Drops tables `tableNames` after calling `f`.
    */
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
     SparkErrorUtils.tryWithSafeFinally(f) {
@@ -40,7 +40,7 @@ trait QueryCleanupHelper extends SparkSessionProvider with Assertions {
   }
 
   /**
-   * Drops view `viewName` after calling `f`.
+   * Drops views `viewNames` after calling `f`.
    */
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
     SparkErrorUtils.tryWithSafeFinally(f)(
@@ -53,8 +53,6 @@ trait QueryCleanupHelper extends SparkSessionProvider with Assertions {
   protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
     try {
       f
-    } catch {
-      case cause: Throwable => throw cause
     } finally {
       functions.foreach { case (functionName, isTemporary) =>
         val withTemporary = if (isTemporary) "TEMPORARY" else ""

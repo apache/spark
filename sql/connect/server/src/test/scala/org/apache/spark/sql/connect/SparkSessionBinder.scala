@@ -54,9 +54,6 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
     } finally {
       SparkEnv.get.conf.set(Connect.CONNECT_GRPC_BINDING_PORT, prevPort)
     }
-  }
-
-  override def beforeEach(): Unit = {
     val client = SparkConnectClient
       .builder()
       .port(SparkConnectService.localPort)
@@ -67,18 +64,13 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
       .builder()
       .client(client)
       .create()
-    super.beforeEach()
   }
 
-  override def afterEach(): Unit = {
-    super.afterEach()
+  override def afterAll(): Unit = {
     if (_connectSpark != null) {
       _connectSpark.close()
       _connectSpark = null
     }
-  }
-
-  override def afterAll(): Unit = {
     SparkConnectService.stop()
     super.afterAll()
   }
