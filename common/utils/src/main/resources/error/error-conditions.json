@@ -8647,6 +8647,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK" : {
+    "message" : [
+      "The operation <operation> is not supported for ContinuousMemorySink."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
       "Can't overwrite the target that is also being read from."
