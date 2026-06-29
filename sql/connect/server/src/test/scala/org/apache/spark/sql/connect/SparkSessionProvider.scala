@@ -20,8 +20,8 @@ package org.apache.spark.sql.connect
 import org.apache.spark.sql
 
 /**
- * A common trait for test suites or utils that require a connect [[SparkSession]].
- * Use together with e.g. [[SparkSessionBinder]].
+ * A common trait for test suites or utils that require a connect [[SparkSession]]. Use together
+ * with e.g. [[SparkSessionBinder]].
  */
 trait SparkSessionProvider extends sql.SparkSessionProvider {
   protected override def spark: SparkSession

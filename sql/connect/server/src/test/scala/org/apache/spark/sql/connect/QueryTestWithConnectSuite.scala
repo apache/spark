@@ -26,6 +26,4 @@ import org.apache.spark.sql.QueryTestSuite
  * [[QueryTestSuite]] tests are inherited unchanged, but execute against a
  * [[SparkSession connect.SparkSession]] instead of a classic one.
  */
-class QueryTestWithConnectSuite
-  extends QueryTestSuite
-    with SessionQueryTest
+class QueryTestWithConnectSuite extends QueryTestSuite with SessionQueryTest
