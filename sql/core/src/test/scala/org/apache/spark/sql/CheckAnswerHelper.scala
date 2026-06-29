@@ -24,7 +24,7 @@ import org.scalatest.Assertions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils}
+import org.apache.spark.util.SparkErrorUtils
 
 /**
  * Provides [[checkAnswer]] helper for SQL- & DataFrame-API tests.
@@ -104,7 +104,7 @@ trait CheckAnswerHelper extends Assertions {
         return Some(errorMessage)
     }
 
-    sameRows(expectedAnswer, sparkAnswer, isDfSorted(df)).map { results =>
+    RowComparisonUtils.sameRows(expectedAnswer, sparkAnswer, isDfSorted(df)).map { results =>
       s"""
          |Results do not match for query:
          |Timezone: ${TimeZone.getDefault}
@@ -117,100 +117,4 @@ trait CheckAnswerHelper extends Assertions {
     }
   }
 
-  private def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
-    // Converts data to types that we can do equality comparison using Scala collections.
-    // For BigDecimal type, the Scala type has a better definition of equality test (similar to
-    // Java's java.math.BigDecimal.compareTo).
-    // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
-    // equality test.
-    val converted: Seq[Row] = answer.map(prepareRow)
-    if (!isSorted) converted.sortBy(_.toString()) else converted
-  }
-
-  // We need to call prepareRow recursively to handle schemas with struct types.
-  private def prepareRow(row: Row): Row = {
-    Row.fromSeq(row.toSeq.map {
-      case null => null
-      case bd: java.math.BigDecimal => BigDecimal(bd)
-      // Equality of WrappedArray differs for AnyVal and AnyRef in Scala 2.12.2+
-      case seq: Seq[_] => seq.map {
-        case b: java.lang.Byte => b.byteValue
-        case s: java.lang.Short => s.shortValue
-        case i: java.lang.Integer => i.intValue
-        case l: java.lang.Long => l.longValue
-        case f: java.lang.Float => f.floatValue
-        case d: java.lang.Double => d.doubleValue
-        case x => x
-      }
-      // Convert array to Seq for easy equality check.
-      case b: Array[_] => b.toSeq
-      case r: Row => prepareRow(r)
-      // SPARK-51349: "null" and null had the same precedence in sorting
-      case "null" => "__null_string__"
-      case o => o
-    })
-  }
-
-  private def genError(
-      expectedAnswer: Seq[Row],
-      sparkAnswer: Seq[Row],
-      isSorted: Boolean = false): String = {
-    val getRowType: Option[Row] => String = row =>
-      row.map(row =>
-        if (row.schema == null) {
-          "struct<>"
-        } else {
-          s"${row.schema.catalogString}"
-        }).getOrElse("struct<>")
-
-    s"""
-       |== Results ==
-       |${
-      SparkStringUtils.sideBySide(
-        s"== Correct Answer - ${expectedAnswer.size} ==" +:
-          getRowType(expectedAnswer.headOption) +:
-          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-          getRowType(sparkAnswer.headOption) +:
-          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")
-    }
-    """.stripMargin
-  }
-
-  private def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
-    case (null, null) => true
-    case (null, _) => false
-    case (_, null) => false
-    case (a: Array[_], b: Array[_]) =>
-      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Map[_, _], b: Map[_, _]) =>
-      a.size == b.size && a.keys.forall { aKey =>
-        b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
-      }
-    case (a: Iterable[_], b: Iterable[_]) =>
-      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Product, b: Product) =>
-      compare(a.productIterator.toSeq, b.productIterator.toSeq)
-    case (a: Row, b: Row) =>
-      compare(a.toSeq, b.toSeq)
-    // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
-    // in some hardware NaN can be represented with different bits, so first check for it
-    case (a: Double, b: Double) =>
-      a.isNaN && b.isNaN ||
-        java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
-    case (a: Float, b: Float) =>
-      a.isNaN && b.isNaN ||
-        java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
-    case (a, b) => a == b
-  }
-
-  private def sameRows(
-      expectedAnswer: Seq[Row],
-      sparkAnswer: Seq[Row],
-      isSorted: Boolean = false): Option[String] = {
-    if (!compare(prepareAnswer(expectedAnswer, isSorted), prepareAnswer(sparkAnswer, isSorted))) {
-      return Some(genError(expectedAnswer, sparkAnswer, isSorted))
-    }
-    None
-  }
 }
