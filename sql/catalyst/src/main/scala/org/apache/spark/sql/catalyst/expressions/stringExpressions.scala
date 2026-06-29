@@ -2458,17 +2458,26 @@ object Right extends DelegateFunction {
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType)
 
-  // NOTE: runs at parse time on unresolved args, so it must not read an input's `.dataType`.
-  // The `If` branch types are unified later by type coercion.
+  // At build time `str` is the not-yet-coerced argument (wrapped in an `ImplicitCastInput` marker that
+  // delegates `dataType` to its child), so `str.dataType` is the *input* type, which is not necessarily
+  // a string yet -- e.g. `right(12345, 2)` has an `IntegerType` child the implicit cast will turn into a
+  // string. Use it for the null/empty branch literals only when it is already a string-family type, so a
+  // CHAR(N)/VARCHAR(N) result (under `spark.sql.preserveCharVarcharTypeInfo`) or a non-default collation
+  // is preserved through the `If` branch unification; otherwise fall back to plain `StringType`, the type
+  // the implicit cast produces. Typing a UTF8String literal with a non-string type would be invalid.
   override def lower(args: Seq[Expression]): Expression = {
     val str = args(0)
     val len = args(1)
+    val litType = str.dataType match {
+      case _: StringType | _: CharType | _: VarcharType => str.dataType
+      case _ => StringType
+    }
     If(
       IsNull(str),
-      Literal(null, StringType),
+      Literal(null, litType),
       If(
         LessThanOrEqual(len, Literal(0)),
-        Literal(UTF8String.EMPTY_UTF8, StringType),
+        Literal(UTF8String.EMPTY_UTF8, litType),
         new Substring(str, UnaryMinus(len, failOnError = false))))
   }
 }

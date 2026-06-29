@@ -4454,23 +4454,31 @@ object EliminateUnions extends Rule[LogicalPlan] {
  * served their purpose, so we strip them at the end of analysis, leaving a clean `definition` in the
  * [[DelegateExpression]]. Like [[RemoveTempResolvedColumn]], this just unwraps a marker to its
  * child; it is not load-bearing -- a `DelegateExpression` is correct with or without the markers.
+ *
+ * Only a *resolved* marker is unwrapped (its child's type satisfied the implicit-cast / type-check
+ * contract). An unresolved marker -- a `TypeCheckInput` whose `implicitCast = false` check failed, or
+ * an `ImplicitCastInput` whose argument could not be cast -- is left in place so its `ExpectsInputTypes`
+ * failure stays visible to `CheckAnalysis`. Unwrapping it unconditionally would expose a resolved child
+ * of the wrong type and let analysis silently accept a mismatched argument.
  */
 object RemoveInputTypeMarkers extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveExpressionsWithPruning(_.containsPattern(INPUT_TYPE_MARKER)) {
-      case marker: ImplicitCastInput => marker.child
-      case marker: TypeCheckInput => marker.child
+      case marker: ImplicitCastInput if marker.resolved => marker.child
+      case marker: TypeCheckInput if marker.resolved => marker.child
     }
 
   /**
    * Expression-level unwrap, for callers that have no rule batch to run this rule in -- notably the
    * single-pass resolver, which builds `DelegateFunction`s (inserting markers) but does not execute
    * the fixed-point analyzer's batches. Apply it once type coercion has cast the marker children.
+   * Like [[apply]], only resolved markers are unwrapped; a failed type check is left for the analyzer
+   * to report.
    */
   def removeMarkers(expression: Expression): Expression =
     expression.transformUpWithPruning(_.containsPattern(INPUT_TYPE_MARKER)) {
-      case marker: ImplicitCastInput => marker.child
-      case marker: TypeCheckInput => marker.child
+      case marker: ImplicitCastInput if marker.resolved => marker.child
+      case marker: TypeCheckInput if marker.resolved => marker.child
     }
 }
 

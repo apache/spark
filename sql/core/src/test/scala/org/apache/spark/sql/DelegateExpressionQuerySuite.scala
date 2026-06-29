@@ -142,4 +142,23 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
       s"right() should preserve the UTF8_LCASE collation, got ${df.schema("r").dataType}")
     checkAnswer(df, Row("llo"))
   }
+
+  test("right() preserves the input CHAR/VARCHAR type with preserveCharVarcharTypeInfo") {
+    // `Right.lower` types its null/empty `If` branch literals with `str.dataType` (the resolved input
+    // type the marker delegates), so the result keeps CHAR(N) instead of being widened to plain string
+    // when type coercion unifies the branches.
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(spark.sql("SELECT typeof(right(CAST('abc' AS CHAR(5)), 2)) AS t"), Row("char(5)"))
+    }
+  }
+
+  test("right() rejects a wrong number of arguments with WRONG_NUM_ARGS") {
+    // `DelegateFunction.build` validates arity before lowering, so too few/too many arguments fail
+    // with the structured error rather than an IndexOutOfBounds or a silently ignored extra argument.
+    Seq("SELECT right('abcd')", "SELECT right('abcd', 1, 99)").foreach { q =>
+      val e = intercept[AnalysisException](spark.sql(q))
+      assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        s"unexpected error condition for `$q`: ${e.getCondition}")
+    }
+  }
 }

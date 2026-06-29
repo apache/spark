@@ -39,8 +39,6 @@ object TreePattern extends Enumeration  {
   val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
   val BINARY_COMPARISON: Value = Value
-  val DELEGATE_EXPRESSION: Value = Value
-  val INPUT_TYPE_MARKER: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
   val COALESCE: Value = Value
@@ -51,6 +49,7 @@ object TreePattern extends Enumeration  {
   val CREATE_NAMED_STRUCT: Value = Value
   val CURRENT_LIKE: Value = Value
   val DATETIME: Value = Value
+  val DELEGATE_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_EXPRESSION: Value = Value
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
@@ -66,6 +65,7 @@ object TreePattern extends Enumeration  {
   val IN: Value = Value
   val IN_SUBQUERY: Value = Value
   val INSET: Value = Value
+  val INPUT_TYPE_MARKER: Value = Value
   val INVOKE: Value = Value
   val JSON_TO_STRUCT: Value = Value
   val LAMBDA_FUNCTION: Value = Value

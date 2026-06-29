@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.{RemoveInputTypeMarkers, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -101,6 +102,39 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("contract 3 (any type): no inputTypes -> no shim, arg passed through unchanged") {
     assert(buildDef(AnyFn, Literal(1L)) == Literal(1L))
+  }
+
+  test("nullIntolerant is delegated to the definition") {
+    // An Invoke with the default propagateNull = true is null-intolerant; a bare Literal is not.
+    val invoke = Invoke(Literal("x"), "toString", StringType)
+    assert(invoke.nullIntolerant)
+    assert(DelegateExpression("f", Seq(Literal("x")), invoke).nullIntolerant,
+      "the wrapper should report its null-intolerant definition's null-intolerance")
+    assert(!DelegateExpression("g", Seq(Literal(1)), Literal(1)).nullIntolerant)
+  }
+
+  test("build validates argument count against the inputTypes arity") {
+    // CheckFn declares one typed input, so build rejects any other arity with WRONG_NUM_ARGS rather
+    // than indexing past the args (too few) or silently ignoring extras (too many).
+    Seq(Seq.empty[Expression], Seq(Literal(1), Literal(2))).foreach { args =>
+      val e = intercept[AnalysisException](CheckFn.build(CheckFn.name, args))
+      assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
+    }
+    // AnyFn has no inputTypes -> it is variadic and `lower` owns the arg handling, so no arity check.
+    assert(AnyFn.build(AnyFn.name, Seq(Literal(1), Literal(2))).isInstanceOf[DelegateExpression])
+  }
+
+  test("RemoveInputTypeMarkers keeps a failed type-check marker for CheckAnalysis to report") {
+    // A resolved marker has served its purpose and is unwrapped to its child ...
+    val okDelegate = CheckFn.build(CheckFn.name, Seq(Literal(1)))
+    assert(!RemoveInputTypeMarkers.removeMarkers(okDelegate).exists(_.isInstanceOf[TypeCheckInput]),
+      "a resolved TypeCheckInput should be unwrapped")
+    // ... but a type-mismatched (unresolved) marker is left in place, so its ExpectsInputTypes failure
+    // stays visible to CheckAnalysis instead of exposing a resolved child of the wrong type.
+    val badDelegate = CheckFn.build(CheckFn.name, Seq(Literal(1L)))
+    val cleaned = RemoveInputTypeMarkers.removeMarkers(badDelegate)
+    assert(cleaned.exists(_.isInstanceOf[TypeCheckInput]),
+      s"a failed TypeCheckInput must be preserved for CheckAnalysis, got $cleaned")
   }
 
   private object MixedFn extends DelegateFunction {

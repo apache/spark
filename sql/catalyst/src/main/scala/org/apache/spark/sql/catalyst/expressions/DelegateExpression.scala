@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DELEGATE_EXPRESSION, INPUT_TYPE_MARKER, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 
 /**
@@ -58,6 +59,12 @@ case class DelegateExpression(
   override def dataType: DataType = definition.dataType
   override def nullable: Boolean = definition.nullable
   override def foldable: Boolean = definition.foldable
+  // Delegate `nullIntolerant` too (it is not derived from children, unlike `throwable`), so that
+  // null-intolerance optimizations -- `IsNotNull`-constraint inference in
+  // `QueryPlanConstraints.scanNullIntolerantAttribute` and `NullPropagation`'s `IsNull`/`IsNotNull`
+  // simplifications -- still fire while the wrapper is in the logical plan (e.g. for the
+  // `multi_get_json_object` delegate, whose `Invoke` definition is null-intolerant).
+  override def nullIntolerant: Boolean = definition.nullIntolerant
   override lazy val deterministic: Boolean = definition.deterministic
   override lazy val canonicalized: Expression = definition.canonicalized
 
@@ -132,6 +139,15 @@ trait DelegateFunction extends ExpressionBuilder {
    * casts them and `RemoveInputTypeMarkers` strips them afterwards.
    */
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // `inputTypes` carries one entry per argument position (`AnyDataType` for an accept-any-type
+    // position), so when it is set its length is the function's arity. Validate it here so a
+    // wrong-arity call fails with the structured WRONG_NUM_ARGS error rather than an
+    // IndexOutOfBounds from `lower` (too few args) or a silently-ignored extra argument (too many).
+    // An empty `inputTypes` marks a variadic function whose `lower` accepts any argument count.
+    if (inputTypes.nonEmpty && expressions.length != inputTypes.length) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        funcName, Seq(inputTypes.length), expressions.length)
+    }
     val args = expressions.zipWithIndex.map { case (e, i) =>
       val expected = if (i < inputTypes.length) inputTypes(i) else AnyDataType
       expected match {

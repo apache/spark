@@ -930,21 +930,32 @@ private[sql] object DataSourceV2Strategy extends Logging {
   protected[sql] def rebuildExpressionFromFilter(
       predicate: Predicate,
       translatedFilterToExpr: mutable.HashMap[Predicate, Expression]): Expression = {
-    predicate match {
-      case and: V2And =>
-        expressions.And(
-          rebuildExpressionFromFilter(and.left(), translatedFilterToExpr),
-          rebuildExpressionFromFilter(and.right(), translatedFilterToExpr))
-      case or: V2Or =>
-        expressions.Or(
-          rebuildExpressionFromFilter(or.left(), translatedFilterToExpr),
-          rebuildExpressionFromFilter(or.right(), translatedFilterToExpr))
-      case not: V2Not =>
-        expressions.Not(rebuildExpressionFromFilter(not.child(), translatedFilterToExpr))
-      case _ =>
-        translatedFilterToExpr.getOrElse(predicate,
-          throw SparkException.internalError(
-            "Failed to rebuild Expression for filter: " + predicate))
+    // Prefer an exact map entry before structurally descending. A normal compound predicate is
+    // decomposed at translation time (only its leaves are mapped), so this lookup misses and we fall
+    // through to the structural cases below -- behavior unchanged. But a `DelegateExpression` whose
+    // `definition` is a compound (e.g. `And(a > 1, b < 2)`) is translated as a single leaf, so the whole
+    // `V2And`/`V2Or`/`V2Not` is mapped back to the delegate; matching the structural case first would
+    // then recurse into the synthetic children, which have no map entries, and throw. Checking the map
+    // first restores the original delegate directly. This is granularity-correct at every level of
+    // descent, so a delegate nested inside an ordinary compound is covered too.
+    translatedFilterToExpr.get(predicate) match {
+      case Some(expr) => expr
+      case None =>
+        predicate match {
+          case and: V2And =>
+            expressions.And(
+              rebuildExpressionFromFilter(and.left(), translatedFilterToExpr),
+              rebuildExpressionFromFilter(and.right(), translatedFilterToExpr))
+          case or: V2Or =>
+            expressions.Or(
+              rebuildExpressionFromFilter(or.left(), translatedFilterToExpr),
+              rebuildExpressionFromFilter(or.right(), translatedFilterToExpr))
+          case not: V2Not =>
+            expressions.Not(rebuildExpressionFromFilter(not.child(), translatedFilterToExpr))
+          case _ =>
+            throw SparkException.internalError(
+              "Failed to rebuild Expression for filter: " + predicate)
+        }
     }
   }
 

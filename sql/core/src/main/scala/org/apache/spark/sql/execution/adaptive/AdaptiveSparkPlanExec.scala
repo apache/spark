@@ -814,11 +814,17 @@ case class AdaptiveSparkPlanExec(
     try {
       logicalPlan.invalidateStatsCache()
       val optimized = optimizer.execute(logicalPlan)
-      // Go through QueryExecution.createSparkPlan -- the single place that strips DelegateExpression
-      // before planning -- instead of calling the planner directly, so the re-planned stage sees the
-      // real executed expression.
+      // Strip DelegateExpression once here and reuse the SAME lowered tree for both planning and the
+      // returned logical plan. `createSparkPlan` is the single place that strips DelegateExpression
+      // before planning; feeding it the already-lowered tree makes its internal strip a no-op (the same
+      // instance is returned when no delegate remains), so the re-planned stage sees the real executed
+      // expression AND the physical plan's `logicalLink` targets point at `lowered`'s own nodes.
+      // Returning the unlowered `optimized` instead would leave those links pointing at lowered copies
+      // absent from the returned tree, so `replaceWithQueryStagesInLogicalPlan` could not match a
+      // completed stage back by reference equality and would lose that stage's statistics.
+      val lowered = LowerDelegateExpression(optimized)
       val sparkPlan = QueryExecution.createSparkPlan(
-        context.session.sessionState.planner, optimized)
+        context.session.sessionState.planner, lowered)
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
@@ -837,7 +843,7 @@ case class AdaptiveSparkPlanExec(
         case _ => newPlan
       }
 
-      Some((finalPlan, optimized))
+      Some((finalPlan, lowered))
     } catch {
       case e: InvalidAQEPlanException[_] =>
         logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
