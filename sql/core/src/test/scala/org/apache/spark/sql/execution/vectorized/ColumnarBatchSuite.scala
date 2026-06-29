@@ -1577,7 +1577,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       DecimalType.ShortDecimal, DecimalType.IntDecimal, DecimalType.ByteDecimal,
       DecimalType.FloatDecimal, DecimalType.LongDecimal, new DecimalType(5, 2),
       new DecimalType(12, 2), new DecimalType(30, 10), CalendarIntervalType,
-      DateType, StringType, BinaryType, TimestampType, TimestampNTZType, TimeType())
+      DateType, StringType, BinaryType, TimestampType, TimestampNTZType,
+      TimeType(0), TimeType(3), TimeType(), TimeType(TimeType.MAX_PRECISION))
     val seed = System.nanoTime()
     val NUM_ROWS = 200
     val NUM_ITERS = 1000
