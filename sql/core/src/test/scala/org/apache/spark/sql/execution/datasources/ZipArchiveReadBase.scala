@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.datasources
 
 /**
- * Reads of text files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared text archive
- * tests from [[TextArchiveReadBase]], run over tar containers via [[TarArchiveTestUtils]].
+ * Binds [[ArchiveReadSuiteBase]]'s archive-format hooks to zip containers (`.zip`). The
+ * container-writing helpers live in [[ZipArchiveTestUtils]] (shared with standalone suites that
+ * cannot extend `ArchiveReadSuiteBase`). Reusable across file formats -- a
+ * `<format>ZipArchiveReadSuite` mixes this in alongside the file-format trait.
  */
-class TextTarArchiveReadSuite extends TextArchiveReadBase with TarArchiveTestUtils {
+trait ZipArchiveReadBase extends ArchiveReadSuiteBase with ZipArchiveTestUtils {
 
-  override protected def corruptArchiveExtension: String = "tar.gz"
+  override protected def corruptArchiveExtension: String = "zip"
 }
