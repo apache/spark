@@ -67,6 +67,8 @@ object AggregatePushDownUtils {
       val structField = getStructFieldForCol(columnName)
 
       structField.dataType match {
+        // Push down min/max only for primitive types whose footer statistics are
+        // well-defined and directly comparable. Notable exclusions:
         // not push down complex type
         // not push down Timestamp because INT96 sort order is undefined,
         // Parquet doesn't return statistics for INT96
@@ -74,8 +76,9 @@ object AggregatePushDownUtils {
         // (https://issues.apache.org/jira/browse/PARQUET-1685), Parquet Binary
         // could be Spark StringType, BinaryType or DecimalType.
         // not push down for ORC with same reason.
-        // TIME is INT64/LONG-backed with a defined sort order, so real min/max
-        // statistics exist in the footer for both Parquet and ORC.
+        // TIME is included because it is INT64/LONG-backed with a defined sort
+        // order, so real min/max statistics exist in the footer for both Parquet
+        // and ORC.
         case BooleanType | ByteType | ShortType | IntegerType
              | LongType | FloatType | DoubleType | DateType | _: TimeType =>
           finalSchema = finalSchema.add(structField.copy(s"$aggType(" + structField.name + ")"))
