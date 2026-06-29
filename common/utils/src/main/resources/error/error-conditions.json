@@ -6044,6 +6044,24 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED" : {
+    "message" : [
+      "Aggregate push-down is not supported for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ],
+    "subClass" : {
+      "NO_MIN_MAX" : {
+        "message" : [
+          "No min/max value found in the column statistics."
+        ]
+      },
+      "NO_NUM_NULLS" : {
+        "message" : [
+          "The number of nulls is not set in the column statistics."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
       "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
@@ -11498,16 +11516,6 @@
   "_LEGACY_ERROR_TEMP_3170" : {
     "message" : [
       "SortAggregate code-gen does not support grouping keys"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
     ]
   },
   "_LEGACY_ERROR_TEMP_3173" : {
