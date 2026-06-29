@@ -161,10 +161,9 @@ class FunctionResolution(
    * [[resolveFunction]] / [[resolveTableFunction]] cannot change resolution precedence. A miss
    * still falls through to the full candidate loop, so non-built-in names are unaffected.
    *
-   * In every default `spark.sql.functionResolution.sessionOrder` mode `system.builtin` is the first
-   * entry (`second` / `last`) except `first`, where `system.session` precedes it and the fast-path
-   * is correctly disabled; only a custom `SET PATH` can place another entry before
-   * `system.builtin`.
+   * The default `spark.sql.functionResolution.sessionOrder` modes `second` and `last` put
+   * `system.builtin` first; only `first` puts `system.session` before it, where the fast-path is
+   * correctly disabled. Only a custom `SET PATH` can place another entry before `system.builtin`.
    */
   private def computeBuiltinFastPathSafe(pathEntries: Seq[Seq[String]]): Boolean =
     pathEntries.headOption.exists(CatalogManager.isSystemBuiltinPathEntry)
