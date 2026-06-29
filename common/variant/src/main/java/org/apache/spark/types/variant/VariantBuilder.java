@@ -171,6 +171,16 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  // Return a new variant with null-valued object fields removed, recursing into nested objects
+  // and arrays. When `includeArrays` is true, null array elements are removed too; when false,
+  // arrays keep their nulls but objects inside them are still cleaned. Empty containers and a
+  // top-level variant null are left unchanged. The result is always rebuilt with fresh metadata.
+  public static Variant stripNulls(Variant v, boolean includeArrays) {
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithNullStrippingImpl(v.value, v.metadata, v.pos, includeArrays);
+    return builder.result();
+  }
+
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
   public Variant result() {
     int numKeys = dictionaryKeys.size();
@@ -896,6 +906,54 @@ public class VariantBuilder {
         appendNewPath(segments, depth + 1, val);
       }
       finishWritingArray(start, offsets);
+    }
+  }
+
+  private void appendWithNullStrippingImpl(
+      byte[] value, byte[] metadata, int pos, boolean includeArrays) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (basicType == OBJECT) {
+      handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          // Drop the whole field when its value is a variant null.
+          if (getType(value, elementPos) == Type.NULL) {
+            continue;
+          }
+          String key = getMetadataKey(metadata, id);
+          int newId = addKey(key);
+          fields.add(new FieldEntry(key, newId, writePos - start));
+          appendWithNullStrippingImpl(value, metadata, elementPos, includeArrays);
+        }
+        finishWritingObject(start, fields);
+        return null;
+      });
+    } else if (basicType == ARRAY) {
+      handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          // Drop variant-null elements only when stripping arrays; otherwise keep them but still
+          // recurse into nested containers.
+          if (includeArrays && getType(value, elementPos) == Type.NULL) {
+            continue;
+          }
+          offsets.add(writePos - start);
+          appendWithNullStrippingImpl(value, metadata, elementPos, includeArrays);
+        }
+        finishWritingArray(start, offsets);
+        return null;
+      });
+    } else {
+      // Scalars and standalone variant nulls are appended unchanged.
+      appendVariantImpl(value, metadata, pos);
     }
   }
 

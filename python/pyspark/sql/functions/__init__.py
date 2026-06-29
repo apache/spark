@@ -482,6 +482,7 @@ __all__ = [  # noqa: F405
     "try_variant_get",
     "variant_array_append",
     "variant_delete",
+    "variant_strip_nulls",
     "variant_get",
     "variant_insert",
     "try_variant_insert",

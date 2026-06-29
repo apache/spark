@@ -259,6 +259,12 @@ object VariantExpressionEvalUtils {
     arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName)
   }
 
+  def stripNulls(input: VariantVal, includeArrays: Boolean): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.stripNulls(v, includeArrays)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate

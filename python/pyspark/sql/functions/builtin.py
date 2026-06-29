@@ -22915,6 +22915,53 @@ def variant_array_append(
 
 
 @_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: Union[Column, bool] = True) -> Column:
+    """
+    Recursively removes null fields from variant objects, and null elements from arrays unless
+    `include_arrays` is False. Returns NULL if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    include_arrays : :class:`~pyspark.sql.Column` or bool, optional
+        whether null elements are also removed from arrays. If False, array null elements are kept
+        while null fields of nested objects are still removed. Defaults to True.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with variant null fields/elements removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_strip_nulls
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : null, "c" : [1, null], "d" : { "e" : null, "f" : 4 } }'''
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_strip_nulls(v)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1],"d":{"f":4}}')]
+    >>> df.select(to_json(variant_strip_nulls(v, False)).alias("r")).collect()
+    [Row(r='{"a":1,"c":[1,null],"d":{"f":4}}')]
+    >>> df.select(variant_strip_nulls(lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    include_arrays_col = (
+        include_arrays if isinstance(include_arrays, Column) else lit(include_arrays)
+    )
+    return _invoke_function(
+        "variant_strip_nulls",
+        _to_java_column(v),
+        _to_java_column(include_arrays_col),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
