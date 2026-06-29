@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.datasources
 
 /**
- * Reads of text files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared text archive
- * tests from [[TextArchiveReadBase]], run over tar containers via [[TarArchiveTestUtils]].
+ * Reads of text files packed in zip archives (`.zip`): the shared text archive tests from
+ * [[TextArchiveReadBase]], run over zip containers via [[ZipArchiveTestUtils]].
  */
-class TextTarArchiveReadSuite extends TextArchiveReadBase with TarArchiveTestUtils {
+class TextZipArchiveReadSuite extends TextArchiveReadBase with ZipArchiveTestUtils {
 
-  override protected def corruptArchiveExtension: String = "tar.gz"
+  override protected def corruptArchiveExtension: String = "zip"
 }
