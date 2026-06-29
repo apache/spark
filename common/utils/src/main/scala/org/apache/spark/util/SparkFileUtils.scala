@@ -61,6 +61,10 @@ private[spark] trait SparkFileUtils extends Logging {
 
   /**
    * Lists files recursively.
+   *
+   * A directory that cannot be listed (`File.listFiles` returns null, e.g. an IO error or the
+   * directory being removed during the walk) is skipped with a warning rather than throwing, so
+   * the result may be partial when part of the tree is unreadable.
    */
   def recursiveList(f: File): Array[File] = {
     require(f.isDirectory)

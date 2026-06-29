@@ -23,6 +23,16 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
 class SparkFileUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
+  // Returns the log content appended to `target/spark-file-utils.log` (configured for the
+  // SparkFileUtils logger in log4j2.properties) while running `f`.
+  private def captureLogOutput(f: () => Unit): String = {
+    val logFile = new File(new File(".").getCanonicalPath, "target/spark-file-utils.log")
+    val before = if (logFile.exists()) Files.readString(logFile.toPath) else ""
+    f()
+    val after = if (logFile.exists()) Files.readString(logFile.toPath) else ""
+    after.substring(before.length)
+  }
+
   test("recursiveList lists all nested files and directories") {
     val root = Files.createTempDirectory("spark-recursive-list").toFile
     try {
@@ -41,13 +51,16 @@ class SparkFileUtilsSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     }
   }
 
-  test("recursiveList returns empty instead of throwing when a directory cannot be listed") {
-    // A directory whose listFiles returns null must yield an empty result, not an NPE.
+  test("recursiveList returns empty and warns instead of throwing when a dir cannot be listed") {
+    // A directory whose listFiles returns null must yield an empty result, not an NPE, and the
+    // skipped directory must be logged so a partial result is traceable.
     val unreadable = new File("spark-unreadable-dir") {
       override def isDirectory: Boolean = true
       override def listFiles(): Array[File] = null
     }
-    assert(SparkFileUtils.recursiveList(unreadable).isEmpty)
+    val logOutput = captureLogOutput(() => assert(SparkFileUtils.recursiveList(unreadable).isEmpty))
+    assert(logOutput.contains("Failed to list directory"))
+    assert(logOutput.contains("spark-unreadable-dir"))
   }
 
   test("recursiveList skips a subdirectory whose listFiles returns null mid-walk") {
