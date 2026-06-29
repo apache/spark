@@ -3728,6 +3728,10 @@ class FunctionsTestsMixin:
             expected_15_seconds,
         )
         assertDataFrameEqual(
+            df.select(F.session_window("date", F.lit("15 seconds")).alias("session_window")),
+            expected_15_seconds,
+        )
+        assertDataFrameEqual(
             df.select(F.session_window(df.date, "1 minute").alias("session_window")),
             expected_1_minute,
         )
