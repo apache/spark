@@ -31,8 +31,7 @@ import org.apache.spark.sql.types._
 
 class ResolveBinBySuite extends AnalysisTest {
 
-  // BIN BY is gated off by default; run the resolution tests with it enabled. The dedicated
-  // gate test below uses `super.test` to observe the default-off behavior.
+  // Enable the operator for all tests here (the gate test opts out via `super.test`).
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
                              (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {
@@ -126,17 +125,21 @@ class ResolveBinBySuite extends AnalysisTest {
   }
 
   test("rejects invalid BIN WIDTH") {
-    def invalid(w: Expression): Unit =
-      expectError(unresolved(binWidth = w), "BIN_BY_INVALID_BIN_WIDTH")
-    invalid(Literal(1, YearMonthIntervalType()))   // year-month
-    invalid(Literal(0L, DayTimeIntervalType()))    // zero
-    invalid(Literal(-1L, DayTimeIntervalType()))   // negative
+    expectError(
+      unresolved(binWidth = Literal(1, YearMonthIntervalType())), "BIN_BY_INVALID_BIN_WIDTH_TYPE")
+    expectError(
+      unresolved(binWidth = Literal(0L, DayTimeIntervalType())), "BIN_BY_NON_POSITIVE_BIN_WIDTH")
+    expectError(
+      unresolved(binWidth = Literal(-1L, DayTimeIntervalType())), "BIN_BY_NON_POSITIVE_BIN_WIDTH")
     // Null width is rejected as a null argument, distinct from a non-positive width.
     expectError(
       unresolved(binWidth = Literal(null, DayTimeIntervalType())), "BIN_BY_NULL_ARGUMENT")
     // A foldable CAST that throws on eval (ANSI) surfaces cleanly, not as a raw exception.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      invalid(Cast(Literal.create("not an interval", StringType), DayTimeIntervalType()))
+      expectError(
+        unresolved(binWidth = Cast(Literal.create("not an interval", StringType),
+          DayTimeIntervalType())),
+        "BIN_BY_INVALID_BIN_WIDTH")
     }
     // Non-foldable is rejected before evaluation.
     val widthAttr = AttributeReference("w", DayTimeIntervalType(), nullable = true)()
@@ -236,11 +239,23 @@ class ResolveBinBySuite extends AnalysisTest {
     assert(resolved2.rangeEnd.exprId == t2End.exprId)
   }
 
-  test("rejects unresolvable column references with BIN_BY_COLUMN_NOT_FOUND") {
+  test("rejects unresolvable column references with UNRESOLVED_COLUMN") {
     expectError(
-      unresolved(rangeStart = UnresolvedAttribute("nonexistent")), "BIN_BY_COLUMN_NOT_FOUND")
+      unresolved(rangeStart = UnresolvedAttribute("nonexistent")),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     expectError(
-      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))), "BIN_BY_COLUMN_NOT_FOUND")
+      unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+  }
+
+  test("UNRESOLVED_COLUMN suggestions are ordered by similarity to the missing name") {
+    // `valeu` is one edit away from `value`, so `value` is suggested first and the remaining
+    // columns follow by edit distance.
+    val ex = intercept[SparkThrowable](
+      ResolveBinBy.apply(unresolved(rangeStart = UnresolvedAttribute("valeu"))))
+    assert(ex.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+    assert(ex.getMessageParameters.get("objectName") == "`valeu`")
+    assert(ex.getMessageParameters.get("proposal") == "`value`, `label`, `ts_end`, `ts_start`")
   }
 
   test("rejects nested column refs through the full analyzer (RULE_ORDERING_DEPENDENCIES)") {
@@ -262,7 +277,7 @@ class ResolveBinBySuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       plan,
       "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
-      Map("columnName" -> "`ts_start`"))
+      Map("columnName" -> "\"outer.ts_start\""))
   }
 
   test("rejects non-timestamp or mismatched RANGE columns") {
@@ -291,7 +306,8 @@ class ResolveBinBySuite extends AnalysisTest {
     // Integral, DECIMAL, DT INTERVAL, and other non-float/double types are rejected;
     // users CAST to DOUBLE in an upstream projection.
     Seq(intCol, decimalCol, intervalCol, label).foreach { c =>
-      expectError(unresolved(child = child, distribute = Seq(c)), "BIN_BY_DISTRIBUTE_TYPE_MISMATCH")
+      expectError(
+        unresolved(child = child, distribute = Seq(c)), "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE")
     }
   }
 
@@ -319,9 +335,10 @@ class ResolveBinBySuite extends AnalysisTest {
       "appended BinBy attributes must have distinct exprIds across the two join sides")
   }
 
-  // `super.test` escapes the suite-wide flag-on wrapper so this runs with the default (off).
-  super.test("BIN BY is gated off by default") {
-    assert(!SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED))
-    expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
+  // `super.test` escapes the suite-wide flag-on wrapper; pin the flag off explicitly.
+  super.test("BIN BY is rejected when the operator is disabled") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+      expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
+    }
   }
 }

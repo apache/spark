@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{FileNotFoundException, InputStream, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
+import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
@@ -119,13 +120,16 @@ abstract class CSVDataSource extends Serializable with Logging {
    *
    * @param getParser builds a fresh [[UnivocityParser]].
    * @param getHeaderChecker builds a fresh [[CSVHeaderChecker]] for `(isStartOfFile, source)`.
+   * @param ignoredPathSegmentRegex the compiled effective `ignoredPathSegmentRegex` option, so
+   *                           hidden entries are skipped exactly like Spark's file listing would.
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow]
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow]
 
   /**
    * Shared driver used by the [[readArchive]] implementations: streams each non-skipped entry's
@@ -137,10 +141,11 @@ abstract class CSVDataSource extends Serializable with Logging {
       conf: Configuration,
       file: PartitionedFile,
       getParser: () => UnivocityParser,
-      getHeaderChecker: (Boolean, String) => CSVHeaderChecker)(
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
+      ignoredPathSegmentRegex: Pattern)(
       parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
     : Iterator[InternalRow] = {
-    ArchiveReader(file.toPath).readEntries(conf) { (entryName, in) =>
+    ArchiveReader(file.toPath).readEntries(conf, ignoredPathSegmentRegex) { (entryName, in) =>
       val headerChecker =
         getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/$entryName")
       val parser = getParser()
@@ -296,12 +301,14 @@ object TextInputCSVDataSource extends CSVDataSource {
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow] =
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
     // Stream each tar entry through the line-based parser, treating the entry exactly like a
     // standalone CSV file (a fresh parser/header checker is built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
-      UnivocityParser.parseIterator(
-        entryLines(in, parser.options), parser, headerChecker, requiredSchema)
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+      (parser, headerChecker, in) =>
+        UnivocityParser.parseIterator(
+          entryLines(in, parser.options), parser, headerChecker, requiredSchema)
     }
 
   /**
@@ -352,7 +359,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       maybeFirstLine: Option[String],
       parsedOptions: CSVOptions): StructType = {
     val csvParser = new CsvParser(parsedOptions.asParserSettings)
-    maybeFirstLine.map(csvParser.parseLine(_)) match {
+    maybeFirstLine.map(UnivocityParser.parseLine(csvParser, _)) match {
       case Some(firstRow) if firstRow != null =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
@@ -362,9 +369,6 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
-          // Route data rows through UnivocityParser.parseLine so a too-many-columns row surfaces as
-          // MALFORMED_CSV_RECORD, not a raw ArrayIndexOutOfBoundsException (SPARK-57195). The
-          // first-line parse above stays raw to keep SPARK-28431's bounded TextParsingException.
           linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
@@ -425,11 +429,13 @@ object MultiLineCSVDataSource extends CSVDataSource {
       file: PartitionedFile,
       getParser: () => UnivocityParser,
       getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
-      requiredSchema: StructType): Iterator[InternalRow] =
+      requiredSchema: StructType,
+      ignoredPathSegmentRegex: Pattern): Iterator[InternalRow] =
     // Stream each tar entry whole through the multi-line parser (a fresh parser/header checker is
     // built per entry).
-    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
-      UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker, ignoredPathSegmentRegex) {
+      (parser, headerChecker, in) =>
+        UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
     }
 
   override protected def tokenizeForInference(

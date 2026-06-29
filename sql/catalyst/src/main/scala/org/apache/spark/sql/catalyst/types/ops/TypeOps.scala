@@ -36,6 +36,12 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  * implemented by every type. Optional methods (serialization, Arrow writer) return Option and
  * default to None - types implement them as they expand their integration coverage.
  *
+ * Extends [[TypeApiOps]] (the api-side trait) so that callers holding an `Option[TypeOps]` can
+ * invoke client-side methods (`format`, `toSQLValue`, `getEncoder`, ...) directly via `.map`,
+ * instead of an `isInstanceOf[TypeApiOps]` runtime narrowing. Concrete `*TypeOps` classes typically
+ * extend `*TypeApiOps` to inherit api-side method implementations -- this trait makes that
+ * relationship part of the type system rather than a runtime invariant.
+ *
  * USAGE - integration points use TypeOps(dt) which returns Option[TypeOps]:
  * {{{
  * def getPhysicalType(dt: DataType): PhysicalDataType =
@@ -48,7 +54,8 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  * }}}
  *
  * IMPLEMENTATION - to add a new type to the framework:
- *   1. Create a case class extending TypeOps (and optionally TypeApiOps for client-side ops)
+ *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
+ *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
  *   2. Register it in TypeOps.apply() below - single registration point
  *   3. No other file modifications needed - all integration points automatically work
  *
@@ -56,10 +63,7 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *   TimeTypeOps for a reference implementation
  * @since 4.2.0
  */
-trait TypeOps extends Serializable {
-
-  /** The DataType this Ops instance handles. */
-  def dataType: DataType
+trait TypeOps extends TypeApiOps {
 
   // ==================== Physical Type Representation ====================
 

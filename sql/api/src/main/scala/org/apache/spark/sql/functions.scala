@@ -8170,7 +8170,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
 
@@ -8179,7 +8179,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
@@ -8198,6 +8198,16 @@ object functions {
    * @since 3.5.0
    */
   def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC for a nanosecond-precision
+   * timestamp (`TIMESTAMP_LTZ(p)` / `TIMESTAMP_NTZ(p)`, `p` in `[7, 9]`). The result is a
+   * lossless `DECIMAL(21, 0)`.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
 
   /**
    * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
@@ -8558,6 +8568,15 @@ object functions {
    * @since 3.5.0
    */
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
+
+  /**
+   * Creates a timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from
+   * the number of nanoseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def timestamp_nanos(e: Column): Column = Column.fn("timestamp_nanos", e)
 
   /**
    * Gets the difference between the timestamps in the specified units by truncating the fraction
@@ -9687,6 +9706,44 @@ object functions {
    * @since 4.2.0
    */
   def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
+
+  /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the first JSONPath string. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath arguments, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: Column, paths: Column*): Column =
+    Column.fn("variant_delete", (v +: path +: paths): _*)
+
+  /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the first JSONPath identifying a deletion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath strings, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: String, paths: String*): Column =
+    Column.fn("variant_delete", (v +: lit(path) +: paths.map(lit)): _*)
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to

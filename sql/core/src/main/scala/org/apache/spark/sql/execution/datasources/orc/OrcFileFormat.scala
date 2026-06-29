@@ -225,8 +225,8 @@ class OrcFileFormat
 
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
-          val orcRecordReader = new OrcInputFormat[OrcStruct]
-            .createRecordReader(fileSplit, taskAttemptContext)
+          val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
+            filePath, taskConf, fileSplit, readerOptions)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
@@ -250,9 +250,6 @@ class OrcFileFormat
     case _: VariantType => false
 
     case _: GeometryType | _: GeographyType => false
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

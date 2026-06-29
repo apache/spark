@@ -357,35 +357,35 @@
     "message" : [
       "The ALIGN TO expression type <originType> must match the range column type <rangeType>."
     ],
-    "sqlState" : "42804"
-  },
-  "BIN_BY_COLUMN_NOT_FOUND" : {
-    "message" : [
-      "The column <columnName> referenced in BIN BY was not found in the input relation."
-    ],
-    "sqlState" : "42703"
-  },
-  "BIN_BY_DISTRIBUTE_TYPE_MISMATCH" : {
-    "message" : [
-      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
-    ],
-    "sqlState" : "42804"
+    "sqlState" : "42K09"
   },
   "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN" : {
     "message" : [
       "Column <columnName> appears multiple times in the BIN BY DISTRIBUTE UNIFORM clause."
     ],
-    "sqlState" : "42701"
+    "sqlState" : "42713"
   },
   "BIN_BY_INVALID_ALIGN_TO" : {
     "message" : [
       "The ALIGN TO expression could not be evaluated to a constant value. Got: <expr>."
     ],
-    "sqlState" : "42K09"
+    "sqlState" : "42K08"
   },
   "BIN_BY_INVALID_BIN_WIDTH" : {
     "message" : [
-      "The BIN WIDTH expression must be a positive DAY-TIME INTERVAL. Got: <expr>."
+      "The BIN WIDTH expression could not be evaluated to a constant value. Got: <expr>."
+    ],
+    "sqlState" : "42K08"
+  },
+  "BIN_BY_INVALID_BIN_WIDTH_TYPE" : {
+    "message" : [
+      "The BIN WIDTH expression must be of type \"INTERVAL DAY TO SECOND\", but got <inputType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE" : {
+    "message" : [
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
     ],
     "sqlState" : "42K09"
   },
@@ -401,6 +401,12 @@
     ],
     "sqlState" : "42601"
   },
+  "BIN_BY_NON_POSITIVE_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH expression must be positive. Got: <expr>."
+    ],
+    "sqlState" : "42816"
+  },
   "BIN_BY_NULL_ARGUMENT" : {
     "message" : [
       "The <clause> expression in BIN BY must not be NULL."
@@ -411,13 +417,13 @@
     "message" : [
       "The range columns in BIN BY must be TIMESTAMP or TIMESTAMP_NTZ. Column <columnName> has type <columnType>. Both range columns must have the same type."
     ],
-    "sqlState" : "42804"
+    "sqlState" : "42K09"
   },
   "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN" : {
     "message" : [
       "BIN BY requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before BIN BY."
     ],
-    "sqlState" : "42K09"
+    "sqlState" : "0A000"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
@@ -3009,12 +3015,6 @@
           "<errors>"
         ]
       },
-      "COLUMN_ID_MISMATCH" : {
-        "message" : [
-          "Column IDs have changed:",
-          "<errors>"
-        ]
-      },
       "METADATA_COLUMNS_MISMATCH" : {
         "message" : [
           "Metadata columns have changed:",
@@ -5028,6 +5028,12 @@
     ],
     "sqlState" : "22009"
   },
+  "INVALID_TIME_LITERAL_PRECISION" : {
+    "message" : [
+      "The time literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a time literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
       "Cannot specify both version and timestamp when time travelling the table."
@@ -5159,6 +5165,13 @@
     "message" : [
       "The path `<path>` is not a valid variant extraction path in `<functionName>`.",
       "A valid path should start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_VARIANT_PATH" : {
+    "message" : [
+      "The path '<path>' is not a valid <functionName> target.",
+      "A valid path should start with `$` and is followed by segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
     ],
     "sqlState" : "22023"
   },
@@ -6030,6 +6043,24 @@
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED" : {
+    "message" : [
+      "Aggregate push-down is not supported for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ],
+    "subClass" : {
+      "NO_MIN_MAX" : {
+        "message" : [
+          "No min/max value found in the column statistics."
+        ]
+      },
+      "NO_NUM_NULLS" : {
+        "message" : [
+          "The number of nulls is not set in the column statistics."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
   },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
@@ -8356,12 +8387,12 @@
       },
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
-          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have MAP type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
-          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have VARIANT type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PATH_WHEN_DISABLED" : {
@@ -8850,7 +8881,7 @@
   },
   "UNSUPPORTED_TIME_PRECISION" : {
     "message" : [
-      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 9]."
     ],
     "sqlState" : "0A001"
   },
@@ -10104,11 +10135,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2003" : {
-    "message" : [
-      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
@@ -11501,16 +11527,6 @@
   "_LEGACY_ERROR_TEMP_3170" : {
     "message" : [
       "SortAggregate code-gen does not support grouping keys"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
     ]
   },
   "_LEGACY_ERROR_TEMP_3173" : {

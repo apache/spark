@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
@@ -306,6 +307,20 @@ private[parquet] class ParquetRowConverter(
       parquetType: Type,
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // Passes all ParquetRowConverter constructor params to the extended newConverter overload
+    // so struct-backed types can create recursive converters.
+    ParquetTypeOps(catalystType)
+      .map(_.newConverter(
+        parquetType, updater, schemaConverter, convertTz,
+        datetimeRebaseSpec, int96RebaseSpec))
+      .getOrElse(newConverterDefault(parquetType, catalystType, updater))
+  }
+
+  private def newConverterDefault(
+      parquetType: Type,
+      catalystType: DataType,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
       parquetType.getLogicalTypeAnnotation match {
@@ -497,17 +512,6 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
             this.updater.set(dateRebaseFunc(value))
-          }
-        }
-
-      case _: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val nanos = DateTimeUtils.microsToNanos(value)
-            this.updater.setLong(nanos)
           }
         }
 

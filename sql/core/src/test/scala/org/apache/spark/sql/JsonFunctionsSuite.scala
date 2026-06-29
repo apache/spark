@@ -23,13 +23,15 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import com.fasterxml.jackson.core.StreamReadConstraints
+
 import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{JsonToStructs, Literal, MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -81,6 +83,244 @@ class JsonFunctionsSuite extends SharedSparkSession {
         functions.get_json_object($"jstring", "$.f4"),
         functions.get_json_object($"jstring", "$.f5")),
       expected)
+  }
+
+  test("SPARK-47670: share simple top-level get_json_object paths") {
+    val input = Seq[String](
+      """{"a":"one","a.b":"dotted","b":2,"obj":{"x":1},"arr":[1,2]}""",
+      """{"a":"first","a":"second","b":3}""",
+      """{"a":null,"a":"after_null","b":4}""",
+      """{"a":"before_error","b":"""",
+      """{'a':'single','b':5}""",
+      """[1,2,3]""",
+      """{"a":"trailing","b":6} trailing text""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val df = input.toDF("json")
+        rows = df.select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$['a.b']"),
+          get_json_object($"json", "$.b"),
+          get_json_object($"json", "$.b").cast(IntegerType),
+          get_json_object($"json", "$.obj"),
+          get_json_object($"json", "$.arr"),
+          get_json_object($"json", "$.missing")).collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+  }
+
+  test("SPARK-57626: share simple nested get_json_object paths") {
+    val malformed = """{"a":{"b":1,"c":"\q"},"d":2}"""
+    val input = Seq[String](
+      """{"a":{"b":1,"c":"x"},"a.b":{"c.d":"dot"},"d":2}""",
+      """{"a":{"b":"first"},"a":{"b":"second","c":"later"},"d":3}""",
+      """{"a":null,"a":{"b":"after-null","c":null,"c":"after-c-null"},""" +
+        """"a.b":{"c.d":4},"d":5}""",
+      """{"a":"not-object","a":{"b":{"nested":1},"c":[1,2]},""" +
+        """"a.b":{"c.d":"dot"},"d":null,"d":6}""",
+      malformed,
+      """{'a':{'b':'single','c':7},'a.b':{'c.d':8},'d':9}""",
+      """[1,2,3]""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$['a']['c']"),
+          get_json_object($"json", "$['a.b']['c.d']"),
+          get_json_object($"json", "$.d"))
+        if (jsonOptimization && sharedParsing) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(6) == Seq(
+      Row("1", "x", "dot", "2"),
+      Row("first", "later", null, "3"),
+      Row("after-null", "after-c-null", "4", "5"),
+      Row("{\"nested\":1}", "[1,2]", "dot", "6"),
+      Row(null, null, null, null),
+      Row("single", "7", "8", "9")))
+  }
+
+  test("SPARK-57626: shared nested get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":{"b":"before","c":"$invalidSurrogate","d":"after"},"z":"root"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$.a.c"),
+          get_json_object($"json", "$.a.d"),
+          get_json_object($"json", "$.z")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(Row("before", null, "after", "root")))
+  }
+
+  test("SPARK-47670: shared get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":"before","b":"$invalidSurrogate","c":"after"}""",
+      s"""{"a":"before","b":{"nested":"$invalidSurrogate"},"c":"after"}""",
+      s"""{"a":"before","b":"$invalidSurrogate","b":"valid","c":"after"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$.b"),
+          get_json_object($"json", "$.c")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(
+      Row("before", null, "after"),
+      Row("before", s"""{"nested":"$invalidSurrogate"}""", "after"),
+      Row("before", null, "after")))
+  }
+
+  test("SPARK-47670: shared get_json_object falls back after parser-side rendering failure") {
+    val oversized = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
+
+    def result(sharedParsingEnabled: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsingEnabled.toString) {
+        val query = Seq(s"""{"a":"$oversized","b.c":2}""").toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$['b.c']"))
+
+        if (sharedParsingEnabled) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val sharedResult = result(sharedParsingEnabled = true)
+    assert(sharedResult == result(sharedParsingEnabled = false))
+    assert(sharedResult == Seq(Row(null, "2")))
+  }
+
+  test("SPARK-47670: shared get_json_object does not return partial malformed results") {
+    val malformed = """{"a":1,"b":"\q}"}"""
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        val query = Seq(malformed).toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$.b"))
+        if (jsonOptimization) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val shared = result(jsonOptimization = true)
+    val legacy = result(jsonOptimization = false)
+    assert(shared == legacy)
+    assert(shared == Seq(Row(null, null)))
+  }
+
+  test("SPARK-47670: shared get_json_object handles deeply nested values on a small stack") {
+    val depth = 999
+    val nested = "[" * depth + "1" + "]" * depth
+    val expression = MultiGetJsonObject(
+      Literal(s"""{"a":$nested,"b":2}"""), Seq("$.a", "$.b"))
+    val result = Array.ofDim[Any](1)
+    val thread = new Thread(
+      null,
+      new Runnable {
+        override def run(): Unit = {
+          try {
+            result(0) = expression.eval()
+          } catch {
+            case error: Throwable => result(0) = error
+          }
+        }
+      },
+      "deep-json-copy",
+      256 * 1024)
+
+    thread.start()
+    thread.join(30000)
+    assert(!thread.isAlive, "Deep JSON extraction did not finish")
+    result(0) match {
+      case error: Throwable => fail("Deep JSON extraction failed", error)
+      case row: InternalRow =>
+        assert(row.getUTF8String(0).numBytes() == 2 * depth + 1)
+        assert(row.getUTF8String(1).toString == "2")
+      case other => fail(s"Unexpected deep JSON extraction result: $other")
+    }
+  }
+
+  test("SPARK-57626: shared nested get_json_object supports project code generation") {
+    withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+      val df = Seq("""{"a":{"x":1,"y":2}}""").toDF("json").select(
+        get_json_object($"json", "$.a.x"),
+        get_json_object($"json", "$.a.y"))
+
+      checkAnswer(df, Row("1", "2"))
+      def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {
+        case _: InputAdapter => false
+        case other
+            if other.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject])) => true
+        case other => other.children.exists(containsSharedExtraction)
+      }
+      assert(df.queryExecution.executedPlan.exists {
+        case stage: WholeStageCodegenExec => containsSharedExtraction(stage.child)
+        case _ => false
+      }, s"Shared get_json_object project was outside whole-stage codegen:\n${df.queryExecution}")
+    }
   }
 
   test("SPARK-42782: Hive compatibility check for get_json_object") {
@@ -1365,6 +1605,25 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-47670: separately projected from_json fields preserve malformed-input semantics") {
+    withSQLConf(
+        SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      val schema = StructType.fromDDL("a int, b struct<x: int>")
+      val input = Seq("""{"a":1,"b":{"x":""").toDF("json")
+      val parsed = from_json($"json", schema)
+      val query = input.select(parsed.getField("a"), parsed.getField("b"))
+
+      val parsedSchemas = query.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case jsonToStructs: JsonToStructs => jsonToStructs.schema
+      })
+      assert(parsedSchemas == Seq(
+        StructType.fromDDL("a int"),
+        StructType.fromDDL("b struct<x: int>")))
+      checkAnswer(query, Row(null, null))
+    }
+  }
+
   test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
     val ymDF = Seq(Period.of(1, 2, 0)).toDF()
     Seq(
@@ -1543,7 +1802,10 @@ class JsonFunctionsSuite extends SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, time, timeStr) =>

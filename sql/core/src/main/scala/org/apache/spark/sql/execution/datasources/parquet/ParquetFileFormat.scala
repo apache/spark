@@ -49,6 +49,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
@@ -149,6 +150,9 @@ class ParquetFileFormat
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong)
+    hadoopConf.setBoolean(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+      sqlConf.timestampNanosTypesEnabled)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       sqlConf.parquetReaderRespectUnknownTypeAnnotation)
@@ -411,13 +415,15 @@ class ParquetFileFormat
     }
   }
 
-  override def supportDataType(dataType: DataType): Boolean = dataType match {
+  override def supportDataType(dataType: DataType): Boolean =
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(dataType).map(_.supportDataType)
+      .getOrElse(supportDataTypeDefault(dataType))
+
+  private def supportDataTypeDefault(dataType: DataType): Boolean = dataType match {
     // GeoSpatial data types in Parquet are limited only to types with supported SRIDs.
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
 
     case _: AtomicType | _: NullType => true
 
@@ -458,6 +464,7 @@ object ParquetFileFormat extends Logging {
       sqlConf.isParquetINT96AsTimestamp,
       inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled,
       nanosAsLong = sqlConf.legacyParquetNanosAsLong,
+      timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled,
       respectUnknownTypeAnnotation =
         sqlConf.parquetReaderRespectUnknownTypeAnnotation)
 
@@ -565,6 +572,7 @@ object ParquetFileFormat extends Logging {
     val assumeInt96IsTimestamp = sqlConf.isParquetINT96AsTimestamp
     val inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sqlConf.legacyParquetNanosAsLong
+    val timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
 
@@ -576,6 +584,7 @@ object ParquetFileFormat extends Logging {
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong,
+        timestampNanosTypesEnabled = timestampNanosTypesEnabled,
         respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)

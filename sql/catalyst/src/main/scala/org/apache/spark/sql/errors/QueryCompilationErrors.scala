@@ -307,29 +307,23 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "rangeType" -> toSQLType(rangeType)))
   }
 
-  def binByColumnNotFoundError(columnName: String): Throwable = {
-    new AnalysisException(
-      errorClass = "BIN_BY_COLUMN_NOT_FOUND",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
-  }
-
   def binByDisabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.BIN_BY",
       messageParameters = Map.empty)
   }
 
-  def binByRequiresTopLevelColumnError(columnName: String): Throwable = {
+  def binByRequiresTopLevelColumnError(reference: Expression): Throwable = {
     new AnalysisException(
       errorClass = "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
-      messageParameters = Map("columnName" -> toSQLId(columnName)))
+      messageParameters = Map("columnName" -> toSQLExpr(reference)))
   }
 
-  def binByDistributeTypeMismatchError(
+  def binByInvalidDistributeColumnTypeError(
       columnName: String,
       columnType: DataType): Throwable = {
     new AnalysisException(
-      errorClass = "BIN_BY_DISTRIBUTE_TYPE_MISMATCH",
+      errorClass = "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE",
       messageParameters = Map(
         "columnName" -> toSQLId(columnName),
         "columnType" -> toSQLType(columnType)))
@@ -351,6 +345,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "BIN_BY_INVALID_BIN_WIDTH",
       messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByNonPositiveBinWidthError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_NON_POSITIVE_BIN_WIDTH",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByInvalidBinWidthTypeError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_BIN_WIDTH_TYPE",
+      messageParameters = Map("inputType" -> toSQLType(expr.dataType)))
   }
 
   def binByMissingDistributeError(): Throwable = {
@@ -1746,6 +1752,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
   }
 
+  def showPartitionsAsJsonNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW PARTITIONS AS JSON")
+  }
+
   def cannotCreateJDBCTableUsingLocationError(): Throwable = {
     notSupportedInJDBCCatalog("CREATE TABLE ... LOCATION ...")
   }
@@ -2315,17 +2325,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "currentTableId" -> currentTableId))
   }
 
-  def columnIdMismatchAfterAnalysis(
-      tableName: String,
-      errors: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-      messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("- ", "\n- ", "")))
-  }
-
-  def columnsMissingOrAddedAfterAnalysis(
+  def columnsChangedAfterAnalysis(
       tableName: String,
       errors: Seq[String]): Throwable = {
     new AnalysisException(

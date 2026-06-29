@@ -136,7 +136,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)
       case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
-        info.subClass.get.contains(subClass)
+        info.subClass.exists(_.contains(subClass))
       }
       case _ => false
     }

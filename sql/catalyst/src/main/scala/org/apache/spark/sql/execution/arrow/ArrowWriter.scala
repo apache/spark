@@ -25,8 +25,8 @@ import org.apache.arrow.vector.complex._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
-import org.apache.spark.sql.catalyst.util.STUtils
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -77,7 +77,6 @@ object ArrowWriter {
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
       case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
-      case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -388,6 +387,46 @@ private[sql] class TimeWriter(
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setSafe(count, input.getLong(ordinal))
+  }
+}
+
+private[sql] class TimestampNTZNanosWriter(
+    val valueVector: TimeStampNanoVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val v = input.getTimestampNTZNanos(ordinal)
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          v, isNtz = true, sink = "Arrow INT64")
+    }
+    valueVector.setSafe(count, nanos)
+  }
+}
+
+private[sql] class TimestampLTZNanosWriter(
+    val valueVector: TimeStampNanoTZVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val v = input.getTimestampLTZNanos(ordinal)
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          v, isNtz = false, sink = "Arrow INT64")
+    }
+    valueVector.setSafe(count, nanos)
   }
 }
 

@@ -2368,6 +2368,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
   }
 
+  temporalFunctionTest("make_time") {
+    fn.make_time(fn.lit(12), fn.lit(13), fn.lit(14))
+  }
+
+  temporalFunctionTest("current_time") {
+    fn.current_time()
+  }
+
+  temporalFunctionTest("current_time with precision") {
+    fn.current_time(3)
+  }
+
   temporalFunctionTest("months_between") {
     fn.months_between(fn.current_date(), fn.col("d"))
   }
@@ -2757,6 +2769,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_valid_variant") {
     fn.is_valid_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_delete") {
+    fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
   }
 
   functionTest("variant_get") {
@@ -3436,6 +3452,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
       fn.lit(Array(java.sql.Date.valueOf("2023-02-23"), java.sql.Date.valueOf("2023-03-01"))),
       fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
       fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
+      fn.lit(
+        Array(java.time.LocalTime.of(23, 59, 59, 999999999), java.time.LocalTime.of(12, 0, 0))),
       fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 

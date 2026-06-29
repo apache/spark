@@ -21,6 +21,7 @@ import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.regex.Pattern
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
@@ -52,7 +53,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.{HadoopFSUtils, Utils, VersionUtils}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -699,7 +700,10 @@ object SQLConf {
       .doc("When statistics are not available or configured not to be used, this config will be " +
         "used as the fallback filter ratio for computing the data size of the partitioned table " +
         "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-        "subquery as the pruning filter if broadcast reuse is not applicable.")
+        "subquery as the pruning filter if broadcast reuse is not applicable. This fallback " +
+        "ratio only applies when the filtering side has a selective predicate; a materialized " +
+        "filtering side without one obtains dynamic partition pruning through broadcast reuse " +
+        "only.")
       .version("3.0.0")
       .doubleConf
       .createWithDefault(0.5)
@@ -2726,10 +2730,8 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
-      "archive is read as a single split and its entries are streamed through the CSV parser " +
-      "(never unpacked to disk), as if the entries were separate CSV files, both during scan " +
-      "and schema inference. Only the CSV data source supports reading archives.")
+    .doc("When true, supported file-based data sources can read archive files, reading each " +
+      "archive's entries as if they were separate files, during both scan and schema inference.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
@@ -2783,6 +2785,27 @@ object SQLConf {
     .version("2.3.0")
     .booleanConf
     .createWithDefault(false)
+
+  val IGNORED_PATH_SEGMENT_REGEX = buildConf("spark.sql.files.ignoredPathSegmentRegex")
+    .doc("Java regular expression matched (with find semantics) against each directory and " +
+      "file name during file listing; matching names are skipped from listing, partition " +
+      "discovery, and reads. The default '^[._]' skips names starting with '_' or '.' (hidden " +
+      "files). Regardless of the regex, names starting with '_metadata' or '_common_metadata' " +
+      "are always listed, names ending in '._COPYING_' are always skipped, and '_'-prefixed " +
+      "names containing '=' (partition directories) are always kept. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC. It can be " +
+      "overridden per read by the 'ignoredPathSegmentRegex' data source option. An empty string " +
+      "disables generic hidden-file filtering (an empty regex matches nothing); note that " +
+      "directories it surfaces also participate in partition discovery, so a hidden directory " +
+      "next to partition directories causes a conflicting directory structures error unless " +
+      "'spark.sql.files.ignoreInvalidPartitionPaths' is enabled.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .stringConf
+    .checkValue(v => v.isEmpty || Try(Pattern.compile(v)).isSuccess,
+      "The value of spark.sql.files.ignoredPathSegmentRegex must be empty (to disable " +
+      "hidden-file filtering) or a valid Java regular expression.")
+    .createWithDefault(HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
 
   val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
     .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
@@ -3864,6 +3887,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GET_JSON_OBJECT_SHARED_PARSING_ENABLED =
+    buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
+      .internal()
+      .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
+        "replaces repeated simple named get_json_object paths over the same input " +
+        "with one shared parse.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableCsvExpressionOptimization")
       .doc("Whether to optimize CSV expressions in SQL optimizer. It includes pruning " +
@@ -4764,6 +4798,25 @@ object SQLConf {
       .checkValue(_ > 0, "The value of spark.sql.execution.python.udf.maxRecordsPerBatch " +
         "must be positive.")
       .createWithDefault(100)
+
+  val PYTHON_UDF_MAX_BYTES_PER_BATCH =
+    buildConf("spark.sql.execution.python.udf.maxBytesPerBatch")
+      .internal()
+      .doc("Byte-size cap for a batch of rows sent to a worker for regular (pickle-serialized, " +
+        "non-Arrow) Python UDF evaluation. Without it, BatchEvalPythonExec batches purely by " +
+        "row count (spark.sql.execution.python.udf.maxRecordsPerBatch), so one oversized batch " +
+        "can OOM the executor; a finite value caps the batch at the min of the row-count and " +
+        "byte limits. The size is a best-effort per-row estimate of the pickled size of the " +
+        "converted row (its accuracy is observable via the pythonEstimatedInputBytes vs " +
+        "pythonDataSent metrics); a row larger than the cap still yields a one-row batch. " +
+        "-1 (the default) means no limit.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(x => x == -1 || (x > 0 && x <= Int.MaxValue),
+        "The value of spark.sql.execution.python.udf.maxBytesPerBatch should " +
+          "be -1 (no limit) or greater than zero and less than or equal to INT_MAX.")
+      .createWithDefault(-1)
 
   val PYTHON_UDF_BUFFER_SIZE =
     buildConf("spark.sql.execution.python.udf.buffer.size")
@@ -6329,6 +6382,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR =
+    buildConf("spark.sql.variant.pushVariantIntoScan.deferCastError")
+      .internal()
+      .doc("When true, strict variant casts that get pushed into the scan are wrapped with a " +
+        "per-row cast-error companion column (nullable string) so that the cast error is only " +
+        "raised when the row is consumed by the user expression. Without this flag, the cast is " +
+        "always evaluated and any failure raises immediately, even when the surrounding " +
+        "expression would not have consumed the failing row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
       .internal()
@@ -7839,6 +7905,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
+  def ignoredPathSegmentRegex: String = getConf(IGNORED_PATH_SEGMENT_REGEX)
+
   def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
@@ -8289,6 +8357,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
+  def getJsonObjectSharedParsingEnabled: Boolean =
+    getConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED)
 
   def csvExpressionOptimization: Boolean = getConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION)
 

@@ -11602,12 +11602,12 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 @_try_remote_functions
 def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    """This is a special version of `to_date` that performs the same operation, but returns a
     NULL value instead of raising an error if date cannot be created.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.0.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -11710,6 +11710,7 @@ def unix_date(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def unix_micros(col: "ColumnOrName") -> Column:
     """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
 
     .. versionadded:: 3.5.0
 
@@ -11728,6 +11729,7 @@ def unix_micros(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_micros`
 
     Examples
@@ -11771,6 +11773,7 @@ def unix_millis(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_millis`
 
     Examples
@@ -11790,6 +11793,57 @@ def unix_millis(col: "ColumnOrName") -> Column:
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_millis", col)
+
+
+@_try_remote_functions
+def unix_nanos(col: "ColumnOrName") -> Column:
+    """Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+    Only supported for ``TIMESTAMP_LTZ(p)`` and ``TIMESTAMP_NTZ(p)`` with precision ``p``
+    in ``[7, 9]``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of nanosecond-precision timestamp values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
+    >>> df = spark.sql(
+    ...     "SELECT TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789' AS ts"
+    ... )
+    >>> df.select('*', sf.unix_nanos('ts')).show(truncate=False)
+    +-----------------------------+-------------------+
+    |ts                           |unix_nanos(ts)     |
+    +-----------------------------+-------------------+
+    |2020-01-01 13:24:35.123456789|1577885075123456789|
+    +-----------------------------+-------------------+
+
+    >>> df.select(sf.unix_nanos(sf.lit(None).cast('timestamp_ntz(9)'))).show()
+    +------------------------------------------+
+    |unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9)))|
+    +------------------------------------------+
+    |                                      NULL|
+    +------------------------------------------+
+
+    >>> spark.conf.unset("spark.sql.timestampNanosTypes.enabled")
+    """
+    return _invoke_function_over_columns("unix_nanos", col)
 
 
 @_try_remote_functions
@@ -11814,6 +11868,7 @@ def unix_seconds(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_millis`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.from_unixtime`
     :meth:`pyspark.sql.functions.timestamp_seconds`
 
@@ -21514,6 +21569,68 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    """
+    Removes fields or array elements from a variant at the given JSONPath locations.
+    Multiple paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are
+    skipped.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    paths : :class:`~pyspark.sql.Column` or str
+        one or more JSONPath deletion targets. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path
+        should start with `$` and is followed by one or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not
+        allowed.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with the specified paths removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_delete
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : 2, "c" : 3, "items" : [1, 2, 3] }''',
+    ...     'path': '$.a'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_delete(v, lit(None), "$.a", "$.c")).alias("r")).collect()
+    [Row(r='{"b":2,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, "$.missing")).alias("r")).collect()
+    [Row(r='{"a":1,"b":2,"c":3,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, df.path)).alias("r")).collect()
+    [Row(r='{"b":2,"c":3,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, "$.items[0]", "$.items[0]")).alias("r")).collect()
+    [Row(r='{"a":1,"b":2,"c":3,"items":[3]}')]
+    >>> df.select(variant_delete(lit(None), "$.a").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    sc = _get_active_spark_context()
+
+    path_cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function(
+        "variant_delete",
+        _to_java_column(v),
+        _to_java_column(path_cols[0]),
+        _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
@@ -22827,7 +22944,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
-    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()  # doctest: +SKIP
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
@@ -22838,7 +22955,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
-    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()  # doctest: +SKIP
     +----------------+----------------+
     |            data|   shuffle(data)|
     +----------------+----------------+
@@ -22849,7 +22966,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data", 345)).show()
+    >>> df.select("*", sf.shuffle("data", 345)).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
@@ -22860,7 +22977,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    >>> df.select("*", sf.shuffle("data")).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+

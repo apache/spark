@@ -78,18 +78,21 @@ abstract class JsonDataSource extends Serializable with Logging {
    * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the JSON parser without
    * unpacking it to disk. The whole archive is a single split (see `JsonFileFormat.isSplitable`);
    * each entry's bytes are parsed exactly like a standalone JSON file via [[readStream]], so this
-   * is mode-agnostic (line-delimited and multi-line both flow through `readStream`) and a single
-   * `parser` serves every entry -- unlike CSV there is no per-entry header to rebuild. Kept apart
-   * from [[readFile]] because only the V1 `JsonFileFormat` read path supports archives; the V2 data
-   * source calls [[readFile]] directly and is intentionally left untouched.
+   * is mode-agnostic (line-delimited and multi-line both flow through `readStream`). Each entry is
+   * parsed with its own parser -- matching the per-file parser of a non-archive read -- and unlike
+   * CSV there is no per-entry header to rebuild. Kept apart from [[readFile]] because only the V1
+   * `JsonFileFormat` read path supports archives; the V2 data source calls [[readFile]] directly
+   * and is intentionally left untouched.
+   *
+   * @param parser builds a fresh JSON parser for each entry.
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
-      parser: JacksonParser,
+      parser: () => JacksonParser,
       schema: StructType): Iterator[InternalRow] =
     ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
-      readStream(in, parser, schema)
+      readStream(in, parser(), schema)
     }
 
   final def inferSchema(

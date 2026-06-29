@@ -294,10 +294,4 @@ public class VariantShreddingWriter {
     return null;
   }
 
-  // Add the result to the shredding result.
-  private static void addVariantValueVariant(Variant variantResult,
-      VariantSchema schema, ShreddedResult result) {
-    result.addVariantValue(variantResult.getValue());
-  }
-
 }

@@ -28,10 +28,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkS
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, GenerationExpression, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
-import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, DefaultValue, GenerationExpression, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
@@ -43,6 +42,7 @@ import org.apache.spark.sql.functions.{lit, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, CalendarIntervalType, DoubleType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.QueryExecutionListener
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
@@ -77,10 +77,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.mixedcolidcat",
       classOf[MixedColumnIdTableCatalog].getName)
     .set("spark.sql.catalog.mixedcolidcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.composedidcat",
-      classOf[ComposedColumnIdTableCatalog].getName)
-    .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
-    .set(SQLConf.TIME_TYPE_ENABLED.key, "true")
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
 
   after {
     catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
@@ -1018,7 +1015,7 @@ class DataSourceV2DataFrameSuite
               Column.create("c1", IntegerType),
               Column.create("c2", StringType))
           }
-          assert(cols === expectedCols)
+          assert(CatalogV2Util.clearIds(cols) === expectedCols)
         }
       }
     }
@@ -2045,7 +2042,7 @@ class DataSourceV2DataFrameSuite
   //
   // Core behavior: when a DataFrame captures column IDs at analysis time,
   // and those IDs change before execution, the query is rejected with
-  // COLUMN_ID_MISMATCH.
+  // COLUMNS_MISMATCH.
 
   test("drop+re-add column with same name and type rejects stale DataFrame") {
     val t = "testcat.ns1.ns2.tbl"
@@ -2060,7 +2057,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2079,9 +2076,15 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+        parameters = Map(
+          "tableName" -> ".*",
+          "errors" ->
+            """|
+               |- `salary` field ID has changed from \d+ to \d+
+               |- `salary` type has changed from INT to STRING
+               |""".stripMargin.strip))
     }
   }
 
@@ -2098,7 +2101,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2119,7 +2122,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*",
           "errors" -> "(?s).*salary.*bonus.*"))
@@ -2161,7 +2164,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2196,7 +2199,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2214,14 +2217,14 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
   test("drop+re-add nested struct field rejects stale DataFrame") {
-    val t = "composedidcat.ns1.ns2.tbl"
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
@@ -2232,7 +2235,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2271,7 +2274,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2288,7 +2291,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2339,54 +2342,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Column ID tests: Composed nested IDs
-  //
-  // ComposedColumnIdTableCatalog encodes nested field IDs into the
-  // top-level Column.id() string, modeling the recommended adoption
-  // pattern for connectors with nested IDs. Any nested
-  // change produces a different encoded string, so validateColumnIds
-  // detects it even though Spark only compares top-level strings.
-
-  test("composed nested IDs detect drop+re-add of nested field") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t DROP COLUMN person.age")
-      sql(s"ALTER TABLE $t ADD COLUMN person.age INT")
-
-      // The inner age field got a new nested ID on re-add. The composed
-      // top-level string changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs tolerate same data inserted into nested column") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      // pure data insert, no schema change: composed IDs stay the same
-      sql(s"INSERT INTO $t VALUES (2, named_struct('name', 'Bob', 'age', 25))")
-
-      checkAnswer(df, Seq(
-        Row(1, Row("Alice", 30)),
-        Row(2, Row("Bob", 25))))
-    }
-  }
-
   // Column ID tests: Additional nested coverage
-  //
-  // These tests fill specific nested cells that are not covered by the
-  // coarse (testcat) or composed (composedidcat) groups above.
 
   // Nested type change with preserved top-level ID: the standard catalog
   // preserves the parent ID, so schema validation catches the incompatible
@@ -2410,10 +2366,8 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  // Depth >= 3 nesting with composed IDs: drop+re-add at depth 3 produces
-  // a different composed ID at the top level.
-  test("depth 3 nesting with composed IDs detects deep field change") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("depth 3 nesting detects deep nested field drop+re-add") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, a STRUCT<b: STRUCT<c: INT>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, named_struct('b', named_struct('c', 42)))")
@@ -2422,11 +2376,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN a.b.c")
       sql(s"ALTER TABLE $t ADD COLUMN a.b.c INT")
 
-      // The deep nested field c got a new ID on re-add, changing the
-      // composed top-level ID for column a.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2461,14 +2413,8 @@ class DataSourceV2DataFrameSuite
   // nested fields are added or dropped (assignMissingIds matches by name
   // only). These tests verify that behavior using the catalog API.
 
-  // Column ID tests: Composed IDs for container types (arrays, maps)
-  //
-  // ComposedColumnIdTableCatalog encodes nested field IDs into the
-  // top-level string. These tests verify detection of nested drop+re-add
-  // inside array element structs and map value structs.
-
-  test("composed nested IDs detect drop+re-add in array element struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in array element struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, items ARRAY<STRUCT<name: STRING, price: INT>>) USING foo")
       sql(s"INSERT INTO $t VALUES (1, array(named_struct('name', 'x', 'price', 10)))")
@@ -2477,48 +2423,6 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN items.element.price")
       sql(s"ALTER TABLE $t ADD COLUMN items.element.price INT")
 
-      // The nested price field got a new ID on re-add. The composed
-      // top-level ID for items changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs detect drop+re-add in map value struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<x: INT, y: INT>>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, map('k1', named_struct('x', 10, 'y', 20)))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t DROP COLUMN props.value.y")
-      sql(s"ALTER TABLE $t ADD COLUMN props.value.y INT")
-
-      // The nested y field got a new ID on re-add. The composed
-      // top-level ID for props changes, so COLUMN_ID_MISMATCH fires.
-      checkError(
-        exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
-        matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
-    }
-  }
-
-  test("composed nested IDs detect rename within struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t RENAME COLUMN person.name TO first_name")
-
-      // With position-based keys, the renamed field stays at position 0
-      // and keeps its nested ID. The composed string is unchanged, so
-      // schema validation catches the struct type difference instead.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
         condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
@@ -2527,13 +2431,31 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("composed nested IDs: reorder preserves composed column ID") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in map value struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, props MAP<STRING, STRUCT<x: INT, y: INT>>) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, map('k1', named_struct('x', 10, 'y', 20)))")
+      val df = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN props.value.y")
+      sql(s"ALTER TABLE $t ADD COLUMN props.value.y INT")
+
+      checkError(
+        exception = intercept[AnalysisException] { df.collect() },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("reorder preserves top-level column ID") {
+    val t = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
 
-      val cat = catalog("composedidcat")
+      val cat = catalog("testcat")
       val personBefore = cat.loadTable(ident).columns().find(_.name() == "person").get
       val idBefore = personBefore.id()
       val typeBefore = personBefore.dataType()
@@ -2552,32 +2474,14 @@ class DataSourceV2DataFrameSuite
       assert(typeAfter.toString.startsWith("StructType(StructField(age"),
         s"age should be first field after reorder, got: $typeAfter")
 
-      // Position-based keys: each ordinal position keeps its old ID after
-      // reorder, so the composed string is unchanged despite the schema change.
+      // The top-level column ID is preserved after reorder.
       assert(idBefore == idAfter,
-        s"Composed ID should be unchanged after reorder: $idBefore vs $idAfter")
+        s"Top-level column ID should be unchanged after reorder: $idBefore vs $idAfter")
     }
   }
 
-  test("composed nested IDs tolerate nested field reorder end-to-end") {
-    val t = "composedidcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, person STRUCT<name: STRING, age: INT>) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, named_struct('name', 'Alice', 'age', 30))")
-      val df = spark.table(t)
-
-      sql(s"ALTER TABLE $t ALTER COLUMN person.age FIRST")
-
-      // InMemoryTable does not actually reorder nested struct fields in stored
-      // data, so the read still returns the original field order. This is fine
-      // because the purpose of this test is to verify that the column ID check
-      // passes (no COLUMN_ID_MISMATCH) after a nested field reorder.
-      checkAnswer(df, Seq(Row(1, Row("Alice", 30))))
-    }
-  }
-
-  test("composed nested IDs detect drop+re-add in map key struct") {
-    val t = "composedidcat.ns1.ns2.tbl"
+  test("drop+re-add in map key struct detected by field ID") {
+    val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t " +
         s"(id INT, coords MAP<STRUCT<x: INT, y: INT>, STRING>) USING foo")
@@ -2588,11 +2492,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN coords.key.y")
       sql(s"ALTER TABLE $t ADD COLUMN coords.key.y INT")
 
-      // The nested y field in the map key struct got a new ID on re-add.
-      // The composed top-level ID for coords changes.
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2693,7 +2595,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           df1.join(df2, df1("id") === df2("id")).collect()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2718,7 +2620,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.filter("salary > 50").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2739,7 +2641,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           df.groupBy("id").agg(sum("salary")).collect()
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2758,7 +2660,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.orderBy("salary").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2777,7 +2679,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.select("salary").collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2801,7 +2703,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2853,7 +2755,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
@@ -2874,7 +2776,7 @@ class DataSourceV2DataFrameSuite
       // stale DataFrame detects salary ID mismatch
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> ".*salary.*"))
 
@@ -2905,9 +2807,15 @@ class DataSourceV2DataFrameSuite
       // reset-id catalog assigns a new ID for the widened column
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
-        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+        parameters = Map(
+          "tableName" -> ".*",
+          "errors" ->
+            """|
+               |- `salary` field ID has changed from \d+ to \d+
+               |- `salary` type has changed from INT to BIGINT
+               |""".stripMargin.strip))
     }
   }
 
@@ -3008,7 +2916,7 @@ class DataSourceV2DataFrameSuite
   // [[commandExecuted]] phase, before the refresh phase runs. As a result,
   // column ID validation does not apply to the source DataFrame in a
   // [[writeTo]] path. The append succeeds without throwing a
-  // COLUMN_ID_MISMATCH error.
+  // COLUMNS_MISMATCH error.
   test("writeTo().append() does not throw column ID mismatch after drop+re-add column") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
@@ -3020,7 +2928,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
       // Command is eagerly executed before the refresh phase validates
-      // column IDs. No COLUMN_ID_MISMATCH exception is thrown.
+      // column IDs. No COLUMNS_MISMATCH exception is thrown.
       source.writeTo(t).append()
     }
   }
@@ -3039,7 +2947,7 @@ class DataSourceV2DataFrameSuite
         exception = intercept[AnalysisException] {
           source.write.format(v2Format).insertInto(t)
         },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
@@ -3067,7 +2975,7 @@ class DataSourceV2DataFrameSuite
 
       checkError(
         exception = intercept[AnalysisException] { df.collect() },
-        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
         matchPVals = true,
         parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
     }
@@ -3110,7 +3018,7 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t ADD COLUMN bonus INT")
 
       // The stale DataFrame has only [id, salary] while the table now has
-      // [id, salary, bonus]. Since column IDs are null, no COLUMN_ID_MISMATCH
+      // [id, salary, bonus]. Since column IDs are null, no COLUMNS_MISMATCH
       // error is thrown; new columns are tolerated for read queries.
       checkAnswer(df, Seq(Row(1, 100)))
     }
@@ -3176,6 +3084,22 @@ class DataSourceV2DataFrameSuite
       // No column ID error because original ID is null. The table is refreshed via
       // version tracking, so the re-added salary column has null values.
       checkAnswer(df, Seq(Row(1, null)))
+    }
+  }
+
+  test("SPARK-57544: V1 CTAS from DSv2 scan does not persist column IDs in catalog schema") {
+    val v2Src = "testcat.ns1.ns2.v2_src"
+    val v1Dst = "v1_dst"
+    withTable(v2Src, v1Dst) {
+      sql(s"CREATE TABLE $v2Src (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $v2Src VALUES (1, 100)")
+
+      // DSv2 source carries column IDs on its output attributes.
+      assert(spark.table(v2Src).schema.fields.forall(_.id.isDefined))
+
+      // V1 CTAS from a DSv2 scan: column IDs must not be stored in the V1 catalog schema.
+      sql(s"CREATE TABLE $v1Dst USING parquet AS SELECT * FROM $v2Src")
+      assert(spark.table(v1Dst).schema.fields.forall(_.id.isEmpty))
     }
   }
 
@@ -3899,7 +3823,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.mode("append").format(v2Format).withSchemaEvolution().saveAsTable(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3913,7 +3837,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.format(v2Format).withSchemaEvolution().insertInto(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3927,7 +3851,7 @@ class DataSourceV2DataFrameSuite
 
       df.write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
 
-      assert(spark.table(t).schema ===
+      assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
         new StructType().add("id", LongType).add("data", StringType))
       checkAnswer(spark.table(t), Seq(Row(1L, "a")))
     }
@@ -3942,7 +3866,7 @@ class DataSourceV2DataFrameSuite
         Seq((1L, "a")).toDF("id", "data")
           .write.mode("overwrite").format(v2Format).withSchemaEvolution().insertInto(t)
 
-        assert(spark.table(t).schema ===
+        assert(SchemaUtils.clearFieldIds(spark.table(t).schema) ===
           new org.apache.spark.sql.types.StructType()
             .add("id", org.apache.spark.sql.types.LongType)
             .add("data", StringType))

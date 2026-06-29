@@ -18,17 +18,17 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.time.LocalDateTime
 
-import org.apache.spark.sql.{AnalysisException, Column, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
@@ -350,39 +350,104 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in Hive ORC") {
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+  test("SPARK-57166: nanosecond timestamp types are supported in Hive ORC") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      nanosTypes.foreach { nanosType =>
-        val expectedType = s""""${nanosType.sql}""""
-        withTempDir { dir =>
-          // Write path
-          val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-          val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-          val writeDir = new File(dir, "write").getCanonicalPath
-          checkError(
-            exception = intercept[AnalysisException] {
-              df.write.format("orc").mode("overwrite").save(writeDir)
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "ORC"))
+      val wallClock = Seq(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 0))
+      Seq(true, false).foreach { convertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+          foreachNanosPrecision { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val df = nanosTimestampDf(nanosType, wallClock)
+                  val path = new File(dir, "nanos").getCanonicalPath
+                  df.write.format("orc").mode("overwrite").save(path)
 
-          // Read path
-          val readDir = new File(dir, "read").getCanonicalPath
-          spark.range(1).write.format("orc").mode("overwrite").save(readDir)
-          checkError(
-            exception = intercept[AnalysisException] {
-              spark.read.schema(new StructType().add("ts", nanosType))
-                .format("orc").load(readDir).collect()
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "ORC"))
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("orc").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: Hive ORC serde nanos round-trip; NTZ time-zone independent") {
+    // Force spark.sql.orc.impl=hive so the Hive serde write/read conversion is exercised
+    // (HiveInspectors.wrapperFor on write, the hive OrcFileFormat unwrappers on read) rather
+    // than the native datasource that the other nanos tests use.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      // A mid-range value plus the documented min/max ends
+      // [0001-01-01T00:00:00, 9999-12-31T23:59:59.999999999] (at UTC for LTZ).
+      val wallClocks = Seq(
+        LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123),
+        LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+        LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999))
+      foreachNanosPrecision { precision =>
+        // Same-zone round trip through the Hive serde path for both nanos types, including the
+        // min and max of the documented range.
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val input = nanosTimestampDf(nanosType, wallClocks)
+            withTempDir { dir =>
+              val path = new File(dir, "nanos").getCanonicalPath
+              input.write.format("orc").mode("overwrite").save(path)
+              checkAnswer(
+                spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
+                input)
+            }
+        }
+
+        // The NTZ wall clock stays zone-independent across a JVM default time-zone change. Hive
+        // ORC stores zone-naive wall-clock fields, so the instant-based LTZ type is not
+        // zone-stable through the Hive serde path -- the same caveat as the legacy TimestampType
+        // -- so LTZ is only round-tripped within a single zone above.
+        val ntzType = TimestampNTZNanosType(precision)
+        val ntzInput = nanosTimestampDf(ntzType, wallClocks.take(1))
+        val ntzExpected = ntzInput.collect()
+        withTempDir { dir =>
+          val path = new File(dir, "ntz-tz").getCanonicalPath
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+            ntzInput.write.format("orc").mode("overwrite").save(path)
+          }
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.UTC) {
+            checkAnswer(
+              spark.read.schema(new StructType().add("ts", ntzType)).format("orc").load(path),
+              ntzExpected)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: Hive ORC serde round-trips nanos timestamps in nested/complex types") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      val wallClocks = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempView("nanos_input") {
+              nanosTimestampDf(nanosType, wallClocks).createOrReplaceTempView("nanos_input")
+              val nested = sql(
+                """SELECT
+                  |  named_struct('ts', ts) AS struct_ts,
+                  |  array(ts) AS array_ts,
+                  |  map('k', ts) AS map_ts
+                  |FROM nanos_input
+                  |""".stripMargin)
+              withTempDir { dir =>
+                val path = new File(dir, "nanos-nested").getCanonicalPath
+                nested.write.format("orc").mode("overwrite").save(path)
+                val readBack = spark.read.schema(nested.schema).format("orc").load(path)
+                checkAnswer(readBack, nested)
+              }
+            }
         }
       }
     }

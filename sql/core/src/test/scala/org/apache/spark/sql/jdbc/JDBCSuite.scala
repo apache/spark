@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -714,12 +714,11 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("H2 time types") {
+    // With timeType.enabled=true (default in tests), TIME columns use TimeType
     val rows = sql("SELECT * FROM timetypes").collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+    // DATE and TIMESTAMP columns unchanged
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
-    assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
-    assert(cal.get(Calendar.MINUTE) === 34)
-    assert(cal.get(Calendar.SECOND) === 56)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
     assert(cal.get(Calendar.YEAR) === 1996)
     assert(cal.get(Calendar.MONTH) === 0)
@@ -736,24 +735,79 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-34357: test TIME types") {
-    val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().collect()
-    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
-    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val rows = spark.read.jdbc(
+        urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().collect()
+      val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+      assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    }
   }
 
   test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {
-    spark.catalog.clearCache()
-    val df = spark.read.format("jdbc")
-      .option("preferTimestampNTZ", true)
-      .option("url", urlWithUserAndPass)
-      .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
-      .load()
-    assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      spark.catalog.clearCache()
+      val df = spark.read.format("jdbc")
+        .option("preferTimestampNTZ", true)
+        .option("url", urlWithUserAndPass)
+        .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
+        .load()
+      assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME maps to TimeType when timeType.enabled") {
+    val df = spark.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+    // With timeType.enabled=true (default in tests), TIME column maps to TimeType
+    assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    val rows = df.collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+  }
+
+  test("SPARK-57555: JDBC TIME write round-trip") {
+    val url = urlWithUserAndPass
+    val tableName = "TEST.TIME_ROUNDTRIP"
+    val time1 = java.time.LocalTime.of(9, 30, 0)
+    val time2 = java.time.LocalTime.of(23, 59, 59, 123456000)
+    val schema = new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION))
+    val rows = Seq(
+      Row(time1),
+      Row(time2)
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    df.write.jdbc(url, tableName, new Properties())
+    try {
+      val readBack = spark.read.jdbc(url, tableName, new Properties())
+      assert(readBack.schema.fields(0).dataType.isInstanceOf[TimeType])
+      val result = readBack.orderBy(readBack.columns(0)).collect()
+      assert(result(0).getAs[java.time.LocalTime](0) === time1)
+      assert(result(1).getAs[java.time.LocalTime](0) === time2)
+    } finally {
+      val conn = java.sql.DriverManager.getConnection(url)
+      conn.createStatement().execute(s"DROP TABLE IF EXISTS $tableName")
+      conn.close()
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME preserves sub-second precision") {
+    val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+    try {
+      conn.createStatement().execute(
+        "CREATE TABLE TEST.TIME_PRECISION (t TIME(6))")
+      conn.createStatement().execute(
+        "INSERT INTO TEST.TIME_PRECISION VALUES (TIME '14:30:45.123456')")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIME_PRECISION", new Properties())
+      val result = df.collect()
+      assert(result(0).getAs[java.time.LocalTime](0) ===
+        java.time.LocalTime.of(14, 30, 45, 123456000))
+    } finally {
+      conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TIME_PRECISION")
+      conn.close()
+    }
   }
 
   test("test DATE types") {
@@ -1532,6 +1586,50 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
+  test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val dateRef = FieldReference("d")
+
+    // LiteralValue for StringType must use UTF8String (Spark's internal string type)
+    // to match what V2ExpressionBuilder produces in the real pushdown path.
+    import org.apache.spark.unsafe.types.UTF8String
+    def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
+      Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
+
+    val monthSql = oracleDialect.compileExpression(truncExpr("MONTH")).get
+    assert(monthSql.contains("'MM'"),
+      s"trunc(d, 'MONTH') should produce Oracle 'MM', got: $monthSql")
+    assert(!monthSql.contains("'IW'"),
+      s"trunc(d, 'MONTH') should NOT produce 'IW', got: $monthSql")
+
+    val weekSql = oracleDialect.compileExpression(truncExpr("WEEK")).get
+    assert(weekSql.contains("'IW'"),
+      s"trunc(d, 'WEEK') should produce Oracle 'IW', got: $weekSql")
+
+    val yearSql = oracleDialect.compileExpression(truncExpr("YEAR")).get
+    assert(yearSql.contains("'YYYY'"),
+      s"trunc(d, 'YEAR') should produce Oracle 'YYYY', got: $yearSql")
+
+    val quarterSql = oracleDialect.compileExpression(truncExpr("QUARTER")).get
+    assert(quarterSql.contains("'Q'"),
+      s"trunc(d, 'QUARTER') should produce Oracle 'Q', got: $quarterSql")
+
+    // Case-insensitive: lowercase formats must also map correctly
+    val weekLowerSql = oracleDialect.compileExpression(truncExpr("week")).get
+    assert(weekLowerSql.contains("'IW'"),
+      s"trunc(d, 'week') (lowercase) should produce Oracle 'IW', got: $weekLowerSql")
+
+    // Unmapped formats should NOT be pushed down (compileExpression returns None)
+    assert(oracleDialect.compileExpression(truncExpr("DAY")).isEmpty,
+      "Unmapped format 'DAY' should not be pushed down (compileExpression should return None)")
+
+    // Alias formats (MM, MON, YYYY, YY) should also map correctly
+    val mmSql = oracleDialect.compileExpression(truncExpr("MM")).get
+    assert(mmSql.contains("'MM'"), s"trunc(d, 'MM') should produce Oracle 'MM', got: $mmSql")
+    val yySql = oracleDialect.compileExpression(truncExpr("YY")).get
+    assert(yySql.contains("'YYYY'"), s"trunc(d, 'YY') should produce Oracle 'YYYY', got: $yySql")
+  }
+
   private def assertEmptyQuery(sqlString: String): Unit = {
     assert(sql(sqlString).collect().isEmpty)
   }
@@ -2128,7 +2226,8 @@ class JDBCSuite extends SharedSparkSession {
         spark.read.format("jdbc").options(opts).load()
       },
       condition = "FAILED_JDBC.CONNECTION",
-      parameters = Map("url" -> url)
+      // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+      parameters = Map("url" -> s"jdbc:mysql:${Utils.REDACTION_REPLACEMENT_TEXT}")
     )
   }
 
@@ -2478,7 +2577,8 @@ class JDBCSuite extends SharedSparkSession {
           }
         },
         condition = "FAILED_JDBC.CONNECTION",
-        parameters = Map("url" -> url)
+        // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+        parameters = Map("url" -> s"$connectionUrl:${Utils.REDACTION_REPLACEMENT_TEXT}")
       )
     }
   }

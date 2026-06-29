@@ -97,7 +97,6 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
           }
         })
         validateTableIdentity(currentTable, r)
-        validateColumnIds(currentTable, r)
         validateDataColumns(currentTable, r, schemaValidationMode)
         validateMetadataColumns(currentTable, r, schemaValidationMode)
         r.copy(table = currentTable)
@@ -125,22 +124,13 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
     V2TableUtil.validateTableId(relation.name, relation.table.id, currentTable)
   }
 
-  private def validateColumnIds(
-      currentTable: Table,
-      relation: DataSourceV2Relation): Unit = {
-    val errors = V2TableUtil.validateColumnIds(currentTable, relation)
-    if (errors.nonEmpty) {
-      throw QueryCompilationErrors.columnIdMismatchAfterAnalysis(relation.name, errors)
-    }
-  }
-
   private def validateDataColumns(
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode, checkIds = true)
     if (errors.nonEmpty) {
-      throw QueryCompilationErrors.columnsMissingOrAddedAfterAnalysis(relation.name, errors)
+      throw QueryCompilationErrors.columnsChangedAfterAnalysis(relation.name, errors)
     }
   }
 
@@ -148,7 +138,11 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode,
+      checkIds = true)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(relation.name, errors)
     }

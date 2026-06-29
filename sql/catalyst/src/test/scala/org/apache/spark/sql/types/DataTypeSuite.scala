@@ -1459,7 +1459,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("Parse time(n) as TimeType(n)") {
-    0 to 6 foreach { n =>
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { n =>
       assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
       val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
       assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
@@ -1467,10 +1467,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson("\"time(9)\"")
+        DataType.fromJson("\"time(10)\"")
       },
       condition = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> "time(9)"))
+      parameters = Map("invalidType" -> "time(10)"))
     checkError(
       exception = intercept[ParseException] {
         DataType.fromDDL("t time(-1)")
