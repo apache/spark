@@ -67,7 +67,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
-RUN gpg -a --export E084DAB9 | apt-key add -
+RUN gpg -a --export E084DAB9 > /etc/apt/trusted.gpg.d/cran.asc
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
