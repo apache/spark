@@ -1349,6 +1349,32 @@ class FunctionQualificationSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SECTION 17d: SPARK-57758 table-function fast-path is bypassed when a catalog precedes " +
+      "system.builtin") {
+    // Table-function counterpart of SECTION 17c: the table-function fast-path shares the same
+    // `builtinFastPathSafe` gate, so a persistent table function in a schema placed before
+    // `system.builtin` via `SET PATH` must win over the built-in TVF of the same name.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_range_shadow") {
+        sql("CREATE DATABASE path_range_shadow")
+        // Persistent table function shadowing the built-in `range` (ignores its argument).
+        sql("CREATE FUNCTION path_range_shadow.range(n INT) RETURNS TABLE(id INT) RETURN SELECT 99")
+        try {
+          // Catalog before system.builtin: the persistent `range` must win (one row [99]), not the
+          // built-in `range(1)` (one row [0]). Pre-fix, the fast-path returned the built-in here.
+          sql("SET PATH = spark_catalog.path_range_shadow, system.builtin")
+          checkAnswer(sql("SELECT * FROM range(1)"), Row(99))
+          // system.builtin first: the fast-path resolves the built-in `range(1)` (one row [0]).
+          sql("SET PATH = system.builtin, spark_catalog.path_range_shadow")
+          checkAnswer(sql("SELECT * FROM range(1)"), Row(0))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_range_shadow.range")
+        }
+      }
+    }
+  }
 }
 
 /**
