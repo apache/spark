@@ -41,7 +41,7 @@ trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
    * Approximates [[sql.SessionQueryTest.isDfSorted]] by inspecting the explain string.
    */
   override def isDfSorted(df: sql.DataFrame): Boolean = df match {
-    case df: DataFrame => sortOperator.findFirstIn(df.explainString(extended = false)).isDefined
+    case df: DataFrame => sortOperator.unanchored.matches(df.explainString(extended = false))
     case df => super.isDfSorted(df)
   }
 

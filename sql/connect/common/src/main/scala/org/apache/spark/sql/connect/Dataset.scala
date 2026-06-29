@@ -262,8 +262,6 @@ class Dataset[T] private[sql] (
     explainString("simple")
   }
 
-  private[connect] def explainString(): String = explainString("simple")
-
   /** @inheritdoc */
   def isLocal: Boolean = sparkSession
     .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
