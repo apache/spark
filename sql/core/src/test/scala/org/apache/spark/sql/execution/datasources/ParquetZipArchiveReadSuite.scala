@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.datasources
 
 /**
- * Reads of Parquet files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared archive
- * read/inference parity tests from [[ArchiveReadSuiteBase]] plus the Parquet-specific tests from
- * [[ParquetArchiveReadBase]], over tar containers via [[TarArchiveReadBase]].
+ * Reads of Parquet files packed in zip archives (`.zip`): the shared archive read/inference parity
+ * tests from [[ArchiveReadSuiteBase]] plus the Parquet-specific tests from
+ * [[ParquetArchiveReadBase]], over zip containers via [[ZipArchiveReadBase]].
  */
-class ParquetTarArchiveReadSuite
+class ParquetZipArchiveReadSuite
   extends ArchiveReadSuiteBase
   with ParquetArchiveReadBase
-  with TarArchiveReadBase
+  with ZipArchiveReadBase
