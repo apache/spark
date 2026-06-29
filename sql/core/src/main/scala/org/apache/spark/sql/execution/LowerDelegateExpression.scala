@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.DelegateExpression
+import org.apache.spark.sql.catalyst.expressions.{DelegateExpression, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DELEGATE_EXPRESSION
@@ -34,6 +34,16 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.DELEGATE_EXPRESSION
 object LowerDelegateExpression extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformAllExpressionsWithPruning(_.containsPattern(DELEGATE_EXPRESSION)) {
-      case d: DelegateExpression => d.definition
+      case d: DelegateExpression => lower(d)
     }
+
+  // `definition` can itself be a [[DelegateExpression]] -- a delegate whose lowered form composes
+  // another delegate function. `transformDown` does not re-apply the rule to the replacement it just
+  // produced, so unwrap the chain here to guarantee no wrapper survives. Delegates nested deeper
+  // (as children of `definition`) are handled by the surrounding tree traversal.
+  @scala.annotation.tailrec
+  private def lower(d: DelegateExpression): Expression = d.definition match {
+    case inner: DelegateExpression => lower(inner)
+    case other => other
+  }
 }

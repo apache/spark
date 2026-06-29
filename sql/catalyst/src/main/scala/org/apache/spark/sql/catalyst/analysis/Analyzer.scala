@@ -4461,6 +4461,17 @@ object RemoveInputTypeMarkers extends Rule[LogicalPlan] {
       case marker: ImplicitCastInput => marker.child
       case marker: TypeCheckInput => marker.child
     }
+
+  /**
+   * Expression-level unwrap, for callers that have no rule batch to run this rule in -- notably the
+   * single-pass resolver, which builds `DelegateFunction`s (inserting markers) but does not execute
+   * the fixed-point analyzer's batches. Apply it once type coercion has cast the marker children.
+   */
+  def removeMarkers(expression: Expression): Expression =
+    expression.transformUpWithPruning(_.containsPattern(INPUT_TYPE_MARKER)) {
+      case marker: ImplicitCastInput => marker.child
+      case marker: TypeCheckInput => marker.child
+    }
 }
 
 /**

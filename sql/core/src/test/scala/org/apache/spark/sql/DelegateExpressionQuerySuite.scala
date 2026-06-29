@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{DelegateExpression, ImplicitCastInput, MultiGetJsonObject, TypeCheckInput}
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, DelegateExpression, ImplicitCastInput, Literal, MultiGetJsonObject, TypeCheckInput}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverRunner
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.execution.{LowerDelegateExpression, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StringType
 
 /**
  * End-to-end proof for the delegate-expression redesign: `right()` is built as a
@@ -48,7 +51,7 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
 
   test("right() implicit-casts a non-string arg via the standard coercion rule (no extra step)") {
     // The old plain-form `right` was ImplicitCastInputTypes; the delegate form preserves this by
-    // wrapping the arg in a ImplicitCastInput shim that the standard TypeCoercion rule handles.
+    // wrapping the arg in an ImplicitCastInput shim that the standard TypeCoercion rule handles.
     checkAnswer(spark.sql("SELECT right(12345, 2)"), Row("45"))
   }
 
@@ -92,5 +95,51 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
         s"delegate should be lowered before execution:\n$executed")
       assert(executed.exists(_.isInstanceOf[WholeStageCodegenExec]))
     }
+  }
+
+  test("right() resolves cleanly under the single-pass resolver (input-type markers stripped)") {
+    // The single-pass resolver builds DelegateFunctions through the same registry path (inserting
+    // the input-type markers) but has no fixed-point batch to strip them; FunctionResolver must
+    // remove them after coercion, else the Unevaluable markers would reach execution. We assert at
+    // the analyzed-plan level (where the fix lives): single-pass does not yet support the
+    // DeserializeToObject operator a typed `collect`/`checkAnswer` introduces, so the right()
+    // execution results stay covered by the fixed-point tests above.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      // 12345 (int) exercises the ImplicitCastInput path: it must be cast to string.
+      val analyzed = spark.sql("SELECT right(12345, 2) AS r").queryExecution.analyzed
+      // single-pass actually ran (there is no fallback when the conf is on) ...
+      assert(analyzed.getTagValue(ResolverRunner.SINGLE_PASS_ANALYSIS_MARKER).contains(true),
+        s"expected single-pass analysis to run:\n$analyzed")
+      assert(analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[DelegateExpression]))),
+        s"expected the right() delegate in the analyzed plan:\n$analyzed")
+      // ... the DelegateFunction's input-type markers were stripped ...
+      assert(!analyzed.exists(_.expressions.exists(_.exists(e =>
+        e.isInstanceOf[ImplicitCastInput] || e.isInstanceOf[TypeCheckInput]))),
+        s"input shims should be stripped under single-pass:\n$analyzed")
+      // ... and the implicit cast the marker drove still applies (the marker was removed, not the Cast).
+      assert(analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Cast]))),
+        s"expected the implicit Cast to survive marker removal:\n$analyzed")
+    }
+  }
+
+  test("LowerDelegateExpression fully unwraps a directly-nested delegate-of-delegate") {
+    // A delegate whose `definition` is itself a delegate (e.g. one delegate function composing
+    // another). transformDown does not re-apply the rule to the replacement it produces, so the
+    // rule must unwrap the chain itself -- otherwise the inner wrapper would reach the planner.
+    val inner = DelegateExpression("inner", Seq(Literal(1)), Literal(1))
+    val outer = DelegateExpression("outer", Seq(Literal(1)), inner)
+    val lowered = LowerDelegateExpression(Project(Seq(Alias(outer, "c")()), OneRowRelation()))
+    assert(!lowered.exists(_.expressions.exists(_.exists(_.isInstanceOf[DelegateExpression]))),
+      s"nested delegates should be fully lowered:\n$lowered")
+  }
+
+  test("right() preserves the input column's collation in its output type") {
+    // `Right.lower` builds the null/empty `If` branches as plain StringType literals (it cannot read
+    // the not-yet-coerced arg's dataType); type coercion then re-unifies the branches to the
+    // column's collation, since string literals carry the weakest collation strength.
+    val df = spark.sql("SELECT right('Hello' COLLATE UTF8_LCASE, 3) AS r")
+    assert(df.schema("r").dataType === StringType("UTF8_LCASE"),
+      s"right() should preserve the UTF8_LCASE collation, got ${df.schema("r").dataType}")
+    checkAnswer(df, Row("llo"))
   }
 }

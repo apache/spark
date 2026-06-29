@@ -22,12 +22,14 @@ import scala.util.Random
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{
   FunctionResolution,
+  RemoveInputTypeMarkers,
   UnresolvedFunction,
   UnresolvedSeed
 }
 import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,
   Collate,
+  DelegateExpression,
   Expression,
   ExpressionWithRandomSeed,
   InheritAnalysisRules,
@@ -200,6 +202,21 @@ class FunctionResolver(
       case windowFunction: WindowFunction
           if (expressionResolutionContext.windowFunctionNestednessLevel != 1) =>
         throwWindowFunctionWithoutOverClause(windowFunction)
+      case delegateExpression: DelegateExpression =>
+        // `DelegateFunction.build` produces a freshly-built `definition` subtree -- like
+        // `InheritAnalysisRules`' `replacement` above -- so resolve its children recursively;
+        // this reaches the analysis-only input-type markers ([[ImplicitCastInput]] /
+        // [[TypeCheckInput]]) buried inside and lets coercion cast their children. The fixed-point
+        // analyzer then strips the markers in `RemoveInputTypeMarkers`, but single-pass has no such
+        // batch, so strip them here once coercion has run.
+        val resolvedDelegateExpression =
+          withResolvedChildren(delegateExpression, expressionResolver.resolve _)
+        RemoveInputTypeMarkers.removeMarkers(
+          coerceExpressionTypes(
+            expression = resolvedDelegateExpression,
+            expressionTreeTraversal = traversals.current
+          )
+        )
       case other =>
         coerceExpressionTypes(expression = other, expressionTreeTraversal = traversals.current)
     }
