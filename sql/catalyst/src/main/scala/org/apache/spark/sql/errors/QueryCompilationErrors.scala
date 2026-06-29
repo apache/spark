@@ -4602,6 +4602,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("invalidClass" -> invalidClass))
   }
 
+  def cannotInstantiateHiveFunctionError(clazz: String, e: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+      messageParameters = Map("clazz" -> clazz),
+      cause = Some(e))
+  }
+
   def unsupportedParameterExpression(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_EXPR_FOR_PARAMETER",

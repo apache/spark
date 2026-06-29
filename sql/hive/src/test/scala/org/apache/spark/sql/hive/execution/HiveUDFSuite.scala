@@ -290,7 +290,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawList " +
       s"AS '${classOf[UDFRawList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawList(s) FROM inputTable"))
-    assert(err.getMessage.contains(
+    assert(err.getCause.getMessage.contains(
       "Raw list type in java is unsupported because Spark cannot infer the element type."))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawList")
@@ -304,7 +304,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawMap " +
       s"AS '${classOf[UDFRawMap].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawMap(s) FROM inputTable"))
-    assert(err.getMessage.contains(
+    assert(err.getCause.getMessage.contains(
       "Raw map type in java is unsupported because Spark cannot infer key and value types."))
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawMap")
@@ -318,7 +318,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFWildcardList " +
       s"AS '${classOf[UDFWildcardList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFWildcardList(s) FROM inputTable"))
-    assert(err.getMessage.contains(
+    assert(err.getCause.getMessage.contains(
       "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported " +
         "because Spark cannot infer the data type for these type parameters."))
 
@@ -414,10 +414,16 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
       def testErrorMsgForFunc(funcName: String, className: String): Unit = {
         withUserDefinedFunction(funcName -> true) {
           sql(s"CREATE TEMPORARY FUNCTION $funcName AS '$className'")
-          val message = intercept[AnalysisException] {
-            sql(s"SELECT $funcName() FROM testUDF")
-          }.getMessage
-          assert(message.contains(s"No handler for UDF/UDAF/UDTF '$className'"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT $funcName() FROM testUDF")
+            },
+            condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+            parameters = Map("clazz" -> className),
+            context = ExpectedContext(
+              fragment = s"$funcName()",
+              start = 7,
+              stop = 6 + s"$funcName()".length))
         }
       }
 
@@ -678,15 +684,21 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
         sql("SELECT testArraySum(array(1, 1.1, 1.2))"),
         Seq(Row(3.3)))
 
-      val msg = intercept[AnalysisException] {
-        sql("SELECT testArraySum(1)")
-      }.getMessage
-      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testArraySum(1)")
+        },
+        condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+        parameters = Map("clazz" -> classOf[ArraySumUDF].getCanonicalName),
+        context = ExpectedContext(fragment = "testArraySum(1)", start = 7, stop = 21))
 
-      val msg2 = intercept[AnalysisException] {
-        sql("SELECT testArraySum(1, 2)")
-      }.getMessage
-      assert(msg2.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testArraySum(1, 2)")
+        },
+        condition = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+        parameters = Map("clazz" -> classOf[ArraySumUDF].getCanonicalName),
+        context = ExpectedContext(fragment = "testArraySum(1, 2)", start = 7, stop = 24))
     }
   }
 
