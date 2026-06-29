@@ -664,7 +664,8 @@ object XmlInferSchema {
       case (_: TimestampNTZNanosType, TimestampNTZType) |
           (TimestampNTZType, _: TimestampNTZNanosType) =>
         return TimestampNTZType
-      case (_: AnyTimestampNanoType, _) | (_, _: AnyTimestampNanoType) =>
+      case (_: AnyTimestampNanoType, _: DatetimeType) |
+          (_: DatetimeType, _: AnyTimestampNanoType) =>
         return TimestampType
       case (StructType(fields1), StructType(fields2)) =>
         val newFields = (fields1 ++ fields2)

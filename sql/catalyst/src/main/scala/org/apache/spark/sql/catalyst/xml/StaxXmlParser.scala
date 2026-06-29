@@ -603,7 +603,7 @@ class StaxXmlParser(
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case t: TimestampLTZNanosType => timestampFormatter.parseNanos(datum, t.precision)
         case t: TimestampNTZNanosType =>
-          timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision)
+          timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: TimeType => timeFormatter.parse(datum)
         case _: StringType => UTF8String.fromString(datum)

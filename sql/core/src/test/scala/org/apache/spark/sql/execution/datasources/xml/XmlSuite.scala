@@ -3741,6 +3741,27 @@ class XmlSuite
     }
   }
 
+  test("SPARK-57458: nano timestamp + non-datetime field widens to StringType during inference") {
+    // When a field is a nano-precision timestamp in some rows and a non-datetime value in others,
+    // inference must fall back to StringType (matching the micro-precision path) rather than
+    // widening to TimestampType and then failing at read time.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      val xmlContent =
+        """<root><row><ts>2025-06-15T12:30:45.123456789</ts></row>
+          |<row><ts>not-a-timestamp</ts></row></root>""".stripMargin
+      withTempDir { dir =>
+        val path = new File(dir, "nano_nondatetime.xml").getCanonicalPath
+        Files.write(Paths.get(path), xmlContent.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read.format("xml").option("rowTag", "row")
+          .option("rootTag", "root").load(path)
+        assert(df.schema("ts").dataType === StringType,
+          s"Expected StringType for nano + non-datetime, got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {
