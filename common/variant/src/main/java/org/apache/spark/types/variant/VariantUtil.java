@@ -26,8 +26,11 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.UUID;
+
+import com.fasterxml.jackson.core.JsonFactory;
 
 /**
  * This class defines constants related to the variant format and provides functions for
@@ -50,6 +53,12 @@ import java.util.UUID;
  * - UTF-8 string data.
  */
 public class VariantUtil {
+  // Jackson's JsonFactory is thread-safe and intended to be reused, so the variant module shares a
+  // single instance. Variant.escapeJson (one call per serialized string or key) and
+  // VariantBuilder.parseJson (one call per parsed JSON value) both use it, which avoids a per-call
+  // factory allocation (including its symbol tables) and keeps one source of configuration.
+  static final JsonFactory JSON_FACTORY = new JsonFactory();
+
   public static final int BASIC_TYPE_BITS = 2;
   public static final int BASIC_TYPE_MASK = 0x3;
   public static final int TYPE_INFO_MASK = 0x3F;
@@ -507,7 +516,10 @@ public class VariantUtil {
         length = readUnsigned(value, pos + 1, U32_SIZE);
       }
       checkIndex(start + length - 1, value.length);
-      return new String(value, start, length);
+      // The string content is UTF-8 encoded (it is written by `VariantBuilder.appendString`).
+      // Decode with UTF-8 explicitly rather than relying on the JVM default charset, which is
+      // platform-dependent on Java 17.
+      return new String(value, start, length, StandardCharsets.UTF_8);
     }
     throw unexpectedType(Type.STRING);
   }
@@ -693,6 +705,8 @@ public class VariantUtil {
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
     if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
-    return new String(metadata, stringStart + offset, nextOffset - offset);
+    // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
+    // explicitly rather than relying on the platform-dependent JVM default charset.
+    return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
   }
 }

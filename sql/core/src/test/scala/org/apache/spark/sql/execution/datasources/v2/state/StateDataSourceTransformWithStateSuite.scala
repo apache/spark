@@ -30,7 +30,7 @@ import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.tags.{ExtendedSQLTest, SlowSQLTest}
 import org.apache.spark.util.Utils
 
 /** Stateful processor of single value state var with non-primitive type */
@@ -1201,6 +1201,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
   }
 }
 
+@ExtendedSQLTest
 class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
   StateDataSourceTransformWithStateSuite {
 
@@ -1213,6 +1214,6 @@ class StateDataSourceTransformWithStateSuiteCheckpointV2 extends
 /**
  * Test suite that runs all StateDataSourceTransformWithStateSuite tests with row checksum enabled.
  */
-@SlowSQLTest
+@ExtendedSQLTest
 class StateDataSourceTransformWithStateSuiteWithRowChecksum
   extends StateDataSourceTransformWithStateSuite with EnableStateStoreRowChecksum

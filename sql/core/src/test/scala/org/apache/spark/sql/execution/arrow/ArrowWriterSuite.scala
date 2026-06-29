@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{Geography => InternalGeography, Geome
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized._
-import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.MaybeNull
 
 class ArrowWriterSuite extends SparkFunSuite {
@@ -150,6 +150,73 @@ class ArrowWriterSuite extends SparkFunSuite {
         new CalendarInterval(-11, -22, -33),
         null))
     check(new YearUDT, Seq(2020, 2021, null, 2022))
+  }
+
+  test("timestamp nanos round-trip") {
+    // Decompose an int64 epoch-nanoseconds value into the (epochMicros, nanosWithinMicro) pair,
+    // matching how the Arrow reader reconstructs it.
+    def fromEpochNanos(nanos: Long): TimestampNanosVal =
+      TimestampNanosVal.fromParts(Math.floorDiv(nanos, 1000L), Math.floorMod(nanos, 1000L).toShort)
+
+    val values = Seq(
+      TimestampNanosVal.fromParts(0L, 0.toShort),
+      TimestampNanosVal.fromParts(0L, 999.toShort),
+      TimestampNanosVal.fromParts(1234567L, 7.toShort),
+      // pre-epoch instant with a sub-microsecond remainder
+      TimestampNanosVal.fromParts(-1234567L, 13.toShort),
+      // large positive/negative epoch-nanoseconds within the representable range
+      fromEpochNanos(9000000000000000000L),
+      fromEpochNanos(-9000000000000000000L))
+
+    def check(dt: DataType, timeZoneId: String): Unit = {
+      val schema = new StructType().add("value", dt, nullable = true)
+      val writer = ArrowWriter.create(schema, timeZoneId)
+      assert(writer.schema === schema)
+      // Append a trailing null to exercise the null path.
+      (values.map(Option(_)) :+ None).foreach { v =>
+        writer.write(InternalRow(v.orNull))
+      }
+      writer.finish()
+
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      values.zipWithIndex.foreach { case (v, rowId) =>
+        val got = dt match {
+          case _: TimestampNTZNanosType => reader.getTimestampNTZNanos(rowId)
+          case _: TimestampLTZNanosType => reader.getTimestampLTZNanos(rowId)
+        }
+        assert(got.epochMicros === v.epochMicros)
+        assert(got.nanosWithinMicro === v.nanosWithinMicro)
+      }
+      assert(reader.isNullAt(values.length))
+      writer.root.close()
+    }
+
+    check(TimestampNTZNanosType(9), null)
+    check(TimestampLTZNanosType(9), "UTC")
+    // The value path packs the full nanosecond value regardless of the column precision (precision
+    // is carried in the Arrow field metadata, not the value), so p=7 round-trips identically to
+    // p=9; exercising it guards the value path against a future precision-enforcing change.
+    check(TimestampNTZNanosType(7), null)
+    check(TimestampLTZNanosType(7), "UTC")
+  }
+
+  test("timestamp nanos out of range raises DATETIME_OVERFLOW") {
+    def check(dt: DataType, timeZoneId: String): Unit = {
+      val schema = new StructType().add("value", dt, nullable = true)
+      val writer = ArrowWriter.create(schema, timeZoneId)
+      // epochMicros past the int64 epoch-nanosecond range overflows when packed, but still
+      // renders as a valid Instant/LocalDateTime in the error message.
+      val tooLarge = TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort)
+      val e = intercept[SparkArithmeticException] {
+        writer.write(InternalRow(tooLarge))
+      }
+      assert(e.getCondition === "DATETIME_OVERFLOW")
+      assert(e.getMessage.contains("Arrow INT64"))
+      writer.root.close()
+    }
+
+    check(TimestampNTZNanosType(9), null)
+    check(TimestampLTZNanosType(9), "UTC")
   }
 
   test("nested geographies") {

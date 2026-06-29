@@ -765,6 +765,54 @@ function setupZoomAndPan(svg, zoomLayer) {
   // provides the natural fit, and the zoom-layer has no transform, so no
   // explicit transform is required here.
   updateZoomLevelLabel(1);
+
+  // Remove d3-zoom's wheel listener (which is registered as non-passive and
+  // can block page scrolling) and replace it with a gated wrapper that only
+  // forwards Ctrl/Cmd+wheel to d3, letting unmodified scrolls pass through.
+  // "wheel.zoom" is d3-zoom's internal event namespace (stable since d3 v4).
+  // The null-guard below protects against future d3 changes.
+  var d3WheelHandler = svg.on("wheel.zoom");
+  svg.on("wheel.zoom", null);
+  svgNode.addEventListener("wheel", function (e) {
+    if (e.ctrlKey || e.metaKey) {
+      // Prevent the browser's native page zoom so only the DAG zooms.
+      e.preventDefault();
+      // Forward to d3-zoom's original handler for zoom behavior.
+      // Note: trackpad pinch gestures fire as wheel events with ctrlKey=true,
+      // so pinch-to-zoom still works as expected.
+      if (d3WheelHandler) d3WheelHandler.call(this, e);
+    } else {
+      // Let the event propagate naturally for page scrolling and show hint
+      showZoomHint();
+    }
+  }, {passive: false});
+}
+
+var zoomHintTimeout;
+var zoomHintCooldown = false;
+function showZoomHint() {
+  if (zoomHintCooldown) return;
+  var container = document.getElementById("plan-viz-graph");
+  if (!container) return;
+  var hint = document.getElementById("plan-viz-zoom-hint");
+  if (!hint) {
+    hint = document.createElement("div");
+    hint.id = "plan-viz-zoom-hint";
+    hint.className = "plan-viz-zoom-hint";
+    var platform = navigator.platform || navigator.userAgent;
+    var isMac = /Mac|iPhone|iPad/.test(platform);
+    var isLinux = /Linux/.test(platform);
+    var modKey = isMac ? "\u2318" : isLinux ? "Super" : "Ctrl";
+    hint.textContent = modKey + " + scroll to zoom";
+    container.appendChild(hint);
+  }
+  hint.classList.add("visible");
+  zoomHintCooldown = true;
+  clearTimeout(zoomHintTimeout);
+  zoomHintTimeout = setTimeout(function () {
+    hint.classList.remove("visible");
+    setTimeout(function () { zoomHintCooldown = false; }, 3000);
+  }, 1000);
 }
 
 function updateZoomLevelLabel(scale) {

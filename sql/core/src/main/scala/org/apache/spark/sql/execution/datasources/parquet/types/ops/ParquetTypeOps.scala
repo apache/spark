@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter, ParquetVectorUpdater}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType, TimeType}
+import org.apache.spark.sql.types.{DataType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Optional trait for Parquet storage format integration in the Types Framework.
@@ -234,6 +234,8 @@ private[parquet] object ParquetTypeOps {
   def apply(dt: DataType): Option[ParquetTypeOps] = {
     dt match {
       case tt: TimeType => Some(TimeTypeParquetOps(tt))
+      case t: TimestampLTZNanosType => Some(TimestampLTZNanosParquetOps(t))
+      case t: TimestampNTZNanosType => Some(TimestampNTZNanosParquetOps(t))
       // Add new types here - single registration point
       case _ => None
     }

@@ -26,6 +26,7 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -63,6 +64,64 @@ class ArchiveReaderSuite extends SparkFunSuite {
     } finally out.close()
   }
 
+  /** Write a zip archive, used to verify the `.zip` archive path. */
+  private def writeZip(file: File, entries: Seq[Entry]): Unit = {
+    val out = new ZipArchiveOutputStream(new FileOutputStream(file))
+    try {
+      entries.foreach { e =>
+        // A trailing slash marks a directory entry.
+        val rawName = if (e.isDir && !e.name.endsWith("/")) e.name + "/" else e.name
+        val zipEntry = new ZipArchiveEntry(rawName)
+        if (!e.isDir) zipEntry.setSize(e.data.length.toLong)
+        out.putArchiveEntry(zipEntry)
+        if (!e.isDir) out.write(e.data)
+        out.closeArchiveEntry()
+      }
+      out.finish()
+    } finally out.close()
+  }
+
+  /**
+   * Writes a zip with one STORED (uncompressed) entry that uses a data descriptor: general-purpose
+   * bit 3 is set and the local header's crc/size fields are zeroed, so the real values live only in
+   * the trailing data descriptor. `ZipArchiveInputStream` cannot stream such an entry -- it has no
+   * size to bound the read -- so `read` throws rather than yielding truncated bytes. This is the
+   * non-streamable case `ZipArchiveReader` documents; `ZipArchiveOutputStream` cannot produce it
+   * (it rejects an unsized STORED entry, or rewrites the header when the sink is seekable), so the
+   * bytes are assembled by hand.
+   */
+  private def writeStoredEntryWithDataDescriptor(file: File, name: String, body: String): Unit = {
+    val nameBytes = name.getBytes(StandardCharsets.UTF_8)
+    val data = body.getBytes(StandardCharsets.UTF_8)
+    val crc = { val c = new java.util.zip.CRC32(); c.update(data); c.getValue }
+    val out = new ByteArrayOutputStream()
+    def u16(v: Int): Unit = { out.write(v & 0xFF); out.write((v >>> 8) & 0xFF) }
+    def u32(v: Long): Unit = {
+      out.write((v & 0xFF).toInt); out.write(((v >>> 8) & 0xFF).toInt)
+      out.write(((v >>> 16) & 0xFF).toInt); out.write(((v >>> 24) & 0xFF).toInt)
+    }
+    // Local file header: GP bit 3 set (data descriptor), STORED method, sizes zeroed here.
+    val localHeaderOffset = out.size()
+    u32(0x04034b50L); u16(10); u16(0x0008); u16(0); u16(0); u16(0)
+    u32(0); u32(0); u32(0)
+    u16(nameBytes.length); u16(0)
+    out.write(nameBytes); out.write(data)
+    // Data descriptor (with optional signature): the real crc and sizes.
+    u32(0x08074b50L); u32(crc); u32(data.length.toLong); u32(data.length.toLong)
+    // Central directory.
+    val cdOffset = out.size()
+    u32(0x02014b50L); u16(20); u16(10); u16(0x0008); u16(0); u16(0); u16(0)
+    u32(crc); u32(data.length.toLong); u32(data.length.toLong)
+    u16(nameBytes.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(localHeaderOffset.toLong)
+    out.write(nameBytes)
+    val cdSize = out.size() - cdOffset
+    // End of central directory.
+    u32(0x06054b50L); u16(0); u16(0); u16(1); u16(1)
+    u32(cdSize.toLong); u32(cdOffset.toLong); u16(0)
+    val fos = new FileOutputStream(file)
+    try fos.write(out.toByteArray) finally fos.close()
+  }
+
   private def textEntry(name: String, body: String): Entry =
     Entry(name, body.getBytes(StandardCharsets.UTF_8))
 
@@ -89,15 +148,16 @@ class ArchiveReaderSuite extends SparkFunSuite {
     Seq(
       "foo.tar", "FOO.TAR", "/a/b/c/x.tar", "weird.TaR",
       "foo.tar.gz", "FOO.TAR.GZ", "mixed.Tar.Gz", "/a/b/c/x.tar.gz",
-      "foo.tgz", "FOO.TGZ", "/a/b/c/x.tgz"
+      "foo.tgz", "FOO.TGZ", "/a/b/c/x.tgz",
+      "data.zip", "FOO.ZIP", "weird.ZiP", "/a/b/c/x.zip"
     ).foreach { p =>
       assert(ArchiveReader.isArchivePath(new Path(p)), s"expected archive match for $p")
     }
   }
 
   test("isArchivePath: negative cases") {
-    Seq("foo.csv", "foo.gz", "foo", "dir/", "foo.tarball", "data.zip",
-        "foo.tar.bz2", "foo.targz").foreach { p =>
+    Seq("foo.csv", "foo.gz", "foo", "dir/", "foo.tarball",
+        "foo.tar.bz2", "foo.targz", "foo.zipx", "foo.gzip").foreach { p =>
       assert(!ArchiveReader.isArchivePath(new Path(p)), s"expected non-match for $p")
     }
   }
@@ -272,6 +332,111 @@ class ArchiveReaderSuite extends SparkFunSuite {
       } finally {
         TaskContext.unset()
       }
+    }
+  }
+
+  // ----- zip ----------------------------------------------------------------
+  // The streaming engine is shared with tar (only stream-opening differs), so these cases focus on
+  // the `.zip` dispatch and the `ZipArchiveInputStream` container behaving like the tar path.
+
+  test("readEntries: empty zip yields empty iterator") {
+    withTempDir { dir =>
+      val zip = new File(dir, "empty.zip")
+      writeZip(zip, Seq.empty)
+      assert(collect(zip).isEmpty)
+    }
+  }
+
+  test("readEntries: zip single entry exposes its name and bytes") {
+    withTempDir { dir =>
+      val zip = new File(dir, "single.zip")
+      writeZip(zip, Seq(textEntry("only.csv", "hello\n")))
+      assert(collect(zip) == Seq("only.csv" -> "hello\n"))
+    }
+  }
+
+  test("readEntries: zip multiple entries chained in archive order") {
+    withTempDir { dir =>
+      val zip = new File(dir, "multi.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
+      assert(collect(zip) == Seq("a.csv" -> "a", "b.csv" -> "b", "c.csv" -> "c"))
+    }
+  }
+
+  test("readEntries: zip directory entries are skipped") {
+    withTempDir { dir =>
+      val zip = new File(dir, "dirs.zip")
+      writeZip(zip, Seq(
+        Entry("subdir", Array.emptyByteArray, isDir = true),
+        textEntry("subdir/data.csv", "x")))
+      assert(collect(zip) == Seq("subdir/data.csv" -> "x"))
+    }
+  }
+
+  test("readEntries: zip dotfile, underscore-marker, and prefixed-dir entries are skipped") {
+    withTempDir { dir =>
+      val zip = new File(dir, "skipped.zip")
+      writeZip(zip, Seq(
+        textEntry("._real.csv", "junk"),           // macOS AppleDouble sidecar
+        textEntry(".hidden", "ignored"),           // bare dotfile
+        textEntry("_SUCCESS", "marker"),           // _-prefixed marker (InMemoryFileIndex skips it)
+        textEntry("_temporary/part-0.csv", "tmp"), // entry under a _-prefixed dir (skipped whole)
+        textEntry("real.csv", "kept"),
+        textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
+      assert(collect(zip) == Seq("real.csv" -> "kept"))
+    }
+  }
+
+  test("readEntries: zip advances lazily, one entry at a time") {
+    withTempDir { dir =>
+      val zip = new File(dir, "lazy.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b"), textEntry("c.csv", "c")))
+
+      val opened = ArrayBuffer[String]()
+      val it = ArchiveReader(new Path(zip.toURI)).readEntries(new Configuration()) { (name, _) =>
+        opened += name
+        Iterator.single(name)
+      }
+      // Construction opens only the first entry; advancing past each boundary opens the next.
+      assert(opened.toList == List("a.csv"))
+      assert(it.hasNext)
+      assert(it.next() == "a.csv")
+      assert(opened.toList == List("a.csv"))
+      assert(it.next() == "b.csv")
+      assert(opened.toList == List("a.csv", "b.csv"))
+      assert(it.next() == "c.csv")
+      assert(opened.toList == List("a.csv", "b.csv", "c.csv"))
+      assert(!it.hasNext)
+      assert(opened.size == 3)
+    }
+  }
+
+  test("readEntries: a zip parseEntry that closes its stream still advances to the next entry") {
+    withTempDir { dir =>
+      val zip = new File(dir, "close.zip")
+      writeZip(zip, Seq(textEntry("a.csv", "a"), textEntry("b.csv", "b")))
+
+      val seen = ArrayBuffer[String]()
+      val it = ArchiveReader(new Path(zip.toURI)).readEntries(new Configuration()) { (name, in) =>
+        val body = new String(readAll(in), StandardCharsets.UTF_8)
+        in.close() // must NOT close the underlying archive
+        seen += body
+        Iterator.single(name)
+      }
+      assert(it.toList == List("a.csv", "b.csv"))
+      assert(seen.toList == List("a", "b"))
+    }
+  }
+
+  test("readEntries: a non-streamable zip entry fails loudly rather than yielding garbled bytes") {
+    withTempDir { dir =>
+      val zip = new File(dir, "stored-dd.zip")
+      writeStoredEntryWithDataDescriptor(zip, "a.csv", "hello")
+      // A stored entry sized only by a trailing data descriptor is the documented non-streamable
+      // case: ZipArchiveInputStream throws on read instead of returning truncated/garbled bytes.
+      val ex = intercept[java.io.IOException](collect(zip))
+      assert(ex.getMessage != null && ex.getMessage.contains("data descriptor"),
+        s"expected a clear unsupported-feature error, got $ex")
     }
   }
 }

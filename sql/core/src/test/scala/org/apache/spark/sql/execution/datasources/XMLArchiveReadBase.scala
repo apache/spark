@@ -21,9 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Utils
 
 /**
  * Binds [[ArchiveReadSuiteBase]]'s file-format hooks to XML. XML opts into the shared
@@ -49,24 +47,6 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
   // elements as structs, so it keeps all three `supports*` defaults (inference, schema-merge,
   // complex types) and runs the full shared test set. Inference needs no trigger option, so
   // `inferenceOptions` keeps its empty default.
-
-  override protected def encodeFile(
-      df: DataFrame,
-      writeOptions: Map[String, String]): Array[Byte] = {
-    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
-    try {
-      df.coalesce(1).write.format("xml")
-        .options(Map("rowTag" -> rowTag) ++ writeOptions)
-        .mode("overwrite").save(dir.getCanonicalPath)
-      val parts = dir.listFiles().filter { f =>
-        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
-          !f.getName.endsWith(".crc")
-      }
-      assert(parts.length == 1,
-        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
-      Files.readAllBytes(parts.head.toPath)
-    } finally Utils.deleteRecursively(dir)
-  }
 
   /** Raw XML bytes, for tests that need precise control over the record layout. */
   protected def xmlBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)

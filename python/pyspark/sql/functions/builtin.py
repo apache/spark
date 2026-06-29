@@ -11607,7 +11607,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.0.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -11710,6 +11710,7 @@ def unix_date(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def unix_micros(col: "ColumnOrName") -> Column:
     """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
 
     .. versionadded:: 3.5.0
 
@@ -11728,6 +11729,7 @@ def unix_micros(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_micros`
 
     Examples
@@ -11771,6 +11773,7 @@ def unix_millis(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_millis`
 
     Examples
@@ -11865,6 +11868,7 @@ def unix_seconds(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_millis`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.from_unixtime`
     :meth:`pyspark.sql.functions.timestamp_seconds`
 
@@ -22940,7 +22944,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
-    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()  # doctest: +SKIP
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
@@ -22951,7 +22955,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
-    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()  # doctest: +SKIP
     +----------------+----------------+
     |            data|   shuffle(data)|
     +----------------+----------------+
@@ -22962,7 +22966,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data", 345)).show()
+    >>> df.select("*", sf.shuffle("data", 345)).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
@@ -22973,7 +22977,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    >>> df.select("*", sf.shuffle("data")).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+

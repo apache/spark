@@ -700,7 +700,10 @@ object SQLConf {
       .doc("When statistics are not available or configured not to be used, this config will be " +
         "used as the fallback filter ratio for computing the data size of the partitioned table " +
         "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-        "subquery as the pruning filter if broadcast reuse is not applicable.")
+        "subquery as the pruning filter if broadcast reuse is not applicable. This fallback " +
+        "ratio only applies when the filtering side has a selective predicate; a materialized " +
+        "filtering side without one obtains dynamic partition pruning through broadcast reuse " +
+        "only.")
       .version("3.0.0")
       .doubleConf
       .createWithDefault(0.5)
@@ -2727,11 +2730,8 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, a supported data source can read tar archives (.tar, .tar.gz, .tgz): " +
-      "each archive is read as a single split and its entries are streamed through that data " +
-      "source's parser (never unpacked to disk), as if the entries were separate files, both " +
-      "during scan and schema inference. The CSV, JSON, and text data sources support " +
-      "reading archives.")
+    .doc("When true, supported file-based data sources can read archive files, reading each " +
+      "archive's entries as if they were separate files, during both scan and schema inference.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf

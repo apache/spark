@@ -239,6 +239,85 @@ public class InMemoryStoreSuite {
   }
 
   @Test
+  public void testRemoveAllByNaturalParentIndex() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    CustomType2 t1 = new CustomType2();
+    t1.key = "key1";
+    t1.id = "id1";
+    t1.parentId = "parentId1";
+    store.write(t1);
+
+    CustomType2 t2 = new CustomType2();
+    t2.key = "key2";
+    t2.id = "id2";
+    t2.parentId = "parentId1";
+    store.write(t2);
+
+    CustomType2 t3 = new CustomType2();
+    t3.key = "key3";
+    t3.id = "id3";
+    t3.parentId = "parentId2";
+    store.write(t3);
+
+    assertEquals(3, store.count(CustomType2.class));
+
+    // A parent value with no children removes nothing.
+    assertFalse(store.removeAllByIndexValues(
+      CustomType2.class, "parentId", Set.of("noSuchParent")));
+    assertEquals(3, store.count(CustomType2.class));
+
+    // Removing by a parent value deletes all of its children, and only those.
+    assertTrue(store.removeAllByIndexValues(
+      CustomType2.class, "parentId", Set.of("parentId1")));
+    assertEquals(1, store.count(CustomType2.class));
+    assertEquals("id3", store.read(CustomType2.class, "key3").id);
+
+    assertTrue(store.removeAllByIndexValues(
+      CustomType2.class, "parentId", Set.of("parentId2")));
+    assertEquals(0, store.count(CustomType2.class));
+  }
+
+  @Test
+  public void testViewByNaturalParentIndex() throws Exception {
+    KVStore store = new InMemoryStore();
+
+    CustomType2 t1 = new CustomType2();
+    t1.key = "key1";
+    t1.id = "id1";
+    t1.parentId = "parentId1";
+    store.write(t1);
+
+    CustomType2 t2 = new CustomType2();
+    t2.key = "key2";
+    t2.id = "id2";
+    t2.parentId = "parentId1";
+    store.write(t2);
+
+    CustomType2 t3 = new CustomType2();
+    t3.key = "key3";
+    t3.id = "id3";
+    t3.parentId = "parentId2";
+    store.write(t3);
+
+    // A populated parent returns exactly its children, in natural-key order.
+    try (KVStoreIterator<CustomType2> it =
+        store.view(CustomType2.class).parent("parentId1").closeableIterator()) {
+      assertTrue(it.hasNext());
+      assertEquals("key1", it.next().key);
+      assertTrue(it.hasNext());
+      assertEquals("key2", it.next().key);
+      assertFalse(it.hasNext());
+    }
+
+    // A parent value with no children yields an empty iterator (the early-return branch).
+    try (KVStoreIterator<CustomType2> it =
+        store.view(CustomType2.class).parent("noSuchParent").closeableIterator()) {
+      assertFalse(it.hasNext());
+    }
+  }
+
+  @Test
   public void testCountByIndexValue() throws Exception {
     KVStore store = new InMemoryStore();
 

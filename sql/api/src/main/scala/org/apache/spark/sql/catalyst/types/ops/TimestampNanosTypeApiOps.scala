@@ -19,6 +19,10 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
+import org.apache.arrow.vector.types.TimeUnit
+import org.apache.arrow.vector.types.pojo.ArrowType
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.catalyst.util.TimestampFormatter
@@ -116,6 +120,12 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampNTZNanosType (SPARK-57033):
   // maps to java.time.LocalDateTime with the column precision.
   override protected def nanosEncoder: AgnosticEncoder[_] = LocalDateTimeNanosEncoder(t.precision)
+
+  // NTZ is zone-less: like TimestampNTZType, the Arrow timestamp carries a null time zone. The
+  // column precision is not expressible in the Arrow type itself and is carried in the Arrow
+  // field metadata instead (see ArrowUtils).
+  override def toArrowType(timeZoneId: String): Option[ArrowType] =
+    Some(new ArrowType.Timestamp(TimeUnit.NANOSECOND, null))
 }
 
 /**
@@ -154,4 +164,14 @@ class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: => ZoneI
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
   // maps to java.time.Instant with the column precision.
   override protected def nanosEncoder: AgnosticEncoder[_] = InstantNanosEncoder(t.precision)
+
+  // LTZ is zone-aware: like TimestampType, the Arrow timestamp carries the session time zone, so
+  // a non-null timeZoneId is mandatory (mirrors ArrowUtils.toArrowTypeDefault for TimestampType).
+  // The column precision is carried in the Arrow field metadata instead (see ArrowUtils).
+  override def toArrowType(timeZoneId: String): Option[ArrowType] = {
+    if (timeZoneId == null) {
+      throw SparkException.internalError("Missing timezoneId where it is mandatory.")
+    }
+    Some(new ArrowType.Timestamp(TimeUnit.NANOSECOND, timeZoneId))
+  }
 }

@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, LocalTimestampNanos, TimestampMicros, TimestampMillis, TimestampNanos}
 import org.apache.avro.Schema.Type
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed, Record}
@@ -199,6 +199,26 @@ private[sql] class AvroSerializer(
           DateTimeUtils.nanosToMicros(getter.getLong(ordinal))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"SQL type ${TimeType().sql} cannot be converted to Avro logical type $other")
+      }
+
+      case (_: TimestampLTZNanosType, LONG) => avroType.getLogicalType match {
+        // Nanosecond-precision timestamps are stored as epoch-nanoseconds (Long). They are always
+        // proleptic Gregorian, so they are exempt from datetime rebasing.
+        case _: TimestampNanos => (getter, ordinal) =>
+          DateTimeUtils.timestampNanosToEpochNanos(
+            getter.getTimestampLTZNanos(ordinal), isNtz = false, sink = "Avro")
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimestampLTZNanosType().sql} cannot be converted to " +
+          s"Avro logical type $other")
+      }
+
+      case (_: TimestampNTZNanosType, LONG) => avroType.getLogicalType match {
+        case _: LocalTimestampNanos => (getter, ordinal) =>
+          DateTimeUtils.timestampNanosToEpochNanos(
+            getter.getTimestampNTZNanos(ordinal), isNtz = true, sink = "Avro")
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimestampNTZNanosType().sql} cannot be converted to " +
+          s"Avro logical type $other")
       }
 
       case (ArrayType(et, containsNull), ARRAY) =>
