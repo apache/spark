@@ -20,6 +20,7 @@ import java.time.{Instant, LocalDate, ZoneId}
 import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.expressions.Literal
 import org.apache.spark.sql.types._
@@ -218,7 +219,7 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
       otherFunc: ReducibleFunction[_, _],
       otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
 
-    if (otherFunc == BucketFunction) {
+    if (otherFunc == BucketFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
       val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
 
@@ -391,7 +392,7 @@ object TruncateFunction
       otherFunc: ReducibleFunction[_, _],
       otherParams: Array[Literal[_]]): Reducer[UTF8String, UTF8String] = {
 
-    if (otherFunc == TruncateFunction) {
+    if (otherFunc == TruncateFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisWidth = thisParams(0).value().asInstanceOf[Int]
       val otherWidth = otherParams(0).value().asInstanceOf[Int]
       val smallerWidth = math.min(thisWidth, otherWidth)
@@ -440,7 +441,7 @@ object IntegerTruncateFunction
       thisParams: Array[Literal[_]],
       otherFunc: ReducibleFunction[_, _],
       otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
-    if (otherFunc == IntegerTruncateFunction) {
+    if (otherFunc == IntegerTruncateFunction && thisParams.length == 1 && otherParams.length == 1) {
       val thisWidth = thisParams(0).value().asInstanceOf[Int]
       val otherWidth = otherParams(0).value().asInstanceOf[Int]
       val common = lcm(thisWidth, otherWidth)
@@ -462,4 +463,170 @@ case class IntTruncateReducer(width: Int) extends Reducer[Int, Int] {
   override def reduce(value: Int): Int = value - (((value % width) + width) % width)
   override def resultType(): DataType = IntegerType
   override def displayName(): String = s"truncate($width)"
+}
+
+/**
+ * A transform whose reducer is defined across a zero-parameter vs one-parameter shape, e.g.
+ * `zero_or_one(col)` reducing onto `zero_or_one(col, 2)`. Used to verify the dispatch does not
+ * globally require equal child counts before invoking the reducer.
+ */
+object ZeroOrOneParamFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "zero_or_one"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(0)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    if (otherFunc == ZeroOrOneParamFunction && thisParams.length != otherParams.length) {
+      BucketReducer(1)
+    } else {
+      null
+    }
+  }
+}
+
+/**
+ * A transform with a `CalendarIntervalType` literal parameter (which is non-complex but not an
+ * `AtomicType`). Used to verify such a parameter is not rejected as a complex container before its
+ * reducer is consulted.
+ */
+object IntervalParamFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, CalendarIntervalType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "interval_param"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(0)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    if (otherFunc == IntervalParamFunction) BucketReducer(1) else null
+  }
+}
+
+/** A user type whose UDT serializes to a struct (an [[InternalRow]]). */
+class StructBacked(val n: Int) extends Serializable
+
+/**
+ * A UDT whose `sqlType` is a [[StructType]]: a literal of this type carries an [[InternalRow]]
+ * value, yet its `dataType` is the UDT, not `StructType`. This is the case a `DataType`-based
+ * container check misses but a value-based one catches.
+ */
+class StructBackedUDT extends UserDefinedType[StructBacked] {
+  override def sqlType: DataType = StructType(Seq(StructField("n", IntegerType, nullable = false)))
+  override def serialize(obj: StructBacked): InternalRow = new GenericInternalRow(Array[Any](obj.n))
+  override def deserialize(datum: Any): StructBacked = datum match {
+    case row: InternalRow => new StructBacked(row.getInt(0))
+  }
+  override def userClass: Class[StructBacked] = classOf[StructBacked]
+}
+
+/**
+ * A transform whose declared input type at the literal position is a UDT ([[StructBackedUDT]]).
+ * Used to make the value-based `noComplexLiteralParams` guard load-bearing: a UDT-over-struct
+ * literal matches the declared input type (so `literalParamsMatchInputTypes` passes), yet its value
+ * is an [[InternalRow]], so only the value-based guard can reject it. The reducer returns
+ * unconditionally, so reaching it at all is the leak.
+ */
+object UdtParamFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(new StructBackedUDT, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "udt_param"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(1)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = BucketReducer(1)
+}
+
+/**
+ * A string truncate whose reducer reads its width type-tolerantly (via [[Number]], so it accepts a
+ * boxed Short or Integer). Used to verify that the literal-param-type gate -- not an incidental
+ * ClassCastException in the connector -- is what makes a mismatched-type (e.g. ShortType) width
+ * non-reducible. With the gate removed, this reducer WOULD reduce a ShortType-width pair.
+ */
+object TypeTolerantTruncateFunction
+    extends ScalarFunction[UTF8String]
+    with ReducibleFunction[UTF8String, UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "tolerant_truncate"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): UTF8String =
+    input.getUTF8String(0).substring(0, input.getInt(1))
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[UTF8String, UTF8String] = {
+    if (otherFunc == TypeTolerantTruncateFunction &&
+        thisParams.length == 1 && otherParams.length == 1) {
+      val thisWidth = thisParams(0).value().asInstanceOf[Number].intValue()
+      val otherWidth = otherParams(0).value().asInstanceOf[Number].intValue()
+      val smaller = math.min(thisWidth, otherWidth)
+      if (smaller != thisWidth) return TruncateReducer(smaller)
+    }
+    null
+  }
+}
+
+/**
+ * A function whose generalized reducer throws an unexpected (non-UnsupportedOperationException)
+ * exception. Used to verify the dispatch logs it and treats the pair as not reducible (a shuffle),
+ * rather than crashing or emitting the misleading "implements no reducer" hint (it does implement
+ * the overload -- it threw a bug, which is a different signal than UOE-means-unimplemented).
+ */
+object ThrowingReducerFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "throwing_reducer"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(1)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] =
+    throw new RuntimeException("boom from reducer")
+}
+
+/**
+ * A bucket-like function implementing BOTH reducer overloads: the deprecated int overload succeeds
+ * (returns a reducer), while the generalized Literal[] overload throws. Used to verify the
+ * single-int dispatch is lazy -- it must not invoke (and log the throw from) the generalized
+ * overload once the deprecated one already produced a reducer.
+ */
+object DeprecatedOkGeneralizedThrowsFunction
+    extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "deprecated_ok_generalized_throws"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getLong(1), input.getInt(0))
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] =
+    if (otherFunc == DeprecatedOkGeneralizedThrowsFunction) BucketReducer(1) else null
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] =
+    throw new RuntimeException("boom from generalized overload")
 }

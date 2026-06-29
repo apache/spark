@@ -38,7 +38,7 @@ import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with ExplainSuiteHelper {
   private val functions = Seq(
@@ -4517,10 +4517,10 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   }
 
   test("SPARK-50593: a complex (non-scalar) literal param is not reducible") {
-    // Reducer parameters must be scalar literals. ArrayParamFunction's generalized reducer returns
-    // a reducer unconditionally, so reaching it at all is the leak; the scalar guard must refuse
-    // the ArrayType literal param first. Different array values keep isSameFunction false, forcing
-    // the reducer path where the guard applies.
+    // Reducer parameters must not carry Catalyst-internal containers. ArrayParamFunction's
+    // generalized reducer returns a reducer unconditionally, so reaching it at all is the leak; the
+    // guard must refuse the ArrayData-backed literal param first. Different array values keep
+    // isSameFunction false, forcing the reducer path where the guard applies.
     val l = TransformExpression(ArrayParamFunction,
       Seq(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), attr("id")))
     val r = TransformExpression(ArrayParamFunction,
@@ -4528,5 +4528,166 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     assert(!l.isSameFunction(r))
     assert(!l.isCompatible(r), "a complex literal param must not be reducible")
     assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
+
+  test("SPARK-50593: a UDT-typed literal param is not reducible (complex-type guard)") {
+    // noComplexLiteralParams rejects a UDT-typed literal param by its DataType. UdtParamFunction
+    // declares the UDT as its literal input type, so literalParamsMatchInputTypes passes (UDT ==
+    // UDT) and only the complex-type guard can reject it. UdtParamFunction reduces unconditionally,
+    // so reaching its reducer is the leak (here a StructBackedUDT, whose value is an InternalRow).
+    val udt = new StructBackedUDT
+    val l = TransformExpression(UdtParamFunction,
+      Seq(Literal(udt.serialize(new StructBacked(1)), udt), attr("id")))
+    val r = TransformExpression(UdtParamFunction,
+      Seq(Literal(udt.serialize(new StructBacked(2)), udt), attr("store_id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "a UDT-typed literal param must not be reducible")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
+
+  test("SPARK-50593: bundled reducers tolerate a length-mismatched params call (no AIOOBE)") {
+    // sameArgumentLayout is arity-less, so a 0-vs-1-parameter pair (e.g. truncate(col) vs
+    // truncate(col, w), whose column slots align) reaches the connector reducer with
+    // mismatched-length param arrays. The bundled reducers model the documented contract by
+    // length-checking before indexing -- returning null rather than throwing ArrayIndexOutOfBounds
+    // (which attempt()'s Try would swallow into a silent missed SPJ + a misleading warning).
+    val empty = Array.empty[org.apache.spark.sql.connector.expressions.Literal[_]]
+    val one = Array[org.apache.spark.sql.connector.expressions.Literal[_]](literal(3))
+    assert(BucketFunction.reducer(empty, BucketFunction, one) == null)
+    assert(TruncateFunction.reducer(empty, TruncateFunction, one) == null)
+    assert(IntegerTruncateFunction.reducer(empty, IntegerTruncateFunction, one) == null)
+  }
+
+  test("SPARK-50593: a non-UOE reducer exception is logged and treated as not reducible") {
+    // An UnsupportedOperationException means "overload not implemented" (silent). Any other
+    // throwable is a bug in an implemented reducer: the dispatch logs it (not the misleading
+    // "implements no reducer" hint) and treats the pair as not reducible -- it falls back to a
+    // shuffle.
+    val id = attr("id")
+    val l = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(2)))
+    val r = TransformExpression(ThrowingReducerFunction, Seq(id, Literal(4)))
+    val appender = new LogAppender("non-UOE reducer exception")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isEmpty, "a throwing reducer must be treated as not reducible")
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(_.contains("reducer threw an exception")),
+      "the non-UOE exception must be logged")
+    assert(!messages.exists(_.contains("implements no reducer")),
+      "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
+  }
+
+  test("SPARK-50593: generalized overload is not probed once the deprecated one yields a reducer") {
+    // The single-int dispatch tries the deprecated int reducer first and must fall back to the
+    // generalized overload lazily -- not invoke it when the deprecated one already returned a
+    // reducer. Here the deprecated reducer succeeds and the generalized one throws; SPJ must still
+    // succeed via the deprecated path with NO "reducer threw" warning (which an eager probe of the
+    // generalized overload would spuriously log on this hot planning path).
+    val l = TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(4), attr("id")))
+    val r =
+      TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val appender = new LogAppender("generalized overload probed eagerly")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isDefined, "the deprecated reducer must still produce a reducer")
+    }
+    assert(!appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .exists(_.contains("reducer threw an exception")),
+      "the generalized overload must not be probed (and throw) once the deprecated one succeeded")
+  }
+
+  test("SPARK-50593: zero-param vs one-param transforms reach the reducer (no arity block)") {
+    // raw(id) has children [id]; withParam(id, 2) has children [id, 2]. Both pass
+    // supportsExpressions (one column ref each). The dispatch must not require equal child counts
+    // before the reducer: ZeroOrOneParamFunction is reducible across the 0-vs-1-parameter shape, so
+    // the pair must reach it (the column slots align under zip; the extra parameter is reconciled
+    // by the reducer).
+    val raw = TransformExpression(ZeroOrOneParamFunction, Seq(attr("id")))
+    val withParam = TransformExpression(ZeroOrOneParamFunction, Seq(attr("id"), Literal(2)))
+    assert(!raw.isSameFunction(withParam)) // different arity -> not the "same" transform
+    assert(raw.isCompatible(withParam),
+      "zero-param vs one-param must reach the connector reducer, not be blocked by arity")
+    assert(raw.reducers(withParam).isDefined && withParam.reducers(raw).isDefined)
+  }
+
+  test("SPARK-50593: CalendarIntervalType literal param is reducible (not treated as complex)") {
+    // CalendarIntervalType is non-complex but not an AtomicType; its literal param must not be
+    // rejected as a complex container before the reducer is consulted. IntervalParamFunction is
+    // reducible; differing interval params keep isSameFunction false, forcing the reducer path.
+    val l = TransformExpression(IntervalParamFunction,
+      Seq(attr("id"), Literal(new CalendarInterval(1, 0, 0), CalendarIntervalType)))
+    val r = TransformExpression(IntervalParamFunction,
+      Seq(attr("id"), Literal(new CalendarInterval(2, 0, 0), CalendarIntervalType)))
+    assert(!l.isSameFunction(r))
+    assert(l.isCompatible(r), "a CalendarIntervalType param must reach the connector reducer")
+    assert(l.reducers(r).isDefined)
+  }
+
+  // Builds (identity spec, truncate(col, <ShortType width>) spec) on the same column. The ShortType
+  // width mismatches truncate's declared IntegerType input, so the pair must be treated as not
+  // reducible. Shared by the reducers and gate tests below, which must agree on that decision.
+  private def mismatchedIdVsTransformSpecs()
+      : (physical.KeyedShuffleSpec, physical.KeyedShuffleSpec) = {
+    val data = AttributeReference("data", StringType)()
+    val identity = physical.KeyedPartitioning(Seq(data), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(TruncateFunction, Seq(data, Literal(2.toShort, ShortType)))),
+      Seq.empty)
+    val dist = physical.ClusteredDistribution(Seq(data))
+    (physical.KeyedShuffleSpec(identity, dist), physical.KeyedShuffleSpec(truncated, dist))
+  }
+
+  test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
+      "reducible (identity-vs-transform)") {
+    // A bound function may declare inputTypes() that differ from the literal's actual type (a legal
+    // implicit cast). truncate declares (StringType, IntegerType); a connector can report a Short
+    // width literal. The identity-vs-transform reducer binds and directly evals the transform,
+    // skipping Analyzer coercion -- a raw Short into an IntegerType slot would throw. Rather than
+    // coerce a value the partitions were not built on, this pair is not reducible (reducers =>
+    // None); the companion gate test asserts areKeysCompatible also rejects it, so it shuffles.
+    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "a mismatched-type literal param must not be reducible via the identity-vs-transform path")
+  }
+
+  test("SPARK-50593: identity-vs-transform compatibility gate agrees with reducers on a " +
+      "mismatched-type literal param") {
+    // The compatibility gate (areKeysCompatible -> isExpressionCompatible) and reducers MUST agree:
+    // if the gate says compatible but reducers returns None, EnsureRequirements keeps the identity
+    // side's raw keys (the reducedDataTypes check can't catch it -- both StringType) and SPJ joins
+    // raw-vs-transformed keys -> silent wrong results. So a mismatched-type literal must make the
+    // gate return false (force a shuffle), consistent with reducers returning None above.
+    val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(!idSpec.areKeysCompatible(trSpec),
+        "gate must reject a mismatched-type literal so it agrees with reducers (no mis-join)")
+      assert(!trSpec.areKeysCompatible(idSpec), "symmetric")
+    }
+  }
+
+  test("SPARK-50593: a literal param whose type differs from the declared input type is not " +
+      "reducible (transform-vs-transform)") {
+    // Both sides are truncate transforms whose width literal is ShortType, while the function
+    // declares (StringType, IntegerType). A literal whose type differs from the declared input type
+    // is treated as not reducible (no coercion), so the pair falls back to a shuffle. Uses a
+    // type-tolerant reducer (reads the width via Number) so emptiness is attributable to the gate,
+    // not to an incidental ClassCastException in the connector. The same widths typed as
+    // IntegerType remain reducible (control).
+    val data = AttributeReference("data", StringType)()
+    def trunc(w: Short): TransformExpression =
+      TransformExpression(TypeTolerantTruncateFunction, Seq(data, Literal(w, ShortType)))
+    assert(trunc(4).reducers(trunc(3)).isEmpty,
+      "mismatched-type (Short) width params must not be reducible")
+    assert(trunc(3).reducers(trunc(4)).isEmpty)
+
+    // Control: IntegerType widths (matching the declared input type) still reduce.
+    def itrunc(w: Int): TransformExpression =
+      TransformExpression(TypeTolerantTruncateFunction, Seq(data, Literal(w)))
+    val reduced = itrunc(4).reducers(itrunc(3))
+    assert(reduced.isDefined, "IntegerType widths must remain reducible")
+    assert(reduced.get.asInstanceOf[Reducer[Any, Any]]
+      .reduce(UTF8String.fromString("abcd")) == UTF8String.fromString("abc"))
   }
 }

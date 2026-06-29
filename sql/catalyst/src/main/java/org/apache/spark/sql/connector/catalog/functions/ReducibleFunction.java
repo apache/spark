@@ -66,11 +66,21 @@ public interface ReducibleFunction<I, O> {
    *
    * If this function is 'reducible' on another function, return the {@link Reducer}.
    * <p>
-   * Each parameter is a scalar {@link Literal} carrying both its value and data type. Parameters
-   * are always scalar literals (e.g. bucket numBuckets, truncate width); complex types (array, map,
-   * struct) are not passed here. {@link Literal#value()} is Spark's internal representation (e.g.
-   * {@code UTF8String} for strings, {@code Decimal} for decimals); use {@link Literal#dataType()}
-   * to interpret it.
+   * Each parameter is a non-complex {@link Literal} carrying both its value and data type:
+   * array/map/struct/UDT-typed values are filtered out by Spark and not passed here, but other
+   * scalar values (e.g. bucket numBuckets, truncate width, or a
+   * {@code CalendarInterval}) may be. {@link Literal#value()} is Spark's internal representation
+   * (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals); use
+   * {@link Literal#dataType()} to interpret it rather than assuming a JVM type.
+   * <p>
+   * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
+   * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
+   * Implementations must check each array's length before indexing into it.
+   * <p>
+   * Returning {@code null} means "not reducible for these parameters". Throwing
+   * {@link UnsupportedOperationException} signals that this overload is not implemented (Spark then
+   * falls back to the deprecated single-int overload, silently); any other exception is logged by
+   * Spark and treated as not reducible (the join falls back to a shuffle).
    * <p>
    * Examples:
    * <ul>
@@ -79,9 +89,10 @@ public interface ReducibleFunction<I, O> {
    *     <li>hypothetical range_bucket(x, 0L, 100L, 4): thisParams = [0L, 100L, 4]</li>
    * </ul>
    *
-   * @param thisParams literal parameters for this function
+   * @param thisParams literal parameters for this function (may differ in length from otherParams)
    * @param otherFunction the other parameterized function
-   * @param otherParams literal parameters for the other function
+   * @param otherParams literal parameters for the other function (may differ in length from
+   *                    thisParams)
    * @return a reduction function if reducible, null otherwise
    * @since 4.3.0
    */

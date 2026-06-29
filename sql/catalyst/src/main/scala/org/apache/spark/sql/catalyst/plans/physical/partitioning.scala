@@ -1257,24 +1257,55 @@ case class KeyedShuffleSpec(
     }
   }
 
-  private def isExpressionCompatible(left: Expression, right: Expression): Boolean =
+  /**
+   * The reducer mapping a raw identity column `col` onto transform `t` (it applies `t` to the
+   * identity values), or None if not reducible. Single source of the identity-vs-transform
+   * decision: [[isExpressionCompatible]] derives the gate from it (`.isDefined`) and [[reducers]]
+   * returns it, so the two cannot drift (a divergence would keep raw keys -> mis-join).
+   *
+   * `t`'s literal params must match its declared input types -- evaluating it here skips Analyzer
+   * coercion, so a mismatched literal would crash. (`sameArgumentLayout` / `noComplexLiteralParams`
+   * don't apply: there is one transform, evaluated in-process, not handed across the reducer API.)
+   * `col` is the single leaf child (asserted in `keyPositions`), at position 0 in the row built.
+   */
+  private def identityReducer(
+      col: AttributeReference, t: TransformExpression): Option[Reducer[_, _]] = {
+    if (!t.literalParamsMatchInputTypes) {
+      None
+    } else {
+      val reducerExpr = t.transform { case _: AttributeReference => col }
+      val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(col)))
+      Some(new Reducer[Any, Any] {
+        override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
+        override def resultType(): DataType = reducerExpr.dataType
+        override def displayName(): String = reducerExpr.toString
+      })
+    }
+  }
+
+  private def isExpressionCompatible(left: Expression, right: Expression): Boolean = {
+    def compatibleTransformsAllowed: Boolean =
+      SQLConf.get.v2BucketingPushPartValuesEnabled &&
+        !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
+        SQLConf.get.v2BucketingAllowCompatibleTransforms
     (left, right) match {
       case (_: LeafExpression, _: LeafExpression) => true
       case (left: TransformExpression, right: TransformExpression) =>
-        if (SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms) {
+        if (compatibleTransformsAllowed) {
           left.isCompatible(right)
         } else {
           left.isSameFunction(right)
         }
-      case (_: AttributeReference, _: TransformExpression) |
-           (_: TransformExpression, _: AttributeReference) =>
-        SQLConf.get.v2BucketingPushPartValuesEnabled &&
-          !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-          SQLConf.get.v2BucketingAllowCompatibleTransforms
+      // Identity transform on one side, arbitrary transform on the other. Derive the gate from the
+      // producer (identityReducer): the pair is compatible only if a reducer can actually be built,
+      // so the gate and reducers cannot drift (a divergence would keep raw keys -> mis-join).
+      case (col: AttributeReference, t: TransformExpression) =>
+        compatibleTransformsAllowed && identityReducer(col, t).isDefined
+      case (t: TransformExpression, col: AttributeReference) =>
+        compatibleTransformsAllowed && identityReducer(col, t).isDefined
       case _ => false
     }
+  }
 
   /**
    * Return a set of [[Reducer]] for the partition expressions of this shuffle spec,
@@ -1296,19 +1327,11 @@ case class KeyedShuffleSpec(
     val results = partitioning.expressions.zip(other.partitioning.expressions).map {
       case (e1: TransformExpression, e2: TransformExpression) => e1.reducers(e2)
 
-      // Identity transform on this side, arbitrary transform on the other side: create a reducer
-      // that applies the other's transform to the raw identity values. The symmetric case
+      // Identity transform on this side, arbitrary transform on the other side. The symmetric case
       // (TransformExpression, AttributeReference) is handled when the other side calls reducers.
-      // Each partition expression is guaranteed to have exactly one leaf child (asserted in
-      // keyPositions), so `a` lives at position 0 in the row we construct.
-      case (a: AttributeReference, t: TransformExpression) =>
-        val reducerExpr = t.transform { case _: AttributeReference => a }
-        val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(a)))
-        Some(new Reducer[Any, Any] {
-          override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
-          override def resultType(): DataType = reducerExpr.dataType
-          override def displayName(): String = reducerExpr.toString
-        })
+      // identityReducer is the shared decision the compatibility gate also consults, so the two
+      // cannot drift.
+      case (col: AttributeReference, t: TransformExpression) => identityReducer(col, t)
 
       case (_, _) => None
     }

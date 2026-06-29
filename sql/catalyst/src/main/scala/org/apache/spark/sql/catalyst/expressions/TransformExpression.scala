@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AtomicType, DataType, IntegerType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StructType, UserDefinedType}
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -75,21 +75,21 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
    */
   def isSameFunction(other: TransformExpression): Boolean =
     function.canonicalName() == other.function.canonicalName() &&
+      children.length == other.children.length &&
       childrenMatch(other)(_ == _)
 
   /**
-   * Per-position match of children, requiring equal arity. Literal slots are compared by the
-   * caller-supplied `literalsMatch`; nested transform slots must recursively be the same function;
-   * any other slot must be a plain column reference on both sides.
+   * Per-position match of the zipped children (callers enforce arity where needed). Literal slots
+   * are compared by the caller-supplied `literalsMatch`; nested transform slots must recursively be
+   * the same function; any other slot must be a plain column reference on both sides.
    */
   private def childrenMatch(other: TransformExpression)
       (literalsMatch: (Literal, Literal) => Boolean): Boolean =
-    children.length == other.children.length &&
-      children.zip(other.children).forall {
-        case (l1: Literal, l2: Literal) => literalsMatch(l1, l2)
-        case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
-        case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
-      }
+    children.zip(other.children).forall {
+      case (l1: Literal, l2: Literal) => literalsMatch(l1, l2)
+      case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
+      case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
+    }
 
   /**
    * Whether this [[TransformExpression]]'s function is compatible with the `other`
@@ -134,32 +134,62 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
 
   /**
    * Extract all literal parameters of this transform as V2 [[V2Literal]]s, preserving each value's
-   * internal representation and its `DataType`. Connectors interpret the value via the accompanying
-   * `DataType` rather than relying on a pre-converted JVM type.
+   * internal representation and its `DataType`. Only consulted once a reducer path has confirmed
+   * the literal params already match the declared input types (see
+   * [[literalParamsMatchInputTypes]]), so no type coercion happens here. Memoized.
    *
    * Examples:
    *   bucket(4, col)        => [Literal(4, IntegerType)]
    *   truncate(col, 3)      => [Literal(3, IntegerType)]
    *   days(col)             => []  (no literals)
    */
-  private def extractParameters: Array[V2Literal[_]] =
+  private lazy val extractParameters: Array[V2Literal[_]] =
     literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
 
   /**
-   * Reducer precondition: same argument layout/structure as `other` (arity, aligned slots, equal
-   * nested transforms, column refs elsewhere). Only literal *values* may differ. Unlike
-   * [[isSameFunction]] the function name is not compared.
+   * Whether every literal parameter already matches the bound function's declared input type at its
+   * position. The SPJ reducer paths hand literal values to the connector reducer, or evaluate the
+   * transform directly, without Analyzer type coercion. A literal whose type differs from the
+   * declared input type (a legal implicit cast under [[BoundFunction]]) is therefore treated as not
+   * reducible: the join falls back to a shuffle rather than coercing a value the partitions were
+   * not built on, or crashing when the connector casts it to the declared type.
+   */
+  lazy val literalParamsMatchInputTypes: Boolean = {
+    val declaredTypes = function.inputTypes()
+    children.zipWithIndex.forall {
+      // Reject only a genuine type mismatch at a declared position. A literal beyond the declared
+      // arity has no declared type to compare against (e.g. an arity-flexible function), so it is
+      // left to the connector reducer / the other guards rather than rejected here.
+      case (l: Literal, i) => i >= declaredTypes.length || l.dataType == declaredTypes(i)
+      case _ => true
+    }
+  }
+
+  /**
+   * Reducer precondition: positionally-aligned argument structure with `other` -- at each zipped
+   * position a literal aligns with a literal, nested transforms are recursively the same function,
+   * and any other slot is a column reference on both sides. Only literal *values* may differ. Arity
+   * is NOT required to match: children are zipped (a shorter side truncates), so a zero-vs-one
+   * parameter pair is admitted and left to the connector reducer. Unlike [[isSameFunction]] the
+   * function name is not compared.
    */
   private def sameArgumentLayout(other: TransformExpression): Boolean =
     childrenMatch(other)((_, _) => true)
 
   /**
-   * Whether every literal parameter is a scalar (an [[AtomicType]]). Reducer parameters are scalar
-   * literals; this never forwards a complex Catalyst container (ArrayData / MapData / InternalRow)
-   * across the public reducer boundary -- such a transform is simply treated as not reducible.
+   * Whether no literal parameter has a complex type. A literal is rejected if its [[DataType]] is
+   * [[ArrayType]] / [[MapType]] / [[StructType]] / [[UserDefinedType]]. Such params (whose value is
+   * a Catalyst-internal container, or -- for a UDT -- whatever its `sqlType` serializes to) must
+   * not cross the public reducer boundary, so the transform is treated as not reducible. Keying off
+   * the type (not the value) also rejects a null-valued complex literal, and rejecting all UDTs is
+   * a safe over-approximation (a UDT transform parameter is exotic; the cost is a shuffle). Scalar
+   * types such as `CalendarIntervalType` are admitted (the connector interprets them via the type).
    */
-  private def scalarLiteralParams: Boolean =
-    literalChildren.forall(_.dataType.isInstanceOf[AtomicType])
+  private def noComplexLiteralParams: Boolean =
+    literalChildren.forall(_.dataType match {
+      case _: ArrayType | _: MapType | _: StructType | _: UserDefinedType[_] => false
+      case _ => true
+    })
 
   /**
    * Return a Reducer for a reducible function on another reducible function
@@ -171,7 +201,8 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       otherFunction: ReducibleFunction[_, _],
       otherExpr: TransformExpression): Option[Reducer[_, _]] = {
     if (!thisExpr.sameArgumentLayout(otherExpr) ||
-        !thisExpr.scalarLiteralParams || !otherExpr.scalarLiteralParams) {
+        !thisExpr.literalParamsMatchInputTypes || !otherExpr.literalParamsMatchInputTypes ||
+        !thisExpr.noComplexLiteralParams || !otherExpr.noComplexLiteralParams) {
       return None
     }
 
@@ -184,36 +215,56 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       p.length == 1 && p(0).dataType == IntegerType
     }
 
-    // Run a reducer overload; a thrown exception or a null both become None. warnOnUoe logs a hint
-    // when the function implements no usable reducer overload.
-    def attempt[R](call: => R, warnOnUoe: Boolean): Option[R] = {
-      val t = Try(Option(call))
-      if (warnOnUoe) {
-        t.failed.foreach {
-          case _: UnsupportedOperationException =>
-            logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} threw " +
-              log"UnsupportedOperationException; treating as not reducible. Override " +
-              log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ.")
-          case _ =>
-        }
+    // Probe a reducer overload, distinguishing three outcomes:
+    //   None       -> overload not implemented (threw UnsupportedOperationException by design,
+    //                 e.g. the deprecated-API probe for a connector that implements only Literal[])
+    //   Some(None) -> implemented, but not reducible for these params (returned null, OR threw an
+    //                 unexpected exception -- logged below and treated as not reducible, not as
+    //                 "unimplemented", so it does not suggest overriding a method that exists)
+    //   Some(r)    -> implemented and reducible
+    def attempt(call: => Reducer[_, _]): Option[Option[Reducer[_, _]]] =
+      Try(Option(call)) match {
+        case Success(r) => Some(r)
+        case Failure(_: UnsupportedOperationException) => None
+        case Failure(e) =>
+          logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} reducer threw an exception; " +
+            log"treating as not reducible.", e)
+          Some(None)
       }
-      t.toOption.flatten
-    }
 
-    if (thisParams.isEmpty && otherParams.isEmpty) {
-      attempt(thisFunction.reducer(otherFunction), warnOnUoe = true)
-    } else if (isSingleInt(thisParams) && isSingleInt(otherParams)) {
-      // Try the deprecated int API first (legacy connectors); fall back to the generalized overload
-      // when it is absent or returns null. Option.orElse fires on None, covering both.
-      attempt(thisFunction.reducer(
+    val attempts: Seq[Option[Option[Reducer[_, _]]]] =
+      if (thisParams.isEmpty && otherParams.isEmpty) {
+        Seq(attempt(thisFunction.reducer(otherFunction)))
+      } else if (isSingleInt(thisParams) && isSingleInt(otherParams)) {
+        // Try the deprecated int API first (legacy connectors). Fall back to the generalized
+        // overload only if the deprecated one did not produce a reducer -- evaluated lazily, so the
+        // generalized overload is not invoked (no wasted connector call, no spurious warning, no
+        // exposure to a throw it might raise) once the deprecated one already returned a reducer.
+        val deprecated = attempt(thisFunction.reducer(
           thisParams(0).value().asInstanceOf[Int], otherFunction,
-          otherParams(0).value().asInstanceOf[Int]), warnOnUoe = false)
-        .orElse(
-          attempt(thisFunction.reducer(thisParams, otherFunction, otherParams), warnOnUoe = true))
-    } else {
-      // Parameterized functions (bucket, truncate, etc.)
-      attempt(thisFunction.reducer(thisParams, otherFunction, otherParams), warnOnUoe = true)
+          otherParams(0).value().asInstanceOf[Int]))
+        deprecated match {
+          case Some(Some(_)) => Seq(deprecated)
+          case _ => Seq(deprecated,
+            attempt(thisFunction.reducer(thisParams, otherFunction, otherParams)))
+        }
+      } else {
+        // Parameterized functions (bucket, truncate, etc.)
+        Seq(attempt(thisFunction.reducer(thisParams, otherFunction, otherParams)))
+      }
+
+    // `implemented` = the overloads that did not throw UnsupportedOperationException (each a
+    // Some(...)); its inner Options carry reducible (Some(r)) vs not-reducible (None). The first
+    // reducible one wins. Warn only when nothing was implemented (every overload threw UOE) -- a
+    // deliberate null, or an exception already logged in `attempt`, leaves `implemented` non-empty.
+    val implemented = attempts.flatten
+    val result = implemented.flatten.headOption
+    if (implemented.isEmpty) {
+      logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} implements no reducer; " +
+        log"treating as not reducible. Override " +
+        log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ.")
     }
+    result
   }
 
   override def dataType: DataType = function.resultType()
