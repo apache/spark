@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -65,6 +64,7 @@ abstract class PercentileBase
     val resultType = child.dataType match {
       case _: YearMonthIntervalType => YearMonthIntervalType()
       case _: DayTimeIntervalType => DayTimeIntervalType()
+      case t: TimeType => t
       case _ => DoubleType
     }
     if (returnPercentileArray) ArrayType(resultType, false) else resultType
@@ -75,7 +75,8 @@ abstract class PercentileBase
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericAndAnsiInterval, percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericType, DayTimeIntervalType, YearMonthIntervalType, AnyTimeType),
+      percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -175,6 +176,7 @@ abstract class PercentileBase
     val results = child.dataType match {
       case _: YearMonthIntervalType => percentiles.map(_.toInt)
       case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _: TimeType => percentiles.map(_.toLong)
       case _ => percentiles
     }
     if (percentiles.isEmpty) {

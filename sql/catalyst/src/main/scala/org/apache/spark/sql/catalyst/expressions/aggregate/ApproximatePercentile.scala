@@ -102,10 +102,10 @@ case class ApproximatePercentile(
   private lazy val accuracy: Long = accuracyNum.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
-    // are all numeric, and can be easily cast to double for processing.
+    // Support NumericType, DateType, TimestampType, TimestampNTZType and TimeType since their
+    // internal types are all numeric, and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType),
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
@@ -183,7 +183,7 @@ case class ApproximatePercentile(
       // Convert the value to a double value
       val doubleValue = child.dataType match {
         case DateType | _: YearMonthIntervalType => value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
           value.asInstanceOf[Long].toDouble
         case n: NumericType =>
           PhysicalNumericType.numeric(n)
@@ -205,7 +205,8 @@ case class ApproximatePercentile(
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
       case DateType | _: YearMonthIntervalType => doubleResult.map(_.toInt)
-      case TimestampType | TimestampNTZType | _: DayTimeIntervalType => doubleResult.map(_.toLong)
+      case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)

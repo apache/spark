@@ -113,6 +113,21 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57557: Percentile and median support TIME type") {
+    // The return type mirrors the input TIME type, preserving precision.
+    assert(new Percentile(BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+      .dataType === TimeType())
+    assert(Median(BoundReference(0, TimeType(3), nullable = false)).dataType === TimeType(3))
+
+    // The exact median of two TIME values interpolates (continuous distribution), returning the
+    // midpoint as Long nanos-of-day: median(00:00:00, 00:00:00.00000001) -> 00:00:00.000000005.
+    val agg = new Percentile(BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+    val buffer = agg.createAggregationBuffer()
+    agg.update(buffer, InternalRow(0L))
+    agg.update(buffer, InternalRow(10L))
+    assert(agg.eval(buffer) === 5L)
+  }
+
   test("class Percentile, low level interface, update, merge, eval...") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val inputAggregationBufferOffset = 1
@@ -176,7 +191,7 @@ class PercentileSuite extends SparkFunSuite {
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
+              "or \"INTERVAL YEAR TO MONTH\" or \"TIME\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
@@ -199,7 +214,7 @@ class PercentileSuite extends SparkFunSuite {
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
+              "or \"INTERVAL YEAR TO MONTH\" or \"TIME\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
