@@ -8626,6 +8626,29 @@
     ],
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_HIVE_FUNCTION_TYPE" : {
+    "message" : [
+      "Unsupported Hive UDF/UDAF/UDTF Java type:"
+    ],
+    "subClass" : {
+      "RAW_LIST" : {
+        "message" : [
+          "raw java.util.List. Spark cannot infer the element type."
+        ]
+      },
+      "RAW_MAP" : {
+        "message" : [
+          "raw java.util.Map. Spark cannot infer the key and value types."
+        ]
+      },
+      "WILDCARD" : {
+        "message" : [
+          "wildcard type parameter. Spark cannot infer a concrete data type for wildcard type parameters, such as List<?> or Map<?, ?>."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
     "message" : [
       "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
@@ -11366,21 +11389,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3090" : {
-    "message" : [
-      "Raw list type in java is unsupported because Spark cannot infer the element type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3091" : {
-    "message" : [
-      "Raw map type in java is unsupported because Spark cannot infer key and value types."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3092" : {
-    "message" : [
-      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
     ]
   },
   "_LEGACY_ERROR_TEMP_3093" : {
