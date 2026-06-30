@@ -1375,6 +1375,65 @@ class FunctionQualificationSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SECTION 17e: SPARK-57758 built-in fast-path raises the built-in's argument error rather " +
+      "than falling through to a same-named session function") {
+    // Invariant: the fast-path and the slow candidate loop must fail on the SAME candidate.
+    // `resolveScalarFunctionByIdentifier` returns None only when the built-in is absent; an
+    // existing built-in invoked with bad arity throws. So with `system.builtin` first, an
+    // unqualified `abs(1, 2)` must hit the built-in `abs` (1-arg) and raise its argument error --
+    // it must NOT silently fall through to a compatible 2-arg session `abs`. The slow loop would
+    // also hit `system.builtin.abs` first and throw, so the two paths stay equivalent.
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT 1 AS id")
+      spark.udf.register("abs", (x: Int, y: Int) => x + y)
+      try {
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+          // The 2-arg session function is reachable via explicit `session.` qualification...
+          checkAnswer(sql("SELECT session.abs(1, 2) FROM t"), Row(3))
+          // ...but the unqualified name resolves to the built-in `abs` first and raises its
+          // argument error instead of resolving the 2-arg session function.
+          intercept[AnalysisException](sql("SELECT abs(1, 2) FROM t").collect())
+        }
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SECTION 17f: SPARK-57758 per-pass memo recomputes for a SQL-function body whose pinned " +
+      "path differs from the caller") {
+    // The subtlest recompute trigger: a SQL-function body runs under a FRESH AnalysisContext
+    // carrying the function's own stored resolution path (not the caller's). The memo lives on the
+    // context, so the body computes its own path within the same analysis pass as the outer query.
+    // Here the body's `abs` is pinned to the built-in (created under a builtin-first path) while
+    // the caller resolves the unqualified `abs` to a shadowing persistent function (catalog-first)
+    // -- so a single statement must yield both resolutions, proving neither context reuses the
+    // other's memo.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_body") {
+        sql("CREATE DATABASE path_body")
+        // Persistent `abs` shadowing the built-in for the caller's catalog-first path.
+        sql("CREATE FUNCTION path_body.abs(x INT) RETURNS INT RETURN x * 10")
+        try {
+          // Create the function body while `system.builtin` leads -> the body's unqualified `abs`
+          // is pinned to the built-in.
+          sql("SET PATH = system.builtin, spark_catalog.path_body")
+          sql("CREATE FUNCTION path_body.use_abs(x INT) RETURNS INT RETURN abs(x)")
+          // Caller path puts the catalog first -> a top-level unqualified `abs` resolves to the
+          // persistent `abs` (x * 10), while the body keeps resolving its `abs` to the built-in.
+          sql("SET PATH = spark_catalog.path_body, system.builtin")
+          checkAnswer(
+            sql("SELECT abs(-5) AS top, path_body.use_abs(-5) AS body"),
+            Row(-50, 5))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_body.use_abs")
+          sql("DROP FUNCTION IF EXISTS path_body.abs")
+        }
+      }
+    }
+  }
 }
 
 /**
