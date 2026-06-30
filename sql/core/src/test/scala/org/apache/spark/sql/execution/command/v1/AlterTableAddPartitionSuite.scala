@@ -43,7 +43,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([p1=]) contains an empty partition column value"
         )
