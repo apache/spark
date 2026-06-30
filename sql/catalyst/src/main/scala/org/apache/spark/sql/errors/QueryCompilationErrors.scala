@@ -744,13 +744,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def expectPersistentFuncError(
       name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    val alternative = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1017",
+      errorClass = "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP",
       messageParameters = Map(
-        "name" -> name,
-        "cmd" -> cmd,
-        "hintStr" -> hintStr),
+        "functionName" -> toSQLId(name),
+        "operation" -> toSQLStmt(cmd),
+        "alternative" -> alternative),
       origin = t.origin)
   }
 
@@ -1375,18 +1375,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def renameTableSourceAndDestinationMismatchError(db: String, newDb: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1073",
-      messageParameters = Map("db" -> db, "newDb" -> newDb))
+      errorClass = "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH",
+      messageParameters = Map("db" -> toSQLId(db), "newDb" -> toSQLId(newDb)))
   }
 
   def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1074",
+      errorClass = "RENAME_TEMP_VIEW_WITH_DATABASE",
       messageParameters = Map(
-        "oldName" -> oldName.toString,
-        "newName" -> newName.toString,
-        "db" -> newName.database.get))
+        "oldName" -> toSQLId(oldName.nameParts),
+        "newName" -> toSQLId(newName.nameParts),
+        "db" -> toSQLId(newName.database.get)))
   }
 
   def cannotRenameTempViewToExistingTableError(newName: TableIdentifier): Throwable = {
@@ -1395,7 +1395,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidPartitionSpecError(details: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1076",
+      errorClass = "INVALID_PARTITION_SPEC",
       messageParameters = Map("details" -> details))
   }
 
@@ -1867,10 +1867,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(namespace: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1126",
-      messageParameters = Map("catalog" -> catalog))
+      errorClass = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
   def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
