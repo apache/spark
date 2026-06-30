@@ -86,7 +86,15 @@ object NormalizePlan extends PredicateHelper {
    * we must normalize them to check if two different queries are identical.
    */
   def normalizeExprIds(plan: LogicalPlan): LogicalPlan = {
-    plan.transformAllExpressions {
+    // Defined as a named rule (rather than inline) so it can also be applied to a
+    // `DelegateExpression`'s `inputs`, which are display-only metadata -- not children -- and so
+    // are never reached by `transformAllExpressions`. Normalizing them explicitly keeps the
+    // informational call deterministic across runs (e.g. `right(g#0, g#0)` in EXPLAIN), since expr
+    // ids come from a process-global counter; the `definition` child is reached by the normal
+    // traversal.
+    lazy val rule: PartialFunction[Expression, Expression] = {
+      case d: DelegateExpression =>
+        d.copy(inputs = d.inputs.map(_.transform(rule)))
       case s: ScalarSubquery =>
         s.copy(plan = normalizeExprIds(s.plan), exprId = ExprId(0))
       case s: LateralSubquery =>
@@ -114,6 +122,7 @@ object NormalizePlan extends PredicateHelper {
       case a: FunctionTableSubqueryArgumentExpression =>
         a.copy(plan = normalizeExprIds(a.plan), exprId = ExprId(0))
     }
+    plan.transformAllExpressions(rule)
   }
 
   /**

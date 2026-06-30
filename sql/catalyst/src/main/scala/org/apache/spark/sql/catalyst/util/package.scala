@@ -127,6 +127,16 @@ package object util extends Logging {
         ),
         dataType = r.dataType
       )
+    case d: DelegateExpression =>
+      // `inputs` are display-only metadata, not children, so `transform` never descends into them.
+      // Render the high-level call with each input prettified (qualifiers stripped, string literals
+      // unquoted, ...) so generated column names match the pre-delegate function, e.g. the column
+      // name for `right(c7, 2)` stays `right(c7, 2)` rather than `right(spark_catalog....c7, 2)`.
+      PrettyAttribute(
+        name = s"${d.name}(${d.inputs
+            .map(i => toPrettySQL(i, shouldTrimTempResolvedColumn)).mkString(", ")})",
+        dataType = d.dataType
+      )
     case c: Cast if !c.containsTag(Cast.USER_SPECIFIED_CAST) =>
       PrettyAttribute(usePrettyExpression(c.child, shouldTrimTempResolvedColumn).sql, c.dataType)
     case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)

@@ -89,21 +89,21 @@ Project [left(abcd, -2) AS left(abcd, -2)#x, left(abcd, 0) AS left(abcd, 0)#x, l
 -- !query
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
 -- !query analysis
-Project [right(abcd, 2) AS right(abcd, 2)#x, right(abcd, 5) AS right(abcd, 5)#x, right(abcd, cast(2 as int)) AS right(abcd, 2)#x, right(abcd, cast(null as int)) AS right(abcd, NULL)#x]
+Project [right(abcd, 2) AS right(abcd, 2)#x, right(abcd, 5) AS right(abcd, 5)#x, right(abcd, 2) AS right(abcd, 2)#x, right(abcd, null) AS right(abcd, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 select right(null, -2)
 -- !query analysis
-Project [right(cast(null as string), -2) AS right(NULL, -2)#x]
+Project [right(null, -2) AS right(NULL, -2)#x]
 +- OneRowRelation
 
 
 -- !query
 select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query analysis
-Project [right(abcd, -2) AS right(abcd, -2)#x, right(abcd, 0) AS right(abcd, 0)#x, right(abcd, cast(a as int)) AS right(abcd, a)#x]
+Project [right(abcd, -2) AS right(abcd, -2)#x, right(abcd, 0) AS right(abcd, 0)#x, right(abcd, a) AS right(abcd, a)#x]
 +- OneRowRelation
 
 

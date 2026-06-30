@@ -161,15 +161,16 @@ object GetJsonObject {
 }
 
 /**
- * Builds the internal expression that extracts multiple simple named paths from a JSON string in one
- * parse, used to share sibling [[GetJsonObject]] expressions; unsupported and prefix-conflicting
- * paths remain as independent `GetJsonObject` expressions.
+ * Builds the internal expression that extracts multiple simple named paths from a JSON string in
+ * one parse, used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * prefix-conflicting paths remain as independent `GetJsonObject` expressions.
  *
  * It is inserted by `OptimizeCsvJsonExprs` (after analysis, so its inputs are resolved), and is the
- * optimizer-constructed showcase for [[DelegateExpression]]: instead of hand-written eval/doGenCode,
- * it builds a typed delegate directly -- the high-level call `multi_get_json_object(json, p1, .., pn)`
- * stays visible via `inputs`, while the `definition` delegates evaluation to
- * [[MultiGetJsonObjectEvaluator]] through an `Invoke`. No rewrite step: the delegate runs as-is.
+ * optimizer-constructed showcase for [[DelegateExpression]]: instead of hand-written
+ * eval/doGenCode, it builds a typed delegate directly -- the high-level call
+ * `multi_get_json_object(json, p1, .., pn)` stays visible via `inputs`, while the `definition`
+ * delegates evaluation to [[MultiGetJsonObjectEvaluator]] through an `Invoke`. No rewrite step: the
+ * delegate runs as-is.
  */
 object MultiGetJsonObject {
   val name: String = "multi_get_json_object"

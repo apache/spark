@@ -20,21 +20,22 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DELEGATE_EXPRESSION, INPUT_TYPE_MARKER, TreePattern}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 
 /**
  * A transparent, named delegate over a `definition` expression -- a LOGICAL-phase construct.
  *
- * `DelegateExpression` lets a high-level function (e.g. `right(a, b)`) stay readable in the analyzed
- * and optimized logical plan, and lets optimizer rules introduce such nodes (e.g.
+ * `DelegateExpression` lets a high-level function (e.g. `right(a, b)`) stay readable in the
+ * analyzed and optimized logical plan, and lets optimizer rules introduce such nodes (e.g.
  * `multi_get_json_object`), without hand-written `eval`/`doGenCode`. Every behavior delegates to
  * `definition`, a real child fully visible to the analyzer and optimizer.
  *
- * `name`/`inputs` are purely informational (EXPLAIN/SQL): nothing enforces that `definition` matches
- * what they claim, so the wrapper is never exposed to physical planning or external systems.
+ * `name`/`inputs` are purely informational (EXPLAIN/SQL): nothing enforces that `definition`
+ * matches what they claim, so the wrapper is never exposed to physical planning or external
+ * systems.
  * `LowerDelegateExpression` strips it to `definition` in `QueryExecution.createSparkPlan` -- the
  * single entry point to the planner, used by both the main query and AQE re-planning -- so the
  * planner and every physical consumer (join-key extraction, data source pushdown, columnar rules,
@@ -85,7 +86,8 @@ case class DelegateExpression(
  * Analysis-only marker that requests an implicit cast of `child` to `expectedType`: it declares the
  * expected type so the standard `TypeCoercion` rule casts the child, then is removed at the end of
  * analysis by [[org.apache.spark.sql.catalyst.analysis.RemoveInputTypeMarkers]]. It never reaches
- * execution, hence [[Unevaluable]]. Modeled on [[org.apache.spark.sql.catalyst.analysis.TempResolvedColumn]].
+ * execution, hence [[Unevaluable]]. Modeled on
+ * [[org.apache.spark.sql.catalyst.analysis.TempResolvedColumn]].
  */
 case class ImplicitCastInput(child: Expression, expectedType: AbstractDataType)
   extends UnaryExpression with Unevaluable with ImplicitCastInputTypes {
