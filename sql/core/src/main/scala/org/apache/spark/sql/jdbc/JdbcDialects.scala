@@ -808,6 +808,9 @@ abstract class JdbcDialect extends Serializable with Logging {
     Option(e.getSQLState).exists(_.startsWith("42"))
   }
 
+  @Since("4.3.0")
+  def isNotSelectableObjectException(e: SQLException): Boolean = false
+
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.

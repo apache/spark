@@ -1703,6 +1703,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
+  def objectNotSelectableError(
+      catalogName: String,
+      ident: Identifier,
+      cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "JDBC_OBJECT_NOT_SELECTABLE",
+      messageParameters = Map(
+        "objectName" -> toSQLId(catalogName +: ident.asMultipartIdentifier)),
+      cause = Some(cause))
+  }
+
   /**
    * Table or view not found (TABLE_OR_VIEW_NOT_FOUND). The `searchPath` segment uses
    * `nameParts.dropRight(1)` when `nameParts` has more than one part (catalog plus namespace);
