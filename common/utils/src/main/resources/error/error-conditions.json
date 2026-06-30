@@ -6226,6 +6226,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "PIPELINE_RUN_FAILED" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "42K0S"
+  },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
       "<message>",
