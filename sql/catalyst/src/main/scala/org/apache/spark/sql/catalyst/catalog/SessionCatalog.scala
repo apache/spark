@@ -1893,9 +1893,10 @@ class SessionCatalog(
     val funcName = function.name.funcName
 
     // Use captured SQL configs when parsing a SQL function.
-    val conf = new SQLConf()
-    function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
-    Analyzer.trySetAnsiValue(conf)
+    val conf = Analyzer.buildSQLFunctionConf(
+      function = function,
+      applySessionOverrides = false,
+      alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
