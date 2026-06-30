@@ -30,29 +30,25 @@ artifacts) does not leak between runs.
 Once the server is accepting connections it writes a discovery file (host, the actually bound port,
 the auth token, its pid and the Spark version) that later client processes read to reconnect.
 
-It is launched by file path (not ``python -m pyspark.sql.connect.local_server``) on purpose: it only
-needs a classic PySpark install plus the Spark Connect server jar on the classpath -- exactly like
-``sbin/start-connect-server.sh`` -- and must not require the Spark Connect *client* dependencies
-(grpc, etc.). Importing the ``pyspark.sql.connect`` package would trigger that client-dependency
-check, so this file imports only the classic ``pyspark.sql`` API.
+It is launched by file path rather than ``python -m`` so it does not require the Spark Connect
+*client* dependencies (grpc, etc.): a server only needs a classic PySpark install plus the Connect
+server jar, like ``sbin/start-connect-server.sh``. It imports only the classic ``pyspark.sql`` API.
 """
 import sys
 
-# This module is launched by file path (see SparkSession._start_persistent_local_connect_server),
-# which puts its own directory -- pyspark/sql/connect -- at the front of sys.path. That directory
-# holds modules whose names collide with the standard library (e.g. `types`, `logging`), so leaving
-# it there shadows the stdlib and breaks ordinary imports. Drop it before importing anything else;
-# pyspark itself stays importable via the remaining sys.path entries (PYTHONPATH / installation).
-# `import sys` is a built-in and cannot be shadowed, so it is safe to run first.
+# Launching by file path puts this file's directory -- pyspark/sql/connect -- at the front of
+# sys.path, where modules such as `types` and `logging` shadow the standard library and break
+# ordinary imports. Drop it before importing anything else (`import sys` cannot be shadowed);
+# pyspark stays importable via the remaining sys.path entries.
 if sys.path:
     del sys.path[0]
 
-import argparse  # noqa: E402
-import json  # noqa: E402
-import os  # noqa: E402
-import signal  # noqa: E402
-import time  # noqa: E402
-from typing import Any  # noqa: E402
+import argparse
+import json
+import os
+import signal
+import time
+from typing import Any
 
 
 def _write_discovery(path: str, host: str, port: int, token: str, version: str) -> None:
@@ -156,7 +152,6 @@ def main() -> None:
 
     bound_port = _bound_port(spark, args.port)
     _write_discovery(args.discovery, "localhost", bound_port, args.token, __version__)
-    # Printed to the (normally discarded) child stdout; useful when launched with stdout attached.
     print(
         "SPARK-CONNECT-LOCAL-SERVER READY port={} pid={}".format(bound_port, os.getpid()),
         flush=True,
