@@ -57,7 +57,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.comment.isEmpty)
 
     val cdc = cmd.flowOperation.asInstanceOf[AutoCdcIntoCommand]
-    assert(cdc.targetTable.table == "target")
+    assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
     val source = cdc.source.asInstanceOf[UnresolvedRelation]
     assert(source.multipartIdentifier == Seq("source"))
     assert(source.isStreaming)
@@ -112,8 +112,20 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
-    assert(cdc.targetTable.database == Some("myschema"))
-    assert(cdc.targetTable.table == "mytable")
+    assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
+      Seq("myschema", "mytable"))
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - three-part target table name") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO mycat.myschema.mytable
+        |FROM STREAM(source)
+        |KEYS (k)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
+      Seq("mycat", "myschema", "mytable"))
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - APPLY AS DELETE WHEN") {
@@ -135,7 +147,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
-        |COLUMNS id, name, value""".stripMargin)
+        |COLUMNS (id, name, value)""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
     assert(cdc.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
@@ -162,7 +174,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (key1, key2)
         |APPLY AS DELETE WHEN key3 = 3
         |SEQUENCE BY timestamp
-        |COLUMNS key1, key2, key3, timestamp""".stripMargin)
+        |COLUMNS (key1, key2, key3, timestamp)""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
@@ -255,7 +267,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |FROM STREAM(source)
         |KEYS (id)
         |SEQUENCE BY ts
-        |COLUMNS id, name, value""".stripMargin)
+        |COLUMNS (id, name, value)""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
     assert(cmd.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
@@ -443,7 +455,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
             |FROM STREAM(source)
             |KEYS (id)
             |SEQUENCE BY ts
-            |COLUMNS a.name""".stripMargin)
+            |COLUMNS (a.name)""".stripMargin)
       },
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",

@@ -1364,7 +1364,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   protected def buildAutoCdcIntoCommand(ctx: AutoCdcCommandContext): AutoCdcIntoCommand =
     withOrigin(ctx) {
-      val target = visitMultipartIdentifier(ctx.target).asTableIdentifier
+      val target = UnresolvedIdentifier(visitMultipartIdentifier(ctx.target))
       val params = parseAutoCdcParams(ctx.autoCdcParameters())
       AutoCdcIntoCommand(
         targetTable = target,

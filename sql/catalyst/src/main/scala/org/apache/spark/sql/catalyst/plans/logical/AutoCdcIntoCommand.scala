@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Expression
 
@@ -29,12 +28,14 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *
  * This node serves as a parse-time placeholder for a pipeline CDC definition and cannot be
  * executed directly. It will be interpreted by the pipeline submodule once execution support
- * is added (SPARK-57402). The [[source]] relation is exposed as the node's child so the analyzer
- * resolves it through the normal plan resolution path.
+ * is added (SPARK-57402). The [[targetTable]] and [[source]] relations are exposed as the node's
+ * children (left and right respectively) so the analyzer resolves them through the normal plan
+ * resolution path.
  *
- * @param targetTable    The target table to apply changes into.
+ * @param targetTable    The target table to apply changes into, as an `UnresolvedIdentifier`.
+ *                       Exposed as the node's left child.
  * @param source         The source relation providing the change events. Always a STREAM(...)
- *                       source (marked as a streaming read). Exposed as the node's child.
+ *                       source (marked as a streaming read). Exposed as the node's right child.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  *                        When absent, all source rows are treated as upserts.
@@ -48,16 +49,18 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *                       exclusive with [[includeColumns]].
  */
 case class AutoCdcIntoCommand(
-    targetTable: TableIdentifier,
+    targetTable: LogicalPlan,
     source: LogicalPlan,
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
     excludeColumns: Option[Seq[UnresolvedAttribute]]
-) extends UnaryCommand {
-  override def child: LogicalPlan = source
+) extends BinaryCommand {
+  override def left: LogicalPlan = targetTable
+  override def right: LogicalPlan = source
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): AutoCdcIntoCommand =
-    copy(source = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): AutoCdcIntoCommand =
+    copy(targetTable = newLeft, source = newRight)
 }

@@ -782,7 +782,7 @@ autoCdcSequenceByClause
 
 autoCdcColumnsClause
     : COLUMNS (
-        columns=identifierSeq |
+        LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
     ;
 
