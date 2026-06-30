@@ -498,6 +498,12 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
+    "message" : [
+      "Cannot instantiate the Hive UDF/UDAF/UDTF wrapper class <clazz>. Check that the function arguments and their types are supported."
+    ],
+    "sqlState" : "38000"
+  },
   "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
     "message" : [
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
@@ -11334,11 +11340,6 @@
   "_LEGACY_ERROR_TEMP_3083" : {
     "message" : [
       "Unable to infer the schema. The schema specification is required to create the table <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3084" : {
-    "message" : [
-      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3086" : {
