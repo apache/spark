@@ -290,8 +290,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawList " +
       s"AS '${classOf[UDFRawList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawList(s) FROM inputTable"))
-    assert(err.getCause.getMessage.contains(
-      "Raw list type in java is unsupported because Spark cannot infer the element type."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "_LEGACY_ERROR_TEMP_3090",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawList")
     hiveContext.reset()
@@ -304,8 +306,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFRawMap " +
       s"AS '${classOf[UDFRawMap].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFRawMap(s) FROM inputTable"))
-    assert(err.getCause.getMessage.contains(
-      "Raw map type in java is unsupported because Spark cannot infer key and value types."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "_LEGACY_ERROR_TEMP_3091",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawMap")
     hiveContext.reset()
@@ -318,9 +322,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     sql(s"CREATE TEMPORARY FUNCTION testUDFWildcardList " +
       s"AS '${classOf[UDFWildcardList].getName}'")
     val err = intercept[AnalysisException](sql("SELECT testUDFWildcardList(s) FROM inputTable"))
-    assert(err.getCause.getMessage.contains(
-      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported " +
-        "because Spark cannot infer the data type for these type parameters."))
+    checkError(
+      exception = err.getCause.asInstanceOf[AnalysisException],
+      condition = "_LEGACY_ERROR_TEMP_3092",
+      parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFWildcardList")
     hiveContext.reset()
