@@ -111,6 +111,28 @@ class XmlFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("from_xml variant output validates each record against rowValidationXSDPath") {
+    val xsdPath =
+      getTestResourcePath("test-data/xml-resources/basket.xsd").replace("file:/", "/")
+    // The first record satisfies basket.xsd; the second has an element not allowed by the schema.
+    val valid = "<basket><entry><key>1</key><value>fork</value></entry></basket>"
+    val invalid = "<basket><unexpected>x</unexpected></basket>"
+    val df = Seq(valid, invalid).toDF("value")
+    df.createOrReplaceTempView("from_xml_xsd")
+
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val result = spark.sql("SELECT value, to_json(from_xml(value, 'variant', " +
+          s"map('rowTag','basket','rowValidationXSDPath','$xsdPath'))) AS json FROM from_xml_xsd")
+          .collect().map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(result(invalid) == null,
+          s"XSD-invalid record should be rescued to null (wholeStageCodegen=$wholeStage)")
+        assert(result(valid) != null && result(valid).contains("fork"),
+          s"XSD-valid record should parse (wholeStageCodegen=$wholeStage), got: ${result(valid)}")
+      }
+    }
+  }
+
   test("from_xml with option (timestampFormat)") {
     val df = Seq("""<ROW><time>26/08/2015 18:00</time></ROW>""").toDS()
     val schema = new StructType().add("time", TimestampType)
