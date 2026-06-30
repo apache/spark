@@ -21604,26 +21604,24 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     Examples
     --------
     >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_insert
-    >>> df = spark.range(1)
-    >>> obj = parse_json(lit('{"a": 1}'))
-    >>> empty = parse_json(lit('{}'))
-    >>> df.select(to_json(variant_insert(obj, "$.b", lit(2))).alias("r")).collect()
-    [Row(r='{"a":1,"b":2}')]
-    >>> df.select(to_json(variant_insert(empty, "$.a.b", lit(1))).alias("r")).collect()
-    [Row(r='{"a":{"b":1}}')]
-    >>> arr = parse_json(lit('["a","b","c"]'))
-    >>> df.select(to_json(variant_insert(arr, "$[1]", lit("z"))).alias("r")).collect()
-    [Row(r='["a","z","b","c"]')]
-    >>> arr2 = parse_json(lit('["a","b"]'))
-    >>> df.select(to_json(variant_insert(arr2, "$[5]", lit("z"))).alias("r")).collect()
-    [Row(r='["a","b",null,null,null,"z"]')]
-    >>> xobj = parse_json(lit('{"x":1}'))
-    >>> df.select(to_json(variant_insert(empty, "$.a", xobj)).alias("r")).collect()
-    [Row(r='{"a":{"x":1}}')]
-    >>> vnull = parse_json(lit('null'))
-    >>> df.select(to_json(variant_insert(empty, "$.a", vnull)).alias("r")).collect()
-    [Row(r='{"a":null}')]
-    >>> df.select(to_json(variant_insert(empty, "$.a", lit(None))).alias("r")).collect()
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": 1, "arr": ["x", "y"] }''',
+    ...     'path': '$.d'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_insert(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
+    >>> df.select(to_json(variant_insert(v, df.path, lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"d":9}')]
+    >>> df.select(to_json(variant_insert(v, "$.b", parse_json(lit('null')))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":null}')]
+    >>> df.select(variant_insert(v, "$.b", lit(None)).alias("r")).collect()
     [Row(r=None)]
     """
     from pyspark.sql.classic.column import _to_java_column
