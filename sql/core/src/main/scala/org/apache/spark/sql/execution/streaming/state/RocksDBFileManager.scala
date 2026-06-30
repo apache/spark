@@ -1086,7 +1086,7 @@ class RocksDBFileManager(
 
   /** Log the files present in a directory. This is useful for debugging. */
   private def logFilesInDir(dir: File, msg: MessageWithContext): Unit = {
-    lazy val files = Option(Utils.recursiveList(dir)).getOrElse(Array.empty).map { f =>
+    lazy val files = Utils.recursiveList(dir).map { f =>
       s"${f.getAbsolutePath} - ${f.length()} bytes"
     }
     logDebug(msg + log" - ${MDC(LogKeys.NUM_FILES, files.length)} files\n\t" +
