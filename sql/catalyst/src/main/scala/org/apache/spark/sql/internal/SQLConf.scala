@@ -5446,6 +5446,7 @@ object SQLConf {
         "non-generated columns from the input. Missing nullable columns are filled with null. " +
         "When false, all non-generated columns must be provided.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 

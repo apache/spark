@@ -25,10 +25,10 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{FILL, NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -387,7 +387,8 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             autoFilledGenCols += expectedCol.name
             // The parsed references here are placeholders: they are resolved against the post-cast
             // stored columns after this loop (see below), so the generated value is computed from
-            // the values as they will be written. References to other generated columns are not allowed.
+            // the values as they will be written. References to other generated columns are not
+            // allowed.
             val genExpr = CatalystSqlParser.parseExpression(genExprSql)
             Some(applyColumnMetadata(genExpr, expectedCol))
           case None =>
