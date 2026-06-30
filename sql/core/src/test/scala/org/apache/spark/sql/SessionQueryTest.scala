@@ -41,5 +41,5 @@ trait SessionQueryTest
   with SessionQueryTestBase
   with SparkSessionBinder {
 
-  override def sessionType: String = "classic"
+  override def isConnect: Boolean = false
 }

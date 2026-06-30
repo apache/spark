@@ -45,5 +45,5 @@ trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
     case df => super.isDfSorted(df)
   }
 
-  override def sessionType: String = "connect"
+  override def isConnect: Boolean = true
 }

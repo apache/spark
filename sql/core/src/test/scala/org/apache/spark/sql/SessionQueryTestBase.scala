@@ -63,12 +63,13 @@ trait SessionQueryTestBase
   }
 
   /**
-   * Documents used session so that tests can handle and document session-specific behaviour
+   * Whether the bound session is a Spark Connect session (`false` for classic), so that tests can
+   * handle and document session-specific behaviour.
    *
    * {{{
    *   test(...) {
    *     val df = // query with connect-specific behaviour
-   *     if (sessionType == "connect") {
+   *     if (isConnect) {
    *       checkError(...)
    *     } else {
    *       checkAnswer(df, ...)
@@ -76,5 +77,5 @@ trait SessionQueryTestBase
    *   }
    * }}}
    */
-  def sessionType: String
+  def isConnect: Boolean
 }

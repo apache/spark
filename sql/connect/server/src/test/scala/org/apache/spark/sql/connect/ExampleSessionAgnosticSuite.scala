@@ -68,8 +68,8 @@ class ExampleSessionAgnosticSuite extends sql.SessionQueryTest {
       val df2 = spark.table("t")
       val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
-      // diverging behaviour can be documented via `sessionType`
-      if (sessionType == "connect") {
+      // diverging behaviour can be documented via `isConnect`
+      if (isConnect) {
         // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
         assert(
           selfJoin.columns.length == 6,
@@ -122,7 +122,7 @@ class ExampleSessionAgnosticConnectSuite
   test("connect-only testcase") {
     // Tests declared in the connect variant run only on connect (not classic).
     // Here `spark` is a connect SparkSession.
-    assert(sessionType == "connect")
+    assert(isConnect)
     assert(spark.range(1).count() == 1)
   }
 }
