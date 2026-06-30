@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TimeType
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -409,6 +410,22 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
       sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
       val df2 = sql("SELECT testGenericUDFHash(rand())")
       assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+    }
+  }
+
+  test("SPARK-57556: TIME type is unsupported as a Hive UDF argument") {
+    withUserDefinedFunction("testGenericUDFHash" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      // The Hive UDF resolver wraps the failure in CANNOT_INSTANTIATE_HIVE_FUNCTION and attaches
+      // the underlying failure as the cause, which clearly identifies the unsupported TIME type
+      // rather than surfacing a MatchError/internal error.
+      val e = intercept[AnalysisException] {
+        sql("SELECT testGenericUDFHash(TIME'12:01:02')").collect()
+      }
+      checkError(
+        exception = e.getCause.asInstanceOf[AnalysisException],
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = Map("typeName" -> s"\"${TimeType().sql}\""))
     }
   }
 
