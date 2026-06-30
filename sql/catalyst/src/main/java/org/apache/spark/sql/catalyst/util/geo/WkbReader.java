@@ -186,7 +186,8 @@ public class WkbReader {
         currentWkb);
     }
     if (count > buffer.remaining() / minBytesPerItem) {
-      throw new WkbParseException("Unexpected end of WKB buffer", countPos, currentWkb);
+      throw new WkbParseException("Invalid count for " + countName
+        + ": exceeds remaining bytes", countPos, currentWkb);
     }
     return count;
   }

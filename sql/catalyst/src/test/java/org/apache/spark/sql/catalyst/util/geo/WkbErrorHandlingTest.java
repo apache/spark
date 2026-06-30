@@ -150,7 +150,7 @@ public class WkbErrorHandlingTest extends WkbTestBase {
     };
 
     for (String invalidCount : invalidCounts) {
-      assertParseError(invalidCount, "Unexpected end of WKB buffer");
+      assertParseError(invalidCount, "Invalid count");
     }
   }
 
