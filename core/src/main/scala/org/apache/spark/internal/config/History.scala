@@ -148,6 +148,25 @@ private[spark] object History {
     .intConf
     .createWithDefault(18080)
 
+  val HISTORY_SERVER_UI_ACCESS_LOG_ENABLED =
+    ConfigBuilder("spark.history.ui.accessLog.enabled")
+      .doc("Whether the History Server should log HTTP access records for its web UI and REST " +
+        "API. When enabled, each non-excluded request is logged at INFO level after it " +
+        "completes. Query string values are redacted using spark.redaction.regex.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HISTORY_SERVER_UI_ACCESS_LOG_EXCLUDE_PATHS =
+    ConfigBuilder("spark.history.ui.accessLog.excludePaths")
+      .doc("Comma-separated list of request path prefixes to exclude from History Server " +
+        "HTTP access logs. This can be used to avoid logging high-volume low-value requests " +
+        "such as static resources.")
+      .version("4.3.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Seq("/static", "/favicon.ico"))
+
   val FAST_IN_PROGRESS_PARSING =
     ConfigBuilder("spark.history.fs.inProgressOptimization.enabled")
       .doc("Enable optimized handling of in-progress logs. This option may leave finished " +
