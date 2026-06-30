@@ -292,7 +292,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     val err = intercept[AnalysisException](sql("SELECT testUDFRawList(s) FROM inputTable"))
     checkError(
       exception = err.getCause.asInstanceOf[AnalysisException],
-      condition = "_LEGACY_ERROR_TEMP_3090",
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_LIST",
       parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawList")
@@ -308,7 +308,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     val err = intercept[AnalysisException](sql("SELECT testUDFRawMap(s) FROM inputTable"))
     checkError(
       exception = err.getCause.asInstanceOf[AnalysisException],
-      condition = "_LEGACY_ERROR_TEMP_3091",
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_MAP",
       parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFRawMap")
@@ -324,7 +324,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     val err = intercept[AnalysisException](sql("SELECT testUDFWildcardList(s) FROM inputTable"))
     checkError(
       exception = err.getCause.asInstanceOf[AnalysisException],
-      condition = "_LEGACY_ERROR_TEMP_3092",
+      condition = "UNSUPPORTED_HIVE_FUNCTION_TYPE.WILDCARD",
       parameters = Map.empty)
 
     sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFWildcardList")

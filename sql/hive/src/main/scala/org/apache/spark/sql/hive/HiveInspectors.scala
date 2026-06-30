@@ -241,16 +241,19 @@ private[hive] trait HiveInspectors {
     // raw java list type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3090", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_LIST",
+        messageParameters = Map.empty)
 
     // raw java map type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3091", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_MAP",
+        messageParameters = Map.empty)
 
     case _: WildcardType =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3092", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.WILDCARD",
+        messageParameters = Map.empty)
 
     case c => throw new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_3093", messageParameters = Map("c" -> c.toString))
