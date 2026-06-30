@@ -6298,6 +6298,7 @@ object SQLConf {
         "TimeType if spark.sql.timeType.enabled is true. Has no effect when " +
         "spark.sql.timeType.enabled is false.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
