@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
@@ -581,6 +582,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *     the shifted-local frame.
    *   - WEEK/MONTH/QUARTER/YEAR: convert local micros to local epoch-day, run
    *     [[truncDate]] in the local-day frame, multiply back to local micros.
+   *
+   * For the date-level units the truncated wall-clock instant is a local midnight, which
+   * at a daylight-saving fall-back transition occurs twice (e.g. `Europe/Berlin`
+   * 1916-10-01 00:00 exists at both +02:00 CEST and +01:00 CET). The fast path resolves
+   * such a midnight with the offset of the source `micros`, whereas the slow path's
+   * `daysToMicros` resolves it with the earliest valid offset. These disagree only when
+   * the truncated midnight lands exactly on a fall-back overlap, and they make the result
+   * depend on the source offset, so two timestamps in the same period can truncate to
+   * different instants. Setting [[SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST]]
+   * routes date-level truncations through the slow path so the earliest offset is always
+   * chosen, which is offset-independent (deterministic per period) at the cost of the
+   * fast path.
    */
   def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
     // MICROSECOND / MILLISECOND / SECOND don't need zone information.
@@ -591,6 +604,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case TRUNC_TO_SECOND =>
         return Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
       case _ =>
+    }
+    // For date-level units the fast path resolves the truncated local midnight with the
+    // source offset, which diverges from the slow path at a fall-back overlap. The legacy
+    // flag forces the slow path so the earliest (offset-independent) result is used.
+    if (level >= MIN_LEVEL_OF_DATE_TRUNC &&
+        SQLConf.get.getConf(SQLConf.LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST)) {
+      return truncTimestampSlow(micros, level, zoneId)
     }
     val rules = zoneId.getRules
     val originalSec = Math.floorDiv(micros, MICROS_PER_SECOND)

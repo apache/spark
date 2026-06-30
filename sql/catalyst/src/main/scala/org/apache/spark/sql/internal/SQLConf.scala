@@ -7497,6 +7497,25 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_TIMESTAMP_TRUNCATE_OVERLAP_EARLIEST =
+    buildConf("spark.sql.legacy.timestampTruncateToOverlapEarliestOffset")
+      .internal()
+      .doc("At a daylight-saving fall-back transition a wall-clock local time occurs " +
+        "twice, once before and once after the clocks are turned back. When date_trunc " +
+        "with a date-level unit (WEEK, MONTH, QUARTER, or YEAR) produces a truncated " +
+        "local midnight that lands on such an overlap, the resolved instant depends on " +
+        "which of the two offsets is chosen. When set to true (legacy behavior), the " +
+        "earliest valid offset is always used (the result is independent of the source " +
+        "timestamp's offset, so all rows in the same period truncate to the same " +
+        "instant). When set to false (the default), the offset of the source timestamp " +
+        "is reused, which is faster but can map two source timestamps in the same period " +
+        "to different instants when one of them sits on the overlap. This only affects " +
+        "date-level truncations whose midnight boundary coincides with a fall-back " +
+        "overlap; all other truncations are unchanged.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_XML_PARSER_ENABLED = {
     buildConf("spark.sql.legacy.useLegacyXMLParser")
       .internal()
