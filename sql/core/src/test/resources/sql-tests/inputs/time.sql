@@ -438,6 +438,9 @@ SELECT time_format(TIME'09:15:30', 'hh:mm:ss a');
 -- Test with different precisions
 SELECT time_format(TIME'14:30:45.123', 'HH:mm:ss.SSS');
 SELECT time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS');
+SELECT time_format(TIME'14:30:45.1234567', 'HH:mm:ss.SSSSSSS');
+SELECT time_format(TIME'14:30:45.12345678', 'HH:mm:ss.SSSSSSSS');
+SELECT time_format(TIME'14:30:45.123456789', 'HH:mm:ss.SSSSSSSSS');
 
 -- Test various format patterns
 SELECT time_format(TIME'14:30:45', 'HH:mm');

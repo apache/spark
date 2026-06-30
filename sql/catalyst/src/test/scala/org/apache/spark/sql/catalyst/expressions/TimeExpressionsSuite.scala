@@ -717,6 +717,11 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimeFormat(timeLit, Literal("HH:mm:ss.SSSSSS")),
       "14:30:45.123456")
+    // Nanosecond precision: 9-digit fractional-second pattern (SSSSSSSSS)
+    val timeWithNanos = localTimeToNanos(LocalTime.of(14, 30, 45, 123456789))
+    checkEvaluation(
+      TimeFormat(Literal(timeWithNanos, TimeType()), Literal("HH:mm:ss.SSSSSSSSS")),
+      "14:30:45.123456789")
 
     // Non-foldable format - formatter created per evaluation
     val nonFoldableExpr = TimeFormat(timeLit, NonFoldableLiteral("HH:mm:ss", StringType))
@@ -727,6 +732,11 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimeFormat(timeLit, NonFoldableLiteral("HH:mm:ss.SSSSSS", StringType)),
       "14:30:45.123456")
+    checkEvaluation(
+      TimeFormat(
+        Literal(timeWithNanos, TimeType()),
+        NonFoldableLiteral("HH:mm:ss.SSSSSSSSS", StringType)),
+      "14:30:45.123456789")
 
     // Multiple formats on same time
     Seq("HH:mm:ss", "hh:mm a", "HH:mm", "HH").zip(

@@ -8731,7 +8731,10 @@ object functions {
    * @param time
    *   A column of time values to be formatted.
    * @param format
-   *   A time format string. for valid patterns.
+   *   A time format string. See <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a> for valid patterns. Note: only time-related patterns (H, h, m, s, S, a) are
+   *   meaningful for TIME values; date fields (y, M, d, etc.) raise an error.
    * @return
    *   String representation of the time in the specified format.
    * @group datetime_funcs
