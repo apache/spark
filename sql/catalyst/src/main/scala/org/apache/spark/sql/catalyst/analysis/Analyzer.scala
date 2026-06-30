@@ -304,7 +304,7 @@ object Analyzer {
    * overrides, so both are parameters:
    *  - `alwaysSetAnsiValue` calls [[trySetAnsiValue]] unconditionally (the SessionCatalog plan
    *    builders); when false, ANSI is set only as part of the session overlay below (the
-   *    [[ResolveSQLFunctions]] / [[ResolveSQLTableFunctions]] rules).
+   *    [[Analyzer#ResolveSQLFunctions]] / [[Analyzer#ResolveSQLTableFunctions]] rules).
    *  - `applySessionOverrides` overlays the active session's retained resolution configs via
    *    [[retainResolutionConfigsForAnalysis]], gated on
    *    [[SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION]].
