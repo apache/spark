@@ -18,7 +18,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -77,5 +77,35 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
     // No explicit fetchsize - should use Postgres default (1000) and set autoCommit=false
     dialect.beforeFetch(conn, createJDBCOptions(Map.empty))
     verify(conn).setAutoCommit(false)
+  }
+
+  test("isSyntaxErrorBestEffort: genuine syntax error (42601) is classified as a syntax error") {
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("ERROR: syntax error at or near \"FROM\"", "42601")))
+  }
+
+  // Cases that must NOT be classified as syntax errors because they are access-control failures,
+  // regardless of whether the engine reports the precise 42501 or the generic 42000 state.
+  private case class AccessControlErrorCase(name: String, sqlState: String, message: String) {
+    override def toString: String = name
+  }
+
+  gridTest("isSyntaxErrorBestEffort: access-control failures are not syntax errors")(Seq(
+    AccessControlErrorCase(
+      "42501 insufficient_privilege", "42501", "ERROR: permission denied for table foo"),
+    AccessControlErrorCase(
+      "42000 permission denied", "42000", "ERROR: permission denied for table pg_statistic"),
+    AccessControlErrorCase("42000 access denied", "42000", "ERROR: access denied for relation foo"),
+    AccessControlErrorCase("42000 unauthorized", "42000", "ERROR: unauthorized")
+  )) { c =>
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException(c.message, c.sqlState)))
+  }
+
+  test("isSyntaxErrorBestEffort: non-class-42 SQLState is not a syntax error") {
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("ERROR: some failure", "28000")))
+  }
+
+  test("isSyntaxErrorBestEffort: null SQLState is not a syntax error") {
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("ERROR: connection lost")))
   }
 }
