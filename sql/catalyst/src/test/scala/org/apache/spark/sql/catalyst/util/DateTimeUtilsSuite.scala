@@ -2308,4 +2308,52 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       }
     }
   }
+
+  test("SPARK-57737: ZoneOffsetCache memoizes the zone offset across rows and at transitions") {
+    val zid = getZoneId("America/Los_Angeles")
+    val rules = zid.getRules
+    // A real DST transition (spring-forward), resolved from the rules so there are no hardcoded
+    // constants that could drift with tzdb updates.
+    val tr = rules.nextTransition(Instant.parse("2024-01-01T00:00:00Z"))
+    val t = tr.toEpochSecond
+    val before = tr.getOffsetBefore.getTotalSeconds.toLong
+    val after = tr.getOffsetAfter.getTotalSeconds.toLong
+    assert(before != after)
+
+    // (a) Cross-row reuse within one constant-offset window: repeated lookups hit the cache and
+    // stay correct.
+    val cache = new ZoneOffsetCache(zid)
+    assert(cache.offsetSeconds(t - 100000) === before)
+    assert(cache.offsetSeconds(t - 50000) === before)
+    assert(cache.offsetSeconds(t - 1) === before)
+    // (b) Straddle the transition: miss + window reset, then a hit in the new window, and going
+    // back resets again (no stale-window reuse).
+    assert(cache.offsetSeconds(t + 100000) === after)
+    assert(cache.offsetSeconds(t + 1) === after)
+    assert(cache.offsetSeconds(t - 1) === before)
+
+    // (c) `epochSec` exactly on the transition instant exercises the `hi - 1` anchor: looking up
+    // `t` builds a window whose lower bound is `previousTransition(hi - 1) == t`, so the following
+    // lookup of `t - 1` must reset to the previous offset. A naive `previousTransition(t)` anchor
+    // would make the window span the transition and wrongly return `after` for `t - 1`.
+    val cache2 = new ZoneOffsetCache(zid)
+    assert(cache2.offsetSeconds(t) === after)
+    assert(cache2.offsetSeconds(t - 1) === before)
+
+    // Cross-check every cell against the ground-truth offset.
+    Seq(t - 100000, t - 1, t, t + 1, t + 100000).foreach { s =>
+      assert(new ZoneOffsetCache(zid).offsetSeconds(s) ===
+        rules.getOffset(Instant.ofEpochSecond(s)).getTotalSeconds.toLong)
+    }
+  }
+
+  test("SPARK-57737: ZoneOffsetCache for a fixed-offset zone") {
+    val cache = new ZoneOffsetCache(getZoneId("UTC"))
+    assert(cache.isFixedOffset)
+    // A fixed-offset zone resolves the same offset everywhere; the first lookup caches the whole
+    // range so the rest are served from the cache.
+    Seq(-1000000000000L, -1L, 0L, 1L, 1000000000000L).foreach { s =>
+      assert(cache.offsetSeconds(s) === 0L)
+    }
+  }
 }
