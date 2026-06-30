@@ -910,7 +910,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
               |SELECT 1
             """.stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([d=Some()]) contains an empty partition column value")
       )
