@@ -18,7 +18,7 @@
 # Spark master (5.0.0-SNAPSHOT) release image
 # Extends the base image with:
 # - Java 17
-# - Python 3.10 with required packages
+# - Python 3.11 with required packages
 
 FROM spark-rm-base:latest
 
@@ -27,16 +27,16 @@ RUN apt-get update && apt-get install -y \
     openjdk-17-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python 3.10
+# Install Python 3.11
 RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3.10-dev \
+    python3.11 \
+    python3.11-dev \
     python3-psutil \
     libpython3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pip for Python 3.10
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+# Install pip for Python 3.11
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 
 # Basic Python packages for master
 ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 \
@@ -46,18 +46,18 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly
 ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 \
     googleapis-common-protos==1.71.0 graphviz==0.20.3"
 
-# Install Python 3.10 packages
-RUN python3.10 -m pip install --ignore-installed 'blinker>=1.6.2' && \
-    python3.10 -m pip install --ignore-installed 'six==1.16.0' && \
-    python3.10 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
-    python3.10 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.10 -m pip install deepspeed torcheval && \
-    python3.10 -m pip cache purge
+# Install Python 3.11 packages
+RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' && \
+    python3.11 -m pip install --ignore-installed 'six==1.16.0' && \
+    python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
+    python3.11 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install deepspeed torcheval && \
+    python3.11 -m pip cache purge
 
 # Sphinx and documentation packages
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
 # See 'ipython_genutils' in SPARK-38517, 'docutils<0.18.0' in SPARK-39421
-RUN python3.10 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' \
+RUN python3.11 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' \
     sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
     ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.23.2' pyarrow pandas \
     'plotly>=4.8' 'docutils<0.18.0' 'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' \
@@ -67,9 +67,9 @@ RUN python3.10 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13'
     'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' \
     'sphinxcontrib-serializinghtml==1.1.5'
 
-# Set Python 3.10 as the default
-RUN ln -sf "$(which python3.10)" "/usr/local/bin/python" && \
-    ln -sf "$(which python3.10)" "/usr/local/bin/python3"
+# Set Python 3.11 as the default
+RUN ln -sf "$(which python3.11)" "/usr/local/bin/python" && \
+    ln -sf "$(which python3.11)" "/usr/local/bin/python3"
 
 # Create user for release manager
 ARG UID
