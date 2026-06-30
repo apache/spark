@@ -153,30 +153,28 @@ case class XmlToStructsEvaluator(
       throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
     }
 
-    nullableSchema match {
-      // Route the variant output through FailureSafeParser too, so the parse `mode` is honored
-      // (PERMISSIVE -> null, FAILFAST -> rethrow) instead of letting parse failures abort the job.
+    // For Variant output, wrap the value in a single-field struct and have the parser emit a
+    // root Variant via `rootVariantType`; the struct path uses the schema as-is. Routing both
+    // through StaxXmlParser.doParseColumn keeps the parse `mode` honored (PERMISSIVE -> null,
+    // FAILFAST -> rethrow) and gives Variant output XSD validation as well.
+    val (schema, rawOptions) = nullableSchema match {
       case _: VariantType =>
-        val parserSchema = StructType(Array(StructField("value", VariantType)))
-        new FailureSafeParser[String](
-          input => StaxXmlParser.parseVariantColumn(input, parsedOptions),
-          mode,
-          parserSchema,
-          parsedOptions.columnNameOfCorruptRecord)
-
+        (StructType(Array(StructField("value", VariantType))),
+          new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord, rootVariantType = true))
       case _ =>
-        val schema = nullableSchema.asInstanceOf[StructType]
-        ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
-        val rawParser = new StaxXmlParser(schema, parsedOptions)
-
-        val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
-
-        new FailureSafeParser[String](
-          input => rawParser.doParseColumn(input, mode, xsdSchema),
-          mode,
-          schema,
-          parsedOptions.columnNameOfCorruptRecord)
+        val s = nullableSchema.asInstanceOf[StructType]
+        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
+        (s, parsedOptions)
     }
+
+    val rawParser = new StaxXmlParser(schema, rawOptions)
+    val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
+
+    new FailureSafeParser[String](
+      input => rawParser.doParseColumn(input, mode, xsdSchema),
+      mode,
+      schema,
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   final def evaluate(xml: UTF8String): Any = {

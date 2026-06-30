@@ -148,18 +148,18 @@ class StaxXmlParser(
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      options.singleVariantColumn match {
-        case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
-          Some(InternalRow(v))
-        case _ =>
-          // Otherwise, parse the xml string as Structs
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
-          result
+      if (options.singleVariantColumn.isDefined || options.rootVariantType) {
+        // If the singleVariantColumn is specified or the requested output is a root Variant,
+        // parse the entire xml string as a Variant.
+        val v = StaxXmlParser.parseVariant(xml, options)
+        Some(InternalRow(v))
+      } else {
+        // Otherwise, parse the xml string as Structs
+        val parser = StaxXmlParserUtils.filteredReader(xml)
+        val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+        val result = Some(convertObject(parser, schema, rootAttributes))
+        parser.close()
+        result
       }
     } catch {
       case e: SparkUpgradeException => throw e
@@ -1062,32 +1062,6 @@ object StaxXmlParser {
     val v = convertVariant(parser, rootAttributes, options)
     parser.close()
     v
-  }
-
-  /**
-   * Parse the input XML string as a single-field row holding a Variant value, wrapping any parse
-   * failure in a [[BadRecordException]] so the caller can apply the configured parse mode via
-   * [[FailureSafeParser]]. Mirrors the corrupt-record handling that [[doParseColumn]] gives the
-   * struct output path.
-   */
-  def parseVariantColumn(xml: String, options: XmlOptions): Option[InternalRow] = {
-    lazy val xmlRecord = UTF8String.fromString(xml)
-    try {
-      Some(InternalRow(parseVariant(xml, options)))
-    } catch {
-      case e: SparkUpgradeException => throw e
-      case e@(_: RuntimeException | _: XMLStreamException | _: MalformedInputException
-              | _: SAXException) =>
-        throw BadRecordException(() => xmlRecord, () => Array.empty, e)
-      case e: CharConversionException if options.charset.isEmpty =>
-        val msg =
-          """XML parser cannot handle a character in its input.
-            |Specifying encoding as an input option explicitly might help to resolve the issue.
-            |""".stripMargin + e.getMessage
-        val wrappedCharException = new CharConversionException(msg)
-        wrappedCharException.initCause(e)
-        throw BadRecordException(() => xmlRecord, () => Array.empty, wrappedCharException)
-    }
   }
 
   def parseVariant(parser: StaxXMLRecordReader, options: XmlOptions): VariantVal = {
