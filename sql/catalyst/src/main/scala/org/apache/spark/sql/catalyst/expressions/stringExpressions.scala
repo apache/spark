@@ -1651,6 +1651,46 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, substr[, start[, occurrence]]) - Returns the (1-based) index of the specified
+      occurrence of `substr` in `str`, starting the search from position `start`.
+      If `start` is positive, the search proceeds forward;
+      if `start` is negative, the search proceeds backward.
+      `start` = 0 returns 0.
+      If `start` is not specified, it defaults to 1.
+      `occurrence` must be a positive integer and defaults to 1.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('SparkSQL', 'SQL');
+       6
+      > SELECT _FUNC_('abcabc', 'b', 1);
+       2
+      > SELECT _FUNC_('abcabc', 'b', 1, 2);
+       5
+      > SELECT _FUNC_('abcabc', 'b', -1, 1);
+       5
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+object StringInstrExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val size = expressions.size
+    if (size == 2) {
+      StringInstr(expressions.head, expressions(1))
+    } else if (size == 3) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), Literal(1))
+    } else if (size == 4) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), expressions(3))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3, 4), size)
+    }
+  }
+}
+
 /**
  * A function that returns the position of the first occurrence of substr in the given string.
  * Returns null if either of the arguments are null and
@@ -1658,17 +1698,6 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('SparkSQL', 'SQL');
-       6
-  """,
-  since = "1.5.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
@@ -1699,6 +1728,70 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
+}
+
+/**
+ * A function that returns the position of the specified occurrence of `substr` in the given
+ * string, starting the search from position `start`. If `start` is positive, the search proceeds
+ * forward; if `start` is negative, the search proceeds backward. `start` = 0 returns 0. If
+ * `start` is not specified, it defaults to 1. If `occurrence` is specified, it determines which
+ * occurrence of `substr` to return; `occurrence` must be a positive integer and defaults to 1.
+ *
+ * Returns null if either of the arguments are null and
+ * returns 0 if substr could not be found in str.
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ */
+case class StringInstrWithOccurrence(
+    str: Expression,
+    sub: Expression,
+    start: Expression,
+    occurrence: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
+  override def first: Expression = str
+  override def second: Expression = sub
+  override def third: Expression = start
+  override def fourth: Expression = occurrence
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      IntegerType,
+      IntegerType
+    )
+
+  override def nullSafeEval(string: Any, sub: Any, start: Any, occurrence: Any): Any = {
+    val occ = occurrence.asInstanceOf[Int]
+    if (occ <= 0) {
+      throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
+    }
+    CollationSupport.StringInstrWithOccurrence.exec(string.asInstanceOf[UTF8String],
+      sub.asInstanceOf[UTF8String], start.asInstanceOf[Int], occ, collationId) + 1
+  }
+
+  override def prettyName: String = "instr"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (string, substring, start, occurrence) => {
+      val eval = CollationSupport.StringInstrWithOccurrence
+        .genCode(string, substring, start, occurrence, collationId) + " + 1"
+      s"""
+        if ($occurrence <= 0) {
+          throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);
+        } else {
+          ${ev.value} = $eval;
+        }
+      """
+    })
+  }
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): StringInstrWithOccurrence =
+    copy(str = first, sub = second, start = third, occurrence = fourth)
 }
 
 /**
