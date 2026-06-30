@@ -677,7 +677,7 @@ def jira_components_from_title_tags(tags):
 
     >>> jira_components_from_title_tags(["SQL", "CORE"])
     ['SQL', 'Spark Core']
-    >>> jira_components_from_title_tags(["PYSPARK", "DOCS"])
+    >>> jira_components_from_title_tags(["PYTHON", "DOCS"])
     ['PySpark', 'Documentation']
     >>> jira_components_from_title_tags(["SQL", "TEST"])
     ['SQL', 'Tests']
@@ -728,7 +728,8 @@ def reconcile_jira_components(issue, title_components):
         return
     if choice == "o":
         new_names = list(title_jira_components)
-    else:  # "a": append the PR title's components, keeping the existing ones first.
+    elif choice == "a":
+        # Append the PR title's components, keeping the existing ones first.
         new_names = list(dict.fromkeys(current + title_jira_components))
 
     try:
