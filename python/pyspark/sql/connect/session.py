@@ -17,9 +17,11 @@
 import uuid
 
 import json
+import signal
 import threading
 import os
 import sys
+import time
 import warnings
 from collections.abc import Callable, Sized
 import functools
@@ -1246,6 +1248,198 @@ class SparkSession:
                 errorClass="SESSION_OR_CONTEXT_EXISTS",
                 messageParameters={},
             )
+
+    # ---------------------------------------------------------------------------------------------
+    # Opt-in reuse of a persistent local Spark Connect server.
+    #
+    # By default ``SparkSession.builder.remote("local[*]")`` boots a fresh in-process Connect server
+    # in every process (see ``_start_connect_server`` above), so every ``python script.py`` run
+    # re-pays the cold start (JVM warmup + SparkContext + server boot). When the opt-in is enabled,
+    # the first run starts a *detached* server (``connect/local_server.py``) and records it in a
+    # discovery file; later runs reconnect to it in a fraction of a second instead.
+    # ---------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _local_connect_discovery_path() -> str:
+        """Location of the discovery file describing the running persistent local server."""
+        override = os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
+        if override:
+            return override
+        return os.path.join(os.path.expanduser("~"), ".spark", "connect-local.json")
+
+    @staticmethod
+    def _read_local_connect_discovery() -> Optional[Dict[str, Any]]:
+        """Read and validate the discovery file, returning ``None`` if it is absent or malformed."""
+        path = SparkSession._local_connect_discovery_path()
+        try:
+            with open(path, "r") as f:
+                disc = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(disc, dict) or not all(
+            k in disc for k in ("host", "port", "token", "pid", "spark_version")
+        ):
+            return None
+        return disc
+
+    @staticmethod
+    def _local_connect_server_is_reusable(disc: Dict[str, Any]) -> bool:
+        """Decide whether the server described by ``disc`` can be reused by this process.
+
+        Reuse requires that the recorded Spark version matches this client's, the recorded process
+        is still alive, and it is accepting connections on the recorded port. A version mismatch,
+        dead pid, or closed port means we must start our own server instead.
+        """
+        import socket
+        from pyspark.version import __version__
+
+        if disc.get("spark_version") != __version__:
+            return False
+        try:
+            os.kill(int(disc["pid"]), 0)
+        except ProcessLookupError:
+            return False
+        except (TypeError, ValueError):
+            return False
+        except OSError:
+            # e.g. PermissionError: the process exists but is not ours to signal -- treat as alive.
+            pass
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            if sock.connect_ex((disc["host"], int(disc["port"]))) != 0:
+                return False
+        return True
+
+    @staticmethod
+    def _reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
+        """Reuse a running persistent local Connect server, or start one if none is reusable.
+
+        Returns the ``sc://host:port`` endpoint to connect to and sets
+        ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates against the server. This is
+        the opt-in counterpart of ``_start_connect_server`` and is only reached for a ``local``
+        master when ``spark.local.connect.reuse`` / ``SPARK_LOCAL_CONNECT_REUSE`` is set.
+        """
+        disc = SparkSession._read_local_connect_discovery()
+        if disc is not None and SparkSession._local_connect_server_is_reusable(disc):
+            os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = disc["token"]
+            return "sc://{}:{}".format(disc["host"], disc["port"])
+        return SparkSession._start_persistent_local_connect_server(master, opts)
+
+    @staticmethod
+    def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
+        """Launch a detached persistent local Connect server and wait until it is reachable."""
+        import socket
+        import subprocess
+
+        discovery_path = SparkSession._local_connect_discovery_path()
+        token = opts.get("spark.connect.authenticate.token") or str(uuid.uuid4())
+
+        # Tests use an ephemeral port (0) so they can run in parallel; the server reports the actual
+        # bound port back through the discovery file.
+        if "SPARK_TESTING" in os.environ:
+            port = 0
+        else:
+            port = int(
+                opts.get("spark.local.connect.server.port", DefaultChannelBuilder.default_port())
+            )
+        idle_timeout = opts.get("spark.local.connect.server.idleTimeout", "3600")
+
+        daemon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_server.py")
+        cmd = [
+            sys.executable,
+            daemon,
+            "--master",
+            master,
+            "--port",
+            str(port),
+            "--token",
+            token,
+            "--discovery",
+            discovery_path,
+            "--idle-timeout",
+            str(idle_timeout),
+        ]
+
+        # Launch detached so the server outlives this client process.
+        env = dict(os.environ)
+        for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
+            env.pop(var, None)
+        popen_kwargs: Dict[str, Any] = dict(
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if os.name == "posix":
+            popen_kwargs["start_new_session"] = True
+        else:
+            detached = getattr(subprocess, "DETACHED_PROCESS", 0)
+            new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            popen_kwargs["creationflags"] = detached | new_group
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+
+        # Wait for the server to write the discovery file (which records the actual bound port) and
+        # start accepting connections.
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            exit_code = proc.poll()
+            if exit_code is not None:
+                raise PySparkRuntimeError(
+                    errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                    messageParameters={
+                        "reason": "the server process exited with code {}".format(exit_code)
+                    },
+                )
+            disc = SparkSession._read_local_connect_discovery()
+            if disc is not None and disc.get("pid") == proc.pid and disc.get("token") == token:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(0.5)
+                    if sock.connect_ex((disc["host"], int(disc["port"]))) == 0:
+                        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
+                        return "sc://{}:{}".format(disc["host"], disc["port"])
+            time.sleep(0.25)
+
+        # Timed out: do not leave the detached process orphaned.
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        raise PySparkRuntimeError(
+            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+            messageParameters={"reason": "the server did not become ready within 120 seconds"},
+        )
+
+    @staticmethod
+    def _stop_local_connect_server() -> bool:
+        """Stop the persistent local Connect server started by the reuse path, if any.
+
+        Returns ``True`` if a running server was signalled to stop. Safe to call when none is
+        running. Intended for the dev/test loop, e.g.::
+
+            python -c "from pyspark.sql.connect.session import SparkSession; \\
+                SparkSession._stop_local_connect_server()"
+        """
+        disc = SparkSession._read_local_connect_discovery()
+        path = SparkSession._local_connect_discovery_path()
+        stopped = False
+        if disc is not None:
+            try:
+                pid = int(disc["pid"])
+            except (TypeError, ValueError, KeyError):
+                pid = None
+            # Never signal the current process: a discovery file should only ever point at the
+            # detached server, never at the client that is reading it.
+            if pid is not None and pid != os.getpid():
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    stopped = True
+                except OSError:
+                    pass
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return stopped
 
     @property
     def session_id(self) -> str:

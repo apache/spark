@@ -523,7 +523,27 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or (
+                            reuse_local = str(
+                                opts.get(
+                                    "spark.local.connect.reuse",
+                                    os.environ.get("SPARK_LOCAL_CONNECT_REUSE", ""),
+                                )
+                            ).lower() in ("1", "true")
+
+                            if url.startswith("local") and reuse_local:
+                                # Opt-in: reconnect to a persistent local Connect server (starting
+                                # one on the first run) instead of booting a fresh in-process server
+                                # every process. See `_reuse_or_start_local_connect_server`.
+                                url = RemoteSparkSession._reuse_or_start_local_connect_server(
+                                    url, opts
+                                )
+                                for k in (
+                                    "spark.local.connect.reuse",
+                                    "spark.local.connect.server.port",
+                                    "spark.local.connect.server.idleTimeout",
+                                ):
+                                    opts.pop(k, None)
+                            elif url.startswith("local") or (
                                 is_api_mode_connect and not url.startswith("sc://")
                             ):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
