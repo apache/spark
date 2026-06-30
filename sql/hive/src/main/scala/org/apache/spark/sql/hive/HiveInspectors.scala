@@ -961,6 +961,14 @@ private[hive] trait HiveInspectors {
     case _: UserDefinedType[_] =>
       val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
       toInspector(sqlType)
+    // Hive has no TIME type, so it cannot be represented by any Hive object inspector.
+    case _: TimeType => throw unsupportedHiveType(dataType)
+  }
+
+  private def unsupportedHiveType(dataType: DataType): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> toSQLType(dataType)))
   }
 
   /**
@@ -1029,6 +1037,9 @@ private[hive] trait HiveInspectors {
       toInspector(dt)
     case Literal(_, dt: UserDefinedType[_]) =>
       toInspector(dt.sqlType)
+    // Hive has no TIME type, so a TIME constant cannot be mapped to a Hive object inspector.
+    case Literal(_, dt: TimeType) =>
+      throw unsupportedHiveType(dt)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
       throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
@@ -1281,6 +1292,8 @@ private[hive] trait HiveInspectors {
       case NullType => voidTypeInfo
       case _: DayTimeIntervalType => intervalDayTimeTypeInfo
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo
+      // Hive has no TIME type, so there is no Hive TypeInfo to map it to.
+      case _: TimeType => throw unsupportedHiveType(dt)
       case dt =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))
