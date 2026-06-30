@@ -54,6 +54,15 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     min = Some(dMin), max = Some(dMax),
     nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
+  // column ctime has 10 values from 08:00:00 through 17:00:00 (nanos of day).
+  // 08:00 = 28800000000000L nanos, 17:00 = 61200000000000L nanos
+  val tMin = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(8, 0, 0))
+  val tMax = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(17, 0, 0))
+  val attrTime = AttributeReference("ctime", TimeType())()
+  val colStatTime = ColumnStat(distinctCount = Some(10),
+    min = Some(tMin), max = Some(tMax),
+    nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))
+
   // column cdecimal has 4 values from 0.20 through 0.80 at increment of 0.20.
   val decMin = Decimal("0.200000000000000000")
   val decMax = Decimal("0.800000000000000000")
@@ -118,6 +127,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrInt -> colStatInt,
     attrBool -> colStatBool,
     attrDate -> colStatDate,
+    attrTime -> colStatTime,
     attrDecimal -> colStatDecimal,
     attrDouble -> colStatDouble,
     attrString -> colStatString,
@@ -520,6 +530,44 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrDate -> ColumnStat(distinctCount = Some(3),
         min = Some(d20170103), max = Some(d20170105),
         nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))),
+      expectedRowCount = 3)
+  }
+
+  test("ctime = cast('10:00:00' AS TIME)") {
+    val t10 = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(10, 0, 0))
+    validateEstimatedStats(
+      Filter(EqualTo(attrTime, Literal(t10, TimeType())),
+        childStatsTestPlan(Seq(attrTime), 10L)),
+      Seq(attrTime -> ColumnStat(distinctCount = Some(1),
+        min = Some(t10), max = Some(t10),
+        nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))),
+      expectedRowCount = 1)
+  }
+
+  test("ctime < cast('12:00:00' AS TIME)") {
+    // 12:00 is 43200000000000L nanos. Range is [08:00, 17:00] = 10 distinct values.
+    // (12:00 - 08:00) / (17:00 - 08:00) = 4/9 of 10 rows => ~4.44 => ceil => 5
+    val t12 = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(12, 0, 0))
+    validateEstimatedStats(
+      Filter(LessThan(attrTime, Literal(t12, TimeType())),
+        childStatsTestPlan(Seq(attrTime), 10L)),
+      Seq(attrTime -> ColumnStat(distinctCount = Some(5),
+        min = Some(tMin), max = Some(t12),
+        nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))),
+      expectedRowCount = 5)
+  }
+
+  test("""ctime IN ( cast('09:00:00' AS TIME),
+      cast('10:00:00' AS TIME), cast('11:00:00' AS TIME) )""") {
+    val t09 = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(9, 0, 0))
+    val t10 = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(10, 0, 0))
+    val t11 = DateTimeUtils.localTimeToNanos(java.time.LocalTime.of(11, 0, 0))
+    validateEstimatedStats(
+      Filter(In(attrTime, Seq(Literal(t09, TimeType()), Literal(t10, TimeType()),
+        Literal(t11, TimeType()))), childStatsTestPlan(Seq(attrTime), 10L)),
+      Seq(attrTime -> ColumnStat(distinctCount = Some(3),
+        min = Some(t09), max = Some(t11),
+        nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))),
       expectedRowCount = 3)
   }
 
