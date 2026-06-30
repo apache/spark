@@ -277,6 +277,68 @@ The connection may also be programmatically created using _SparkSession#builder_
 </div>
 </div>
 
+## Faster local iteration with a persistent Connect server
+
+When you develop or test locally with
+
+{% highlight python %}
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.remote("local[*]").getOrCreate()
+{% endhighlight %}
+
+PySpark boots a fresh in-process Spark Connect server in **every** process. Each
+`python script.py` run (or each forked test JVM) therefore re-pays the one-time startup cost --
+JVM warmup, `SparkContext` construction, and Connect server boot -- which can take a few seconds and
+makes a quick edit/run loop feel slow.
+
+There are two ways to amortize that cost across runs by reconnecting to a long-lived local server.
+
+### Start a server yourself and connect to it
+
+Start one persistent local Spark Connect server and point every run at it:
+
+{% highlight bash %}
+# Start once; it stays up across runs.
+$SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
+
+# Every run reconnects instead of booting a new server.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc://localhost:15002").getOrCreate()'
+
+# Stop it when you are done.
+$SPARK_HOME/sbin/stop-connect-server.sh
+{% endhighlight %}
+
+### Let PySpark manage the server (opt-in)
+
+If you would rather keep your code as `SparkSession.builder.remote("local[*]").getOrCreate()` and not
+manage a server by hand, enable the opt-in reuse path. The first run starts a **detached** local
+Connect server and records it in a discovery file; later runs reconnect to it in a fraction of a
+second:
+
+{% highlight bash %}
+export SPARK_LOCAL_CONNECT_REUSE=1     # or .config("spark.local.connect.reuse", "true")
+python script.py     # 1st run: starts a persistent server (cold start, once)
+python script.py     # 2nd+ run: reconnects to it (sub-second)
+{% endhighlight %}
+
+This is **off by default**; nothing changes unless you opt in. A few details:
+
+- Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
+  configurations, and (with artifact isolation, which stays on) session artifacts -- is fresh on
+  every run and never leaks between runs. State backed by the shared `SparkContext` (the persistent
+  catalog/warehouse, global temp views, and cached datasets) *is* shared across runs, so namespace
+  per-run databases or clear that state yourself if your runs must be fully isolated.
+- The server listens on port `15002` by default and authenticates with a token written, together
+  with the host, port, pid and Spark version, to `~/.spark/connect-local.json` (mode `0600`).
+  Set `SPARK_LOCAL_CONNECT_DISCOVERY` to relocate that file. Reuse is refused (and a fresh server
+  started) if the recorded process is gone, the port is closed, or the Spark version differs.
+- The server self-terminates after it has been idle for `spark.local.connect.server.idleTimeout`
+  seconds (default `3600`; set `0` to disable). To stop it explicitly:
+
+{% highlight bash %}
+python -c "from pyspark.sql.connect.session import SparkSession; SparkSession._stop_local_connect_server()"
+{% endhighlight %}
+
 ## Use Spark Connect in standalone applications
 
 <div class="codetabs">
