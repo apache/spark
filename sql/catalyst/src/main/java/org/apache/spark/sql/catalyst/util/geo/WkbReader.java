@@ -178,6 +178,19 @@ public class WkbReader {
     return buffer.getInt();
   }
 
+  private int readCount(String countName, int minBytesPerItem) {
+    long countPos = buffer.position();
+    int count = readInt();
+    if (count < 0) {
+      throw new WkbParseException("Invalid count for " + countName + ": " + count, countPos,
+        currentWkb);
+    }
+    if (count > buffer.remaining() / minBytesPerItem) {
+      throw new WkbParseException("Unexpected end of WKB buffer", countPos, currentWkb);
+    }
+    return count;
+  }
+
   /**
    * Reads a double coordinate value, allowing NaN for empty points.
    */
@@ -386,7 +399,7 @@ public class WkbReader {
 
   private LineString readLineString(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     long numPointsPos = buffer.position();
-    int numPoints = readInt();
+    int numPoints = readCount("LineString points", dimensionCount * WkbUtil.DOUBLE_SIZE);
 
     if (validationLevel > 0 && numPoints == 1) {
       throw new WkbParseException("Too few points in linestring", numPointsPos, currentWkb);
@@ -402,7 +415,7 @@ public class WkbReader {
 
   private Ring readRing(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     long numPointsPos = buffer.position();
-    int numPoints = readInt();
+    int numPoints = readCount("ring points", dimensionCount * WkbUtil.DOUBLE_SIZE);
 
     List<Point> points = new ArrayList<>(numPoints);
 
@@ -425,7 +438,7 @@ public class WkbReader {
   }
 
   private Polygon readPolygon(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
-    int numRings = readInt();
+    int numRings = readCount("polygon rings", WkbUtil.INT_SIZE);
     List<Ring> rings = new ArrayList<>(numRings);
 
     for (int i = 0; i < numRings; i++) {
@@ -436,7 +449,7 @@ public class WkbReader {
   }
 
   private MultiPoint readMultiPoint(int srid, boolean hasZ, boolean hasM) {
-    int numPoints = readInt();
+    int numPoints = readCount("MultiPoint points", WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE);
     List<Point> points = new ArrayList<>(numPoints);
 
     for (int i = 0; i < numPoints; i++) {
@@ -452,7 +465,8 @@ public class WkbReader {
   }
 
   private MultiLineString readMultiLineString(int srid, boolean hasZ, boolean hasM) {
-    int numLineStrings = readInt();
+    int numLineStrings =
+        readCount("MultiLineString line strings", WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE);
     List<LineString> lineStrings = new ArrayList<>(numLineStrings);
 
     for (int i = 0; i < numLineStrings; i++) {
@@ -468,7 +482,8 @@ public class WkbReader {
   }
 
   private MultiPolygon readMultiPolygon(int srid, boolean hasZ, boolean hasM) {
-    int numPolygons = readInt();
+    int numPolygons =
+        readCount("MultiPolygon polygons", WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE);
     List<Polygon> polygons = new ArrayList<>(numPolygons);
 
     for (int i = 0; i < numPolygons; i++) {
@@ -484,7 +499,8 @@ public class WkbReader {
   }
 
   private GeometryCollection readGeometryCollection(int srid, boolean hasZ, boolean hasM) {
-    int numGeometries = readInt();
+    int numGeometries =
+        readCount("GeometryCollection geometries", WkbUtil.BYTE_SIZE + WkbUtil.TYPE_SIZE);
     List<GeometryModel> geometries = new ArrayList<>(numGeometries);
 
     for (int i = 0; i < numGeometries; i++) {
