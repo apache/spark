@@ -332,12 +332,9 @@ This is **off by default**; nothing changes unless you opt in. A few details:
   with the host, port, pid and Spark version, to `~/.spark/connect-local.json` (mode `0600`).
   Set `SPARK_LOCAL_CONNECT_DISCOVERY` to relocate that file. Reuse is refused (and a fresh server
   started) if the recorded process is gone, the port is closed, or the Spark version differs.
-- The server self-terminates after it has been idle for `spark.local.connect.server.idleTimeout`
-  seconds (default `3600`; set `0` to disable). To stop it explicitly:
-
-{% highlight bash %}
-python -c "from pyspark.sql.connect.session import SparkSession; SparkSession._stop_local_connect_server()"
-{% endhighlight %}
+- The server self-terminates once it has been idle for `spark.local.connect.server.idleTimeout`
+  seconds (default `3600`; set `0` to disable). To stop it sooner, terminate the `pid` recorded in
+  the discovery file.
 
 ## Use Spark Connect in standalone applications
 

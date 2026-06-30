@@ -1249,15 +1249,11 @@ class SparkSession:
                 messageParameters={},
             )
 
-    # ---------------------------------------------------------------------------------------------
-    # Opt-in reuse of a persistent local Spark Connect server.
-    #
-    # By default ``SparkSession.builder.remote("local[*]")`` boots a fresh in-process Connect server
-    # in every process (see ``_start_connect_server`` above), so every ``python script.py`` run
-    # re-pays the cold start (JVM warmup + SparkContext + server boot). When the opt-in is enabled,
-    # the first run starts a *detached* server (``connect/local_server.py``) and records it in a
-    # discovery file; later runs reconnect to it in a fraction of a second instead.
-    # ---------------------------------------------------------------------------------------------
+    # Opt-in reuse of a persistent local Spark Connect server. By default ``.remote("local[*]")``
+    # boots a fresh in-process server every process (see ``_start_connect_server`` above); when
+    # reuse is enabled, the first run starts a detached server (``connect/local_server.py``) and
+    # records it in a discovery file, and later runs reconnect to it instead of re-paying the cold
+    # start.
 
     @staticmethod
     def _local_connect_discovery_path() -> str:
@@ -1297,12 +1293,10 @@ class SparkSession:
             return False
         try:
             os.kill(int(disc["pid"]), 0)
-        except ProcessLookupError:
-            return False
-        except (TypeError, ValueError):
+        except (ProcessLookupError, ValueError, TypeError):
             return False
         except OSError:
-            # e.g. PermissionError: the process exists but is not ours to signal -- treat as alive.
+            # The process exists but is not ours to signal (e.g. PermissionError) -- treat as alive.
             pass
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.5)
