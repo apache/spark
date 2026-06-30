@@ -166,9 +166,13 @@ public class VectorizedColumnReader {
       }
       case INT64: {
         boolean isDecimal = sparkType instanceof DecimalType;
+        // TIME columns (both MICROS and NANOS) need per-value processing in the updater: a unit
+        // conversion for MICROS and/or truncation to the requested precision. Lazy dictionary
+        // decoding would bypass the updater, so it must be disabled for them.
         boolean needsUpcast = (isDecimal && !DecimalType.is64BitDecimalType(sparkType)) ||
           updaterFactory.isTimestampTypeMatched(TimeUnit.MILLIS) ||
-          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS);
+          updaterFactory.isTimeTypeMatched(TimeUnit.MICROS) ||
+          updaterFactory.isTimeTypeMatched(TimeUnit.NANOS);
         boolean needsRebase = updaterFactory.isTimestampTypeMatched(TimeUnit.MICROS) &&
           !"CORRECTED".equals(datetimeRebaseMode);
         isSupported = !needsUpcast && !needsRebase && !needsDecimalScaleRebase(sparkType);
@@ -371,6 +375,18 @@ public class VectorizedColumnReader {
       case DELTA_BYTE_ARRAY -> new VectorizedDeltaByteArrayReader();
       case DELTA_LENGTH_BYTE_ARRAY -> new VectorizedDeltaLengthByteArrayReader();
       case DELTA_BINARY_PACKED -> new VectorizedDeltaBinaryPackedReader();
+      case BYTE_STREAM_SPLIT -> {
+        PrimitiveType.PrimitiveTypeName typeName =
+          this.descriptor.getPrimitiveType().getPrimitiveTypeName();
+        int typeWidth = switch (typeName) {
+          case FLOAT, INT32 -> 4;
+          case DOUBLE, INT64 -> 8;
+          case FIXED_LEN_BYTE_ARRAY -> this.descriptor.getPrimitiveType().getTypeLength();
+          default -> throw new SparkUnsupportedOperationException(
+            "_LEGACY_ERROR_TEMP_3190", Map.of("typeName", typeName.toString()));
+        };
+        yield new VectorizedByteStreamSplitValuesReader(typeWidth);
+      }
       case RLE -> {
         PrimitiveType.PrimitiveTypeName typeName =
           this.descriptor.getPrimitiveType().getPrimitiveTypeName();

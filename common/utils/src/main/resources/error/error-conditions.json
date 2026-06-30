@@ -357,35 +357,35 @@
     "message" : [
       "The ALIGN TO expression type <originType> must match the range column type <rangeType>."
     ],
-    "sqlState" : "42804"
-  },
-  "BIN_BY_COLUMN_NOT_FOUND" : {
-    "message" : [
-      "The column <columnName> referenced in BIN BY was not found in the input relation."
-    ],
-    "sqlState" : "42703"
-  },
-  "BIN_BY_DISTRIBUTE_TYPE_MISMATCH" : {
-    "message" : [
-      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
-    ],
-    "sqlState" : "42804"
+    "sqlState" : "42K09"
   },
   "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN" : {
     "message" : [
       "Column <columnName> appears multiple times in the BIN BY DISTRIBUTE UNIFORM clause."
     ],
-    "sqlState" : "42701"
+    "sqlState" : "42713"
   },
   "BIN_BY_INVALID_ALIGN_TO" : {
     "message" : [
       "The ALIGN TO expression could not be evaluated to a constant value. Got: <expr>."
     ],
-    "sqlState" : "42K09"
+    "sqlState" : "42K08"
   },
   "BIN_BY_INVALID_BIN_WIDTH" : {
     "message" : [
-      "The BIN WIDTH expression must be a positive DAY-TIME INTERVAL. Got: <expr>."
+      "The BIN WIDTH expression could not be evaluated to a constant value. Got: <expr>."
+    ],
+    "sqlState" : "42K08"
+  },
+  "BIN_BY_INVALID_BIN_WIDTH_TYPE" : {
+    "message" : [
+      "The BIN WIDTH expression must be of type \"INTERVAL DAY TO SECOND\", but got <inputType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE" : {
+    "message" : [
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
     ],
     "sqlState" : "42K09"
   },
@@ -401,6 +401,12 @@
     ],
     "sqlState" : "42601"
   },
+  "BIN_BY_NON_POSITIVE_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH expression must be positive. Got: <expr>."
+    ],
+    "sqlState" : "42816"
+  },
   "BIN_BY_NULL_ARGUMENT" : {
     "message" : [
       "The <clause> expression in BIN BY must not be NULL."
@@ -411,13 +417,13 @@
     "message" : [
       "The range columns in BIN BY must be TIMESTAMP or TIMESTAMP_NTZ. Column <columnName> has type <columnType>. Both range columns must have the same type."
     ],
-    "sqlState" : "42804"
+    "sqlState" : "42K09"
   },
   "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN" : {
     "message" : [
       "BIN BY requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before BIN BY."
     ],
-    "sqlState" : "42K09"
+    "sqlState" : "0A000"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
@@ -491,6 +497,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
+    "message" : [
+      "Cannot instantiate the Hive UDF/UDAF/UDTF wrapper class <clazz>. Check that the function arguments and their types are supported."
+    ],
+    "sqlState" : "38000"
   },
   "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
     "message" : [
@@ -2397,6 +2409,12 @@
     ],
     "sqlState" : "42809"
   },
+  "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP" : {
+    "message" : [
+      "<functionName> is a temporary function. '<operation>' expects a persistent function.<alternative>"
+    ],
+    "sqlState" : "42809"
+  },
   "EXPECT_TABLE_NOT_VIEW" : {
     "message" : [
       "'<operation>' expects a table but <viewName> is a view."
@@ -3006,12 +3024,6 @@
       "COLUMNS_MISMATCH" : {
         "message" : [
           "Data columns have changed:",
-          "<errors>"
-        ]
-      },
-      "COLUMN_ID_MISMATCH" : {
-        "message" : [
-          "Column IDs have changed:",
           "<errors>"
         ]
       },
@@ -4546,6 +4558,11 @@
           "expects a non-NULL value."
         ]
       },
+      "OCCURRENCE" : {
+        "message" : [
+          "expects a positive integer, but got <actual>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -4606,6 +4623,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_SPEC" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ],
     "sqlState" : "42601"
   },
   "INVALID_PARTITION_VALUE" : {
@@ -5027,6 +5050,12 @@
       "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
     ],
     "sqlState" : "22009"
+  },
+  "INVALID_TIME_LITERAL_PRECISION" : {
+    "message" : [
+      "The time literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a time literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -5536,6 +5565,12 @@
     },
     "sqlState" : "0A000"
   },
+  "MISSING_CLAUSES_FOR_OPERATION" : {
+    "message" : [
+      "Missing required clause(s) <clauses> for operation <operation>."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -5688,6 +5723,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Nested databases are not supported by v1 session catalog: <namespace>."
+    ],
+    "sqlState" : "42K05"
   },
   "NESTED_EXECUTE_IMMEDIATE" : {
     "message" : [
@@ -6038,6 +6079,24 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED" : {
+    "message" : [
+      "Aggregate push-down is not supported for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ],
+    "subClass" : {
+      "NO_MIN_MAX" : {
+        "message" : [
+          "No min/max value found in the column statistics."
+        ]
+      },
+      "NO_NUM_NULLS" : {
+        "message" : [
+          "The number of nulls is not set in the column statistics."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
       "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
@@ -6177,6 +6236,12 @@
       "There is a cycle between <flowName> and <inputName>."
     ],
     "sqlState" : "0A000"
+  },
+  "PIPELINE_RUN_FAILED" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "42K0S"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
@@ -6366,6 +6431,18 @@
       "Failed to rename as <sourcePath> was not found."
     ],
     "sqlState" : "42K03"
+  },
+  "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH" : {
+    "message" : [
+      "RENAME TABLE source and destination databases do not match: <db> != <newDb>."
+    ],
+    "sqlState" : "3F000"
+  },
+  "RENAME_TEMP_VIEW_WITH_DATABASE" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from <oldName> to <newName>: cannot specify database name <db> in the destination table."
+    ],
+    "sqlState" : "42809"
   },
   "REPEATED_CLAUSE" : {
     "message" : [
@@ -8363,12 +8440,12 @@
       },
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
-          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have MAP type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
-          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have VARIANT type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PATH_WHEN_DISABLED" : {
@@ -8857,7 +8934,7 @@
   },
   "UNSUPPORTED_TIME_PRECISION" : {
     "message" : [
-      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 9]."
     ],
     "sqlState" : "0A001"
   },
@@ -9301,11 +9378,6 @@
       "Cannot write into v1 table: <identifier>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1017" : {
-    "message" : [
-      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
@@ -9422,21 +9494,6 @@
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1073" : {
-    "message" : [
-      "RENAME TABLE source and destination databases do not match: '<db>' != '<newDb>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1074" : {
-    "message" : [
-      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1076" : {
-    "message" : [
-      "Partition spec is invalid. <details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1079" : {
     "message" : [
       "Resource Type '<resourceType>' is not supported."
@@ -9527,11 +9584,6 @@
   "_LEGACY_ERROR_TEMP_1123" : {
     "message" : [
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1126" : {
-    "message" : [
-      "Nested databases are not supported by v1 session catalog: <catalog>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1127" : {
@@ -10111,11 +10163,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2003" : {
-    "message" : [
-      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
@@ -11295,11 +11342,6 @@
       "Unable to infer the schema. The schema specification is required to create the table <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3084" : {
-    "message" : [
-      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -11510,16 +11552,6 @@
       "SortAggregate code-gen does not support grouping keys"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3173" : {
     "message" : [
       "Cannot specify 'USING index_type' in 'CREATE INDEX'"
@@ -11608,11 +11640,6 @@
   "_LEGACY_ERROR_TEMP_3191" : {
     "message" : [
       "Dictionary encoding does not support String"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3192" : {
-    "message" : [
-      "Datatype not supported <dt>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3198" : {

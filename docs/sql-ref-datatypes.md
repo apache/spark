@@ -47,7 +47,8 @@ Spark SQL and DataFrames support the following data types:
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
   - `TimeType(precision)`: Represents values comprising values of fields hour, minute and second with the number of decimal digits `precision` following the decimal point in the seconds field, without a time-zone.
-  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999` for max precision `6`.
+  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999999` for max precision `9`. The default precision is `6`.
+    - Note: Apache Hive has no TIME type, so `TimeType` is not supported in Hive SerDe interop. Storing it in a Hive SerDe table (including `INSERT OVERWRITE DIRECTORY ... STORED AS`) or passing it to a Hive UDF/UDAF/UDTF raises an error rather than silently converting the value.
   - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second, with the session local time-zone. The timestamp value represents an
   absolute point in time.
@@ -143,6 +144,7 @@ from pyspark.sql.types import *
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
+|**TimeType**|datetime.time|TimeType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
 |**GeometryType**|Geometry|GeometryType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
 |**GeographyType**|Geography|GeographyType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
@@ -241,6 +243,7 @@ please use factory methods provided in
 |**BooleanType**|logical|"bool"|
 |**TimestampType**|POSIXct|"timestamp"|
 |**DateType**|Date|"date"|
+|**TimeType**|Not supported|Not supported|
 |**GeometryType**|Not supported|Not supported|
 |**GeographyType**|Not supported|Not supported|
 |**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
@@ -264,6 +267,7 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**FloatType**|FLOAT, REAL|
 |**DoubleType**|DOUBLE|
 |**DateType**|DATE|
+|**TimeType**|TIME, TIME(p)|
 |**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
 |**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|

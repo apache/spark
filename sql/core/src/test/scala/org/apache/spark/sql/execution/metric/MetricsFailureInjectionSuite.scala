@@ -420,6 +420,64 @@ class MetricsFailureInjectionSuite
     }
   }
 
+  test("Three stage metrics block failure injection with AQE") {
+    // Same as the previous test but with AQE enabled. Under AQE each Exchange is materialized
+    // as its own map-stage job, which exercises a different DAGScheduler path than the
+    // AQE-disabled variant: the injection's deferred corruption must survive across those
+    // per-shuffle jobs for the downstream FetchFailed (and thus the producer re-run) to fire.
+    val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
+    val stage2Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 2 counter")
+    val stage3Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 3 counter")
+    val stage1SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 1 SLAM")
+    val stage2SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 2 SLAM")
+    val stage3SLAMetric =
+      SQLLastAttemptMetrics.createMetric(spark.sparkContext, "stage 3 SLAM")
+
+    withTable("primary_table", "secondary_table") {
+      setUpTestTable("primary_table")
+      setUpTestTable("secondary_table")
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          val stage1MetricsExpr = incrementMetrics(Seq(stage1Metric, stage1SLAMetric))
+          val stage1 = spark.read.table("primary_table")
+            .filter(Column(stage1MetricsExpr))
+          val stage2MetricsExpr = incrementMetrics(Seq(stage2Metric, stage2SLAMetric))
+          val stage2 = stage1.join(
+              spark.read.table("secondary_table"),
+              usingColumn = "id",
+              joinType = "fullOuter")
+            .filter(Column(stage2MetricsExpr))
+          val stage3MetricsExpr = incrementMetrics(Seq(stage3Metric, stage3SLAMetric))
+          val stage3 = stage2
+            .groupBy("primary_table.low_cardinality_col")
+            .count()
+            .filter(Column(stage3MetricsExpr))
+          val finalDf = stage3.as[(Int, Long)]
+          val result = finalDf.collect()
+          assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
+
+          // Both the leaf stage 1 and the non-leaf stage 2 get their first successful attempt
+          // corrupted and re-run, so their raw counters overcount. SLAM reports only the last
+          // successful attempt per RDD.
+          assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
+          assert(stage2Metric.value > 300, s"stage2Metric=${stage2Metric.value}")
+          assert(stage3Metric.value === 5)
+
+          assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+          assert(stage2SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
+          assert(stage3SLAMetric.lastAttemptValueForHighestRDDId() === Some(5))
+
+          assert(stage1SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage2SLAMetric.lastAttemptValueForDataset(finalDf) === Some(300))
+          assert(stage3SLAMetric.lastAttemptValueForDataset(finalDf) === Some(5))
+        }
+      }
+    }
+  }
+
   test("Three stage metrics force-checksum-mismatch on recompute") {
     // INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE additionally flags the recompute of the
     // partition-0 task as a checksum mismatch. The DAGScheduler then runs
@@ -572,6 +630,16 @@ class MetricsFailureInjectionSuite
     // OSS Spark cannot roll back a partially-finished result stage, so the job aborts. With
     // the default RESULT_STAGE_DELAY=0 the result stage is corrupted before any task
     // dispatches and the rollback path does not abort.
+    //
+    // We group by the high-cardinality `id` column (not `low_cardinality_col`) so that every
+    // one of the 20 reducer partitions reads data from the corrupted mapper 0. Otherwise only
+    // the handful of reducer partitions that happen to hold mapper-0's few low-cardinality keys
+    // would observe the FetchFailed, and the abort would only fire when one of those specific
+    // partitions happened to be scheduled after the (asynchronous) corruption -- a scheduling
+    // race that made this test flaky under Maven. With `id`, every partition depends on mapper
+    // 0, so once RESULT_STAGE_DELAY=1 has corrupted it (after the first result task), local[2]
+    // dispatches the remaining result tasks afterwards and at least one is guaranteed to hit
+    // the corrupted mapper, deterministically triggering the indeterminate-stage abort.
     withTable("test_table") {
       setUpTestTable("test_table")
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
@@ -580,7 +648,7 @@ class MetricsFailureInjectionSuite
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY.key -> "1",
             config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true") {
           val df = spark.read.table("test_table")
-            .groupBy("low_cardinality_col")
+            .groupBy("id")
             .count()
           val ex = intercept[SparkException] {
             df.collect()

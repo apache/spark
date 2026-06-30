@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{DateFormatClass, GetTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DateFormatClass, GetTimestamp}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -65,5 +65,30 @@ class SimplifyDateTimeConversionsSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("SPARK-57575: SimplifyDateTimeConversions skips TimeType child") {
+    val timeAttr = AttributeReference("t", TimeType(TimeType.NANOS_PRECISION))()
+    val timeRelation = LocalRelation(timeAttr)
+    val pattern = "HH:mm:ss.SSSSSSSSS"
+
+    val df = DateFormatClass(timeAttr, pattern)
+
+    // date_format(to_timestamp(date_format(time_col, p), p), p) should NOT simplify
+    // because TIME(9) -> Timestamp truncates sub-micro precision (nanos lost)
+    val originalQuery = timeRelation
+      .select(
+        DateFormatClass(
+          GetTimestamp(
+            df,
+            pattern,
+            TimestampType),
+          pattern) as "c1")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Should NOT be simplified - optimized plan should equal original (no rewrite)
+    comparePlans(optimized, originalQuery)
   }
 }

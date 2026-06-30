@@ -243,3 +243,23 @@ svg g.cluster.search-dimmed {
 .sql-cell-details[open] > summary {
   margin-bottom: 0.25rem;
 }
+
+/* Zoom hint overlay */
+.plan-viz-zoom-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+.plan-viz-zoom-hint.visible {
+  opacity: 1;
+}

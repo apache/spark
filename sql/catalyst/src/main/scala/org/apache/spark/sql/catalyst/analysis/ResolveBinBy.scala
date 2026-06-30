@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{BinBy, LogicalPlan, UnresolvedBinBy}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_BIN_BY
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimestampType, DayTimeIntervalType, DoubleType, FloatType, TimestampType}
 
 /**
  * Resolves [[UnresolvedBinBy]] into [[BinBy]]: looks up column references against the child's
@@ -48,9 +44,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
   // `binWidthExpr` must be fully resolved before validation can proceed. The optional
   // `originExpr` must also be resolved when present; an absent `ALIGN TO` clause defaults to
   // `1970-01-01 00:00:00` and bypasses user-facing foldability and type checks. The
-  // range/distribute column references can stay as `UnresolvedAttribute`; `resolveColumn` below
-  // converts a missing name to `BIN_BY_COLUMN_NOT_FOUND` rather than letting the default
-  // resolution pass leave them unresolved indefinitely.
+  // range/distribute column references can stay as `UnresolvedAttribute`.
   private def readyToResolve(b: UnresolvedBinBy): Boolean = {
     b.childrenResolved && b.binWidthExpr.resolved && b.originExpr.forall(_.resolved)
   }
@@ -61,98 +55,27 @@ object ResolveBinBy extends Rule[LogicalPlan] {
 
     val rangeStart = resolveColumn(b.rangeStartCol, child, resolver)
     val rangeEnd = resolveColumn(b.rangeEndCol, child, resolver)
-    val distributeAttrs = b.distributeColumns.map(c => resolveColumn(c, child, resolver))
+    val distributeAttributes = b.distributeColumns.map(c => resolveColumn(c, child, resolver))
 
-    val rangeType = rangeStart.dataType
-    if (!AnyTimestampType.acceptsType(rangeType)) {
-      throw QueryCompilationErrors.binByRangeTypeMismatchError(rangeStart.name, rangeType)
-    }
-    if (rangeEnd.dataType != rangeType) {
-      throw QueryCompilationErrors.binByRangeTypeMismatchError(rangeEnd.name, rangeEnd.dataType)
-    }
-
-    if (!b.binWidthExpr.foldable) {
-      throw QueryCompilationErrors.binByNonFoldableInputError("BIN WIDTH", b.binWidthExpr)
-    }
-    // Fold the bin width to micros.
-    val binWidthMicros: Long = b.binWidthExpr.dataType match {
-      case _: DayTimeIntervalType =>
-        val v = try {
-          b.binWidthExpr.eval(EmptyRow)
-        } catch {
-          case NonFatal(_) =>
-            throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
-        }
-        if (v == null) {
-          throw QueryCompilationErrors.binByNullArgumentError("BIN WIDTH")
-        }
-        if (v.asInstanceOf[Long] <= 0L) {
-          throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
-        }
-        v.asInstanceOf[Long]
-      case _ =>
-        throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
-    }
-
-    val sessionZone = SQLConf.get.sessionLocalTimeZone
-    val isLTZ = rangeType.isInstanceOf[TimestampType]
-
-    // `ALIGN TO` is optional. When omitted, default the resolved plan's origin to
-    // `1970-01-01 00:00:00` in the session zone for `TIMESTAMP` (LTZ) and epoch for
-    // `TIMESTAMP_NTZ`.
-    val originMicros: Long = b.originExpr match {
-      case Some(o) =>
-        if (!o.foldable) {
-          throw QueryCompilationErrors.binByNonFoldableInputError("ALIGN TO", o)
-        }
-        if (o.dataType != rangeType) {
-          throw QueryCompilationErrors.binByAlignToTypeMismatchError(o.dataType, rangeType)
-        }
-        // Fold the origin to micros.
-        val v = try {
-          o.eval(EmptyRow)
-        } catch {
-          case NonFatal(_) =>
-            throw QueryCompilationErrors.binByInvalidAlignToError(o)
-        }
-        if (v == null) {
-          throw QueryCompilationErrors.binByNullArgumentError("ALIGN TO")
-        }
-        v.asInstanceOf[Long]
-      case None if isLTZ =>
-        DateTimeUtils.daysToMicros(0, DateTimeUtils.getZoneId(sessionZone))
-      case None =>
-        0L
-    }
-
-    if (distributeAttrs.isEmpty) {
-      throw QueryCompilationErrors.binByMissingDistributeError()
-    }
-    distributeAttrs.foreach { attr =>
-      attr.dataType match {
-        case _: FloatType | _: DoubleType => // ok
-        case other =>
-          throw QueryCompilationErrors.binByDistributeTypeMismatchError(attr.name, other)
-      }
-    }
-    val seen = mutable.HashSet.empty[ExprId]
-    distributeAttrs.foreach { attr =>
-      if (!seen.add(attr.exprId)) {
-        throw QueryCompilationErrors.binByDuplicateDistributeColumnError(attr.name)
-      }
-    }
-
-    val appendedAttributes = BinBy.appendedAttributesWithAliases(rangeType, b.outputAliases)
-
-    BinBy(
-      binWidthMicros = binWidthMicros,
+    val parameters = BinByResolution.validateAndComputeParameters(
       rangeStart = rangeStart,
       rangeEnd = rangeEnd,
-      originMicros = originMicros,
-      distributeColumns = distributeAttrs,
+      distributeAttributes = distributeAttributes,
+      binWidthExpr = b.binWidthExpr,
+      originExpr = b.originExpr)
+
+    val appendedAttributes =
+      BinBy.appendedAttributesWithAliases(parameters.rangeType, b.outputAliases)
+
+    BinBy(
+      binWidthMicros = parameters.binWidthMicros,
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      originMicros = parameters.originMicros,
+      distributeColumns = distributeAttributes,
       appendedAttributes = appendedAttributes,
       child = child,
-      timeZoneId = if (isLTZ) Some(sessionZone) else None)
+      timeZoneId = parameters.timeZoneId)
   }
 
   private def resolveColumn(
@@ -163,13 +86,17 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       // Still unresolved here means genuinely absent: ResolveReferences rewrites resolvable refs.
       child.resolve(u.nameParts, resolver) match {
         case Some(a: Attribute) => a
-        case _ => throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
+        case _ =>
+          throw QueryCompilationErrors.unresolvedColumnError(
+            u.name,
+            proposal = StringUtils.orderSuggestedIdentifiersBySimilarity(
+              u.name,
+              candidates = child.output.map(attribute => attribute.qualifier :+ attribute.name)))
       }
     case a: Attribute => a
-    case ne: NamedExpression if ne.resolved =>
-      // A nested ref (e.g. `struct.field`) is resolved to an Alias(GetStructField) by
-      // ResolveReferences; the column exists, so this is distinct from BIN_BY_COLUMN_NOT_FOUND.
-      throw QueryCompilationErrors.binByRequiresTopLevelColumnError(ne.name)
+    case alias: Alias if alias.resolved =>
+      // A resolved nested ref (e.g. `struct.field`) exists but isn't a top-level column.
+      throw QueryCompilationErrors.binByRequiresTopLevelColumnError(alias.child)
     case other =>
       // Genuinely unexpected; the grammar restricts these positions to multipartIdentifier.
       throw SparkException.internalError(

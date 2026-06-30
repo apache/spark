@@ -652,13 +652,91 @@ def print_jira_issue_summary(issue):
         assignee = assignee.displayName
     assignee = "Assignee\t%s\n" % assignee
     status = "Status\t\t%s\n" % issue.fields.status.name
+    components = "Components\t%s\n" % [x.name for x in issue.fields.components]
     url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
     target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
     fix_versions = ""
     if len(issue.fields.fixVersions) > 0:
         fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
-    print("%s%s%s%s%s%s" % (summary, assignee, status, url, target_versions, fix_versions))
+    print(
+        "%s%s%s%s%s%s%s"
+        % (summary, assignee, status, components, url, target_versions, fix_versions)
+    )
+
+
+def jira_components_from_title_tags(tags):
+    """Canonical SPARK JIRA component names implied by PR-title component tags.
+
+    Each tag is resolved through the component registry; a tag that maps to a
+    JIRA component contributes that component's canonical name, whether primary
+    or not (e.g. [SQL] -> "SQL", [TEST] -> "Tests"). Tags that are not JIRA
+    components (status markers like [FOLLOWUP]/[MINOR], version tags like [4.X],
+    or unknown tags) contribute nothing. Aliases normalize to the canonical
+    name. The result preserves input order and is de-duplicated.
+
+    >>> jira_components_from_title_tags(["SQL", "CORE"])
+    ['SQL', 'Spark Core']
+    >>> jira_components_from_title_tags(["PYTHON", "DOCS"])
+    ['PySpark', 'Documentation']
+    >>> jira_components_from_title_tags(["SQL", "TEST"])
+    ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
+    ['SQL']
+    >>> jira_components_from_title_tags(["SQL", "SQL"])
+    ['SQL']
+    """
+    names = []
+    for tag in tags:
+        c = Component.find(tag)
+        if c is not None and c.jira_name:
+            names.append(c.jira_name)
+    return list(dict.fromkeys(names))
+
+
+def reconcile_jira_components(issue, title_components):
+    """Prompt to sync JIRA components when they differ from the PR title.
+
+    ``title_components`` is the list of normalized PR-title component tags (e.g.
+    ["SQL", "TEST"]). Every tag that maps to a JIRA component -- primary or not,
+    e.g. [SQL] -> "SQL" and [TEST] -> "Tests" -- is reconciled; tags with no JIRA
+    component ([MINOR], [FOLLOWUP], version tags, unknown tags) are dropped. The
+    mapped names are compared, as a set, against the issue's current components.
+    On a mismatch, offer to overwrite JIRA with the PR title's components, append
+    them to the existing ones, or keep JIRA unchanged (the default).
+    """
+    title_jira_components = jira_components_from_title_tags(title_components)
+    if not title_jira_components:
+        return
+    current = [c.name for c in issue.fields.components]
+    if set(current) == set(title_jira_components):
+        return
+
+    print()
+    print("=" * 80)
+    print("PR title components differ from JIRA %s:" % issue.key)
+    print("  PR title: %s" % ", ".join(title_jira_components))
+    print("  JIRA:     %s" % (", ".join(current) if current else "(none)"))
+    print("=" * 80)
+    choice = get_input(
+        "[o]verwrite JIRA with PR title / [a]ppend PR title to JIRA / [k]eep JIRA as is "
+        "(default: keep): ",
+        {"o": ["o", "overwrite"], "a": ["a", "append"], "k": ["k", "keep", ""]},
+    )
+    if choice == "k":
+        print("Keeping JIRA %s components unchanged." % issue.key)
+        return
+    if choice == "o":
+        new_names = list(title_jira_components)
+    elif choice == "a":
+        # Append the PR title's components, keeping the existing ones first.
+        new_names = list(dict.fromkeys(current + title_jira_components))
+
+    try:
+        issue.update(fields={"components": [{"name": n} for n in new_names]})
+        print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+    except Exception as e:
+        print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -684,13 +762,15 @@ def get_jira_issue(prompt, default_jira_id=""):
         return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
+def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
     issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
 
     if issue.fields.assignee is None:
         choose_jira_assignee(issue)
+
+    reconcile_jira_components(issue, title_components)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -830,13 +910,13 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment):
+def resolve_jira_issues(title, merge_branches, comment, title_components=()):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment)
+        resolve_jira_issue(merge_branches, comment, title_components=title_components)
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id)
+        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
 
 
 class Component:
@@ -1248,6 +1328,10 @@ def main():
     # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
     is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
 
+    # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
+    # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
+    title_components: List[str] = []
+
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
         # Parse; fail on a malformed title.
@@ -1290,6 +1374,7 @@ def main():
             print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
 
         parsed.components = components
+        title_components = list(parsed.components)
         title = str(parsed)
         if title != pr["title"]:
             print("Normalized title: %s" % title)
@@ -1451,7 +1536,7 @@ def main():
         GITHUB_BASE,
         pr_num,
     )
-    resolve_jira_issues(title, merged_refs, jira_comment)
+    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
 
 
 if __name__ == "__main__":

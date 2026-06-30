@@ -11602,12 +11602,12 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 @_try_remote_functions
 def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    """This is a special version of `to_date` that performs the same operation, but returns a
     NULL value instead of raising an error if date cannot be created.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
-    .. versionadded:: 4.0.0
+    .. versionadded:: 4.1.0
 
     Parameters
     ----------
@@ -11710,6 +11710,7 @@ def unix_date(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def unix_micros(col: "ColumnOrName") -> Column:
     """Returns the number of microseconds since 1970-01-01 00:00:00 UTC.
+    Truncates higher levels of precision.
 
     .. versionadded:: 3.5.0
 
@@ -11728,6 +11729,7 @@ def unix_micros(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_micros`
 
     Examples
@@ -11771,6 +11773,7 @@ def unix_millis(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_seconds`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.timestamp_millis`
 
     Examples
@@ -11790,6 +11793,57 @@ def unix_millis(col: "ColumnOrName") -> Column:
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_millis", col)
+
+
+@_try_remote_functions
+def unix_nanos(col: "ColumnOrName") -> Column:
+    """Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+    Only supported for ``TIMESTAMP_LTZ(p)`` and ``TIMESTAMP_NTZ(p)`` with precision ``p``
+    in ``[7, 9]``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of nanosecond-precision timestamp values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
+    >>> df = spark.sql(
+    ...     "SELECT TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789' AS ts"
+    ... )
+    >>> df.select('*', sf.unix_nanos('ts')).show(truncate=False)
+    +-----------------------------+-------------------+
+    |ts                           |unix_nanos(ts)     |
+    +-----------------------------+-------------------+
+    |2020-01-01 13:24:35.123456789|1577885075123456789|
+    +-----------------------------+-------------------+
+
+    >>> df.select(sf.unix_nanos(sf.lit(None).cast('timestamp_ntz(9)'))).show()
+    +------------------------------------------+
+    |unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9)))|
+    +------------------------------------------+
+    |                                      NULL|
+    +------------------------------------------+
+
+    >>> spark.conf.unset("spark.sql.timestampNanosTypes.enabled")
+    """
+    return _invoke_function_over_columns("unix_nanos", col)
 
 
 @_try_remote_functions
@@ -11814,6 +11868,7 @@ def unix_seconds(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.unix_date`
     :meth:`pyspark.sql.functions.unix_millis`
     :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
     :meth:`pyspark.sql.functions.from_unixtime`
     :meth:`pyspark.sql.functions.timestamp_seconds`
 
@@ -15180,15 +15235,23 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
     """
-    Locate the position of the first occurrence of substr column in the given string.
+    Locate the position of the specified occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.3.0
+        Supports optional `start` and `occurrence` parameters.
 
     Notes
     -----
@@ -15204,11 +15267,16 @@ def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
 
         .. versionchanged:: 4.0.0
             `substr` now accepts column.
+    start : int or :class:`~pyspark.sql.Column`, optional
+        Starting position (1-based, can be negative for backward search).
+        If not specified, defaults to 1.
+    occurrence : int or :class:`~pyspark.sql.Column`, optional
+        Which occurrence to locate (must be > 0). Defaults to 1.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        location of the first occurrence of the substring as integer.
+        location of the substring as integer.
 
     See Also
     --------
@@ -15242,8 +15310,40 @@ def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     |abcd|                          1|
     | xyz|                          0|
     +----+---------------------------+
+
+    Example 3: Using start and occurrence parameters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("aabcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr("s", "b", 1, 2)).show()
+    +-----+-----------------+
+    |    s|instr(s, b, 1, 2)|
+    +-----+-----------------+
+    |aabcd|                0|
+    |  xyz|                0|
+    +-----+-----------------+
+
+    Example 4: Using start parameter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("aabcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr("s", "a", 2)).show()
+    +-----+-----------------+
+    |    s|instr(s, a, 2, 1)|
+    +-----+-----------------+
+    |aabcd|                2|
+    |  xyz|                0|
+    +-----+-----------------+
     """
-    return _invoke_function_over_columns("instr", str, lit(substr))
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 @_try_remote_functions
@@ -22889,7 +22989,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, 3, 5) AS data")
-    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()
+    >>> df.select("*", sf.shuffle(df.data, sf.lit(123))).show()  # doctest: +SKIP
     +-------------+-------------+
     |         data|shuffle(data)|
     +-------------+-------------+
@@ -22900,7 +23000,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 20, NULL, 5) AS data")
-    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()
+    >>> df.select("*", sf.shuffle(sf.col("data"), 234)).show()  # doctest: +SKIP
     +----------------+----------------+
     |            data|   shuffle(data)|
     +----------------+----------------+
@@ -22911,7 +23011,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data", 345)).show()
+    >>> df.select("*", sf.shuffle("data", 345)).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+
@@ -22922,7 +23022,7 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.sql("SELECT ARRAY(1, 2, 2, 3, 3, 3) AS data")
-    >>> df.select("*", sf.shuffle("data")).show() # doctest: +SKIP
+    >>> df.select("*", sf.shuffle("data")).show()  # doctest: +SKIP
     +------------------+------------------+
     |              data|     shuffle(data)|
     +------------------+------------------+

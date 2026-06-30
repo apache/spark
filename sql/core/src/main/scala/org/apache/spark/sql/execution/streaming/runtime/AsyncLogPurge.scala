@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ErrorNotifier, ThreadUtils}
 
 /**
  * Used to enable the capability to allow log purges to be done asynchronously

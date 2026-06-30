@@ -703,6 +703,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
   public byte getByte(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
+      return 0;
+    }
     return Platform.getByte(base, offset + byteIndex);
   }
 
@@ -723,7 +726,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Returns the code point starting from the byte at position `byteIndex`.
-   * If byte index is invalid, throws exception.
+   * If byte index is invalid, throws exception. If the sequence is truncated (the leader byte
+   * declares more bytes than remain), the missing continuation bytes are treated as 0.
    */
   public int codePointFrom(int byteIndex) {
     Objects.checkIndex(byteIndex, numBytes);
@@ -733,16 +737,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       case 1 ->
         b & 0x7F;
       case 2 ->
-        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
+        ((b & 0x1F) << 6) | continuationByte(byteIndex + 1);
       case 3 ->
-        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
-        (getByte(byteIndex + 2) & 0x3F);
+        ((b & 0x0F) << 12) | (continuationByte(byteIndex + 1) << 6) |
+        continuationByte(byteIndex + 2);
       case 4 ->
-        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
-        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
+        ((b & 0x07) << 18) | (continuationByte(byteIndex + 1) << 12) |
+        (continuationByte(byteIndex + 2) << 6) | continuationByte(byteIndex + 3);
       default ->
         throw new IllegalStateException("Error in UTF-8 code point");
     };
+  }
+
+  /**
+   * Returns the low 6 bits of the UTF-8 continuation byte at `byteIndex`, or 0 when `byteIndex`
+   * is past the end of the string. The bounds check stops a truncated trailing multi-byte
+   * sequence (a leader byte whose declared width exceeds the bytes that remain) from reading
+   * past the end of the backing memory.
+   */
+  private int continuationByte(int byteIndex) {
+    return byteIndex < numBytes ? getByte(byteIndex) & 0x3F : 0;
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -941,7 +955,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
   public UTF8String copyUTF8String(int start, int end) {
-    int len = end - start + 1;
+    // Clamp to the bytes that actually remain so an out-of-range `end` (for example, derived
+    // from a truncated trailing multi-byte sequence) can't copy past the end of the backing
+    // memory.
+    int len = Math.min(end - start + 1, numBytes - start);
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
@@ -1134,7 +1151,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
       if (trimString.find(searchChar, 0) >= 0) {
-        trimEnd -= stringCharLen[numChars - 1];
+        // Advance by the bytes the character actually occupies. A truncated trailing leader is
+        // shorter than the width its leader byte declares, so use the (clamped) search char.
+        trimEnd -= searchChar.numBytes;
       } else {
         break;
       }
@@ -1157,7 +1176,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes - i);
       int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
         BYTE_ARRAY_OFFSET + targetOffset, len);
@@ -1241,6 +1260,114 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } while (i < numBytes);
 
     return -1;
+  }
+
+  /**
+   * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
+   * starting the search at the specified position.
+   * When {@code start} is positive, the search proceeds forward from the
+   * {@code start}-th character (1-based). When {@code start} is negative, the
+   * search proceeds backward: {@code start} specifies the first character to
+   * compare, counting from the end of the string. For example,
+   * {@code start = -3} points at the 3rd character from the end, and the first
+   * candidate substring is the one that begins at that character.
+   * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1 for
+   * occurrence 1, 2 respectively).
+   *
+   * @param pattern    the substring to search for
+   * @param start      1-based start position; if negative, search direction is reversed
+   * @param occurrence which occurrence to return (must be >= 1)
+   * @return 0-based character index of the match, or -1 if not found
+   */
+  public int indexOf(UTF8String pattern, int start, int occurrence) {
+    assert occurrence > 0;
+    if (pattern.numBytes() == 0) {
+      return indexOfEmpty(start);
+    }
+    if (start == 0) {
+      return -1;
+    }
+
+    int charCount = 0;
+    int charsToSkip, byteIdx;
+    if (start > 0) {
+      byteIdx = 0; // position in byte
+      charsToSkip = start - 1; // skip character count
+      while (byteIdx < numBytes && charCount < charsToSkip) {
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // For negative start, skip |start| characters from the end to position
+      // byteIdx at the starting byte of the first character to compare.
+      charsToSkip = -start;
+      byteIdx = numBytes;
+      while (byteIdx > 0 && charCount < charsToSkip) {
+        byteIdx = prevCharStart(byteIdx);
+        charCount++;
+      }
+    }
+    // If start position is out of range, return -1 immediately
+    if (charCount < charsToSkip) return -1;
+
+    // For forward search, byteIdx is the starting byte offset of the current character,
+    // and charCount tracks the 0-based character index of that character.
+    // For backward search, byteIdx points to the starting byte of the current candidate match.
+    if (start > 0) {
+      // Search for the occurrence-th match, starting from the current byteIdx.
+      while (occurrence > 0) {
+        // If byteIdx equals numBytes, it indicates that we have
+        // reached the end of the string, yet we still enter the loop
+        // and return -1 when the 'not found' condition is met.
+        while (byteIdx <= numBytes) {
+          if (pattern.numBytes + byteIdx > numBytes) {
+            return -1;
+          }
+
+          if (ByteArrayMethods.arrayEquals(base, offset + byteIdx,
+                  pattern.base, pattern.offset, pattern.numBytes)) {
+            break;
+          }
+          byteIdx += numBytesForFirstByte(getByte(byteIdx));
+          charCount += 1;
+        }
+
+        occurrence--;
+        if (occurrence == 0) return charCount;
+
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // trying to match pattern starting at byteIdx, scanning leftwards
+      while (occurrence > 0) {
+        while (byteIdx >= 0) {
+          // Only attempt to match if there is enough room for the pattern.
+          if (byteIdx + pattern.numBytes <= numBytes &&
+            ByteArrayMethods.arrayEquals(base, offset + byteIdx, pattern.base, pattern.offset,
+              pattern.numBytes)) {
+            break;
+          }
+          byteIdx = prevCharStart(byteIdx);
+        }
+        if (byteIdx < 0) return -1;
+
+        occurrence--;
+        if (occurrence == 0) return bytePosToChar(byteIdx);
+
+        byteIdx = prevCharStart(byteIdx);
+      }
+    }
+    return -1;
+  }
+
+  private int prevCharStart(int byteIdx) {
+    byteIdx--;
+    // Skip UTF-8 continuation bytes to reach the start of a character
+    while (byteIdx > 0 && (getByte(byteIdx) & 0xC0) == 0x80) {
+      byteIdx--;
+    }
+    return byteIdx;
   }
 
   public int charPosToByte(int charPos) {

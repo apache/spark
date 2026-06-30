@@ -102,19 +102,19 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     }
 
     (file: PartitionedFile) => {
-      val parser = new JacksonParser(
+      def parser() = new JacksonParser(
         actualSchema,
         parsedOptions,
         allowArrayAsStructs = true,
         filters)
       if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
         JsonDataSource(parsedOptions).readArchive(
-          broadcastedHadoopConf.value.value, file, parser, requiredSchema)
+          broadcastedHadoopConf.value.value, file, () => parser(), requiredSchema)
       } else {
         JsonDataSource(parsedOptions).readFile(
           broadcastedHadoopConf.value.value,
           file,
-          parser,
+          parser(),
           requiredSchema)
       }
     }
@@ -126,9 +126,6 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     case _: VariantType => true
 
     case _: GeometryType | _: GeographyType => false
-
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

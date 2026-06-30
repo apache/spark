@@ -20,14 +20,14 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{DelegatingTable, Identifier, Table, TableCatalog, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Tests for the data-source-table side of [[MetadataTable]]: a v2 catalog returns
+ * Tests for the data-source-table side of [[DelegatingTable]]: a v2 catalog returns
  * metadata-only tables and Spark reads / writes them via the V1 data-source path.
  * View-related paths live in [[DataSourceV2MetadataViewSuite]].
  */
@@ -111,7 +111,7 @@ class DataSourceV2MetadataTableSuite extends SharedSparkSession {
 }
 
 /**
- * A read-only [[TableCatalog]] that returns [[MetadataTable]] for a small set of canned
+ * A read-only [[TableCatalog]] that returns [[DelegatingTable]] for a small set of canned
  * table fixtures. Used to drive the data-source-table read path (file source + v2 provider)
  * through Spark's V1 data-source machinery.
  */
@@ -124,7 +124,7 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withLocation(ident.namespace().head)
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .build()
-      new MetadataTable(info, ident.toString)
+      new DelegatingTable(info, ident.toString)
     case "test_partitioned_json" =>
       val partitioning = LogicalExpressions.identity(LogicalExpressions.reference(Seq("c2")))
       val info = new TableInfo.Builder()
@@ -134,13 +134,13 @@ class TestingDataSourceTableCatalog extends TableCatalog {
         .withTableType(TableSummary.EXTERNAL_TABLE_TYPE)
         .withPartitions(Array(partitioning))
         .build()
-      new MetadataTable(info, ident.toString)
+      new DelegatingTable(info, ident.toString)
     case "test_v2" =>
       val info = new TableInfo.Builder()
         .withSchema(FakeV2Provider.schema)
         .withProvider(classOf[FakeV2Provider].getName)
         .build()
-      new MetadataTable(info, ident.toString)
+      new DelegatingTable(info, ident.toString)
     case _ => throw new NoSuchTableException(ident)
   }
 

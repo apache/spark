@@ -565,8 +565,11 @@ class BaseUDTFTestsMixin:
             with open(path, "r") as f:
                 data = f.read()
 
-            # Only cleanup method should be called.
-            self.assertEqual(data, "cleanup")
+            # Only the cleanup method should be called, not terminate. The UDTF may be retried,
+            # so cleanup can run more than once and the file may contain multiple "cleanup"
+            # strings; just check that "cleanup" is present and "terminate" is not.
+            self.assertIn("cleanup", data)
+            self.assertNotIn("terminate", data)
 
     def test_udtf_cleanup_with_exception_in_terminate(self):
         with tempfile.TemporaryDirectory(
@@ -595,7 +598,10 @@ class BaseUDTFTestsMixin:
             with open(path, "r") as f:
                 data = f.read()
 
-            self.assertEqual(data, "cleanup")
+            # The cleanup method should be called even when terminate raises. The UDTF may be
+            # retried, so cleanup can run more than once and the file may contain multiple
+            # "cleanup" strings; just check that "cleanup" is present.
+            self.assertIn("cleanup", data)
 
     def test_init_with_exception(self):
         @udtf(returnType="x: int")

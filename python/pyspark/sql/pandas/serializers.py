@@ -127,9 +127,10 @@ class ArrowStreamSerializer(Serializer):
         output batch. Default False.
     """
 
-    def __init__(self, write_start_stream: bool = False) -> None:
+    def __init__(self, write_start_stream: bool = False, flush_per_batch: bool = False) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
+        self._flush_per_batch: bool = flush_per_batch
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
@@ -144,6 +145,10 @@ class ArrowStreamSerializer(Serializer):
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
+                # In pipelined mode, flush after each batch so the JVM can read output
+                # while still sending input, rather than buffering all output.
+                if self._flush_per_batch:
+                    stream.flush()
         finally:
             if writer is not None:
                 writer.close()

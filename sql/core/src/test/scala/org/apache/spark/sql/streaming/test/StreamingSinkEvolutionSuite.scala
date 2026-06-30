@@ -21,6 +21,7 @@ import org.scalatest.{BeforeAndAfterEach, Tag}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadataV3}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
@@ -181,6 +182,118 @@ class StreamingSinkEvolutionSuite extends StreamTest with BeforeAndAfterEach {
       .start()
     q2.processAllAvailable()
     q2.stop()
+  }
+
+  // ===========================
+  // Commit log V3 persistence
+  // ===========================
+
+  testWithSinkEvolution("commit log records V3 metadata with named sink") {
+    val checkpointDir = newMetadataDir
+    val input = MemoryStream[Int]
+    input.addData(1, 2, 3)
+    val q = input.toDF().writeStream
+      .format("noop")
+      .name("my_sink")
+      .option("checkpointLocation", checkpointDir)
+      .start()
+    q.processAllAvailable()
+    q.stop()
+
+    val commitLog = new CommitLog(spark, s"$checkpointDir/commits", readOnly = true)
+    val latest = commitLog.getLatest().getOrElse(fail("No commit recorded"))
+    val v3 = latest._2 match {
+      case v: CommitMetadataV3 => v
+      case other => fail(s"Expected CommitMetadataV3, got $other")
+    }
+    val active = v3.activeSinkMetadataInfo
+    assert(active.sinkName === "my_sink")
+    assert(active.isActive)
+    assert(v3.sinkMetadataMap.size === 1)
+  }
+
+  testWithSinkEvolution("commit log V3 retains historical sink after rename") {
+    val checkpointDir = newMetadataDir
+    val input = MemoryStream[Int]
+
+    // First batch under sink name "old_sink".
+    input.addData(1)
+    val q1 = input.toDF().writeStream
+      .format("noop")
+      .name("old_sink")
+      .option("checkpointLocation", checkpointDir)
+      .start()
+    q1.processAllAvailable()
+    q1.stop()
+
+    // Restart with a new sink name "new_sink" against the same checkpoint.
+    input.addData(2)
+    val q2 = input.toDF().writeStream
+      .format("noop")
+      .name("new_sink")
+      .option("checkpointLocation", checkpointDir)
+      .start()
+    q2.processAllAvailable()
+    q2.stop()
+
+    val commitLog = new CommitLog(spark, s"$checkpointDir/commits", readOnly = true)
+    val v3 = commitLog.getLatest().get._2.asInstanceOf[CommitMetadataV3]
+    assert(v3.sinkMetadataMap.keySet === Set("old_sink", "new_sink"))
+    assert(v3.activeSinkMetadataInfo.sinkName === "new_sink")
+    assert(v3.sinkMetadataMap("old_sink").isActive === false)
+    assert(v3.sinkMetadataMap("new_sink").isActive === true)
+  }
+
+  test("commit log stays V1/V2 when sink evolution is disabled") {
+    val checkpointDir = newMetadataDir
+    withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "false") {
+      val input = MemoryStream[Int]
+      input.addData(1, 2)
+      val q = input.toDF().writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpointDir)
+        .start()
+      q.processAllAvailable()
+      q.stop()
+    }
+
+    val commitLog = new CommitLog(spark, s"$checkpointDir/commits", readOnly = true)
+    val latest = commitLog.getLatest().get._2
+    assert(latest.version === CommitLog.VERSION_1 || latest.version === CommitLog.VERSION_2,
+      s"Expected V1 or V2 commit log, got v${latest.version}")
+    assert(!latest.isInstanceOf[CommitMetadataV3])
+  }
+
+  testWithSinkEvolution("enabling sink evolution mid-checkpoint upgrades commit log to V3") {
+    val checkpointDir = newMetadataDir
+    val input = MemoryStream[Int]
+
+    // First run with sink evolution disabled writes V1/V2, no sink metadata.
+    withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "false") {
+      input.addData(1)
+      val q = input.toDF().writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpointDir)
+        .start()
+      q.processAllAvailable()
+      q.stop()
+    }
+
+    // Restart with sink evolution enabled, supplying a name. V3 should now be written; the
+    // previous V1/V2 batches contribute no historical sinks.
+    input.addData(2)
+    val q = input.toDF().writeStream
+      .format("noop")
+      .name("upgraded_sink")
+      .option("checkpointLocation", checkpointDir)
+      .start()
+    q.processAllAvailable()
+    q.stop()
+
+    val commitLog = new CommitLog(spark, s"$checkpointDir/commits", readOnly = true)
+    val v3 = commitLog.getLatest().get._2.asInstanceOf[CommitMetadataV3]
+    assert(v3.activeSinkMetadataInfo.sinkName === "upgraded_sink")
+    assert(v3.sinkMetadataMap.size === 1)
   }
 
   // ==============

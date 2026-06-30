@@ -179,7 +179,7 @@ private[sql] case class MetricView(
    * [[Constants.MAXIMUM_PROPERTY_SIZE]] characters, so these are descriptive values
    * for catalog browsers / lineage tooling -- not round-trippable representations
    * of the source. Consumers that need the full SQL or filter expression for
-   * re-execution should read [[ViewInfo#queryText]] (the YAML body) and re-parse it
+   * re-execution should read [[View#queryText]] (the YAML body) and re-parse it
    * rather than reconstruct the query from these properties; for any source whose
    * SQL exceeds the size limit, this property would silently return a truncated
    * string.

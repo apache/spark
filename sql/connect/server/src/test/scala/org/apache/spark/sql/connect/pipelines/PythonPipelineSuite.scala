@@ -180,6 +180,12 @@ class PythonPipelineSuite
   }
 
   test("flow progress events have correct python source code location") {
+    // `standalone_flow1` writes to its own dedicated streaming table `st2` (rather than appending
+    // to `table1`, which already has its own implicit flow). Two flows writing concurrently to the
+    // same file-based streaming table share a single `_spark_metadata` log and race on the batch 0
+    // commit (`ManifestFileCommitProtocol`: "Race while writing batch 0"), which made this test
+    // flaky. Keeping each flow on a separate destination removes the race without changing what the
+    // test verifies (source-code-location propagation for an append flow).
     val unresolvedGraph = buildGraph(pythonText = """
         |@dp.table(
         | comment = 'my table'
@@ -197,10 +203,12 @@ class PythonPipelineSuite
         |   return df.select("age")
         |
         |@dp.append_flow(
-        | target = 'table1'
+        | target = 'st2'
         |)
         |def standalone_flow1():
         |   return spark.readStream.table('mv2')
+        |
+        |dp.create_streaming_table('st2')
         |""".stripMargin)
 
     val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)

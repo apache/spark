@@ -202,6 +202,15 @@ object TypeApiOps {
     at match {
       case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
         Some(TimeType(TimeType.MICROS_PRECISION))
+      // Nanosecond Arrow timestamps map to the nanosecond-capable Spark timestamp types. The Arrow
+      // type carries no fractional-second precision, so this precision-less reverse lookup uses the
+      // canonical maximum precision; the exact precision is recovered from the Arrow field metadata
+      // by ArrowUtils.fromArrowField when present.
+      case ts: ArrowType.Timestamp
+          if ts.getUnit == TimeUnit.NANOSECOND && ts.getTimezone == null =>
+        Some(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+      case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.NANOSECOND =>
+        Some(TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION))
       // Add new framework types here
       case _ => None
     }

@@ -110,6 +110,7 @@
 | org.apache.spark.sql.catalyst.expressions.CurrentDate | current_date | SELECT current_date() | struct<current_date():date> |
 | org.apache.spark.sql.catalyst.expressions.CurrentPath | current_path | SELECT current_path() | struct<current_path():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTime | current_time | SELECT current_time() | struct<current_time(6):time(6)> |
+| org.apache.spark.sql.catalyst.expressions.CurrentTime | localtime | SELECT localtime() | struct<current_time(6):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimeZone | current_timezone | SELECT current_timezone() | struct<current_timezone():string> |
 | org.apache.spark.sql.catalyst.expressions.CurrentTimestamp | current_timestamp | SELECT current_timestamp() | struct<current_timestamp():timestamp> |
 | org.apache.spark.sql.catalyst.expressions.CurrentUser | current_user | SELECT current_user() | struct<current_user():string> |
@@ -255,6 +256,7 @@
 | org.apache.spark.sql.catalyst.expressions.Murmur3Hash | hash | SELECT hash('Spark', array(123), 2) | struct<hash(Spark, array(123), 2):int> |
 | org.apache.spark.sql.catalyst.expressions.NTile | ntile | SELECT a, b, ntile(2) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,ntile(2) OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.NaNvl | nanvl | SELECT nanvl(cast('NaN' as double), 123) | struct<nanvl(CAST(NaN AS DOUBLE), 123):double> |
+| org.apache.spark.sql.catalyst.expressions.NanosToTimestamp | timestamp_nanos | SELECT timestamp_nanos(1230219000123456789) | struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)> |
 | org.apache.spark.sql.catalyst.expressions.NextDay | next_day | SELECT next_day('2015-01-14', 'TU') | struct<next_day(2015-01-14, TU):date> |
 | org.apache.spark.sql.catalyst.expressions.Not | ! | SELECT ! true | struct<(NOT true):boolean> |
 | org.apache.spark.sql.catalyst.expressions.Not | not | SELECT not true | struct<(NOT true):boolean> |
@@ -339,7 +341,7 @@
 | org.apache.spark.sql.catalyst.expressions.Sqrt | sqrt | SELECT sqrt(4) | struct<SQRT(4):double> |
 | org.apache.spark.sql.catalyst.expressions.Stack | stack | SELECT stack(2, 1, 2, 3) | struct<col0:int,col1:int> |
 | org.apache.spark.sql.catalyst.expressions.StartsWithExpressionBuilder | startswith | SELECT startswith('Spark SQL', 'Spark') | struct<startswith(Spark SQL, Spark):boolean> |
-| org.apache.spark.sql.catalyst.expressions.StringInstr | instr | SELECT instr('SparkSQL', 'SQL') | struct<instr(SparkSQL, SQL):int> |
+| org.apache.spark.sql.catalyst.expressions.StringInstrExpressionBuilder | instr | SELECT instr('SparkSQL', 'SQL') | struct<instr(SparkSQL, SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.StringLocate | locate | SELECT locate('bar', 'foobarbar') | struct<locate(bar, foobarbar, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.StringLocate | position | SELECT position('bar', 'foobarbar') | struct<position(bar, foobarbar, 1):int> |
 | org.apache.spark.sql.catalyst.expressions.StringRepeat | repeat | SELECT repeat('123', 2) | struct<repeat(123, 2):string> |
@@ -435,6 +437,7 @@
 | org.apache.spark.sql.catalyst.expressions.UnixDate | unix_date | SELECT unix_date(DATE("1970-01-02")) | struct<unix_date(1970-01-02):int> |
 | org.apache.spark.sql.catalyst.expressions.UnixMicros | unix_micros | SELECT unix_micros(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_micros(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixMillis | unix_millis | SELECT unix_millis(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_millis(1970-01-01 00:00:01Z):bigint> |
+| org.apache.spark.sql.catalyst.expressions.UnixNanos | unix_nanos | SELECT unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789') | struct<unix_nanos(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789'):decimal(21,0)> |
 | org.apache.spark.sql.catalyst.expressions.UnixSeconds | unix_seconds | SELECT unix_seconds(TIMESTAMP('1970-01-01 00:00:01Z')) | struct<unix_seconds(1970-01-01 00:00:01Z):bigint> |
 | org.apache.spark.sql.catalyst.expressions.UnixTimestamp | unix_timestamp | SELECT unix_timestamp() | struct<unix_timestamp(current_timestamp(), yyyy-MM-dd HH:mm:ss):bigint> |
 | org.apache.spark.sql.catalyst.expressions.Upper | ucase | SELECT ucase('SparkSql') | struct<ucase(SparkSql):string> |

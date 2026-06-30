@@ -327,6 +327,7 @@ Date and Timestamp Functions
     unix_date
     unix_micros
     unix_millis
+    unix_nanos
     unix_seconds
     unix_timestamp
     weekday

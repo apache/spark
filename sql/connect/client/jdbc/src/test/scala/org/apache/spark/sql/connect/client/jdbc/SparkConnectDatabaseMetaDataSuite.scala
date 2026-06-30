@@ -667,7 +667,10 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
           |  col_timestamp TIMESTAMP,
           |  col_timestamp_ntz TIMESTAMP_NTZ,
           |  col_binary BINARY,
-          |  col_time TIME)""".stripMargin)
+          |  col_time TIME,
+          |  col_array ARRAY<INT>,
+          |  col_map MAP<STRING, INT>,
+          |  col_struct STRUCT<a: INT, b: STRING>)""".stripMargin)
 
       spark.sql(
         """CREATE VIEW IF NOT EXISTS spark_catalog.db1.t1_v AS
@@ -720,6 +723,9 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
                 ("spark_catalog", "db1", "t2", 13, "col_timestamp_ntz"),
                 ("spark_catalog", "db1", "t2", 14, "col_binary"),
                 ("spark_catalog", "db1", "t2", 15, "col_time"),
+                ("spark_catalog", "db1", "t2", 16, "col_array"),
+                ("spark_catalog", "db1", "t2", 17, "col_map"),
+                ("spark_catalog", "db1", "t2", 18, "col_struct"),
                 ("spark_catalog", "db_", "t_", 1, "id"),
                 ("spark_catalog", "db_", "t_", 2, "i_"),
                 ("spark_catalog", "db_2", "t_2", 1, "id"),
@@ -799,6 +805,152 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
         // skip testing escape ', % in schema pattern, because Spark SQL does not
         // allow using those chars in schema table name.
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getPrimaryKeys") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      // Spark has no primary keys, so an empty result set with the JDBC schema is returned.
+      Using.resource(metadata.getPrimaryKeys(null, null, null)) { rs =>
+        val rsmd = rs.getMetaData
+        assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === Seq(
+          "TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "COLUMN_NAME", "KEY_SEQ", "PK_NAME"))
+        assert(!rs.next())
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getImportedKeys, getExportedKeys and getCrossReference") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      val foreignKeySchema = Seq(
+        "PKTABLE_CAT", "PKTABLE_SCHEM", "PKTABLE_NAME", "PKCOLUMN_NAME",
+        "FKTABLE_CAT", "FKTABLE_SCHEM", "FKTABLE_NAME", "FKCOLUMN_NAME",
+        "KEY_SEQ", "UPDATE_RULE", "DELETE_RULE", "FK_NAME", "PK_NAME", "DEFERRABILITY")
+      // Spark has no foreign keys, so all three return an empty result set with the JDBC schema.
+      Seq(
+        () => metadata.getImportedKeys(null, null, null),
+        () => metadata.getExportedKeys(null, null, null),
+        () => metadata.getCrossReference(null, null, null, null, null, null))
+        .foreach { getForeignKeys =>
+        Using.resource(getForeignKeys()) { rs =>
+          val rsmd = rs.getMetaData
+          assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === foreignKeySchema)
+          assert(!rs.next())
+        }
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getTypeInfo") {
+    withConnection { conn =>
+      val metadata = conn.getMetaData
+      Using.resource(metadata.getTypeInfo) { rs =>
+        val rsmd = rs.getMetaData
+        assert((1 to rsmd.getColumnCount).map(rsmd.getColumnName) === Seq(
+          "TYPE_NAME", "DATA_TYPE", "PRECISION", "LITERAL_PREFIX", "LITERAL_SUFFIX",
+          "CREATE_PARAMS", "NULLABLE", "CASE_SENSITIVE", "SEARCHABLE", "UNSIGNED_ATTRIBUTE",
+          "FIXED_PREC_SCALE", "AUTO_INCREMENT", "LOCAL_TYPE_NAME", "MINIMUM_SCALE",
+          "MAXIMUM_SCALE", "SQL_DATA_TYPE", "SQL_DATETIME_SUB", "NUM_PREC_RADIX"))
+
+        case class TypeInfo(
+            name: String,
+            dataType: Int,
+            precision: Int,
+            literalPrefix: String,
+            literalSuffix: String,
+            createParams: String,
+            caseSensitive: Boolean,
+            nullable: Short,
+            searchable: Short,
+            minScale: Short,
+            maxScale: Short,
+            numPrecRadix: Option[Int])
+        val types = new Iterator[TypeInfo] {
+          def hasNext: Boolean = rs.next()
+          def next(): TypeInfo = TypeInfo(
+            name = rs.getString("TYPE_NAME"),
+            dataType = rs.getInt("DATA_TYPE"),
+            precision = rs.getInt("PRECISION"),
+            literalPrefix = rs.getString("LITERAL_PREFIX"),
+            literalSuffix = rs.getString("LITERAL_SUFFIX"),
+            createParams = rs.getString("CREATE_PARAMS"),
+            caseSensitive = rs.getBoolean("CASE_SENSITIVE"),
+            nullable = rs.getShort("NULLABLE"),
+            searchable = rs.getShort("SEARCHABLE"),
+            minScale = rs.getShort("MINIMUM_SCALE"),
+            maxScale = rs.getShort("MAXIMUM_SCALE"),
+            numPrecRadix =
+              Option(rs.getObject("NUM_PREC_RADIX")).map(_.asInstanceOf[Integer].toInt))
+        }.toSeq
+
+        // results are ordered by DATA_TYPE
+        assert(types.map(t => (t.name, t.dataType)) === Seq(
+          ("TINYINT", Types.TINYINT),
+          ("BIGINT", Types.BIGINT),
+          ("BINARY", Types.VARBINARY),
+          ("DECIMAL", Types.DECIMAL),
+          ("INT", Types.INTEGER),
+          ("SMALLINT", Types.SMALLINT),
+          ("FLOAT", Types.FLOAT),
+          ("DOUBLE", Types.DOUBLE),
+          ("STRING", Types.VARCHAR),
+          ("BOOLEAN", Types.BOOLEAN),
+          ("DATE", Types.DATE),
+          ("TIMESTAMP", Types.TIMESTAMP)))
+
+        // every type is nullable and searchable
+        assert(types.forall(_.nullable == DatabaseMetaData.typeNullable))
+        assert(types.forall(_.searchable == DatabaseMetaData.typeSearchable))
+        // only STRING is case-sensitive
+        assert(types.filter(_.caseSensitive).map(_.name) === Seq("STRING"))
+
+        // string-like types are quoted with a single quote on both sides, except BINARY,
+        // whose literals use the hex syntax X'...'. Numeric types carry no literal quote.
+        val quoted = Map(
+          "STRING" -> ("'", "'"),
+          "DATE" -> ("'", "'"),
+          "TIMESTAMP" -> ("'", "'"),
+          "BINARY" -> ("X'", "'"))
+        types.foreach { t =>
+          val (prefix, suffix) = quoted.getOrElse(t.name, (null, null))
+          assert(t.literalPrefix === prefix, s"unexpected LITERAL_PREFIX for ${t.name}")
+          assert(t.literalSuffix === suffix, s"unexpected LITERAL_SUFFIX for ${t.name}")
+        }
+
+        // PRECISION mirrors JdbcTypeUtils.getPrecision for every type
+        val precisions = Map(
+          "BOOLEAN" -> 1, "TINYINT" -> 3, "SMALLINT" -> 5, "INT" -> 10, "BIGINT" -> 19,
+          "FLOAT" -> 7, "DOUBLE" -> 15, "DECIMAL" -> 38, "STRING" -> Int.MaxValue,
+          "BINARY" -> Int.MaxValue, "DATE" -> 10, "TIMESTAMP" -> 29)
+        types.foreach { t =>
+          assert(t.precision === precisions(t.name), s"unexpected PRECISION for ${t.name}")
+        }
+
+        // CREATE_PARAMS is set only for the parameterized types
+        val createParams = Map("DECIMAL" -> "precision,scale")
+        types.foreach { t =>
+          assert(t.createParams === createParams.getOrElse(t.name, null),
+            s"unexpected CREATE_PARAMS for ${t.name}")
+        }
+
+        // (MINIMUM_SCALE, MAXIMUM_SCALE); types not listed carry no scale (0, 0)
+        val scales = Map("DECIMAL" -> (0, 38), "TIMESTAMP" -> (0, 6))
+        types.foreach { t =>
+          val (minScale, maxScale) = scales.getOrElse(t.name, (0, 0))
+          assert(t.minScale === minScale.toShort, s"unexpected MINIMUM_SCALE for ${t.name}")
+          assert(t.maxScale === maxScale.toShort, s"unexpected MAXIMUM_SCALE for ${t.name}")
+        }
+
+        // NUM_PREC_RADIX is 10 for numeric types and NULL otherwise, mirroring JdbcTypeUtils
+        val numericTypes =
+          Set("TINYINT", "SMALLINT", "INT", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL")
+        types.foreach { t =>
+          val expected = if (numericTypes.contains(t.name)) Some(10) else None
+          assert(t.numPrecRadix === expected, s"unexpected NUM_PREC_RADIX for ${t.name}")
+        }
       }
     }
   }

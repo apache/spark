@@ -22,10 +22,13 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils, JsonToStructsEvaluator, JsonTupleEvaluator, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
+  JsonPathParser, JsonToStructsEvaluator, JsonTupleEvaluator, MultiGetJsonObjectEvaluator,
+  PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
+  RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -62,6 +65,8 @@ case class GetJsonObject(json: Expression, path: Expression)
       StringTypeWithCollation(supportsTrimCollation = true))
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
   private lazy val evaluator = if (path.foldable) {
@@ -134,6 +139,92 @@ case class GetJsonObject(json: Expression, path: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
+}
+
+object GetJsonObject {
+  import PathInstruction._
+
+  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
+    try {
+      Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
+        val names = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(fieldName)
+          case _ => None
+        }.toSeq
+        if (names.nonEmpty && names.forall(_.isDefined)) Some(names.flatten) else None
+      }
+    } catch {
+      // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
+      case _: NumberFormatException => None
+    }
+  }
+}
+
+/**
+ * Extracts multiple simple named paths from a JSON string in one parse. This is an internal
+ * expression used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
+ */
+case class MultiGetJsonObject(
+    json: Expression,
+    fallbackPaths: Seq[String])
+  extends UnaryExpression
+  with ExpectsInputTypes {
+
+  // OptimizeCsvJsonExprs caps shared path depth to keep evaluator recursion stack-safe.
+  require(fallbackPaths.nonEmpty)
+
+  override def child: Expression = json
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override lazy val dataType: DataType = StructType(fallbackPaths.indices.map { index =>
+    StructField(s"_$index", StringType, nullable = true)
+  })
+
+  override def nullable: Boolean = true
+
+  // This internal unary expression always returns null when its JSON child is null.
+  override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "multi_get_json_object"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
+
+  @transient
+  private lazy val namedPaths = fallbackPaths.map { path =>
+    GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+      throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
+    }
+  }
+
+  @transient
+  private lazy val evaluator = MultiGetJsonObjectEvaluator(
+    fallbackPaths.map(UTF8String.fromString),
+    namedPaths)
+
+  override def eval(input: InternalRow): Any = {
+    evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val jsonEval = json.genCode(ctx)
+    val resultType = CodeGenerator.javaType(dataType)
+    ev.copy(code = code"""
+       |${jsonEval.code}
+       |boolean ${ev.isNull} = ${jsonEval.isNull};
+       |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+       |if (!${ev.isNull}) {
+       |  ${ev.value} = ($resultType) $refEvaluator.evaluate(${jsonEval.value});
+       |  ${ev.isNull} = ${ev.value} == null;
+       |}
+       |""".stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): MultiGetJsonObject =
+    copy(json = newChild)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -454,23 +545,28 @@ case class SchemaOfJson(
 
   override def nullable: Boolean = false
 
-  @transient
-  private lazy val json = child.eval().asInstanceOf[UTF8String]
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.foldable && json != null) {
-      super.checkInputDataTypes()
-    } else if (!child.foldable) {
+    if (!child.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("json"),
           "inputType" -> toSQLType(child.dataType),
           "inputExpr" -> toSQLExpr(child)))
-    } else {
+    } else if (child.eval() == null) {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "json"))
+    } else if (child.dataType != StringType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType),
+          "requiredType" -> toSQLType(StringType)))
+    } else {
+      super.checkInputDataTypes()
     }
   }
 

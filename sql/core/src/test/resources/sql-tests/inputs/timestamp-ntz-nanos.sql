@@ -150,6 +150,21 @@ SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.0000
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH;
 
+-- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_NTZ. The aggregate preserves the
+-- nanosecond type and orders by the sub-microsecond remainder (two values share the same
+-- microsecond and differ only within it); NULLs are ignored.
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c);
+-- GROUP BY a nanosecond key: two keys that share epochMicros but differ within the microsecond
+-- must not collapse into one group.
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+  GROUP BY c ORDER BY c;
+
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped and NTZ applies no zone shift, so the
 -- wall-clock value is read as the epoch instant.
@@ -161,3 +176,76 @@ SELECT to_unix_timestamp('2020-01-01 13:24:35.000000001' :: timestamp_ntz(9));
 SELECT unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000');
 -- NULL nanosecond timestamp.
 SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: timestamp_ntz(9));
+
+-- SPARK-57103: max_by / min_by return the nanosecond-precision TIMESTAMP_NTZ value at the extreme
+-- ordering key, preserving the nanosecond type. The ordering keys are distinct so the result is
+-- deterministic; a NULL-ordering row is ignored.
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k);
+
+-- SPARK-57527: unix_nanos over nanosecond-precision values returns DECIMAL(21, 0) nanoseconds since
+-- the epoch; NTZ applies no zone shift, so the wall-clock value is read as the epoch instant. The
+-- sub-microsecond digits are kept, truncated to the type's precision.
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7));
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8));
+-- Far-future value: epochMicros * 1000 overflows a 64-bit BIGINT, exercising the DECIMAL path.
+SELECT unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999');
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
+-- NULL nanosecond timestamp.
+SELECT unix_nanos(NULL :: timestamp_ntz(9));
+
+-- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_NTZ(p). The resolved
+-- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
+-- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in
+-- TimestampNanosWideningSuite; the cases below complement those by locking the resolved type with
+-- typeof() and the end-to-end rendered values, by covering operators those suites do not
+-- (greatest/least and the array/map constructors), and by spanning the value range: the min/max
+-- supported timestamps, the 1582 Julian/Gregorian boundary (Spark uses the proleptic Gregorian
+-- calendar), pre/post epoch, near-current values, and varied fractions / precisions. NTZ is
+-- zone-independent, so the time-zone dimension is exercised in timestamp-ltz-nanos.sql instead.
+
+-- UNION ALL widens micro -> nanos: the minimum and maximum supported TIMESTAMP_NTZ values.
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_NTZ '0001-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999') ORDER BY c;
+-- UNION ALL widens nanos(7)/nanos(9) -> nanos(9): around the 1582 Julian/Gregorian boundary
+-- (1582-10-05..14 are valid dates only under the proleptic Gregorian calendar).
+SELECT typeof(c), c FROM (
+    SELECT '1582-10-04 12:30:45.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '1582-10-15 23:59:59.123456789' :: timestamp_ntz(9)) ORDER BY c;
+
+-- coalesce keeps the first non-null, widened to the wider precision: pre-epoch boundary values.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '1969-12-31 23:59:59.0000001' :: timestamp_ntz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ntz(9)) AS v);
+-- CASE WHEN unifies its branches: a near-current value taken from the micro branch.
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_NTZ '2026-06-21 10:16:30'
+    ELSE '2026-06-21 10:16:30.987654321' :: timestamp_ntz(9) END AS v);
+
+-- nanos <-> DATE widening: the minimum DATE adopts the nanos family and renders at midnight.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '0001-01-01', '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8)) AS v);
+
+-- greatest / least widen their arguments to the common nanosecond type and pick the extreme instant.
+SELECT typeof(greatest(TIMESTAMP_NTZ '0001-01-01 00:00:00',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ntz(9)));
+SELECT greatest(TIMESTAMP_NTZ '1500-03-01 12:00:00',
+    '1582-10-15 00:00:00.123456789' :: timestamp_ntz(9),
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.5');
+SELECT least('1970-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    '1969-12-31 23:59:59.999999999' :: timestamp_ntz(9));
+
+-- array() unifies element types and map() value types: a spread of eras, fractions and precisions.
+SELECT array('0001-01-01 00:00:00.0000001' :: timestamp_ntz(7),
+    TIMESTAMP_NTZ '2026-06-21 10:16:30',
+    '9999-12-31 23:59:59.999999999' :: timestamp_ntz(9));
+SELECT typeof(array(TIMESTAMP_NTZ '9999-12-31 23:59:59',
+    '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9)));
+SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9),
+    'max', TIMESTAMP_NTZ '9999-12-31 23:59:59.999999');

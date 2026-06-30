@@ -5175,6 +5175,78 @@ object functions {
   def instr(str: Column, substring: Column): Column = Column.fn("instr", str, substring)
 
   /**
+   * Locate the position of the first occurrence of `substring` in `str`, starting the search from
+   * position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Int): Column =
+    Column.fn("instr", str, substring, lit(start))
+
+  /**
+   * Locate the position of the first occurrence of `substring` in `str`, starting the search from
+   * position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Column): Column =
+    Column.fn("instr", str, substring, start)
+
+  /**
+   * Locate the position of the `occurrence`-th occurrence of `substring` in `str`, starting the
+   * search from position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   * @note
+   *   The `occurrence` parameter must be a positive integer.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Int, occurrence: Int): Column =
+    Column.fn("instr", str, substring, lit(start), lit(occurrence))
+
+  /**
+   * Locate the position of the `occurrence`-th occurrence of `substring` in `str`, starting the
+   * search from position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   * @note
+   *   The `occurrence` parameter must be a positive integer.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Column, occurrence: Column): Column =
+    Column.fn("instr", str, substring, start, occurrence)
+
+  /**
    * Computes the character length of a given string or number of bytes of a binary string. The
    * length of character strings include the trailing spaces. The length of binary strings
    * includes binary zeros.
@@ -8170,7 +8242,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
 
@@ -8179,7 +8251,7 @@ object functions {
    * value instead of raising an error if date cannot be created.
    *
    * @group datetime_funcs
-   * @since 4.0.0
+   * @since 4.1.0
    */
   def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
@@ -8198,6 +8270,16 @@ object functions {
    * @since 3.5.0
    */
   def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
+
+  /**
+   * Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC for a nanosecond-precision
+   * timestamp (`TIMESTAMP_LTZ(p)` / `TIMESTAMP_NTZ(p)`, `p` in `[7, 9]`). The result is a
+   * lossless `DECIMAL(21, 0)`.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
 
   /**
    * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
@@ -8558,6 +8640,15 @@ object functions {
    * @since 3.5.0
    */
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
+
+  /**
+   * Creates a timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from
+   * the number of nanoseconds since UTC epoch.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def timestamp_nanos(e: Column): Column = Column.fn("timestamp_nanos", e)
 
   /**
    * Gets the difference between the timestamps in the specified units by truncating the fraction
@@ -8922,9 +9013,13 @@ object functions {
   def get(column: Column, index: Column): Column = Column.fn("get", column, index)
 
   /**
-   * Sorts the input array in ascending order. The elements of the input array must be orderable.
-   * NaN is greater than any non-NaN elements for double/float type. Null elements will be placed
-   * at the end of the returned array.
+   * Sorts the input array in ascending order. Null elements will be placed at the end of the
+   * returned array. NaN is greater than any non-NaN elements for double/float type.
+   *
+   * The elements of the input array must be orderable. For example, when the array elements are
+   * structs, the default comparator compares the struct fields in schema order. Therefore, all
+   * fields in the struct must be orderable. If the default comparator does not support the input
+   * type, you can specify a custom comparator.
    *
    * @group collection_funcs
    * @since 2.4.0

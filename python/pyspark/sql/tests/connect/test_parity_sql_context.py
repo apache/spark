@@ -16,9 +16,13 @@
 #
 import warnings
 
-from pyspark.sql.connect.context import SQLContext
 from pyspark.sql.tests.test_sql_context import SQLContextTestsMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+
+# Connect SQLContext is only importable when grpc is present, so the import is guarded and the
+# ``-> "SQLContext"`` annotation below is quoted to avoid evaluating it when grpc is absent.
+if should_test_connect:
+    from pyspark.sql.connect.context import SQLContext
 
 
 class SQLContextParityTests(SQLContextTestsMixin, ReusedConnectTestCase):
@@ -30,7 +34,7 @@ class SQLContextParityTests(SQLContextTestsMixin, ReusedConnectTestCase):
         super().tearDown()
         SQLContext._instantiatedContext = None
 
-    def _make_ctx(self) -> SQLContext:
+    def _make_ctx(self) -> "SQLContext":
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             return SQLContext(self.spark)

@@ -26,6 +26,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{CollationFactory, QuotingUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils.FIELD_ID_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.{CURRENT_DEFAULT_COLUMN_METADATA_KEY, EXISTS_DEFAULT_COLUMN_METADATA_KEY}
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -241,6 +242,43 @@ case class StructField(
 
   private[sql] def hasExistenceDefaultValue: Boolean = {
     metadata.contains(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
+  }
+
+  /**
+   * Updates the field with an ID for column identity tracking.
+   */
+  def withId(id: String): StructField = {
+    val newMetadata = new MetadataBuilder()
+      .withMetadata(metadata)
+      .putString(FIELD_ID_METADATA_KEY, id)
+      .build()
+    copy(metadata = newMetadata)
+  }
+
+  /**
+   * Returns the ID of this field, if set.
+   */
+  def id: Option[String] = {
+    if (metadata.contains(FIELD_ID_METADATA_KEY)) {
+      Some(metadata.getString(FIELD_ID_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Returns a copy of this field with the field ID removed, or this field if no ID is set.
+   */
+  def clearId(): StructField = {
+    if (metadata.contains(FIELD_ID_METADATA_KEY)) {
+      val newMetadata = new MetadataBuilder()
+        .withMetadata(metadata)
+        .remove(FIELD_ID_METADATA_KEY)
+        .build()
+      copy(metadata = newMetadata)
+    } else {
+      this
+    }
   }
 
   private def getDDLDefault = getDefault()
