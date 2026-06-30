@@ -154,6 +154,7 @@ private[spark] object History {
         "API. When enabled, each non-excluded request is logged at INFO level after it " +
         "completes. Query string values are redacted using spark.redaction.regex.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -163,6 +164,7 @@ private[spark] object History {
         "HTTP access logs. This can be used to avoid logging high-volume low-value requests " +
         "such as static resources.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .toSequence
       .createWithDefault(Seq("/static", "/favicon.ico"))
