@@ -15235,15 +15235,23 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
     """
-    Locate the position of the first occurrence of substr column in the given string.
+    Locate the position of the specified occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.3.0
+        Supports optional `start` and `occurrence` parameters.
 
     Notes
     -----
@@ -15259,11 +15267,16 @@ def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
 
         .. versionchanged:: 4.0.0
             `substr` now accepts column.
+    start : int or :class:`~pyspark.sql.Column`, optional
+        Starting position (1-based, can be negative for backward search).
+        If not specified, defaults to 1.
+    occurrence : int or :class:`~pyspark.sql.Column`, optional
+        Which occurrence to locate (must be > 0). Defaults to 1.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        location of the first occurrence of the substring as integer.
+        location of the substring as integer.
 
     See Also
     --------
@@ -15297,8 +15310,40 @@ def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     |abcd|                          1|
     | xyz|                          0|
     +----+---------------------------+
+
+    Example 3: Using start and occurrence parameters
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("aabcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr("s", "b", 1, 2)).show()
+    +-----+-----------------+
+    |    s|instr(s, b, 1, 2)|
+    +-----+-----------------+
+    |aabcd|                0|
+    |  xyz|                0|
+    +-----+-----------------+
+
+    Example 4: Using start parameter
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("aabcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr("s", "a", 2)).show()
+    +-----+-----------------+
+    |    s|instr(s, a, 2, 1)|
+    +-----+-----------------+
+    |aabcd|                2|
+    |  xyz|                0|
+    +-----+-----------------+
     """
-    return _invoke_function_over_columns("instr", str, lit(substr))
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 @_try_remote_functions

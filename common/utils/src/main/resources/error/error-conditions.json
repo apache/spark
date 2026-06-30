@@ -4552,6 +4552,11 @@
           "expects a non-NULL value."
         ]
       },
+      "OCCURRENCE" : {
+        "message" : [
+          "expects a positive integer, but got <actual>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
