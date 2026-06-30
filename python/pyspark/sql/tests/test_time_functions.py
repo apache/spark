@@ -127,27 +127,21 @@ class TimeFunctionsTestsMixin:
 
     def test_to_time(self):
         """Test to_time string parsing without format."""
-        df = self.spark.createDataFrame(
-            [("10:30:45",), ("23:59:59",)], ["s"]
-        )
+        df = self.spark.createDataFrame([("10:30:45",), ("23:59:59",)], ["s"])
         result = df.select(F.to_time("s")).collect()
         self.assertEqual(result[0][0], datetime.time(10, 30, 45))
         self.assertEqual(result[1][0], datetime.time(23, 59, 59))
 
     def test_to_time_with_format(self):
         """Test to_time string parsing with custom format."""
-        df = self.spark.createDataFrame(
-            [("10.30.45",), ("23.59.59",)], ["s"]
-        )
+        df = self.spark.createDataFrame([("10.30.45",), ("23.59.59",)], ["s"])
         result = df.select(F.to_time("s", F.lit("HH.mm.ss"))).collect()
         self.assertEqual(result[0][0], datetime.time(10, 30, 45))
         self.assertEqual(result[1][0], datetime.time(23, 59, 59))
 
     def test_try_to_time(self):
         """Test try_to_time returns NULL on invalid input instead of raising."""
-        df = self.spark.createDataFrame(
-            [("10:30:45",), ("not_a_time",), (None,)], ["s"]
-        )
+        df = self.spark.createDataFrame([("10:30:45",), ("not_a_time",), (None,)], ["s"])
         result = df.select(F.try_to_time("s")).collect()
         self.assertEqual(result[0][0], datetime.time(10, 30, 45))
         self.assertIsNone(result[1][0])
@@ -155,9 +149,7 @@ class TimeFunctionsTestsMixin:
 
     def test_try_to_time_with_format(self):
         """Test try_to_time with custom format returns NULL on mismatch."""
-        df = self.spark.createDataFrame(
-            [("10.30.45",), ("10:30:45",)], ["s"]
-        )
+        df = self.spark.createDataFrame([("10.30.45",), ("10:30:45",)], ["s"])
         result = df.select(F.try_to_time("s", F.lit("HH.mm.ss"))).collect()
         self.assertEqual(result[0][0], datetime.time(10, 30, 45))
         self.assertIsNone(result[1][0])
@@ -165,10 +157,12 @@ class TimeFunctionsTestsMixin:
     def test_time_diff(self):
         """Test time_diff function with various units."""
         data = [(datetime.time(10, 0, 0), datetime.time(12, 30, 0))]
-        schema = StructType([
-            StructField("t1", TimeType()),
-            StructField("t2", TimeType()),
-        ])
+        schema = StructType(
+            [
+                StructField("t1", TimeType()),
+                StructField("t2", TimeType()),
+            ]
+        )
         df = self.spark.createDataFrame(data, schema=schema)
 
         # HOUR unit
@@ -182,10 +176,12 @@ class TimeFunctionsTestsMixin:
     def test_time_diff_null_handling(self):
         """Test time_diff returns NULL when inputs are NULL."""
         data = [(None, datetime.time(12, 0, 0)), (datetime.time(10, 0, 0), None)]
-        schema = StructType([
-            StructField("t1", TimeType()),
-            StructField("t2", TimeType()),
-        ])
+        schema = StructType(
+            [
+                StructField("t1", TimeType()),
+                StructField("t2", TimeType()),
+            ]
+        )
         df = self.spark.createDataFrame(data, schema=schema)
         result = df.select(F.time_diff(F.lit("HOUR"), "t1", "t2")).collect()
         self.assertIsNone(result[0][0])
@@ -345,9 +341,7 @@ class TimeFunctionsTestsMixin:
 
     def test_to_time_error_on_invalid_input(self):
         """Test to_time raises error on unparseable input."""
-        df = self.spark.range(1).select(
-            F.lit("invalid_time").alias("s")
-        )
+        df = self.spark.range(1).select(F.lit("invalid_time").alias("s"))
         with self.assertRaises(DateTimeException) as ctx:
             df.select(F.to_time("s")).collect()
         self.assertIn("CANNOT_PARSE_TIME", ctx.exception.getErrorClass())
@@ -387,22 +381,16 @@ class TimeFunctionsTestsMixin:
         )
 
         # SECOND unit
-        result = df.select(
-            F.time_diff(F.lit("second"), "t1", "t2")
-        ).collect()
+        result = df.select(F.time_diff(F.lit("second"), "t1", "t2")).collect()
         self.assertEqual(result[0][0], 30)
 
         # MICROSECOND unit
-        result = df.select(
-            F.time_diff(F.lit("microsecond"), "t1", "t2")
-        ).collect()
+        result = df.select(F.time_diff(F.lit("microsecond"), "t1", "t2")).collect()
         self.assertEqual(result[0][0], 30000000)
 
     def test_time_trunc_second(self):
         """Test time_trunc to SECOND level."""
-        df = self.spark.range(1).select(
-            F.lit(datetime.time(10, 30, 45, 123456)).alias("t")
-        )
+        df = self.spark.range(1).select(F.lit(datetime.time(10, 30, 45, 123456)).alias("t"))
 
         result = df.select(F.time_trunc(F.lit("second"), "t")).collect()
         self.assertEqual(result[0][0], datetime.time(10, 30, 45))
