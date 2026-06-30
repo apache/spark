@@ -1316,6 +1316,154 @@ class FunctionQualificationSuite extends SharedSparkSession {
       checkAnswer(sql("SELECT system.builtin.abs(-5)"), Row(5))
     }
   }
+
+  test("SECTION 17a: SPARK-57758 built-in fast-path respects dynamic session order") {
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT 1 AS id")
+      // Register a temp function shadowing builtin `abs` (overrideIfExists allows any order).
+      spark.udf.register("abs", (x: Int) => x + 100)
+      try {
+        // Default order (second): builtin precedes session, so the fast-path returns the builtin
+        // and the temp is reachable only via `session.` qualification.
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+          checkAnswer(sql("SELECT abs(-5) FROM t"), Row(5))
+          checkAnswer(sql("SELECT session.abs(-5) FROM t"), Row(95))
+        }
+        // first: session precedes builtin, so the fast-path is bypassed and the temp shadows the
+        // builtin for unqualified names. Same session, so this also exercises per-pass recompute.
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "first") {
+          checkAnswer(sql("SELECT abs(-5) FROM t"), Row(95))
+          checkAnswer(sql("SELECT builtin.abs(-5) FROM t"), Row(5))
+        }
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SECTION 17b: SPARK-57758 built-in table-function fast-path") {
+    // Smoke test that built-in / extension table functions resolve unqualified. Under the default
+    // path `system.builtin` leads, so the slow loop's first candidate is already the built-in --
+    // this yields the same rows whether or not the fast-path fires, and so does not by itself
+    // distinguish the gate's on/off behavior. That signal is asserted by
+    // CatalogManagerSuite.isBuiltinFirstOnPath and by SECTION 17c/17d/17e.
+    checkAnswer(sql("SELECT * FROM range(3)"), Seq(Row(0), Row(1), Row(2)))
+    // Extension table functions (stored as builtins) also resolve unqualified.
+    checkAnswer(sql("SELECT * FROM test_ext_table_func()"), Seq(Row(0L), Row(1L), Row(2L)))
+  }
+
+  test("SECTION 17c: SPARK-57758 fast-path is bypassed when a catalog precedes system.builtin") {
+    // SPARK-57758 regression guard: the built-in fast-path is safe only when `system.builtin` is
+    // the FIRST path entry. A custom `SET PATH` can place a catalog/schema before `system.builtin`,
+    // and an unqualified name found there must win over the built-in -- the fast-path must not
+    // short-circuit to the built-in. (The default `sessionOrder` modes always keep catalogs after
+    // `system.builtin`, so only a custom SET PATH exercises this.)
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_abs_shadow") {
+        sql("CREATE DATABASE path_abs_shadow")
+        // Persistent function shadowing the built-in `abs`.
+        sql("CREATE FUNCTION path_abs_shadow.abs(x INT) RETURNS INT RETURN x * 10")
+        try {
+          // Catalog before system.builtin: the persistent `abs` must win (50), not the
+          // built-in (5). Pre-fix, the fast-path returned the built-in here.
+          sql("SET PATH = spark_catalog.path_abs_shadow, system.builtin")
+          checkAnswer(sql("SELECT abs(5)"), Row(50))
+          // system.builtin first: the fast-path is enabled and resolves the built-in (abs(-5) = 5),
+          // confirming the optimization still applies when builtin leads the path.
+          sql("SET PATH = system.builtin, spark_catalog.path_abs_shadow")
+          checkAnswer(sql("SELECT abs(-5)"), Row(5))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_abs_shadow.abs")
+        }
+      }
+    }
+  }
+
+  test("SECTION 17d: SPARK-57758 table-function fast-path is bypassed when a catalog precedes " +
+      "system.builtin") {
+    // Table-function counterpart of SECTION 17c: the table-function fast-path shares the same
+    // `builtinFastPathSafe` gate, so a persistent table function in a schema placed before
+    // `system.builtin` via `SET PATH` must win over the built-in TVF of the same name.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_range_shadow") {
+        sql("CREATE DATABASE path_range_shadow")
+        // Persistent table function shadowing the built-in `range` (ignores its argument).
+        sql("CREATE FUNCTION path_range_shadow.range(n INT) RETURNS TABLE(id INT) RETURN SELECT 99")
+        try {
+          // Catalog before system.builtin: the persistent `range` must win (one row [99]), not the
+          // built-in `range(1)` (one row [0]). Pre-fix, the fast-path returned the built-in here.
+          sql("SET PATH = spark_catalog.path_range_shadow, system.builtin")
+          checkAnswer(sql("SELECT * FROM range(1)"), Row(99))
+          // system.builtin first: the fast-path resolves the built-in `range(1)` (one row [0]).
+          sql("SET PATH = system.builtin, spark_catalog.path_range_shadow")
+          checkAnswer(sql("SELECT * FROM range(1)"), Row(0))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_range_shadow.range")
+        }
+      }
+    }
+  }
+
+  test("SECTION 17e: SPARK-57758 built-in fast-path raises the built-in's argument error rather " +
+      "than falling through to a same-named session function") {
+    // Invariant: the fast-path and the slow candidate loop must fail on the SAME candidate.
+    // `resolveScalarFunctionByIdentifier` returns None only when the built-in is absent; an
+    // existing built-in invoked with bad arity throws. So with `system.builtin` first, an
+    // unqualified `abs(1, 2)` must hit the built-in `abs` (1-arg) and raise its argument error --
+    // it must NOT silently fall through to a compatible 2-arg session `abs`. The slow loop would
+    // also hit `system.builtin.abs` first and throw, so the two paths stay equivalent.
+    withTempView("t") {
+      sql("CREATE TEMPORARY VIEW t AS SELECT 1 AS id")
+      spark.udf.register("abs", (x: Int, y: Int) => x + y)
+      try {
+        withSQLConf("spark.sql.functionResolution.sessionOrder" -> "second") {
+          // The 2-arg session function is reachable via explicit `session.` qualification...
+          checkAnswer(sql("SELECT session.abs(1, 2) FROM t"), Row(3))
+          // ...but the unqualified name resolves to the built-in `abs` first and raises its
+          // argument error instead of resolving the 2-arg session function.
+          intercept[AnalysisException](sql("SELECT abs(1, 2) FROM t").collect())
+        }
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("abs", ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SECTION 17f: SPARK-57758 per-pass memo recomputes for a SQL-function body whose pinned " +
+      "path differs from the caller") {
+    // The subtlest recompute trigger: a SQL-function body runs under a FRESH AnalysisContext
+    // carrying the function's own stored resolution path (not the caller's). The memo lives on the
+    // context, so the body computes its own path within the same analysis pass as the outer query.
+    // Here the body's `abs` is pinned to the built-in (created under a builtin-first path) while
+    // the caller resolves the unqualified `abs` to a shadowing persistent function (catalog-first)
+    // -- so a single statement must yield both resolutions, proving neither context reuses the
+    // other's memo.
+    withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+      withDatabase("path_body") {
+        sql("CREATE DATABASE path_body")
+        // Persistent `abs` shadowing the built-in for the caller's catalog-first path.
+        sql("CREATE FUNCTION path_body.abs(x INT) RETURNS INT RETURN x * 10")
+        try {
+          // Create the function body while `system.builtin` leads -> the body's unqualified `abs`
+          // is pinned to the built-in.
+          sql("SET PATH = system.builtin, spark_catalog.path_body")
+          sql("CREATE FUNCTION path_body.use_abs(x INT) RETURNS INT RETURN abs(x)")
+          // Caller path puts the catalog first -> a top-level unqualified `abs` resolves to the
+          // persistent `abs` (x * 10), while the body keeps resolving its `abs` to the built-in.
+          sql("SET PATH = spark_catalog.path_body, system.builtin")
+          checkAnswer(
+            sql("SELECT abs(-5) AS top, path_body.use_abs(-5) AS body"),
+            Row(-50, 5))
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP FUNCTION IF EXISTS path_body.use_abs")
+          sql("DROP FUNCTION IF EXISTS path_body.abs")
+        }
+      }
+    }
+  }
 }
 
 /**
