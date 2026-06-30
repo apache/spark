@@ -599,7 +599,11 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       // string on re-parse (e.g. so that default-collation resolution does not treat an
       // explicitly-collated literal as eligible for inheriting a default collation).
       val collateClause =
-        if (DataTypeUtils.isDefaultStringCharOrVarcharType(st)) "" else s" collate ${st.collationName}"
+        if (DataTypeUtils.isDefaultStringCharOrVarcharType(st)) {
+          ""
+        } else {
+          s" collate ${st.collationName}"
+        }
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'" + collateClause
     case (v: Byte, ByteType) => s"${v}Y"
