@@ -186,20 +186,9 @@ abstract class ArchiveReader(path: Path) {
   }
 
   /**
-   * Materializes each archive entry to a file under `localDir` and yields `(entryName, localFile)`
-   * for every entry kept by `entryFilter`. This is the counterpart to [[readEntries]] for formats
-   * that cannot be parsed from a streaming `InputStream` and instead need random access to a
-   * complete file (e.g. Parquet/ORC, which read a trailing footer). Entries are materialized one at
-   * a time as the returned iterator advances, so a caller that consumes sequentially and deletes
-   * each file after use keeps at most one entry in `localDir` at a time. The caller owns the
-   * lifetime of the produced files and of `localDir`.
-   *
-   * @param conf Hadoop conf used to open and decompress the archive.
-   * @param localDir an existing local directory the entries are written into.
-   * @param entryFilter keeps only entries whose name satisfies it; entries that fail it are skipped
-   *                    without being written to disk. Defaults to keeping every entry that
-   *                    [[readEntries]] surfaces (i.e. non-directory, non-dotfile entries).
-   * @return an iterator of `(entry name, local file)`; each file lives until the caller deletes it.
+   * Materializes each kept entry to a file under `localDir` as `(entryName, localFile)`, lazily one
+   * at a time -- the [[readEntries]] counterpart for random-access formats (Parquet/ORC footers).
+   * The caller owns the produced files and `localDir`.
    */
   final def localizeEntries(
       conf: Configuration,
@@ -291,16 +280,9 @@ object ArchiveReader extends Logging {
   }
 
   /**
-   * Copies one archive entry's bytes to a fresh file under `localDir`, used by
-   * [[ArchiveReader.localizeEntries]] to localize entries for random-access formats. The entry
-   * stream is not closed here (the reader owns the underlying archive stream); the output file is.
-   * Uniqueness comes from [[File.createTempFile]], so entries that share a basename across archive
-   * subdirectories never collide; the sanitized basename is kept only as a readable suffix.
-   *
-   * @param in bytes of one archive entry.
-   * @param localDir an existing local directory the file is created in.
-   * @param entryName the entry's name within the archive, used only to derive a readable file name.
-   * @return the local file the entry was written to.
+   * Copies one entry's bytes to a fresh, uniquely-named file under `localDir` (entries sharing a
+   * basename across archive subdirs won't collide). The entry stream is left open (the reader owns
+   * it); the output file is closed.
    */
   private def copyEntryToLocalFile(in: InputStream, localDir: File, entryName: String): File = {
     val rawBasename = entryName.substring(entryName.lastIndexOf('/') + 1)
@@ -312,13 +294,9 @@ object ArchiveReader extends Logging {
   }
 
   /**
-   * Reads an archive of random-access files: each kept entry is unpacked to a temp file under a
-   * fresh local dir and read with `readOne`. The counterpart to [[readEntries]] for formats that
-   * need a complete file (Parquet/ORC footers, Excel). Entries are unpacked one at a time, each
-   * reader and temp file released before the next opens; the temp dir, current reader, and archive
-   * stream are released on task completion, so an abandoned read (e.g. a `LIMIT`) does not leak.
-   * The per-entry [[PartitionedFile]] points at the temp file but keeps the archive's path and
-   * modification time, so `input_file_name()` / `_metadata` still report the archive.
+   * Reads an archive of random-access files -- the [[readEntries]] counterpart for formats needing
+   * a complete file (Parquet/ORC footers, Excel). The per-entry [[PartitionedFile]] keeps the
+   * archive's path, so `input_file_name()`/`_metadata` report it.
    */
   def readLocalizedEntries(
       file: PartitionedFile,
@@ -447,8 +425,8 @@ object ArchiveReader extends Logging {
 
   /**
    * Driver-side schema inference for random-access archive formats: `looseInfer` seeds from loose
-   * files, then each archive folds into the seed via `foldEntries`, one entry on disk at a time
-   * (missing/corrupt skipped per the ignore flags). `mergeSchema` off samples one schema.
+   * files; each archive's entries fold in one at a time -- `inferOne` reads one unpacked entry,
+   * `mergeSchemas` combines it -- deleting each before the next. `mergeSchema` off samples one.
    */
   def inferArchiveSchema(
       files: Seq[FileStatus],
@@ -458,15 +436,22 @@ object ArchiveReader extends Logging {
       ignoreMissingFiles: Boolean,
       ignoreCorruptFiles: Boolean,
       mergeSchema: Boolean,
-      looseInfer: Seq[FileStatus] => Option[StructType])(
-      foldEntries: (Option[StructType], Iterator[(String, File)]) => Option[StructType])
-      : Option[StructType] = {
+      looseInfer: Seq[FileStatus] => Option[StructType],
+      inferOne: File => Option[StructType],
+      mergeSchemas: (StructType, StructType) => StructType): Option[StructType] = {
     val (archives, nonArchives) = files.partition(f => isArchivePath(f.getPath))
     val tempDir = Utils.createTempDir(namePrefix = tempPrefix)
     def foldArchive(archive: FileStatus, seed: Option[StructType], limit: Int): Option[StructType] =
       withLocalizedArchive(
         archive, conf, tempDir, entryFilter, ignoreMissingFiles, ignoreCorruptFiles,
-        onSkip = seed)(entries => foldEntries(seed, entries.take(limit)))
+        onSkip = seed) { entries =>
+        var merged = seed
+        entries.take(limit).foreach { case (_, file) =>
+          try inferOne(file).foreach(s => merged = Some(merged.fold(s)(mergeSchemas(_, s))))
+          finally file.delete()
+        }
+        merged
+      }
     try {
       val looseSchema = if (nonArchives.nonEmpty) looseInfer(nonArchives) else None
       if (mergeSchema) {

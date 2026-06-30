@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{Closeable, File, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,13 +42,12 @@ import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, SCHEMA}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, RebaseDateTime}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, RebaseDateTime}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
@@ -99,9 +98,8 @@ class ParquetFileFormat
 
   /**
    * Schema inference for inputs including archives: loose files seed via
-   * [[ParquetUtils.inferSchema]], each archive's entries fold in via
-   * [[ParquetFileFormat.mergeArchiveEntrySchemas]] (one footer at a time).
-   * [[ArchiveReader.inferArchiveSchema]] owns partition/unpack/policy/cleanup.
+   * [[ParquetUtils.inferSchema]], then each archive's entries fold in one footer at a time.
+   * [[ArchiveReader.inferArchiveSchema]] owns the orchestration; this supplies the footer reader.
    */
   private def inferArchiveSchema(
       sparkSession: SparkSession,
@@ -111,12 +109,23 @@ class ParquetFileFormat
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean): Option[StructType] = {
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+    val caseSensitive = SessionStateHelper.getSqlConf(sparkSession).caseSensitiveAnalysis
+    val reader = ParquetFileFormat.buildSchemaReader(sparkSession)
     ArchiveReader.inferArchiveSchema(
       files, conf, "parquet-archive-infer", ParquetFileFormat.isParquetArchiveEntry,
       ignoreMissingFiles, ignoreCorruptFiles, mergeSchema,
-      fs => ParquetUtils.inferSchema(sparkSession, parameters, fs)) { (seed, entries) =>
-      ParquetFileFormat.mergeArchiveEntrySchemas(sparkSession, parameters, entries, seed)
-    }
+      fs => ParquetUtils.inferSchema(sparkSession, parameters, fs),
+      file => {
+        // The footer reader needs only a path and length (cf. mergeSchemasInParallel).
+        val status = new FileStatus(file.length(), false, 0, 0, file.lastModified(), 0, null, null,
+          null, new Path(file.toURI))
+        reader(Seq(status), conf, ignoreCorruptFiles, ignoreMissingFiles).headOption
+      },
+      (acc, schema) =>
+        try acc.merge(schema, caseSensitive) catch {
+          case cause: SparkException =>
+            throw QueryExecutionErrors.failedMergingSchemaError(acc, schema, cause)
+        })
   }
 
   /**
@@ -669,44 +678,6 @@ object ParquetFileFormat extends Logging {
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)
         .map(ParquetFileFormat.readSchemaFromFooter(_, converter))
     }
-  }
-
-  /**
-   * Driver-side analog of [[mergeSchemasInParallel]] for archive entries (they unpack to a
-   * driver-local temp dir executors can't read): reads each entry's footer into `seed`, deleting it
-   * before the next so disk holds one entry. The caller owns closing `entries`.
-   */
-  private[sql] def mergeArchiveEntrySchemas(
-      sparkSession: SparkSession,
-      parameters: Map[String, String],
-      entries: Iterator[(String, File)],
-      seed: Option[StructType]): Option[StructType] = {
-    val caseSensitive = SessionStateHelper.getSqlConf(sparkSession).caseSensitiveAnalysis
-    val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(parameters))
-    val conf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
-    val reader = buildSchemaReader(sparkSession)
-
-    var merged = seed
-    entries.foreach { case (_, file) =>
-      try {
-        // The footer reader needs only a path and length (cf. mergeSchemasInParallel).
-        val status = new FileStatus(
-          file.length(), false, 0, 0, file.lastModified(), 0, null, null, null,
-          new Path(file.toURI))
-        reader(Seq(status), conf, fileSourceOptions.ignoreCorruptFiles,
-            fileSourceOptions.ignoreMissingFiles).foreach { schema =>
-          merged = Some(merged.fold(schema) { acc =>
-            try acc.merge(schema, caseSensitive) catch {
-              case cause: SparkException =>
-                throw QueryExecutionErrors.failedMergingSchemaError(acc, schema, cause)
-            }
-          })
-        }
-      } finally {
-        file.delete()
-      }
-    }
-    merged
   }
 
   /**
