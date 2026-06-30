@@ -158,10 +158,20 @@ def as_spark_type(
             and hasattr(tpe, "__args__")
             and len(tpe.__args__) > 1
         ):
-            # numpy.typing.NDArray
+            # numpy.typing.NDArray for numpy < 2.5
             return types.ArrayType(
                 as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
             )
+        elif (
+            hasattr(tpe, "__origin__")
+            and hasattr(tpe.__origin__, "__value__")
+            and getattr(tpe.__origin__.__value__, "__origin__", None) is np.ndarray
+            and hasattr(tpe, "__args__")
+            and len(tpe.__args__) > 0
+        ):
+            # numpy.typing.NDArray for numpy >= 2.5: a PEP 695 type alias whose __value__
+            # resolves to np.ndarray[shape, dtype[scalar]], with the scalar at __args__[0]
+            return types.ArrayType(as_spark_type(tpe.__args__[0], raise_error=raise_error))
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass
