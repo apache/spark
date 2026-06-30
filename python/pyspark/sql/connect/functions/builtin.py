@@ -2327,11 +2327,8 @@ def try_variant_array_append(
 try_variant_array_append.__doc__ = pysparkfuncs.try_variant_array_append.__doc__
 
 
-def variant_strip_nulls(v: "ColumnOrName", include_arrays: Union[Column, bool] = True) -> Column:
-    include_arrays_col = (
-        include_arrays if isinstance(include_arrays, Column) else lit(include_arrays)
-    )
-    return _invoke_function("variant_strip_nulls", _to_col(v), include_arrays_col)
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
+    return _invoke_function("variant_strip_nulls", _to_col(v), lit(include_arrays))
 
 
 variant_strip_nulls.__doc__ = pysparkfuncs.variant_strip_nulls.__doc__
