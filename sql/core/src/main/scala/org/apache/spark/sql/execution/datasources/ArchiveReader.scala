@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{Closeable, File, FileOutputStream, InputStream}
+import java.io.{Closeable, File, FileNotFoundException, FileOutputStream, InputStream, IOException}
 import java.util.Locale
 import java.util.regex.Pattern
 import java.util.zip.GZIPInputStream
@@ -29,14 +29,17 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import org.apache.commons.io.ByteOrderMark
 import org.apache.commons.io.input.{BOMInputStream, CloseShieldInputStream}
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{HadoopFSUtils, Utils}
 
 /**
@@ -211,7 +214,7 @@ abstract class ArchiveReader(path: Path) {
     }
 }
 
-object ArchiveReader {
+object ArchiveReader extends Logging {
 
   /**
    * Whether `path` names an archive this reader can stream. Dispatched purely on the file
@@ -396,6 +399,86 @@ object ArchiveReader {
       Utils.deleteRecursively(tempDir)
     })
     rows.asInstanceOf[Iterator[InternalRow]]
+  }
+
+  /**
+   * Localizes one archive's kept entries and applies `use`, returning `onSkip` when the archive is
+   * missing/corrupt and the matching ignore flag is set. The entries iterator is closed before
+   * returning (the driver has no TaskContext), so `use` must consume what it needs first.
+   */
+  private[datasources] def withLocalizedArchive[T](
+      archive: FileStatus,
+      conf: Configuration,
+      tempDir: File,
+      entryFilter: String => Boolean,
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean,
+      onSkip: => T)(
+      use: Iterator[(String, File)] => T): T = {
+    var entries: Iterator[(String, File)] = null
+    try {
+      entries = ArchiveReader(archive.getPath).localizeEntries(conf, tempDir, entryFilter)
+      use(entries)
+    } catch {
+      case e: Exception if ignoreMissingFiles &&
+          ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+        logWarning(log"Skipping missing archive during inference: " +
+          log"${MDC(LogKeys.PATH, archive.getPath.toString)}", e)
+        onSkip
+      case NonFatal(e) =>
+        Utils.getRootCause(e) match {
+          // A missing archive is a FileNotFoundException (a subtype of IOException); govern it by
+          // ignoreMissingFiles (handled above), not by ignoreCorruptFiles -- matching FileScanRDD,
+          // which rethrows missing-file errors regardless of ignoreCorruptFiles.
+          case _: FileNotFoundException => throw e
+          case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
+            logWarning(log"Skipping corrupt archive during inference: " +
+              log"${MDC(LogKeys.PATH, archive.getPath.toString)}", e)
+            onSkip
+          case _ => throw e
+        }
+    } finally {
+      entries match {
+        case c: Closeable => c.close()
+        case _ =>
+      }
+    }
+  }
+
+  /**
+   * Driver-side schema inference for random-access archive formats: `looseInfer` seeds from loose
+   * files, then each archive folds into the seed via `foldEntries`, one entry on disk at a time
+   * (missing/corrupt skipped per the ignore flags). `mergeSchema` off samples one schema.
+   */
+  def inferArchiveSchema(
+      files: Seq[FileStatus],
+      conf: Configuration,
+      tempPrefix: String,
+      entryFilter: String => Boolean,
+      ignoreMissingFiles: Boolean,
+      ignoreCorruptFiles: Boolean,
+      mergeSchema: Boolean,
+      looseInfer: Seq[FileStatus] => Option[StructType])(
+      foldEntries: (Option[StructType], Iterator[(String, File)]) => Option[StructType])
+      : Option[StructType] = {
+    val (archives, nonArchives) = files.partition(f => isArchivePath(f.getPath))
+    val tempDir = Utils.createTempDir(namePrefix = tempPrefix)
+    def foldArchive(archive: FileStatus, seed: Option[StructType], limit: Int): Option[StructType] =
+      withLocalizedArchive(
+        archive, conf, tempDir, entryFilter, ignoreMissingFiles, ignoreCorruptFiles,
+        onSkip = seed)(entries => foldEntries(seed, entries.take(limit)))
+    try {
+      val looseSchema = if (nonArchives.nonEmpty) looseInfer(nonArchives) else None
+      if (mergeSchema) {
+        archives.foldLeft(looseSchema)((acc, a) => foldArchive(a, acc, Int.MaxValue))
+      } else if (looseSchema.isDefined) {
+        looseSchema
+      } else {
+        archives.iterator.map(foldArchive(_, None, 1)).find(_.isDefined).flatten
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 

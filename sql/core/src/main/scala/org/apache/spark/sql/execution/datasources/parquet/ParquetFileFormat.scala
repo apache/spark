@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Try}
-import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -99,11 +98,10 @@ class ParquetFileFormat
   }
 
   /**
-   * Schema inference when the inputs include archives. Loose files use the standard
-   * [[ParquetUtils.inferSchema]] path and seed the merge; each archive's entries fold in one at a
-   * time via [[ParquetFileFormat.mergeArchiveEntrySchemas]], bounding disk to one entry.
-   * `mergeSchema = false` samples a single schema. A corrupt/missing archive is skipped under the
-   * matching `ignore*` flag.
+   * Schema inference for inputs including archives: loose files seed via
+   * [[ParquetUtils.inferSchema]], each archive's entries fold in via
+   * [[ParquetFileFormat.mergeArchiveEntrySchemas]] (one footer at a time).
+   * [[ArchiveReader.inferArchiveSchema]] owns partition/unpack/policy/cleanup.
    */
   private def inferArchiveSchema(
       sparkSession: SparkSession,
@@ -113,59 +111,11 @@ class ParquetFileFormat
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean): Option[StructType] = {
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
-    val (archives, nonArchives) = files.partition(f => ArchiveReader.isArchivePath(f.getPath))
-    val tempDir = Utils.createTempDir(namePrefix = "parquet-archive-infer")
-
-    // Folds one archive's entries (at most `limit`) into `seed`, always closing the archive stream
-    // (the driver has no TaskContext to do it); skips the archive under the matching ignore flag.
-    def foldArchive(
-        archive: FileStatus, seed: Option[StructType], limit: Int): Option[StructType] = {
-      try {
-        val entries = ArchiveReader(archive.getPath)
-          .localizeEntries(conf, tempDir, ParquetFileFormat.isParquetArchiveEntry)
-        try ParquetFileFormat.mergeArchiveEntrySchemas(
-          sparkSession, parameters, entries.take(limit), seed)
-        finally entries match {
-          case c: Closeable => c.close()
-          case _ =>
-        }
-      } catch {
-        case e: Exception if ignoreMissingFiles &&
-            ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
-          logWarning(log"Skipping missing archive during inference: " +
-            log"${MDC(PATH, archive.getPath.toString)}", e)
-          seed
-        case NonFatal(e) =>
-          Utils.getRootCause(e) match {
-            // A missing archive is a FileNotFoundException (a subtype of IOException); it must be
-            // governed by ignoreMissingFiles (handled above), not silently dropped as corrupt under
-            // ignoreCorruptFiles -- matching FileScanRDD, which rethrows missing-file errors
-            // regardless of ignoreCorruptFiles.
-            case _: FileNotFoundException => throw e
-            case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
-              logWarning(log"Skipping corrupt archive during inference: " +
-                log"${MDC(PATH, archive.getPath.toString)}", e)
-              seed
-            case _ => throw e
-          }
-      }
-    }
-
-    try {
-      val looseSchema =
-        if (nonArchives.nonEmpty) ParquetUtils.inferSchema(sparkSession, parameters, nonArchives)
-        else None
-      if (mergeSchema) {
-        archives.foldLeft(looseSchema)((acc, a) => foldArchive(a, acc, Int.MaxValue))
-      } else if (looseSchema.isDefined) {
-        // Not merging: the loose schema already samples one, so leave the archives unopened.
-        looseSchema
-      } else {
-        // Sample the first archive entry that yields a schema.
-        archives.iterator.map(foldArchive(_, None, 1)).find(_.isDefined).flatten
-      }
-    } finally {
-      Utils.deleteRecursively(tempDir)
+    ArchiveReader.inferArchiveSchema(
+      files, conf, "parquet-archive-infer", ParquetFileFormat.isParquetArchiveEntry,
+      ignoreMissingFiles, ignoreCorruptFiles, mergeSchema,
+      fs => ParquetUtils.inferSchema(sparkSession, parameters, fs)) { (seed, entries) =>
+      ParquetFileFormat.mergeArchiveEntrySchemas(sparkSession, parameters, entries, seed)
     }
   }
 
@@ -722,11 +672,9 @@ object ParquetFileFormat extends Logging {
   }
 
   /**
-   * Driver-side, sequential analog of [[mergeSchemasInParallel]] for archive entries: they unpack
-   * to a driver-local temp dir that executors can't read, so the schemas can't be merged in a
-   * distributed job. Reads each lazily-unpacked entry's footer and deletes it before pulling the
-   * next, so disk holds one entry at a time; `seed` is the starting schema (loose files). The
-   * caller owns closing `entries`.
+   * Driver-side analog of [[mergeSchemasInParallel]] for archive entries (they unpack to a
+   * driver-local temp dir executors can't read): reads each entry's footer into `seed`, deleting it
+   * before the next so disk holds one entry. The caller owns closing `entries`.
    */
   private[sql] def mergeArchiveEntrySchemas(
       sparkSession: SparkSession,
