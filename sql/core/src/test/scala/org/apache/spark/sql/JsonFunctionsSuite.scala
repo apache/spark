@@ -18,19 +18,19 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.core.StreamReadConstraints
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{JsonToStructs, Literal, MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -609,8 +609,12 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
   test("SPARK-57164: from_json with a nanos timestamp DDL schema string") {
     val df = Seq("""{"c": "2020-01-01T00:00:00.123456789"}""").toDF("value")
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    // Fix the session timezone so the TIMESTAMP_LTZ expected value is deterministic.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
         Seq(
           s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
           s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
@@ -621,12 +625,73 @@ class JsonFunctionsSuite extends SharedSparkSession {
               from_json($"value", s"c $spelling", Map.empty[String, String]).as("v"))
             // The schema string resolves to the nanos type ...
             assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
-            // ... but the JSON datasource does not support nanosecond timestamps yet, so the
-            // value converter rejects it at execution.
-            checkError(
-              exception = intercept[SparkUnsupportedOperationException](parsed.collect()),
-              condition = "UNSUPPORTED_DATATYPE",
-              parameters = Map("typeName" -> toSQLType(expected)))
+            // ... and the JSON datasource correctly parses the nanosecond timestamp, truncating
+            // sub-precision digits toward zero.
+            val expectedValue = expected match {
+              case _: TimestampNTZNanosType => LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano)
+              case _: TimestampLTZNanosType =>
+                LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC)
+            }
+            checkAnswer(parsed, Row(Row(expectedValue)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: to_json with nanos timestamp types") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        // The pattern must carry `p` fractional digits to emit the full declared precision; the
+        // floored value has exactly `p` significant digits, so the rendered fraction is the first
+        // `p` digits of 123456789.
+        val fracPat = "S" * p
+        val frac = "123456789".take(p)
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any,
+            s"""{"ts":"2020-01-01T00:00:00.$frac"}"""),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any,
+            s"""{"ts":"2020-01-01T00:00:00.${frac}Z"}""")).foreach {
+          case (nanosType, optKey, fmt, value, expectedJson) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            checkAnswer(
+              df.select(to_json(struct($"ts"), Map(optKey -> fmt))),
+              Row(expectedJson))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: roundtrip in to_json and from_json - nanos timestamps") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val fracPat = "S" * p
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any)).foreach {
+          case (nanosType, optKey, fmt, value) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            val options = Map(optKey -> fmt)
+            // The input column already carries precision `p`, so the to_json -> from_json
+            // round-trip with a `p`-digit pattern is loss-free.
+            val readBack = df
+              .select(to_json(struct($"ts"), options).as("json"))
+              .select(from_json($"json", schema, options).as("data"))
+              .select($"data.ts".as("ts"))
+            checkAnswer(readBack, df.select($"ts"))
         }
       }
     }
