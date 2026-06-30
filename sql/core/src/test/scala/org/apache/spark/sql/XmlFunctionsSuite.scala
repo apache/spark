@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
@@ -45,25 +47,45 @@ class XmlFunctionsSuite extends SharedSparkSession {
   test("SPARK-57164: from_xml with a nanos timestamp DDL schema string") {
     val df = Seq("""<ROW><c>2020-01-01T00:00:00.123456789</c></ROW>""").toDF("value")
     // FAILFAST so the value-converter rejection propagates instead of becoming a corrupt record.
+    // Pin the session timezone to UTC so LTZ values are predictable without a zone in the string.
+    val options = Map("mode" -> "FAILFAST").asJava
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val truncator = TimestampNanosTestUtils.nanoOfSecTruncator(p)
+        val truncNanos = truncator(123456789)
+        val expectedNTZ = LocalDateTime.of(2020, 1, 1, 0, 0, 0, truncNanos)
+        val expectedLTZ = expectedNTZ.toInstant(ZoneOffset.UTC)
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> (TimestampNTZNanosType(p), expectedNTZ.asInstanceOf[Any]),
+          s"TIMESTAMP_LTZ($p)" -> (TimestampLTZNanosType(p), expectedLTZ.asInstanceOf[Any]),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" ->
+            (TimestampNTZNanosType(p), expectedNTZ.asInstanceOf[Any]),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" ->
+            (TimestampLTZNanosType(p), expectedLTZ.asInstanceOf[Any])).foreach {
+          case (spelling, (expectedType, expectedVal)) =>
+            val parsed = df.select(from_xml($"value", s"c $spelling", options).as("v"))
+            // The schema string resolves to the nanos type ...
+            val parsedType = parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType
+            assert(parsedType === expectedType)
+            // ... the XML datasource parses the value and round-trips to the expected value.
+            checkAnswer(parsed, Row(Row(expectedVal)) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57458: from_xml rejects zoned input for NTZ nanos columns") {
+    // A string with an explicit zone offset must be rejected for TIMESTAMP_NTZ(p) because
+    // the NTZ parse path uses allowTimeZone=false, matching the micro NTZ and CSV behaviour.
+    val df = Seq("""<ROW><c>2020-01-01T00:00:00.123456789+05:00</c></ROW>""").toDF("value")
     val options = Map("mode" -> "FAILFAST").asJava
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       foreachNanosPrecision { p =>
-        Seq(
-          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
-          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
-          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
-          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
-          case (spelling, expected) =>
-            val parsed = df.select(from_xml($"value", s"c $spelling", options).as("v"))
-            // The schema string resolves to the nanos type ...
-            assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
-            // ... but the XML datasource does not support nanosecond timestamps yet, so the
-            // value converter rejects it at execution (surfaced as a malformed record in
-            // FAILFAST mode).
-            checkError(
-              exception = intercept[SparkException](parsed.collect()),
-              condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-              parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+        val parsed = df.select(from_xml($"value", s"c TIMESTAMP_NTZ($p)", options).as("v"))
+        intercept[SparkException] {
+          parsed.collect()
         }
       }
     }
