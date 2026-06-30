@@ -55,8 +55,8 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric or
-      ansi interval column `col` which is the smallest value in the ordered `col` values (sorted
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric,
+      ansi interval or TIME column `col` which is the smallest value in the ordered `col` values (sorted
       from least to greatest) such that no more than `percentage` of `col` values is less than
       the value or equal to that value. The value of percentage must be between 0.0 and 1.0.
       The `accuracy` parameter (default: 10000) is a positive numeric literal which controls

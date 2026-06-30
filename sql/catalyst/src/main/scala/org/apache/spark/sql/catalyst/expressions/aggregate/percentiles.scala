@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -75,8 +76,7 @@ abstract class PercentileBase
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(TypeCollection(NumericType, DayTimeIntervalType, YearMonthIntervalType, AnyTimeType),
-      percentageExpType, IntegralType)
+    Seq(TypeCollection(NumericAndAnsiInterval, AnyTimeType), percentageExpType, IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -257,8 +257,8 @@ abstract class PercentileBase
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ANSI interval column `col` at the given percentage. The value of percentage must be
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric,
+       ANSI interval or TIME column `col` at the given percentage. The value of percentage must be
        between 0.0 and 1.0. The value of frequency should be positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
@@ -330,7 +330,7 @@ case class Percentile(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the median of numeric or ANSI interval column `col`.",
+  usage = "_FUNC_(col) - Returns the median of numeric, ANSI interval or TIME column `col`.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
@@ -355,7 +355,7 @@ case class Median(child: Expression)
 
 /**
  * Return a percentile value based on a continuous distribution of
- * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
+ * numeric, ANSI interval or TIME column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
@@ -482,7 +482,7 @@ case class PercentileDisc(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a continuous distribution of numeric or ANSI interval column `col` at the given " +
+    "a continuous distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
   examples = """
     Examples:
@@ -508,7 +508,7 @@ object PercentileContBuilder extends ExpressionBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a discrete distribution of numeric or ANSI interval column `col` at the given " +
+    "a discrete distribution of numeric, ANSI interval or TIME column `col` at the given " +
     "`percentage` (specified in ORDER BY clause).",
   examples = """
     Examples:

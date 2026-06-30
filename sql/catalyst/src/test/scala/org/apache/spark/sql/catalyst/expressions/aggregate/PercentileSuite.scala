@@ -119,8 +119,8 @@ class PercentileSuite extends SparkFunSuite {
       .dataType === TimeType())
     assert(Median(BoundReference(0, TimeType(3), nullable = false)).dataType === TimeType(3))
 
-    // The exact median of two TIME values interpolates (continuous distribution), returning the
-    // midpoint as Long nanos-of-day: median(00:00:00, 00:00:00.00000001) -> 00:00:00.000000005.
+    // The exact median of two TIME values interpolates (continuous distribution): the midpoint is
+    // returned as the internal Long value (nanos-of-day), e.g. median(0L, 10L) -> 5L.
     val agg = new Percentile(BoundReference(0, TimeType(), nullable = false), Literal(0.5))
     val buffer = agg.createAggregationBuffer()
     agg.update(buffer, InternalRow(0L))
@@ -190,8 +190,8 @@ class PercentileSuite extends SparkFunSuite {
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\" or \"TIME\")"),
+            "requiredType" -> ("((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\") or \"TIME\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
@@ -213,8 +213,8 @@ class PercentileSuite extends SparkFunSuite {
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\" or \"TIME\")"),
+            "requiredType" -> ("((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\") or \"TIME\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
