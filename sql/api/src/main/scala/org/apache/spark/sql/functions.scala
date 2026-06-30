@@ -8941,9 +8941,13 @@ object functions {
   def get(column: Column, index: Column): Column = Column.fn("get", column, index)
 
   /**
-   * Sorts the input array in ascending order. The elements of the input array must be orderable.
-   * NaN is greater than any non-NaN elements for double/float type. Null elements will be placed
-   * at the end of the returned array.
+   * Sorts the input array in ascending order. Null elements will be placed at the end of the
+   * returned array. NaN is greater than any non-NaN elements for double/float type.
+   *
+   * The elements of the input array must be orderable. For example, when the array elements are
+   * structs, the default comparator compares the struct fields in schema order. Therefore, all
+   * fields in the struct must be orderable. If the default comparator does not support the input
+   * type, you can specify a custom comparator.
    *
    * @group collection_funcs
    * @since 2.4.0
