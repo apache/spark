@@ -6289,6 +6289,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_JDBC_TIME_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
+      .internal()
+      .doc("When true, JDBC TIME columns are read as TimestampType (the legacy behavior), even " +
+        "when spark.sql.timeType.enabled is true. This is an escape hatch for workloads that " +
+        "rely on the old TIME-to-timestamp mapping. When false, JDBC TIME columns are read as " +
+        "TimeType if spark.sql.timeType.enabled is true. Has no effect when " +
+        "spark.sql.timeType.enabled is false.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.python.filterPushdown.enabled")
     .internal()
     .doc("When true, enable filter pushdown to Python datasource, at the cost of running " +
@@ -8155,6 +8167,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
+
+  def legacyJdbcTimeMappingEnabled: Boolean =
+    getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)

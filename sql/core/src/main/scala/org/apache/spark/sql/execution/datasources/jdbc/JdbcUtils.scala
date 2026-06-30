@@ -229,7 +229,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
     case java.sql.Types.TIME =>
-      if (conf.isTimeTypeEnabled) {
+      if (conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled) {
         // Use reported scale (fractional digits) as precision; TIME(0) is valid
         val timePrecision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
           else TimeType.DEFAULT_PRECISION

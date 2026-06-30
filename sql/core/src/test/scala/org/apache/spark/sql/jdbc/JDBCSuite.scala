@@ -768,6 +768,24 @@ class JDBCSuite extends SharedSparkSession {
     assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
   }
 
+  test("SPARK-57555: legacy.jdbc.timeMapping escape hatch keeps TIME as TimestampType") {
+    // The escape hatch forces the legacy TIME-to-timestamp mapping even when the TIME type is
+    // enabled, so workloads relying on the old behavior are not silently broken.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType === TimestampType)
+    }
+    // Sanity check: without the escape hatch the column is read as TimeType.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    }
+  }
+
   test("SPARK-57555: JDBC TIME write round-trip") {
     val url = urlWithUserAndPass
     val tableName = "TEST.TIME_ROUNDTRIP"
