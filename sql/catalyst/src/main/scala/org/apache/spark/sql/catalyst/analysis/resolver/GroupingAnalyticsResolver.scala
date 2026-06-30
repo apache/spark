@@ -19,12 +19,10 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.analysis.GroupingAnalyticsTransformer
 import org.apache.spark.sql.catalyst.expressions.{
-  AttributeReference,
   BaseGroupingSets,
   Expression,
   GroupingAnalyticsExtractor,
-  SortOrder,
-  VirtualColumn
+  SortOrder
 }
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, Sort}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -111,7 +109,9 @@ class GroupingAnalyticsResolver(resolver: Resolver, expressionResolver: Expressi
    *      - If there is, collect grouping expressions from it using
    *        [[GroupingAnalyticsTransformer.collectGroupingExpressions]].
    *      - If there isn't, throw `groupingMustWithGroupingSetsOrCubeOrRollupError` exception.
-   *  2. Create a grouping ID attribute and resolve it using [[ExpressionResolver]].
+   *  2. Compute the grouping id via [[GroupingAnalyticsTransformer.groupingIdExpression]] (the
+   *     constant 0 for a grand total, otherwise the `spark_grouping_id` attribute) and resolve it
+   *     using [[ExpressionResolver]].
    *  3. Replace [[SortOrder]] expressions using
    *     [[GroupingAnalyticsTransformer.replaceGroupingFunction]] (see its scala doc for more
    *     details).
@@ -128,10 +128,9 @@ class GroupingAnalyticsResolver(resolver: Resolver, expressionResolver: Expressi
         scopes.current.baseAggregate.get
       )
 
-    val groupingId = VirtualColumn.groupingIdAttribute
-    val resolvedGroupingId = expressionResolver
-      .resolveExpressionTreeInOperator(groupingId, sort)
-      .asInstanceOf[AttributeReference]
+    val groupingId = GroupingAnalyticsTransformer.groupingIdExpression(groupingExpressions)
+    val resolvedGroupingId =
+      expressionResolver.resolveExpressionTreeInOperator(groupingId, sort)
 
     val orderExpressionsWithGroupingAnalytics = orderExpressions.map { orderExpression =>
       GroupingAnalyticsTransformer

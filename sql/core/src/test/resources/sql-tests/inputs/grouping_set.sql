@@ -55,6 +55,62 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE;
 
 SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (());
 
+-- GROUP BY GROUPING SETS (()) is a grand total and must return one row over empty input, just
+-- like an aggregation without a GROUP BY clause.
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (());
+
+-- Semantically identical query without GROUP BY, for comparison.
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100;
+
+-- Grand total over empty input with grouping_id() in the SELECT list.
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (());
+
+-- Grand total over non-empty input still returns the single aggregated row.
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (());
+
+-- Meaningful aggregates make the grand-total row explicit. Over empty input it is a single row of
+-- NULL measures with count 0 (identical to the same query with no GROUP BY); over non-empty input
+-- it carries the real totals.
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY GROUPING SETS (());
+
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100;
+
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) GROUP BY GROUPING SETS (());
+
+-- Contrast: grouping by a real column over empty input returns no rows (no groups), whereas the
+-- grand total above returns one row -- the grand-total-specific semantics this fix restores.
+SELECT v, count(*) AS c FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY v;
+
+-- grouping_id() over a grand total is 0, so it resolves in HAVING and ORDER BY.
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) HAVING grouping_id() = 0;
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) ORDER BY grouping_id();
+
+-- grouping() over a grand total references a non-grouping column and is rejected.
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (());
+
+-- Grand total over a named relation rather than inline data in the query: the grand total reads
+-- FROM a temporary view.
+CREATE TEMPORARY VIEW grouping_grand_total AS
+  SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v);
+
+-- Empty input (filter removes all rows): one grand-total row of NULL measures with count 0.
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (());
+
+-- Non-empty input: the real totals in a single grand-total row.
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total GROUP BY GROUPING SETS (());
+
+-- grouping_id() over the grand total folds to 0.
+SELECT count(*) AS c, grouping_id() AS g
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (());
+
+DROP VIEW grouping_grand_total;
+
 -- duplicate entries in grouping sets
 SELECT k1, k2, avg(v) FROM (VALUES (1,1,1),(2,2,2)) AS t(k1,k2,v) GROUP BY GROUPING SETS ((k1),(k1,k2),(k2,k1));
 
