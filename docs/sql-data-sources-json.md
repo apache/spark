@@ -214,6 +214,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>explodeEmbeddedArray</code></td>
+    <td>(none)</td>
+    <td>If specified, each input file is treated as a single JSON object document with a top-level array-valued field of the given name (e.g. <code>{"Records": [record1, record2, ...]}</code>). Each element of that array becomes one row, stored as a single column of <code>VariantType</code>, and anything outside the array is ignored. This is useful for ingesting formats such as AWS CloudTrail. Mutually exclusive with <code>singleVariantColumn</code>. Because each file is consumed as a whole document, line-based options such as <code>multiLine</code> and <code>lineSep</code> are ignored.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
