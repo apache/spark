@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.plans.logical.{Histogram, HistogramBin}
+import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.FieldReference
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2RelationSuite extends SparkFunSuite {
 
@@ -106,5 +111,32 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     // When no histogram: histogram() should be empty
     val idV2NoHist = colStats.get(FieldReference.column("id"))
     assert(!idV2NoHist.histogram().isPresent)
+  }
+
+  test("create strips leaked internal metadata but preserves column IDs") {
+    // A column carrying both a column ID (surfaced on purpose) and a leaked internal
+    // metadata key (METADATA_COL_ATTR_KEY, listed in INTERNAL_METADATA_KEYS).
+    val leakedMetadata = new MetadataBuilder()
+      .putString(METADATA_COL_ATTR_KEY, "leaked")
+      .build()
+    val table = new Table {
+      override def name(): String = "t"
+      override def columns(): Array[Column] = Array(
+        Column.builderFor("id", IntegerType)
+          .id("1")
+          .metadata(leakedMetadata.json)
+          .build())
+      override def capabilities(): util.Set[TableCapability] =
+        util.Collections.emptySet[TableCapability]()
+    }
+
+    val relation =
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+    val field = relation.schema.head
+
+    // The leaked internal metadata key is stripped from the relation output ...
+    assert(!field.metadata.contains(METADATA_COL_ATTR_KEY))
+    // ... but the column ID is preserved.
+    assert(field.id.contains("1"))
   }
 }
