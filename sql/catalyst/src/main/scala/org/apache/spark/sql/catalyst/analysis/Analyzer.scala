@@ -197,6 +197,12 @@ case class AnalysisContext(
      * but only for values derived from this context's immutable fields (the path derives from
      * `resolutionPathEntries` / `catalogAndNamespace`); never memoize anything derived from the
      * mutable fields above (`relationCache`, `referredTempFunctionNames`, ...).
+     *
+     * INVARIANT: keep this a body `var`, never a constructor parameter. `.copy()` (used by
+     * `withAnalysisContext(function)` and `withOuterPlan`) deliberately does not carry a body
+     * field, which is what gives a SQL-function-body / outer-plan context a fresh memo. Promoting
+     * it to a parameter would copy a stale path across that boundary and silently mis-resolve
+     * (SECTION 17f of `FunctionQualificationSuite` is the regression guard).
      */
     private var resolutionPathMemo: Seq[Seq[String]] = _
 

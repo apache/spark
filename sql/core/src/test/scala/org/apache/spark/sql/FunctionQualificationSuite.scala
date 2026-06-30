@@ -1316,7 +1316,11 @@ class FunctionQualificationSuite extends SharedSparkSession {
   }
 
   test("SECTION 17b: SPARK-57758 built-in table-function fast-path") {
-    // Built-in table function resolves via the fast path.
+    // Smoke test that built-in / extension table functions resolve unqualified. Under the default
+    // path `system.builtin` leads, so the slow loop's first candidate is already the built-in --
+    // this yields the same rows whether or not the fast-path fires, and so does not by itself
+    // distinguish the gate's on/off behavior. That signal is asserted by
+    // CatalogManagerSuite.isBuiltinFirstOnPath and by SECTION 17c/17d/17e.
     checkAnswer(sql("SELECT * FROM range(3)"), Seq(Row(0), Row(1), Row(2)))
     // Extension table functions (stored as builtins) also resolve unqualified.
     checkAnswer(sql("SELECT * FROM test_ext_table_func()"), Seq(Row(0L), Row(1L), Row(2L)))
