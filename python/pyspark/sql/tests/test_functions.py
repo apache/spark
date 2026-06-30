@@ -3570,17 +3570,7 @@ class FunctionsTestsMixin:
             ["[1,2,9]", "[[3,9],4]"],
         )
         check(df.select(F.to_json(F.variant_strip_nulls(v))), ['{"a":1}', '{"b":2}'])
-        check(
-            df.select(F.to_json(F.variant_strip_nulls(F.parse_json(F.lit('{"a": 1, "b": null}'))))),
-            ['{"a":1}', '{"a":1}'],
-        )
-        inc = df.path == "$.a"
-        check(
-            df.select(
-                F.to_json(F.variant_strip_nulls(F.parse_json(F.lit('{"x": [1, null]}')), inc))
-            ),
-            ['{"x":[1]}', '{"x":[1,null]}'],
-        )
+        check(df.select(F.to_json(F.variant_strip_nulls(v, False))), ['{"a":1}', '{"b":2}'])
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 

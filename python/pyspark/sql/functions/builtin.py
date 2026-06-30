@@ -1,4 +1,3 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -22915,10 +22914,10 @@ def variant_array_append(
 
 
 @_try_remote_functions
-def variant_strip_nulls(v: "ColumnOrName", include_arrays: Union[Column, bool] = True) -> Column:
+def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Column:
     """
     Recursively removes null fields from variant objects, and null elements from arrays unless
-    `include_arrays` is False. Returns NULL if any argument is NULL.
+    `include_arrays` is False. Returns NULL if `v` is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -22926,7 +22925,7 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: Union[Column, bool] =
     ----------
     v : :class:`~pyspark.sql.Column` or str
         a variant column or column name
-    include_arrays : :class:`~pyspark.sql.Column` or bool, optional
+    include_arrays : bool, optional
         whether null elements are also removed from arrays. If False, array null elements are kept
         while null fields of nested objects are still removed. Defaults to True.
 
@@ -22951,13 +22950,8 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: Union[Column, bool] =
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    include_arrays_col = (
-        include_arrays if isinstance(include_arrays, Column) else lit(include_arrays)
-    )
     return _invoke_function(
-        "variant_strip_nulls",
-        _to_java_column(v),
-        _to_java_column(include_arrays_col),
+        "variant_strip_nulls", _to_java_column(v), _enum_to_value(include_arrays)
     )
 
 
