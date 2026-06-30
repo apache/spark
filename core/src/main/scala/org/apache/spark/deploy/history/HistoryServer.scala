@@ -68,6 +68,8 @@ class HistoryServer(
   // How many applications the summary ui displays
   private[history] val maxApplications = conf.get(History.HISTORY_UI_MAX_APPS);
 
+  private[history] val historyServerLogEnabled = conf.get(History.HISTORY_SERVER_UI_LOG_ENABLED)
+
   // application
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
@@ -150,12 +152,14 @@ class HistoryServer(
    */
   def initialize(): Unit = {
     attachPage(new HistoryPage(this))
-    attachPage(new LogPage(conf))
+    if (historyServerLogEnabled) {
+      attachPage(new LogPage(conf))
+      addRenderLogHandler(this, conf)
+    }
 
     attachHandler(ApiRootResource.getServletHandler(this))
 
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
-    addRenderLogHandler(this, conf)
 
     val contextHandler = new ServletContextHandler
     contextHandler.setContextPath(HistoryServer.UI_PATH_PREFIX)
