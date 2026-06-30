@@ -356,9 +356,8 @@ class ParquetFileFormat
     }
 
     // An archive is read by unpacking each Parquet entry to a local temp file and reading it with
-    // the plain JVM reader -- Parquet needs random access to its footer, so it cannot be streamed.
-    // ArchiveReader.readLocalizedEntries owns the unpack/iterate/cleanup; the per-entry read reuses
-    // readSingleFile, which keeps `input_file_name()` / `_metadata` pointing at the archive path.
+    // the plain JVM reader (readSingleFile); ArchiveReader.readLocalizedEntries owns the
+    // unpack/iterate/cleanup.
     def readArchiveFile(file: PartitionedFile): Iterator[InternalRow] =
       ArchiveReader.readLocalizedEntries(
         file, broadcastedHadoopConf.value.value,
@@ -511,12 +510,6 @@ class ParquetFileFormat
 
 object ParquetFileFormat extends Logging {
 
-  /**
-   * Whether an archive entry is a Parquet data file. Skips non-Parquet sidecars an archive may
-   * contain (e.g. `_SUCCESS`, `_committed_*`, `_common_metadata`) so an archive reads like a
-   * directory of Parquet part-files. The read path and schema inference must use the same
-   * predicate, or the inferred schema would not match the data that is read.
-   */
   private[parquet] def isParquetArchiveEntry(name: String): Boolean =
     name.toLowerCase(Locale.ROOT).endsWith(".parquet")
 

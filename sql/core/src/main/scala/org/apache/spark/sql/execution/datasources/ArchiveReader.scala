@@ -188,7 +188,6 @@ abstract class ArchiveReader(path: Path) {
   /**
    * Materializes each kept entry to a file under `localDir` as `(entryName, localFile)`, lazily one
    * at a time -- the [[readEntries]] counterpart for random-access formats (Parquet/ORC footers).
-   * The caller owns the produced files and `localDir`.
    */
   final def localizeEntries(
       conf: Configuration,
@@ -206,8 +205,7 @@ abstract class ArchiveReader(path: Path) {
 object ArchiveReader extends Logging {
 
   /**
-   * Whether `path` names an archive this reader can stream. Dispatched purely on the file
-   * extension -- `.tar`, `.tar.gz`, `.tgz`, or `.zip` -- since the bytes are not inspected here.
+   * Whether `path` names an archive this reader can stream.
    */
   def isArchivePath(path: Path): Boolean = {
     val name = path.getName.toLowerCase(Locale.ROOT)
@@ -280,9 +278,8 @@ object ArchiveReader extends Logging {
   }
 
   /**
-   * Copies one entry's bytes to a fresh, uniquely-named file under `localDir` (entries sharing a
-   * basename across archive subdirs won't collide). The entry stream is left open (the reader owns
-   * it); the output file is closed.
+   * Copies one entry's bytes to a unique file under `localDir`.
+   * The entry stream is left open (the reader owns it); the output file is closed.
    */
   private def copyEntryToLocalFile(in: InputStream, localDir: File, entryName: String): File = {
     val rawBasename = entryName.substring(entryName.lastIndexOf('/') + 1)
@@ -295,7 +292,7 @@ object ArchiveReader extends Logging {
 
   /**
    * Reads an archive of random-access files -- the [[readEntries]] counterpart for formats needing
-   * a complete file (Parquet/ORC footers, Excel). The per-entry [[PartitionedFile]] keeps the
+   * a complete file (Parquet/ORC, Excel). The per-entry [[PartitionedFile]] keeps the
    * archive's path, so `input_file_name()`/`_metadata` report it.
    */
   def readLocalizedEntries(
@@ -308,7 +305,7 @@ object ArchiveReader extends Logging {
     val entries = ArchiveReader(file.toPath).localizeEntries(conf, tempDir, entryFilter)
 
     // Element type is `Object`, not `InternalRow`: a batch scan yields `ColumnarBatch`, so
-    // per-element casts would fail; the whole iterator is cast once at the end.
+    // per-element casts would fail;
     val rows = new Iterator[Object] with Closeable {
       private var current: Iterator[Object] = Iterator.empty
       private var currentFile: File = _
@@ -366,13 +363,9 @@ object ArchiveReader extends Logging {
       }
     }
 
-    // Only delete the temp dir here; do NOT close `rows`. `rows` is Closeable and becomes
-    // FileScanRDD's `currentIterator`, which its own (early-registered) task-completion listener
-    // closes -- after downstream exec nodes' listeners, per reverse-order execution. Closing the
-    // per-entry reader from this listener (registered during iteration, so it would run first)
-    // would free the vectorized reader's off-heap column vectors while downstream operators may
-    // still reference them, re-introducing the SPARK-37089 use-after-free. FileScanRDD's close of
-    // `rows` still releases the current reader and the archive stream, so nothing leaks.
+    // Delete only the temp dir here; FileScanRDD closes `rows`. Closing the per-entry reader from
+    // this listener (it runs before FileScanRDD's) would free the vectorized reader's off-heap
+    // vectors while downstream operators still read them.
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] { _ =>
       Utils.deleteRecursively(tempDir)
     })
@@ -380,8 +373,7 @@ object ArchiveReader extends Logging {
   }
 
   /**
-   * Localizes one archive's kept entries and applies `use`, returning `onSkip` when the archive is
-   * missing/corrupt and the matching ignore flag is set. The entries iterator is closed before
+   * Localizes one archive's kept entries and applies `use`. The entries iterator is closed before
    * returning (the driver has no TaskContext), so `use` must consume what it needs first.
    */
   private[datasources] def withLocalizedArchive[T](
@@ -405,7 +397,7 @@ object ArchiveReader extends Logging {
         onSkip
       case NonFatal(e) =>
         Utils.getRootCause(e) match {
-          // A missing archive is a FileNotFoundException (a subtype of IOException); govern it by
+          // A missing archive is a FileNotFoundException; govern it by
           // ignoreMissingFiles (handled above), not by ignoreCorruptFiles -- matching FileScanRDD,
           // which rethrows missing-file errors regardless of ignoreCorruptFiles.
           case _: FileNotFoundException => throw e
