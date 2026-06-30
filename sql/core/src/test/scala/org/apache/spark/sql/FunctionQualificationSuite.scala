@@ -418,6 +418,32 @@ class FunctionQualificationSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-44800: Error Cases - DROP FUNCTION expects a persistent function") {
+    sql("CREATE TEMPORARY FUNCTION drop_persistent_test() RETURNS INT RETURN 1")
+    val sqlText = "DROP FUNCTION drop_persistent_test"
+    try {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlText)
+        },
+        condition = "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP",
+        sqlState = "42809",
+        parameters = Map(
+          "functionName" -> "`drop_persistent_test`",
+          "operation" -> "DROP FUNCTION",
+          "alternative" -> " Please use DROP TEMPORARY FUNCTION to drop a temporary function."
+        ),
+        context = ExpectedContext(
+          fragment = sqlText,
+          start = 0,
+          stop = sqlText.length - 1
+        )
+      )
+    } finally {
+      sql("DROP TEMPORARY FUNCTION IF EXISTS drop_persistent_test")
+    }
+  }
+
   test("SECTION 7d: Error Cases - cannot create function in builtin namespace (CREATE FUNCTION)") {
     checkError(
       exception = intercept[AnalysisException] {
