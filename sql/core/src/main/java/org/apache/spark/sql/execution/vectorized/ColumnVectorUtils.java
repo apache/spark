@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -236,6 +237,8 @@ public class ColumnVectorUtils {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
+      } else if (t instanceof TimeType) {
+        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o));
       } else {
         throw new SparkUnsupportedOperationException(
           "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
