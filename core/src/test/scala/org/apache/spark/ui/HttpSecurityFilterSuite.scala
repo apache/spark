@@ -153,7 +153,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
   }
 
-  test("frame-ancestors is set when full CSP is disabled but frameAncestors is enabled") {
+  test("no CSP header when CSP is disabled regardless of frameAncestors setting") {
     val conf = new SparkConf(false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
@@ -163,10 +163,8 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
-    // frameAncestors.enabled defaults to true, so frame-ancestors CSP is emitted
-    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
-    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
-    assert(cspCaptor.getValue === "frame-ancestors 'self';")
+    // CSP is disabled by default, so no CSP header should be emitted
+    verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
   }
 
   test("X-XSS-Protection defaults to 0") {
@@ -182,9 +180,8 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     verify(res).setHeader(meq("X-XSS-Protection"), meq("0"))
   }
 
-  test("no CSP header when both CSP and frameAncestors are disabled") {
+  test("no CSP header when CSP is disabled regardless of frameAncestors setting") {
     val conf = new SparkConf(false)
-      .set(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED, false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
@@ -194,6 +191,40 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     filter.doFilter(req, res, chain)
 
     verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
+  }
+
+  test("frame-ancestors is included in CSP when both CSP and frameAncestors are enabled") {
+    val conf = new SparkConf(false)
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
+      .set(UI_ALLOW_FRAMING_FROM, "https://example.com")
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(cspCaptor.getValue.contains("frame-ancestors 'self' https://example.com"))
+  }
+
+  test("frame-ancestors is excluded from CSP when frameAncestors is disabled") {
+    val conf = new SparkConf(false)
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
+      .set(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED, false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(!cspCaptor.getValue.contains("frame-ancestors"))
   }
 
   test("doAs impersonation") {
@@ -303,6 +334,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
   test("allowFramingFrom value is sanitized to prevent CSP directive injection") {
     val conf = new SparkConf(false)
       .set(UI_ALLOW_FRAMING_FROM, "evil.com; script-src 'unsafe-inline'")
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
@@ -336,6 +368,41 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     verify(chain, times(0)).doFilter(any(), any())
     // But X-Frame-Options should still be set
     verify(res).setHeader(meq("X-Frame-Options"), meq("SAMEORIGIN"))
+  }
+
+  test("allowFramingFrom=DENY maps to frame-ancestors 'none'") {
+    val conf = new SparkConf(false)
+      .set(UI_ALLOW_FRAMING_FROM, "DENY")
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(cspCaptor.getValue.contains("frame-ancestors 'none'"))
+  }
+
+  test("allowFramingFrom=SAMEORIGIN maps to frame-ancestors 'self'") {
+    val conf = new SparkConf(false)
+      .set(UI_ALLOW_FRAMING_FROM, "SAMEORIGIN")
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(cspCaptor.getValue.contains("frame-ancestors 'self'"))
+    assert(!cspCaptor.getValue.contains("SAMEORIGIN"))
   }
 
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {

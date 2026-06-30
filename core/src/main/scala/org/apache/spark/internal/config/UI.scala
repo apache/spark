@@ -151,10 +151,10 @@ private[spark] object UI {
 
   val UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED =
     ConfigBuilder("spark.ui.contentSecurityPolicy.frameAncestors.enabled")
-      .doc("Whether to set the CSP frame-ancestors directive for clickjacking protection, " +
-        "even when the full CSP header (spark.ui.contentSecurityPolicy.enabled) is disabled. " +
-        "When enabled, the frame-ancestors directive is emitted to enforce the " +
-        "spark.ui.allowFramingFrom setting.")
+      .doc("Whether to include the frame-ancestors directive in the CSP header " +
+        "when spark.ui.contentSecurityPolicy.enabled is true. When enabled, the " +
+        "frame-ancestors directive enforces the spark.ui.allowFramingFrom setting. " +
+        "This setting is ignored when spark.ui.contentSecurityPolicy.enabled is false.")
       .version("4.2.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

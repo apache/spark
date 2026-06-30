@@ -51,36 +51,35 @@ private class HttpSecurityFilter(
 
     val cspNonce = CspNonce.generate()
     try {
-      val cspEnabled = conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)
-      val frameAncestorsEnabled = conf.get(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED)
-
-      if (cspEnabled || frameAncestorsEnabled) {
+      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)) {
         // Use CSP frame-ancestors as the primary clickjacking protection mechanism.
         // X-Frame-Options ALLOW-FROM is deprecated and ignored by modern browsers
         // (Chrome, Firefox, Edge, Safari), so frame-ancestors is used instead.
-        val frameAncestors = conf.get(UI_ALLOW_FRAMING_FROM)
-          .filterNot(v => v.equalsIgnoreCase("SAMEORIGIN"))
-          .map { uri =>
-            if (uri.equalsIgnoreCase("DENY")) {
-              "frame-ancestors 'none'"
-            } else {
-              // Sanitize the URI: truncate at semicolons to prevent CSP directive injection,
-              // and strip newlines to prevent header injection.
-              val sanitized = uri.replaceAll("[\\r\\n]+", "").split(";", 2)(0).trim
-              if (sanitized.isEmpty) "frame-ancestors 'self'"
-              else s"frame-ancestors 'self' $sanitized"
-            }
+        val frameAncestorsDirective =
+          if (conf.get(UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED)) {
+            val frameAncestors = conf.get(UI_ALLOW_FRAMING_FROM)
+              .filterNot(v => v.equalsIgnoreCase("SAMEORIGIN"))
+              .map { uri =>
+                if (uri.equalsIgnoreCase("DENY")) {
+                  "frame-ancestors 'none'"
+                } else {
+                  // Sanitize the URI: truncate at semicolons to prevent CSP directive
+                  // injection, and strip newlines to prevent header injection.
+                  val sanitized = uri.replaceAll("[\\r\\n]+", "").split(";", 2)(0).trim
+                  if (sanitized.isEmpty) "frame-ancestors 'self'"
+                  else s"frame-ancestors 'self' $sanitized"
+                }
+              }
+              .getOrElse("frame-ancestors 'self'")
+            s" $frameAncestors;"
+          } else {
+            ""
           }
-          .getOrElse("frame-ancestors 'self'")
 
-        if (cspEnabled) {
-          hres.setHeader("Content-Security-Policy",
-            s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
-            s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
-            s"object-src 'none'; base-uri 'self'; $frameAncestors;")
-        } else {
-          hres.setHeader("Content-Security-Policy", s"$frameAncestors;")
-        }
+        hres.setHeader("Content-Security-Policy",
+          s"default-src 'self'; script-src 'self' 'nonce-$cspNonce'; " +
+          s"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+          s"object-src 'none'; base-uri 'self';$frameAncestorsDirective")
       }
 
       // X-Frame-Options is set before access control so that even error responses

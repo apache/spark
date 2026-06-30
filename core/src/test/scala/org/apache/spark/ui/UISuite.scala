@@ -473,6 +473,7 @@ class UISuite extends SparkFunSuite {
     // Set the config value directly to bypass validation, simulating what could happen
     // if someone bypasses the config validation (e.g., through direct property setting)
     conf.set("spark.ui.allowFramingFrom", valueWithNewlines)
+    conf.set("spark.ui.contentSecurityPolicy.enabled", "true")
 
     val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
     try {
