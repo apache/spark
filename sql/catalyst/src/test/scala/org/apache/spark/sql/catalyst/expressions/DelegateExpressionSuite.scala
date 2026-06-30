@@ -61,14 +61,14 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private object CastFn extends DelegateFunction {
     override val name = "castfn"
     override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
-    override def implicitCast = true
+    override def implicitCast: Boolean = true
     override def lower(args: Seq[Expression]): Expression = args.head
   }
 
   private object CheckFn extends DelegateFunction {
     override val name = "checkfn"
     override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType)
-    override def implicitCast = false
+    override def implicitCast: Boolean = false
     override def lower(args: Seq[Expression]): Expression = args.head
   }
 
@@ -120,7 +120,8 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val e = intercept[AnalysisException](CheckFn.build(CheckFn.name, args))
       assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION")
     }
-    // AnyFn has no inputTypes -> it is variadic and `lower` owns the arg handling, so no arity check.
+    // AnyFn has no inputTypes -> it is variadic and `lower` owns the arg handling, so no arity
+    // check.
     assert(AnyFn.build(AnyFn.name, Seq(Literal(1), Literal(2))).isInstanceOf[DelegateExpression])
   }
 
@@ -129,8 +130,8 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val okDelegate = CheckFn.build(CheckFn.name, Seq(Literal(1)))
     assert(!RemoveInputTypeMarkers.removeMarkers(okDelegate).exists(_.isInstanceOf[TypeCheckInput]),
       "a resolved TypeCheckInput should be unwrapped")
-    // ... but a type-mismatched (unresolved) marker is left in place, so its ExpectsInputTypes failure
-    // stays visible to CheckAnalysis instead of exposing a resolved child of the wrong type.
+    // ... but a type-mismatched (unresolved) marker is left in place, so its ExpectsInputTypes
+    // failure stays visible to CheckAnalysis instead of exposing a resolved child of a wrong type.
     val badDelegate = CheckFn.build(CheckFn.name, Seq(Literal(1L)))
     val cleaned = RemoveInputTypeMarkers.removeMarkers(badDelegate)
     assert(cleaned.exists(_.isInstanceOf[TypeCheckInput]),
@@ -152,7 +153,8 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("apply (direct construction) inserts no markers; args must already be typed") {
     // Unlike `build`, `apply` is construct-anywhere and never produces input-type markers.
     assert(CastFn(Literal("x")).definition == Literal("x"))
-    assert(MixedFn(Literal("s"), Literal(2)).definition == CreateArray(Seq(Literal("s"), Literal(2))))
+    assert(
+      MixedFn(Literal("s"), Literal(2)).definition == CreateArray(Seq(Literal("s"), Literal(2))))
   }
 
   test("apply rejects unresolved arguments") {

@@ -345,9 +345,10 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val map = mutable.HashMap.empty[Predicate, Expression]
     val translated = DataSourceV2Strategy.translateFilterV2WithMapping(delegate, Some(map))
     assert(translated.isDefined, "the compound delegate should translate via its definition")
-    // The whole V2And is mapped back to the delegate (it was translated as a single leaf). Rebuilding
-    // must restore the delegate via the exact map entry, not descend into the synthetic children that
-    // have no map entries -- descending would throw "Failed to rebuild Expression for filter".
+    // The whole V2And is mapped back to the delegate (it was translated as a single leaf).
+    // Rebuilding must restore the delegate via the exact map entry, not descend into the synthetic
+    // children that have no map entries -- descending would throw
+    // "Failed to rebuild Expression for filter".
     val rebuilt = DataSourceV2Strategy.rebuildExpressionFromFilter(translated.get, map)
     assert(rebuilt == delegate, s"expected the original delegate, got $rebuilt")
   }

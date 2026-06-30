@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, DelegateExpression, ImplicitCastInput, Literal, MultiGetJsonObject, TypeCheckInput}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverRunner
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, DelegateExpression, ImplicitCastInput, Literal, MultiGetJsonObject, TypeCheckInput}
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.execution.{LowerDelegateExpression, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
@@ -27,9 +27,9 @@ import org.apache.spark.sql.types.StringType
 
 /**
  * End-to-end proof for the delegate-expression redesign: `right()` is built as a
- * [[DelegateExpression]] -- a logical-phase wrapper that stays readable in the optimized plan and is
- * lowered to its real definition (by `LowerDelegateExpression`) before physical execution, so the
- * planner, pushdown, columnar rules and codegen see the actual executed expression.
+ * [[DelegateExpression]] -- a logical-phase wrapper that stays readable in the optimized plan and
+ * is lowered to its real definition (by `LowerDelegateExpression`) before physical execution, so
+ * the planner, pushdown, columnar rules and codegen see the actual executed expression.
  */
 class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
 
@@ -116,7 +116,8 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
       assert(!analyzed.exists(_.expressions.exists(_.exists(e =>
         e.isInstanceOf[ImplicitCastInput] || e.isInstanceOf[TypeCheckInput]))),
         s"input shims should be stripped under single-pass:\n$analyzed")
-      // ... and the implicit cast the marker drove still applies (the marker was removed, not the Cast).
+      // ... and the implicit cast the marker drove still applies (the marker was removed, not the
+      // Cast).
       assert(analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Cast]))),
         s"expected the implicit Cast to survive marker removal:\n$analyzed")
     }
@@ -134,8 +135,8 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("right() preserves the input column's collation in its output type") {
-    // `Right.lower` builds the null/empty `If` branches as plain StringType literals (it cannot read
-    // the not-yet-coerced arg's dataType); type coercion then re-unifies the branches to the
+    // `Right.lower` builds the null/empty `If` branches as plain StringType literals (it cannot
+    // read the not-yet-coerced arg's dataType); type coercion then re-unifies the branches to the
     // column's collation, since string literals carry the weakest collation strength.
     val df = spark.sql("SELECT right('Hello' COLLATE UTF8_LCASE, 3) AS r")
     assert(df.schema("r").dataType === StringType("UTF8_LCASE"),
@@ -144,9 +145,9 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("right() preserves the input CHAR/VARCHAR type with preserveCharVarcharTypeInfo") {
-    // `Right.lower` types its null/empty `If` branch literals with `str.dataType` (the resolved input
-    // type the marker delegates), so the result keeps CHAR(N) instead of being widened to plain string
-    // when type coercion unifies the branches.
+    // `Right.lower` types its null/empty `If` branch literals with `str.dataType` (the resolved
+    // input type the marker delegates), so the result keeps CHAR(N) instead of being widened to
+    // plain string when type coercion unifies the branches.
     withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
       checkAnswer(spark.sql("SELECT typeof(right(CAST('abc' AS CHAR(5)), 2)) AS t"), Row("char(5)"))
     }
@@ -154,7 +155,7 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
 
   test("right() rejects a wrong number of arguments with WRONG_NUM_ARGS") {
     // `DelegateFunction.build` validates arity before lowering, so too few/too many arguments fail
-    // with the structured error rather than an IndexOutOfBounds or a silently ignored extra argument.
+    // with the structured error rather than an IndexOutOfBounds or a silently ignored extra arg.
     Seq("SELECT right('abcd')", "SELECT right('abcd', 1, 99)").foreach { q =>
       val e = intercept[AnalysisException](spark.sql(q))
       assert(e.getCondition == "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
