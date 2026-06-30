@@ -63,9 +63,9 @@ case class Scd2BatchProcessor(
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
     val row = Scd2IntervalColumns(recordStartAtCol, startAtCol, endAtCol)
 
-    // All rows except decomposition tails have a non-null recordStartAt. Tails use their
-    // logical endAt to order against other rows. That endAt comes from a real CDC event
-    // from some processed microbatch, so it is comparable to other rows' recordStartAt.
+    // Order by effective recordStartAt. The decomposition-tail fallback - tails carry a null
+    // recordStartAt and order by their endAt instead - is encapsulated in
+    // Scd2IntervalColumns.effectiveRecordStartAt, so no tail special-casing is needed here.
     val effectiveRecordStartAt = row.effectiveRecordStartAt.asc
 
     val orderDecompositionTailsFirst = RowClassifier.isDecompositionTail(row).desc
@@ -439,9 +439,9 @@ case class Scd2BatchProcessor(
    *   a dataframe with the same schema as the input. Every closed non-tombstone row that
    *   was bisected has been replaced by its head + tail pair; every other row is carried
    *   through as-is. Each output row can be classified as one of: {decomposition head,
-   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}. It's possible
-   *   that some of the returned decomposition tails are logically redundant, as deletion
-   *   markers that are immediately overtaken by a succeeding row.
+   *   decomposition tail, instantaneous delete, open upsert, closed-and-unbisected row}. It's
+   *   possible that some of the returned decomposition tails are logically redundant, as
+   *   deletion markers that are immediately overtaken by a succeeding row.
    */
   private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
@@ -532,8 +532,8 @@ case class Scd2BatchProcessor(
 
   /**
    * Asserts that every row in `decomposedRowsPerKey` conforms to one of the four canonical
-   * post-decomposition shapes - tombstone, open upsert, closed upsert, or decomposition
-   * tail - and is otherwise a structural identity transform.
+   * post-decomposition shapes - instantaneous delete, open upsert, closed upsert, or
+   * decomposition tail - and is otherwise a structural identity transform.
    *
    * @param decomposedRowsPerKey
    *   the output of [[decomposeOutOfOrderRows]]: a dataframe conforming to the canonical
@@ -556,7 +556,7 @@ case class Scd2BatchProcessor(
     val row = Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
     val isWellFormedRow =
       RowClassifier.isDecompositionTail(row) ||
-        RowClassifier.isTombstone(row) ||
+        RowClassifier.isDeleteRepresentingRow(row) ||
         RowClassifier.isUpsertRepresentingRow(row)
 
     def stringOrNullLit(c: Column): Column = F.coalesce(c.cast(StringType), F.lit("null"))
@@ -942,16 +942,15 @@ object RowClassifier {
     isOpenUpsert(row) || isClosedUpsert(row)
 
   /**
-   * Tombstone (delete-boundary) row, encoded as an instantaneous interval at
-   * `recordStartAt`. Never materializes in the target table, only in the aux table.
+   * Delete-representing row, encoded as an instantaneous (zero-width) interval at `recordStartAt`
+   * (`startAt == endAt == recordStartAt`). Never materializes in the target table.
    *
-   * User-data column values on tombstones are not part of the SCD2 contract: they may
-   * reflect the originating delete event, the values of the upsert whose closed-interval
-   * row was bisected (when the tombstone was promoted from a decomposition tail), or be
-   * null altogether. Reconciliation does not consume these values for any semantic
-   * decision.
+   * User-data column values on these rows are not part of the SCD2 contract: they may reflect
+   * the originating delete event, the values of the upsert whose closed-interval row was bisected
+   * (when promoted from a decomposition tail), or be null altogether. Reconciliation does not
+   * consume these values for any semantic decision.
    */
-  private[autocdc] def isTombstone(row: Scd2IntervalColumns): Column =
+  private[autocdc] def isDeleteRepresentingRow(row: Scd2IntervalColumns): Column =
     row.recordStartAt.isNotNull &&
       row.startAt.isNotNull &&
       row.endAt.isNotNull &&
