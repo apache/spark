@@ -12,7 +12,7 @@ URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
 SystemRequirements: Java (>= 17, < 26)
 Depends:
-    R (>= 3.5),
+    R (>= 4.0),
     methods
 Suggests:
     knitr,
