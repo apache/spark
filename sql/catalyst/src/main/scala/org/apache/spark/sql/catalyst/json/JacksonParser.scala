@@ -39,7 +39,7 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.Utils
 
 /**
@@ -378,6 +378,21 @@ class JacksonParser(
       (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
           timestampNTZFormatter.parseWithoutTimeZone(parser.getText, false)
+      }
+
+    case t: TimestampLTZNanosType =>
+      (parser: JsonParser) => parseJsonToken[TimestampNanosVal](parser, dataType) {
+        // Unlike the microsecond TimestampType, the nanosecond types accept only string input.
+        // The numeric-epoch shorthand (a JSON integer read as epoch seconds) is legacy
+        // TimestampType behavior and is intentionally not carried over to the nanos types.
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timestampFormatter.parseNanos(parser.getText, t.precision)
+      }
+
+    case t: TimestampNTZNanosType =>
+      (parser: JsonParser) => parseJsonToken[TimestampNanosVal](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timestampNTZFormatter.parseWithoutTimeZoneNanos(parser.getText, t.precision, false)
       }
 
     case DateType =>
