@@ -371,6 +371,9 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
+    // Exclude nanosecond timestamp types: ApproximatePercentile and
+    // ApproxCountDistinctForIntervals do not accept them yet (separate scope).
+    case _: AnyTimestampNanoType => false
     case _: DatetimeType => true
     case _ => false
   }

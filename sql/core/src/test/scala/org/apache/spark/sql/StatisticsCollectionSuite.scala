@@ -237,6 +237,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(roundtrip === Some(catalogStat))
   }
 
+  test("SPARK-57839: ANALYZE TABLE FOR COLUMNS on nanosecond timestamp collects basic stats") {
+    // Nanosecond timestamp columns should collect basic stats (min/max/ndv) but skip histogram,
+    // since ApproximatePercentile and ApproxCountDistinctForIntervals do not accept nanos types.
+    val table = "nanos_analyze_test"
+    withTable(table) {
+      sql(
+        s"""CREATE TABLE $table (id INT, ts_ntz TIMESTAMP_NTZ(9), ts_ltz TIMESTAMP_LTZ(9))
+           |USING PARQUET""".stripMargin)
+      sql(s"INSERT INTO $table VALUES (1, TIMESTAMP_NTZ'2024-01-01 00:00:00.123456789', " +
+        "TIMESTAMP_LTZ'2024-01-01 00:00:00.123456789')")
+      sql(s"INSERT INTO $table VALUES (2, TIMESTAMP_NTZ'2024-06-15 12:30:00.987654321', " +
+        "TIMESTAMP_LTZ'2024-06-15 12:30:00.987654321')")
+
+      // Should succeed with histograms enabled - nanos cols get basic stats, no histogram error
+      withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+        sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS ts_ntz, ts_ltz")
+      }
+
+      val stats = getCatalogTable(table).stats
+      assert(stats.isDefined)
+      assert(stats.get.colStats.contains("ts_ntz"))
+      assert(stats.get.colStats.contains("ts_ltz"))
+      // Verify basic stats collected (no histogram field for nanos columns)
+      val ntzStats = stats.get.colStats("ts_ntz")
+      assert(ntzStats.distinctCount.contains(2))
+      assert(ntzStats.nullCount.contains(0))
+      assert(ntzStats.histogram.isEmpty, "Nanos columns should not have histograms")
+    }
+  }
+
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)

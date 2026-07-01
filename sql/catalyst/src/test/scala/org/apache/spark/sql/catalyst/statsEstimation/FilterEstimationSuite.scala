@@ -1071,4 +1071,48 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 2)
   }
 
+  // column ctsLtzNanos: LTZ nanos type with sub-microsecond values (nanosWithinMicro != 0).
+  // Values span epochMicros=1000 nanos=500 to epochMicros=1009 nanos=500
+  // i.e. total epoch nanos 1000500..1009500 (range = 9000 nanos)
+  val tsLtzNanosMin = TimestampNanosVal.fromParts(1000L, 500.toShort)
+  val tsLtzNanosMax = TimestampNanosVal.fromParts(1009L, 500.toShort)
+  val attrTsLtzNanos = AttributeReference("ctsltznanos", TimestampLTZNanosType(9))()
+  val colStatTsLtzNanos = ColumnStat(distinctCount = Some(10),
+    min = Some(tsLtzNanosMin), max = Some(tsLtzNanosMax),
+    nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+
+  test("ctsltznanos < TimestampNanosVal(1003, 500) - LTZ type with sub-microsecond") {
+    // Range [1000500, 1009500], value = 1003500, fraction = 3000/9000 = 1/3
+    // Rows = ceil(10 * 3/9) = 4, ndv = ceil(10 * 3/9) = 4
+    val tsVal = TimestampNanosVal.fromParts(1003L, 500.toShort)
+    val ltzMap = AttributeMap(Seq(attrTsLtzNanos -> colStatTsLtzNanos))
+    validateEstimatedStats(
+      Filter(LessThan(attrTsLtzNanos, Literal(tsVal, TimestampLTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsLtzNanos), 10L, ltzMap)),
+      Seq(attrTsLtzNanos -> ColumnStat(distinctCount = Some(4),
+        min = Some(tsLtzNanosMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("ctsnanos = TimestampNanosVal(1003, 456) - sub-microsecond nanosWithinMicro") {
+    // Test that sub-microsecond nanosWithinMicro term is exercised in toDouble estimation.
+    // The value 1003*1000+456 = 1003456 falls within range [1000000, 1009000].
+    val subMicroMin = TimestampNanosVal.fromParts(1000L, 0.toShort)
+    val subMicroMax = TimestampNanosVal.fromParts(1009L, 0.toShort)
+    val attrSubMicro = AttributeReference("ctssubmicro", TimestampNTZNanosType(9))()
+    val colStatSubMicro = ColumnStat(distinctCount = Some(10),
+      min = Some(subMicroMin), max = Some(subMicroMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val subMicroMap = AttributeMap(Seq(attrSubMicro -> colStatSubMicro))
+    val tsVal = TimestampNanosVal.fromParts(1003L, 456.toShort)
+    validateEstimatedStats(
+      Filter(EqualTo(attrSubMicro, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrSubMicro), 10L, subMicroMap)),
+      Seq(attrSubMicro -> ColumnStat(distinctCount = Some(1),
+        min = Some(tsVal), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 1)
+  }
+
 }

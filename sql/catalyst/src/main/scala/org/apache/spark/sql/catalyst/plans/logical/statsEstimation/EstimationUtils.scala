@@ -138,6 +138,8 @@ object EstimationUtils {
     dataType match {
       case _: NumericType | DateType | TimestampType => value.toString.toDouble
       case _: AnyTimestampNanoType =>
+        // Note: epochMicros*1000+nanosWithinMicro exceeds Double's 2^53 exact-integer range for
+        // real-world dates, so this conversion is slightly lossy. Acceptable for estimation only.
         val v = value.asInstanceOf[TimestampNanosVal]
         v.epochMicros * 1000.0 + v.nanosWithinMicro
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
