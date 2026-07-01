@@ -3029,6 +3029,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
         and not runner_conf.use_legacy_pandas_udf_conversion
     ):
+        import numpy as np
         import pyarrow as pa
 
         # --- UDF preparation ---
@@ -3065,6 +3066,49 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             for f in eval_conf.input_type
         ]
 
+        def _input_fast_listify_safe(dt: DataType) -> bool:
+            # For an array column whose leaf elements need no per-element input
+            # converter, pa.Array.to_pylist() is markedly slower than
+            # arr.to_pandas() followed by turning the resulting numpy ndarrays back
+            # into Python lists. This flag marks such columns; the leaf must be a
+            # type for which ArrowTableToRowsConversion needs no converter (so the
+            # column-level converter is None), which is why we only recurse through
+            # ArrayType here -- Map/Struct/other types either need a converter or do
+            # not benefit.
+            return isinstance(dt, ArrayType) and (
+                _input_fast_listify_safe(dt.elementType)
+                or not ArrowTableToRowsConversion._need_converter(dt.elementType)
+            )
+
+        # Per input column: (converter, use_pandas_listify). The two are mutually
+        # exclusive -- listify only applies when no per-element converter is needed.
+        input_col_plan = [
+            (
+                conv,
+                conv is None and _input_fast_listify_safe(f.dataType),
+            )
+            for conv, f in zip(arrow_to_py_converters, eval_conf.input_type)
+        ]
+
+        def _ndarray_to_list(value: Any) -> Any:
+            # Recursively turn numpy ndarrays (as produced by pa.Array.to_pandas()
+            # for nested list types) into Python lists, so UDFs see the same object
+            # types (list, not ndarray) that to_pylist() would have produced.
+            if isinstance(value, np.ndarray):
+                return [_ndarray_to_list(v) for v in value.tolist()]
+            elif isinstance(value, list):
+                return [_ndarray_to_list(v) for v in value]
+            else:
+                return value
+
+        def _column_to_pylist(col: "pa.Array", conv, listify: bool) -> list:
+            if listify:
+                return [_ndarray_to_list(v) for v in col.to_pandas()]
+            elif conv is not None:
+                return [conv(v) for v in col.to_pylist()]
+            else:
+                return col.to_pylist()
+
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func, rows):
             if runner_conf.arrow_concurrency_level <= 0:
@@ -3080,8 +3124,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 # --- Input: Arrow -> Python columns ---
                 columns = [
-                    [conv(v) for v in col.to_pylist()] if conv is not None else col.to_pylist()
-                    for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
+                    _column_to_pylist(col, conv, listify)
+                    for col, (conv, listify) in zip(input_batch.itercolumns(), input_col_plan)
                 ]
                 if not columns:
                     columns = [[_NoValue] * num_rows]

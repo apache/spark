@@ -163,6 +163,51 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             ],
         )
 
+    def test_array_input_is_python_list(self):
+        # The input conversion for array columns must hand the UDF Python lists
+        # (not numpy ndarrays), at any nesting depth. This guards the fast input
+        # path that builds columns via to_pandas() instead of to_pylist().
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.range(0, 3).selectExpr(
+                "transform(sequence(0, 2), i -> cast(id + i as int)) as arr",
+                "transform(sequence(0, 1), "
+                "i -> array(cast(id + i as int), cast(id as int))) as nested",
+            )
+
+            @udf(returnType=StringType())
+            def type_of(x):
+                return type(x).__name__
+
+            @udf(returnType=StringType())
+            def type_of_inner(x):
+                return type(x[0]).__name__ if x else "empty"
+
+            row = df.select(
+                type_of("arr").alias("outer"),
+                type_of_inner("nested").alias("inner"),
+            ).first()
+            self.assertEqual(row.outer, "list")
+            self.assertEqual(row.inner, "list")
+
+    def test_array_string_input_values(self):
+        # array<string> input values must be preserved exactly through the fast
+        # input path.
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.range(0, 3).selectExpr(
+                "transform(sequence(0, 1), i -> cast(id + i as string)) as arr"
+            )
+
+            @udf(returnType=StringType())
+            def joined(a):
+                return ",".join(a)
+
+            result = [r.res for r in df.select(joined("arr").alias("res")).collect()]
+            self.assertEqual(result, ["0,1", "1,2", "2,3"])
+
     def test_type_coercion_string_to_numeric(self):
         df_int_value = self.spark.createDataFrame(["1", "2"], schema="string")
         df_floating_value = self.spark.createDataFrame(["1.1", "2.2"], schema="string")
