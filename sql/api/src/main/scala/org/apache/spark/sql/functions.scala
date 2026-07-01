@@ -8785,7 +8785,8 @@ object functions {
         messageParameters = Map("interval" -> bucketWidth))
     }
     val micros = Math.addExact(
-      Math.multiplyExact(interval.days.toLong, MICROS_PER_DAY), interval.microseconds)
+      Math.multiplyExact(interval.days.toLong, MICROS_PER_DAY),
+      interval.microseconds)
     time_of_day_bucket(lit(SparkIntervalUtils.microsToDuration(micros)), time)
   }
 

@@ -372,6 +372,7 @@
 | org.apache.spark.sql.catalyst.expressions.TimeFromMicros | time_from_micros | SELECT time_from_micros(0) | struct<time_from_micros(0):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromMillis | time_from_millis | SELECT time_from_millis(0) | struct<time_from_millis(0):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromSeconds | time_from_seconds | SELECT time_from_seconds(0) | struct<time_from_seconds(0):time(6)> |
+| org.apache.spark.sql.catalyst.expressions.TimeOfDayBucket | time_of_day_bucket | SELECT time_of_day_bucket(INTERVAL '15' MINUTE, TIME'09:37:22') | struct<time_of_day_bucket(INTERVAL '15' MINUTE, TIME '09:37:22'):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeToMicros | time_to_micros | SELECT time_to_micros(TIME'00:00:00') | struct<time_to_micros(TIME '00:00:00'):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeToMillis | time_to_millis | SELECT time_to_millis(TIME'00:00:00') | struct<time_to_millis(TIME '00:00:00'):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeToSeconds | time_to_seconds | SELECT time_to_seconds(TIME'00:00:00') | struct<time_to_seconds(TIME '00:00:00'):decimal(14,6)> |
