@@ -3784,6 +3784,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("schema" -> toSQLType(schema)))
   }
 
+  def invalidExplodeEmbeddedArraySchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA",
+      messageParameters = Map("schema" -> toSQLType(schema)))
+  }
+
+  def explodeEmbeddedArrayConflictingOption(option: String): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION",
+      messageParameters = Map("option" -> option))
+  }
+
+  def explodeEmbeddedArrayUnsupportedUsage(usage: String): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE",
+      messageParameters = Map("usage" -> usage))
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
