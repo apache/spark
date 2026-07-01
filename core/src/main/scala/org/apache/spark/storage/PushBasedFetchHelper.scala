@@ -309,7 +309,7 @@ private class PushBasedFetchHelper(
    *
    * @param shuffleBlockId ShuffleMergedBlockId to be checked
    * @param address BlockManagerId of push-based shuffle service
-   * @param chunkBitmaps Chunks bitmap from push-based shuffle service site
+   * @param chunkBitmaps Chunks bitmap from push-based shuffle service side
    * @return false if any stale-marked mapIndex is present in this block (forcing fallback),
    *         true otherwise
    */
