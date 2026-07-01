@@ -202,6 +202,35 @@ class ResolveBinBySuite extends AnalysisTest {
     assert(bi.distributeColumns.map(_.exprId) == Seq(value.exprId))
   }
 
+  test("resolved BinBy emits the DISTRIBUTE column as a produced attribute replacing the input") {
+    // `value` sits mid-schema (not last) and carries a qualifier + metadata, so this covers
+    // in-place replacement, produced identity, and the qualifier/metadata drop in one go.
+    val md = new MetadataBuilder().putString("comment", "a measure").build()
+    val valueMd = AttributeReference("value", DoubleType, nullable = true, md)()
+    val child = SubqueryAlias("m", LocalRelation(tsStart, tsEnd, valueMd, label))
+    val bi = ResolveBinBy.apply(
+      unresolved(child = child, distribute = Seq(UnresolvedAttribute(Seq("m", "value")))))
+      .asInstanceOf[BinBy]
+
+    // The input is read (held in distributeColumns) but not forwarded by identity.
+    assert(bi.distributeColumns.head.qualifier == Seq("m"))
+    assert(bi.distributeColumns.head.metadata == md)
+    assert(!bi.output.exists(_.exprId == valueMd.exprId))
+
+    // It is replaced at its own position by a fresh-id, same-name produced attribute.
+    val outValue = bi.output(child.output.indexWhere(_.exprId == valueMd.exprId))
+    assert(outValue.name == "value" && outValue.exprId != valueMd.exprId)
+    assert(bi.scaledDistributeColumns.map(_.exprId) == Seq(outValue.exprId))
+    assert(bi.producedAttributes.contains(outValue))
+
+    // The produced (computed) value drops the input's qualifier and metadata.
+    assert(outValue.qualifier.isEmpty && outValue.metadata == Metadata.empty)
+
+    // Forwarded (non-distribute) columns keep their identity.
+    assert(bi.output.exists(_.exprId == label.exprId))
+    assert(bi.output.exists(_.exprId == tsStart.exprId))
+  }
+
   test("multipart identifiers disambiguate same-name columns across a JOIN") {
     val t1Start = AttributeReference("ts_start", TimestampType, nullable = true)()
     val t1End = AttributeReference("ts_end", TimestampType, nullable = true)()
@@ -330,9 +359,10 @@ class ResolveBinBySuite extends AnalysisTest {
 
     val binBys = analyzed.collect { case b: BinBy => b }
     assert(binBys.size == 2, s"expected two BinBy nodes, got ${binBys.size}")
-    val appendedExprIds = binBys.flatMap(_.appendedAttributes.map(_.exprId))
-    assert(appendedExprIds.distinct.size == appendedExprIds.size,
-      "appended BinBy attributes must have distinct exprIds across the two join sides")
+    val producedExprIds = binBys.flatMap(b =>
+      (b.scaledDistributeColumns ++ b.appendedAttributes).map(_.exprId))
+    assert(producedExprIds.distinct.size == producedExprIds.size,
+      "produced BinBy attributes must have distinct exprIds across the two join sides")
   }
 
   // `super.test` escapes the suite-wide flag-on wrapper; pin the flag off explicitly.
