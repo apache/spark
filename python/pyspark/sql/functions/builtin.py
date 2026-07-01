@@ -13207,6 +13207,7 @@ def timestamp_nanos(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
     >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
     >>> df = spark.createDataFrame([(1577885075123456789,)], ['nanos'])
     >>> df.select(sf.timestamp_nanos('nanos')).show(truncate=False)
@@ -13224,6 +13225,7 @@ def timestamp_nanos(col: "ColumnOrName") -> Column:
     +-------------------------------------+
 
     >>> spark.conf.unset("spark.sql.timestampNanosTypes.enabled")
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("timestamp_nanos", col)
 
