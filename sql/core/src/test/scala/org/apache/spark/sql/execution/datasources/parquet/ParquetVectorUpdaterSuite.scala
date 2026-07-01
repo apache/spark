@@ -505,12 +505,14 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val incompatible = Seq(
       // INT32 TIME(MILLIS): wrong primitive width.
       Types.primitive(PrimitiveTypeName.INT32, Repetition.OPTIONAL)
-        .as(LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MILLIS)).named("col"),
+        .as(LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MILLIS))
+        .named("col"),
       // raw INT64 with no TIME annotation.
       Types.primitive(PrimitiveTypeName.INT64, Repetition.OPTIONAL).named("col"),
       // INT64 carrying a TIMESTAMP (not TIME) annotation.
       Types.primitive(PrimitiveTypeName.INT64, Repetition.OPTIONAL)
-        .as(LogicalTypeAnnotation.timestampType(false, LogicalTypeAnnotation.TimeUnit.MICROS)).named("col")
+        .as(LogicalTypeAnnotation.timestampType(false, LogicalTypeAnnotation.TimeUnit.MICROS))
+        .named("col")
     )
     incompatible.foreach { pt =>
       val desc = new ColumnDescriptor(Array("col"), pt, 0, 1)
