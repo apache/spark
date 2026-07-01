@@ -1375,8 +1375,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // NULL-intolerant: any NULL argument yields NULL.
     checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(
-        VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1)), StringType)),
+      VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1)),
       null)
     checkInsert("""{"a": 1}""", null, Literal(1), null)
     checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
@@ -1392,44 +1391,37 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(UTF8String.fromString("$.b")))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
       "VARIANT_DUPLICATE_KEY",
       Map("key" -> "a"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("""{"a": 5}""")), Literal("$.a[0]"), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a": 5}""")), Literal("$.a[0]"), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("5")), Literal("$.a"), Literal(2))),
+      VariantInsert(Literal(parseJson("5")), Literal("$.a"), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(VariantInsert(
-        Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2))),
+      VariantInsert(Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2)),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
 
@@ -1440,20 +1432,17 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(uncastableValue.checkInputDataTypes().isFailure)
 
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1))),
+      VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1)),
       "INVALID_VARIANT_PATH",
       Map("path" -> "$", "functionName" -> "`variant_insert`"))
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("{}")), Literal("abc"), Literal(1))),
+      VariantInsert(Literal(parseJson("{}")), Literal("abc"), Literal(1)),
       "INVALID_VARIANT_PATH",
       Map("path" -> "abc", "functionName" -> "`variant_insert`"))
 
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkErrorInExpression[SparkRuntimeException](
-      ResolveTimeZone.resolveTimeZones(
-        VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig))),
+      VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig)),
       "VARIANT_SIZE_LIMIT",
       Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
   }
