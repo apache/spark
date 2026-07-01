@@ -1305,38 +1305,155 @@ class SparkSession:
         return True
 
     @staticmethod
-    def _reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
-        """Reuse a running persistent local Connect server, or start one if none is reusable.
+    def _reuse_from_discovery() -> Optional[str]:
+        """Return an endpoint for the recorded server if it is reusable, else ``None``.
 
-        Returns the ``sc://host:port`` endpoint to connect to and sets
-        ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates against the server. This is
-        the opt-in counterpart of ``_start_connect_server`` and is only reached for a ``local``
-        master when ``spark.local.connect.reuse`` / ``SPARK_LOCAL_CONNECT_REUSE`` is set.
+        On success it also sets ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates
+        against that server.
         """
         disc = SparkSession._read_local_connect_discovery()
         if disc is not None and SparkSession._local_connect_server_is_reusable(disc):
             os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = disc["token"]
             return "sc://{}:{}".format(disc["host"], disc["port"])
-        return SparkSession._start_persistent_local_connect_server(master, opts)
+        return None
+
+    @staticmethod
+    def _acquire_local_connect_start_lock() -> Any:
+        """Take an exclusive file lock guarding persistent-server start-up.
+
+        Returns the open fd to pass to ``_release_local_connect_start_lock``, or ``None`` when file
+        locking is unavailable (e.g. Windows, which has no ``fcntl``); there we rely on the
+        reconnect-the-winner fallback in ``_start_persistent_local_connect_server`` instead.
+        """
+        try:
+            import fcntl
+        except ImportError:
+            return None
+        path = SparkSession._local_connect_discovery_path() + ".lock"
+        parent = os.path.dirname(path)
+        if parent and not os.path.isdir(parent):
+            os.makedirs(parent, exist_ok=True)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return fd
+
+    @staticmethod
+    def _release_local_connect_start_lock(fd: Any) -> None:
+        if fd is None:
+            return
+        try:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+    @staticmethod
+    def _reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
+        """Reuse a running persistent local Connect server, or start one if none is reusable.
+
+        Returns the ``sc://host:port`` endpoint to connect to. This is the opt-in counterpart of
+        ``_start_connect_server`` and is only reached for a ``local`` master when
+        ``spark.local.connect.reuse`` / ``SPARK_LOCAL_CONNECT_REUSE`` is set.
+        """
+        # Fast path: reuse an already-running server without taking the cross-process lock.
+        endpoint = SparkSession._reuse_from_discovery()
+        if endpoint is not None:
+            return endpoint
+        # No reusable server yet. Serialize start-up across processes so concurrent opted-in
+        # processes (parallel workers, an IDE spawning scripts) do not each spawn a server and
+        # collide on the port; the winner writes the discovery file and the others reuse it.
+        lock_fd = SparkSession._acquire_local_connect_start_lock()
+        try:
+            endpoint = SparkSession._reuse_from_discovery()
+            if endpoint is not None:
+                return endpoint
+            return SparkSession._start_persistent_local_connect_server(master, opts)
+        finally:
+            SparkSession._release_local_connect_start_lock(lock_fd)
+
+    @staticmethod
+    def _local_port_available(port: int) -> bool:
+        """Whether ``port`` can currently be bound on localhost (best effort, subject to races)."""
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("localhost", port))
+                return True
+            except OSError:
+                return False
+
+    @staticmethod
+    def _local_connect_server_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
+        """Start-up configs to seed a freshly started persistent server.
+
+        Mirrors the merge that the in-process ``_start_connect_server`` applies to its ``SparkConf``
+        so that first-run behavior matches (warehouse dir, app name, jars/packages, catalog confs,
+        etc.). Keys the daemon controls itself (master, port, token, plugins) and the reuse opt-in
+        keys are excluded. This only seeds the run that *starts* the server; a later run
+        reconnecting to an already-warm JVM cannot change its static configs.
+        """
+        conf: Dict[str, Any] = {}
+        for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+            conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
+        conf.update(opts)
+        for k in (
+            "spark.remote",
+            "spark.api.mode",
+            "spark.master",
+            "spark.connect.authenticate.token",
+            "spark.connect.grpc.binding.port",
+            "spark.local.connect.reuse",
+            "spark.local.connect.server.port",
+            "spark.local.connect.server.idleTimeout",
+        ):
+            conf.pop(k, None)
+        return conf
 
     @staticmethod
     def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
-        """Launch a detached persistent local Connect server and wait until it is reachable."""
+        """Launch a detached persistent local Connect server and wait until it is reachable.
+
+        Callers must hold the start-up lock (see ``_reuse_or_start_local_connect_server``). If the
+        server cannot be started but another process has meanwhile published a reusable one, this
+        reconnects to it rather than failing.
+        """
         import socket
         import subprocess
+        import tempfile
 
         discovery_path = SparkSession._local_connect_discovery_path()
         token = opts.get("spark.connect.authenticate.token") or str(uuid.uuid4())
 
-        # Tests use an ephemeral port (0) so they can run in parallel; the server reports the actual
-        # bound port back through the discovery file.
+        # Choose the port. Tests use an ephemeral port (0) so they can run in parallel. Otherwise we
+        # honor the configured/default port, but fall back to an ephemeral one if it is already
+        # taken -- e.g. by a stale server we just rejected on version mismatch -- so a fresh server
+        # can still start instead of failing to bind.
         if "SPARK_TESTING" in os.environ:
             port = 0
         else:
             port = int(
                 opts.get("spark.local.connect.server.port", DefaultChannelBuilder.default_port())
             )
+            if port != 0 and not SparkSession._local_port_available(port):
+                port = 0
         idle_timeout = opts.get("spark.local.connect.server.idleTimeout", "3600")
+
+        # Seed the server with the caller's start-up confs (warehouse dir, jars, catalog, etc.) so
+        # first-run behavior matches the in-process path. Passed as a JSON file since confs are
+        # arbitrary key/values. Written under the discovery dir with 0600 perms as it may hold
+        # sensitive values, and removed once the daemon has started.
+        conf_file = None
+        seed_conf = SparkSession._local_connect_server_conf(opts)
+        if seed_conf:
+            parent = os.path.dirname(discovery_path)
+            if parent and not os.path.isdir(parent):
+                os.makedirs(parent, exist_ok=True)
+            fd, conf_file = tempfile.mkstemp(prefix="connect-local-conf-", dir=parent or None)
+            with os.fdopen(fd, "w") as f:
+                json.dump(seed_conf, f)
+            os.chmod(conf_file, 0o600)
 
         daemon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_server.py")
         cmd = [
@@ -1353,6 +1470,8 @@ class SparkSession:
             "--idle-timeout",
             str(idle_timeout),
         ]
+        if conf_file is not None:
+            cmd += ["--conf-file", conf_file]
 
         # Launch detached so the server outlives this client process.
         env = dict(os.environ)
@@ -1372,36 +1491,48 @@ class SparkSession:
             popen_kwargs["creationflags"] = detached | new_group
         proc = subprocess.Popen(cmd, **popen_kwargs)
 
-        # Wait for the server to write the discovery file (which records the actual bound port) and
-        # start accepting connections.
-        deadline = time.time() + 120
-        while time.time() < deadline:
-            exit_code = proc.poll()
-            if exit_code is not None:
-                raise PySparkRuntimeError(
-                    errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-                    messageParameters={
-                        "reason": "the server process exited with code {}".format(exit_code)
-                    },
-                )
-            disc = SparkSession._read_local_connect_discovery()
-            if disc is not None and disc.get("pid") == proc.pid and disc.get("token") == token:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(0.5)
-                    if sock.connect_ex((disc["host"], int(disc["port"]))) == 0:
-                        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
-                        return "sc://{}:{}".format(disc["host"], disc["port"])
-            time.sleep(0.25)
-
-        # Timed out: do not leave the detached process orphaned.
         try:
-            proc.terminate()
-        except OSError:
-            pass
-        raise PySparkRuntimeError(
-            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-            messageParameters={"reason": "the server did not become ready within 120 seconds"},
-        )
+            # Wait for the server to write the discovery file (which records the actual bound port)
+            # and start accepting connections.
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                exit_code = proc.poll()
+                if exit_code is not None:
+                    # Our daemon died. Another process may have published a usable server in the
+                    # meantime (e.g. a port race), so prefer reconnecting to it over failing.
+                    endpoint = SparkSession._reuse_from_discovery()
+                    if endpoint is not None:
+                        return endpoint
+                    raise PySparkRuntimeError(
+                        errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                        messageParameters={
+                            "reason": "the server process exited with code {}".format(exit_code)
+                        },
+                    )
+                disc = SparkSession._read_local_connect_discovery()
+                if disc is not None and disc.get("pid") == proc.pid and disc.get("token") == token:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                        sock.settimeout(0.5)
+                        if sock.connect_ex((disc["host"], int(disc["port"]))) == 0:
+                            os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
+                            return "sc://{}:{}".format(disc["host"], disc["port"])
+                time.sleep(0.25)
+
+            # Timed out: do not leave the detached process orphaned.
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+            raise PySparkRuntimeError(
+                errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                messageParameters={"reason": "the server did not become ready within 120 seconds"},
+            )
+        finally:
+            if conf_file is not None:
+                try:
+                    os.remove(conf_file)
+                except OSError:
+                    pass
 
     @staticmethod
     def _stop_local_connect_server() -> bool:
