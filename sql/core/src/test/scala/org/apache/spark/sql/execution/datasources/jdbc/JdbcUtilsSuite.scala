@@ -114,21 +114,21 @@ class JdbcUtilsSuite extends SparkFunSuite {
     assert(JDBCOptions.redactUrl("", None) === "")
   }
 
-  test("SPARK-57471: estimateInternalRowSize estimates ArrayType by element count") {
+  test("SPARK-57471: measureInternalRowSize measures ArrayType by element count") {
     val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
     val row = new GenericInternalRow(Array[Any](new GenericArrayData(Array(1, 2, 3))))
     // 3 elements * 4 bytes (IntegerType.defaultSize) = 12
-    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 12L)
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 12L)
   }
 
-  test("SPARK-57471: estimateRowSize estimates ArrayType by element count") {
+  test("SPARK-57471: measureRowSize measures ArrayType by element count") {
     val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
     val row = Row(Seq(1, 2, 3))
     // 3 elements * 4 bytes (IntegerType.defaultSize) = 12
-    assert(JdbcUtils.estimateRowSize(row, schema) === 12L)
+    assert(JdbcUtils.measureRowSize(row, schema) === 12L)
   }
 
-  test("SPARK-57471: estimateInternalRowSize uses actual size for String and Binary") {
+  test("SPARK-57471: measureInternalRowSize uses actual size for String and Binary") {
     import org.apache.spark.unsafe.types.UTF8String
     val schema = StructType(Seq(
       StructField("s", StringType),
@@ -138,48 +138,63 @@ class JdbcUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("hello"), // 5 bytes
       Array[Byte](1, 2, 3),          // 3 bytes
       null))                          // null -> 0
-    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 8L)
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 8L)
   }
 
-  test("SPARK-57471: estimateRowSize uses actual size for String and Binary") {
+  test("SPARK-57471: measureRowSize uses actual UTF-8 byte size for String and Binary") {
     val schema = StructType(Seq(
       StructField("s", StringType),
       StructField("b", BinaryType),
       StructField("n", StringType)))
     val row = Row("hello", Array[Byte](1, 2, 3), null)
-    // "hello".length=5 + 3 bytes + null=0
-    assert(JdbcUtils.estimateRowSize(row, schema) === 8L)
+    // "hello" -> 5 UTF-8 bytes + 3 bytes + null=0
+    assert(JdbcUtils.measureRowSize(row, schema) === 8L)
   }
 
-  test("SPARK-57471: estimateInternalRowSize measures ArrayType(StringType) by actual content") {
+  test("SPARK-57471: measureRowSize counts actual UTF-8 bytes for non-ASCII strings") {
+    val schema = StructType(Seq(StructField("s", StringType)))
+    // "\u00e9" is 'e-acute' which is 2 UTF-8 bytes but 1 char; "\u4e16" is 3 UTF-8 bytes
+    val row = Row("\u00e9\u4e16") // 2 + 3 = 5 UTF-8 bytes, but only 2 chars
+    assert(JdbcUtils.measureRowSize(row, schema) === 5L)
+  }
+
+  test("SPARK-57471: measureRowSize counts actual UTF-8 bytes for strings in arrays") {
+    val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
+    // Each "\u00e9" is 2 UTF-8 bytes
+    val row = Row(Seq("\u00e9", "\u00e9"))
+    // 2 + 2 = 4 UTF-8 bytes, but 2 chars total
+    assert(JdbcUtils.measureRowSize(row, schema) === 4L)
+  }
+
+  test("SPARK-57471: measureInternalRowSize measures ArrayType(StringType) by actual content") {
     import org.apache.spark.unsafe.types.UTF8String
     val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
     val arr = new GenericArrayData(
       Array(UTF8String.fromString("abc"), UTF8String.fromString("de")))
     val row = new GenericInternalRow(Array[Any](arr))
     // "abc"=3 + "de"=2 = 5, NOT 2*20
-    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 5L)
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 5L)
   }
 
-  test("SPARK-57471: estimateRowSize measures ArrayType(StringType) by actual content") {
+  test("SPARK-57471: measureRowSize measures ArrayType(StringType) by actual content") {
     val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
     val row = Row(Seq("abc", "de"))
-    // "abc".length=3 + "de".length=2 = 5, NOT 2*20
-    assert(JdbcUtils.estimateRowSize(row, schema) === 5L)
+    // "abc"=3 UTF-8 bytes + "de"=2 UTF-8 bytes = 5
+    assert(JdbcUtils.measureRowSize(row, schema) === 5L)
   }
 
-  test("SPARK-57471: estimateInternalRowSize ArrayType(BinaryType) uses actual lengths") {
+  test("SPARK-57471: measureInternalRowSize ArrayType(BinaryType) uses actual lengths") {
     val schema = StructType(Seq(StructField("a", ArrayType(BinaryType))))
     val arr = new GenericArrayData(Array(Array[Byte](1, 2), null, Array[Byte](3, 4, 5)))
     val row = new GenericInternalRow(Array[Any](arr))
     // 2 + 0 (null) + 3 = 5
-    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 5L)
+    assert(JdbcUtils.measureInternalRowSize(row, schema) === 5L)
   }
 
-  test("SPARK-57471: estimateRowSize ArrayType(BinaryType) uses actual lengths") {
+  test("SPARK-57471: measureRowSize ArrayType(BinaryType) uses actual lengths") {
     val schema = StructType(Seq(StructField("a", ArrayType(BinaryType))))
     val row = Row(Seq(Array[Byte](1, 2), null, Array[Byte](3, 4, 5)))
     // 2 + 0 (null) + 3 = 5
-    assert(JdbcUtils.estimateRowSize(row, schema) === 5L)
+    assert(JdbcUtils.measureRowSize(row, schema) === 5L)
   }
 }
