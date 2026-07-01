@@ -450,7 +450,7 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
+    body = "**Merge summary** (posted by `merge_spark_pr.py`):\n" + "\n".join(lines)
     print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
@@ -560,7 +560,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
+    merge_hash = run_cmd("git rev-parse %s" % target_branch_name)[:8]
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
@@ -594,7 +594,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
+    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
