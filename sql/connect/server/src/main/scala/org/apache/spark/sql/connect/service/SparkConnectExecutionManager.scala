@@ -32,8 +32,10 @@ import org.apache.spark.{SparkEnv, SparkSQLException}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
+import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.util.ThreadUtils
 
 // Unique key identifying execution by combination of user, session and operation id
@@ -157,12 +159,12 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     // getting an INVALID_HANDLE.OPERATION_ABANDONED error on a retry.
     if (abandoned) {
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
-      executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
+      executeHolder.sessionHolder.closeOperation(executeHolder)
     }
 
     // Remove the execution from the map *after* putting it in abandonedTombstones.
     executions.remove(key)
-    executeHolder.sessionHolder.closeOperation(executeHolder.operationId)
+    executeHolder.sessionHolder.closeOperation(executeHolder)
 
     updateLastExecutionTime()
 
@@ -190,7 +192,16 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
     val executeHolder = createExecuteHolder(executeKey, request, sessionHolder)
     try {
-      executeHolder.eventsManager.postStarted()
+      // SPARK-53339: Validate the plan before starting the execution thread.
+      // postStarted() was moved into executeInternal(), so invalid plans that previously
+      // caused postStarted() to throw (and thus triggered removeExecuteHolder in this
+      // catch block) now fail asynchronously inside the execution thread. This early
+      // validation ensures that invalid plans are still caught synchronously here.
+      request.getPlan.getOpTypeCase match {
+        case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND => // valid
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(other, request.getPlan.getDescriptorForType)
+      }
       executeHolder.start()
     } catch {
       // Errors raised before the execution holder has finished spawning a thread are considered
@@ -225,7 +236,7 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     } else if (executeHolder.isOrphan()) {
       logWarning(log"Reattach to an orphan operation.")
       removeExecuteHolder(executeHolder.key)
-      throw new IllegalStateException("Operation was orphaned because of an internal error.")
+      throw IllegalStateErrors.operationOrphaned(executeHolder.key.toString)
     }
 
     val responseSender =

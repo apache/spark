@@ -103,6 +103,21 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
     yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
     yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
+    // `maximum-am-resource-percent` defaults to 0.1, which caps the queue's total AM resource
+    // usage to 10% of its capacity. On memory-constrained CI runners this becomes ~1GB, smaller
+    // than the AM/driver memory these tests request (1-2GB), so applications get stuck in the
+    // ACCEPTED state (never activated) and the suite times out waiting for a final state. Let
+    // AMs use the whole queue in tests so applications are always activated.
+    yarnConf.setFloat("yarn.scheduler.capacity.maximum-am-resource-percent", 1.0f)
+    yarnConf.setFloat("yarn.scheduler.capacity.root.default.maximum-am-resource-percent", 1.0f)
+
+    // Give the single mini NodeManager generous memory. By default the mini cluster advertises
+    // only a small amount of memory, so once the AM (~1.4GB) is running there is barely enough
+    // headroom left for the executors these tests request. On a busy CI runner that makes
+    // executor allocation slow/racy and the YarnClusterSuite apps time out waiting to finish.
+    // The CI hosts have plenty of RAM, so let the NM offer enough for the AM plus a few executors.
+    yarnConf.setInt("yarn.nodemanager.resource.memory-mb", 8192)
+    yarnConf.setInt("yarn.scheduler.maximum-allocation-mb", 8192)
 
     // Support both IPv4 and IPv6
     yarnConf.set("yarn.resourcemanager.hostname", Utils.localHostNameForURI())
@@ -285,6 +300,18 @@ abstract class BaseYarnClusterSuite extends SparkFunSuite with Matchers {
         props.setProperty(k, v)
       }
     }
+
+    // On a busy CI runner the in-JVM mini cluster, the driver and the container JVMs all compete
+    // for CPU, and the driver's RPC server occasionally cannot accept a connection in time. With
+    // the default of 3 retries an executor that loses this race gives up and exits, which leaves
+    // the application unable to finish and the suite times out. Give the executor->driver
+    // connection a larger retry budget so a transient stall does not permanently fail the app.
+    // Set after the spark.* JVM properties are copied above so these values are not silently
+    // overridden by an inherited -Dspark.rpc.io.* flag; individual tests can still override them
+    // via extraConf below.
+    props.setProperty("spark.rpc.io.maxRetries", "10")
+    props.setProperty("spark.rpc.io.retryWait", "2s")
+
     extraConf.foreach { case (k, v) => props.setProperty(k, v) }
 
     val propsFile = File.createTempFile("spark", ".properties", tempDir)

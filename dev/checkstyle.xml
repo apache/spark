@@ -66,7 +66,7 @@
 
     <module name="LineLength">
         <property name="max" value="100"/>
-        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+        <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://|// checkstyle\.off: LineLength"/>
     </module>
 
     <module name="NewlineAtEndOfFile"/>
@@ -217,6 +217,10 @@
         <module name="RegexpSinglelineJava">
             <property name="format" value="new ToStringBuilder\("/>
             <property name="message" value="Use String concatenation instead." />
+        </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="StringUtils\.stringifyException"/>
+            <property name="message" value="Use org.apache.spark.util.Utils.stringifyException instead." />
         </module>
         <module name="RegexpSinglelineJava">
             <property name="format" value="Files\.equal\("/>

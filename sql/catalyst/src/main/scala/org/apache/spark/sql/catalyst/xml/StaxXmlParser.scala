@@ -601,6 +601,9 @@ class StaxXmlParser(
           Decimal(decimalParser(datum), dt.precision, dt.scale)
         case _: TimestampType => parseXmlTimestamp(datum, options)
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+        case t: TimestampLTZNanosType => timestampFormatter.parseNanos(datum, t.precision)
+        case t: TimestampNTZNanosType =>
+          timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
         case _: DateType => parseXmlDate(datum, options)
         case _: TimeType => timeFormatter.parse(datum)
         case _: StringType => UTF8String.fromString(datum)
@@ -652,6 +655,8 @@ class StaxXmlParser(
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
         case TimestampNTZType => castTo(value, TimestampNTZType)
+        case t: TimestampLTZNanosType => castTo(value, t)
+        case t: TimestampNTZNanosType => castTo(value, t)
         case _: TimeType => castTo(value, TimeType())
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)
@@ -1262,6 +1267,13 @@ object StaxXmlParser {
       return
     }
 
+    // Skip type inference when the user has disabled it via inferSchema=false, gated by
+    // spark.sql.xml.variant.respectInferSchema so existing workloads keep inferring by default.
+    if (!options.inferSchema && options.respectVariantInferSchema) {
+      builder.appendString(value)
+      return
+    }
+
     // Try parsing the value as boolean first
     if (value.toLowerCase(Locale.ROOT) == "true") {
       builder.appendBoolean(true)
@@ -1284,13 +1296,19 @@ object StaxXmlParser {
     val decimalParser = ExprUtils.getDecimalParser(options.locale)
     try {
       var d = decimalParser(value)
-      if (d.scale() < 0) {
-        d = d.setScale(0)
-      }
-      if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-        d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-        builder.appendDecimal(d)
-        return
+      if (d.scale() < -VariantUtil.MAX_DECIMAL16_PRECISION) {
+        // Scale is so extremely negative that setScale(0) would require computing
+        // bigTenToThe(|scale|), which is prohibitively expensive. The resulting precision
+        // would also exceed MAX_DECIMAL16_PRECISION, so fall through to string.
+      } else {
+        if (d.scale() < 0) {
+          d = d.setScale(0)
+        }
+        if (d.scale <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+          d.precision <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+          builder.appendDecimal(d)
+          return
+        }
       }
     } catch {
       case NonFatal(_) =>

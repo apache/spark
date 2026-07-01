@@ -33,7 +33,6 @@ from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
 from pyspark.sql.utils import is_remote
 
-
 __all__ = ["sql"]
 
 
@@ -193,8 +192,7 @@ def sql(
         from pyspark.pandas import sql_processor
 
         warnings.warn(
-            "Deprecated in 3.3.0, and the legacy behavior "
-            "will be removed in the future releases.",
+            "Deprecated in 3.3.0, and the legacy behavior will be removed in the future releases.",
             FutureWarning,
         )
         return sql_processor.sql(query, index_col=index_col, **kwargs)
@@ -320,7 +318,7 @@ def _test() -> None:
         .appName("pyspark.pandas.sql_formatter tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.sql_formatter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

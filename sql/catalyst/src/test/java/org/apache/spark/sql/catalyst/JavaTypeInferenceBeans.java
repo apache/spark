@@ -80,7 +80,7 @@ public class JavaTypeInferenceBeans {
   }
 
   // SPARK-46679: Test classes for nested parameterized types with multi-level inheritance
-  static class Foo<T> {
+  public static class Foo<T> {
     private T t;
 
     public T getT() {
@@ -92,7 +92,7 @@ public class JavaTypeInferenceBeans {
     }
   }
 
-  static class FooWrapper<U> {
+  public static class FooWrapper<U> {
     private Foo<U> foo;
 
     public Foo<U> getFoo() {
@@ -104,14 +104,14 @@ public class JavaTypeInferenceBeans {
     }
   }
 
-  static class StringFooWrapper extends FooWrapper<String> {
+  public static class StringFooWrapper extends FooWrapper<String> {
   }
 
   // SPARK-46679: Additional test classes for same type variable names at different levels
-  static class StringBarWrapper extends BarWrapper<String> {
+  public static class StringBarWrapper extends BarWrapper<String> {
   }
 
-  static class BarWrapper<T> {
+  public static class BarWrapper<T> {
     private Bar<T> bar;
 
     public Bar<T> getBar() {
@@ -123,7 +123,7 @@ public class JavaTypeInferenceBeans {
     }
   }
 
-  static class Bar<T> {
+  public static class Bar<T> {
     private T t;
 
     public T getT() {

@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.*;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonToken;
@@ -43,7 +42,12 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  */
 public class VariantBuilder {
   public VariantBuilder(boolean allowDuplicateKeys) {
+    this(allowDuplicateKeys, true);
+  }
+
+  public VariantBuilder(boolean allowDuplicateKeys, boolean validateUnicodeInJsonParsing) {
     this.allowDuplicateKeys = allowDuplicateKeys;
+    this.validateUnicodeInJsonParsing = validateUnicodeInJsonParsing;
   }
 
   /**
@@ -53,19 +57,76 @@ public class VariantBuilder {
    * @throws IOException if any JSON parsing error happens.
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
-    try (JsonParser parser = new JsonFactory().createParser(json)) {
+    return parseJson(json, allowDuplicateKeys, true);
+  }
+
+  /**
+   * Similar to {@link #parseJson(String, boolean)}, but additionally controls whether JSON
+   * string contents are validated to be well-formed Unicode (no unpaired UTF-16 surrogate code
+   * units). Strict validation is the default and matches RFC 8259 section 7. The flag exists
+   * to allow callers to opt out for backward compatibility with input that previously parsed
+   * (with the unpaired surrogate silently replaced by the Unicode replacement character).
+   */
+  public static Variant parseJson(String json, boolean allowDuplicateKeys,
+      boolean validateUnicodeInJsonParsing) throws IOException {
+    try (JsonParser parser = JSON_FACTORY.createParser(json)) {
       parser.nextToken();
-      return parseJson(parser, allowDuplicateKeys);
+      return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing);
     }
   }
 
   /**
-   * Similar {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string input.
+   * Similar to {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string
+   * input.
    */
   public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
       throws IOException {
-    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
+    return parseJson(parser, allowDuplicateKeys, true);
+  }
+
+  /**
+   * Similar to {@link #parseJson(JsonParser, boolean)}, but additionally controls whether JSON
+   * string contents are validated to be well-formed Unicode. See
+   * {@link #parseJson(String, boolean, boolean)}.
+   */
+  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys,
+      boolean validateUnicodeInJsonParsing) throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUnicodeInJsonParsing);
     builder.buildJson(parser);
+    return builder.result();
+  }
+
+  // A segment in a JSONPath used by variant manipulation functions.
+  public abstract static class PathSegment {}
+
+  // Object field access (e.g. `.a` or `['a']`).
+  public static final class ObjectKeySegment extends PathSegment {
+    public final String key;
+
+    public ObjectKeySegment(String key) {
+      this.key = key;
+    }
+  }
+
+  // Array index access (e.g. `[0]`).
+  public static final class ArrayIndexSegment extends PathSegment {
+    public final int index;
+
+    public ArrayIndexSegment(int index) {
+      this.index = index;
+    }
+  }
+
+  // Return a new variant with the field or array element at `segments` removed. If the path does
+  // not match (missing key, out-of-range index, or incompatible container type), a semantically
+  // equivalent variant is returned. The result is always rebuilt with fresh metadata, so the
+  // binary representation may differ even when nothing is deleted. `segments` must be non-empty.
+  public static Variant deleteAtPath(Variant v, PathSegment[] segments) {
+    if (segments.length == 0) {
+      throw new IllegalArgumentException("Segments must be non-empty");
+    }
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithDeletionImpl(v.value, v.metadata, v.pos, segments, 0);
     return builder.result();
   }
 
@@ -431,6 +492,63 @@ public class VariantBuilder {
     }
   }
 
+  private void appendWithDeletionImpl(
+      byte[] value, byte[] metadata, int pos, PathSegment[] segments, int depth) {
+    checkIndex(pos, value.length);
+    PathSegment seg = segments[depth];
+    boolean isLast = depth == segments.length - 1;
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (seg instanceof ObjectKeySegment && basicType == OBJECT) {
+      String key = ((ObjectKeySegment) seg).key;
+      handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          String fieldKey = getMetadataKey(metadata, id);
+          boolean isTarget = fieldKey.equals(key);
+          if (!(isTarget && isLast)) {
+            int newId = addKey(fieldKey);
+            fields.add(new FieldEntry(fieldKey, newId, writePos - start));
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingObject(start, fields);
+        return null;
+      });
+    } else if (seg instanceof ArrayIndexSegment && basicType == ARRAY) {
+      int index = ((ArrayIndexSegment) seg).index;
+      handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          boolean isTarget = i == index;
+          if (!(isTarget && isLast)) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            offsets.add(writePos - start);
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingArray(start, offsets);
+        return null;
+      });
+    } else {
+      // Container type does not match the segment kind; append unchanged.
+      appendVariantImpl(value, metadata, pos);
+    }
+  }
+
   // Append the variant value without rewriting or creating any metadata. This is used when
   // building an object during shredding, where there is a fixed pre-existing metadata that
   // all shredded values will refer to.
@@ -495,6 +613,9 @@ public class VariantBuilder {
         int start = writePos;
         while (parser.nextToken() != JsonToken.END_OBJECT) {
           String key = parser.currentName();
+          if (validateUnicodeInJsonParsing) {
+            checkValidUnicodeString(key, parser);
+          }
           parser.nextToken();
           int id = addKey(key);
           fields.add(new FieldEntry(key, id, writePos - start));
@@ -513,9 +634,14 @@ public class VariantBuilder {
         finishWritingArray(start, offsets);
         break;
       }
-      case VALUE_STRING:
-        appendString(parser.getText());
+      case VALUE_STRING: {
+        String text = parser.getText();
+        if (validateUnicodeInJsonParsing) {
+          checkValidUnicodeString(text, parser);
+        }
+        appendString(text);
         break;
+      }
       case VALUE_NUMBER_INT:
         try {
           appendLong(parser.getLongValue());
@@ -557,6 +683,30 @@ public class VariantBuilder {
     }
   }
 
+  // Reject JSON strings that contain unpaired UTF-16 surrogate code units. Java strings can
+  // hold lone surrogates, but RFC 8259 section 7 requires JSON string contents to be well-formed
+  // Unicode. Stricter parsers such as simdjson reject these inputs, while Jackson's
+  // `ReaderBasedJsonParser` accepts them and silently replaces the invalid character with U+FFFD
+  // when the result is encoded as UTF-8. That silent replacement causes data corruption, so
+  // we surface a JSON parse error instead.
+  private static void checkValidUnicodeString(String str, JsonParser parser)
+      throws JsonParseException {
+    int len = str.length();
+    for (int i = 0; i < len; ++i) {
+      char c = str.charAt(i);
+      if (Character.isHighSurrogate(c)) {
+        if (i + 1 >= len || !Character.isLowSurrogate(str.charAt(i + 1))) {
+          throw new JsonParseException(parser, String.format(
+              "Invalid Unicode in JSON string: lone high surrogate U+%04X", (int) c));
+        }
+        ++i;
+      } else if (Character.isLowSurrogate(c)) {
+        throw new JsonParseException(parser, String.format(
+            "Invalid Unicode in JSON string: lone low surrogate U+%04X", (int) c));
+      }
+    }
+  }
+
   // Try to parse a JSON number as a decimal. Return whether the parsing succeeds. The input must
   // only use the decimal format (an integer value with an optional '.' in it) and must not use
   // scientific notation. It also must fit into the precision limitation of decimal types.
@@ -583,4 +733,8 @@ public class VariantBuilder {
   // Store all keys in `dictionary` in the order of id.
   private final ArrayList<byte[]> dictionaryKeys = new ArrayList<>();
   private final boolean allowDuplicateKeys;
+  // When true, JSON string contents are validated to be well-formed Unicode (RFC 8259 sec 7).
+  // Unpaired UTF-16 surrogate code units cause a `JsonParseException` to be thrown during
+  // `buildJson`, which surfaces as a `MALFORMED_RECORD_IN_PARSING` error to SQL callers.
+  private final boolean validateUnicodeInJsonParsing;
 }

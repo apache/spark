@@ -129,6 +129,7 @@ private[hive] class HiveClientImpl(
     case hive.v3_1 => new Shim_v3_1()
     case hive.v4_0 => new Shim_v4_0()
     case hive.v4_1 => new Shim_v4_1()
+    case hive.v4_2 => new Shim_v4_2()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -425,6 +426,10 @@ private[hive] class HiveClientImpl(
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
+      // SPARK-57263: HIVE-27473 may fail batch lookup on missing tables; keep Spark's
+      // contract of returning only tables that exist.
+      case _: NoSuchObjectException if shim.databaseExists(client, dbName) =>
+        tableNames.flatMap(getRawTableOption(dbName, _))
       case ex: Exception =>
         throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
     }
@@ -560,7 +565,8 @@ private[hive] class HiveClientImpl(
         serde = Option(h.getSerializationLib),
         compressed = h.getTTable.getSd.isCompressed,
         properties = Option(h.getTTable.getSd.getSerdeInfo.getParameters)
-          .map(_.asScala.toMap).orNull
+          .map(_.asScala.toMap).orNull,
+        serdeName = Option(h.getTTable.getSd.getSerdeInfo.getName).filter(_.nonEmpty)
       ),
       // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
       // in the function toHiveTable.
@@ -1138,6 +1144,11 @@ private[hive] object HiveClientImpl extends Logging {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
       case e: ParseException =>
+        // Hive's union type (uniontype<...>) is not supported by Spark SQL and makes the parser
+        // fail with a generic message. Detect it and report a clearer error (SPARK-21529).
+        if (hc.getType.toLowerCase(Locale.ROOT).contains("uniontype<")) {
+          throw QueryExecutionErrors.unsupportedHiveTypeError(hc.getType, hc.getName)
+        }
         throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
     }
   }
@@ -1162,7 +1173,7 @@ private[hive] object HiveClientImpl extends Logging {
     catalogTableType match {
       case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE
-      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
+      case t if CatalogTable.isViewLike(t) => HiveTableType.VIRTUAL_VIEW
       case t =>
         throw new IllegalArgumentException(
           s"Unknown table type is found at toHiveTableType: $t")
@@ -1201,6 +1212,7 @@ private[hive] object HiveClientImpl extends Logging {
       hiveTable.getTTable.getSd.setLocation(loc)}
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
+    table.storage.serdeName.foreach(hiveTable.getTTable.getSd.getSerdeInfo.setName)
     hiveTable.setSerializationLib(
       table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.properties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
@@ -1251,6 +1263,7 @@ private[hive] object HiveClientImpl extends Logging {
     p.storage.locationUri.map(CatalogUtils.URIToString(_)).foreach(storageDesc.setLocation)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
+    p.storage.serdeName.foreach(serdeInfo.setName)
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
     serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
@@ -1283,7 +1296,8 @@ private[hive] object HiveClientImpl extends Logging {
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
-          .map(_.asScala.toMap).orNull),
+          .map(_.asScala.toMap).orNull,
+        serdeName = Option(apiPartition.getSd.getSerdeInfo.getName).filter(_.nonEmpty)),
       createTime = apiPartition.getCreateTime.toLong * 1000,
       lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters = properties,

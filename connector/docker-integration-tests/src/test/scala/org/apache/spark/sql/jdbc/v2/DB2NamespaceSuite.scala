@@ -35,11 +35,14 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class DB2NamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new DB2DatabaseOnDocker
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "com.ibm.db2.jcc.DB2Driver").asJava)
 
-  catalog.initialize("db2", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("db2", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

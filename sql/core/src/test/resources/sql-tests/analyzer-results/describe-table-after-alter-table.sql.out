@@ -9,6 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`table_with_comment`, fal
 DESC FORMATTED table_with_comment
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`table_with_comment`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.table_with_comment, V1Table(default.table_with_comment), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -21,6 +22,7 @@ AlterTableSetPropertiesCommand `spark_catalog`.`default`.`table_with_comment`, [
 DESC FORMATTED table_with_comment
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`table_with_comment`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.table_with_comment, V1Table(default.table_with_comment), [a#x, b#x, c#x, d#x]
 
 
 -- !query
@@ -40,6 +42,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`table_comment`, false
 DESC FORMATTED table_comment
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`table_comment`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.table_comment, V1Table(default.table_comment), [a#x, b#x]
 
 
 -- !query
@@ -52,6 +55,7 @@ AlterTableSetPropertiesCommand `spark_catalog`.`default`.`table_comment`, [comme
 DESC formatted table_comment
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`table_comment`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.table_comment, V1Table(default.table_comment), [a#x, b#x]
 
 
 -- !query
@@ -64,6 +68,7 @@ AlterTableUnsetPropertiesCommand `spark_catalog`.`default`.`table_comment`, [com
 DESC FORMATTED table_comment
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`table_comment`, true, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.table_comment, V1Table(default.table_comment), [a#x, b#x]
 
 
 -- !query

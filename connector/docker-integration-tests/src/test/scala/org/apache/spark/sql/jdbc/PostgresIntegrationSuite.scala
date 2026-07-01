@@ -32,9 +32,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.2-alpine):
+ * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:18.2-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
@@ -186,111 +186,113 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Type mapping for various types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
-    val rows = df.collect().sortBy(_.toString())
-    assert(rows.length == 2)
-    // Test the types, and values using the first row.
-    val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 42)
-    assert(classOf[String].isAssignableFrom(types(0)))
-    assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
-    assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
-    assert(classOf[java.lang.Long].isAssignableFrom(types(3)))
-    assert(classOf[java.lang.Boolean].isAssignableFrom(types(4)))
-    assert(classOf[Array[Byte]].isAssignableFrom(types(5)))
-    assert(classOf[Array[Byte]].isAssignableFrom(types(6)))
-    assert(classOf[java.lang.Boolean].isAssignableFrom(types(7)))
-    assert(classOf[String].isAssignableFrom(types(8)))
-    assert(classOf[String].isAssignableFrom(types(9)))
-    assert(classOf[scala.collection.Seq[Int]].isAssignableFrom(types(10)))
-    assert(classOf[scala.collection.Seq[String]].isAssignableFrom(types(11)))
-    assert(classOf[scala.collection.Seq[Double]].isAssignableFrom(types(12)))
-    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(13)))
-    assert(classOf[String].isAssignableFrom(types(14)))
-    assert(classOf[java.lang.Float].isAssignableFrom(types(15)))
-    assert(classOf[java.lang.Short].isAssignableFrom(types(16)))
-    assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(17)))
-    assert(classOf[String].isAssignableFrom(types(18)))
-    assert(classOf[String].isAssignableFrom(types(19)))
-    assert(classOf[String].isAssignableFrom(types(20)))
-    assert(classOf[String].isAssignableFrom(types(21)))
-    assert(classOf[String].isAssignableFrom(types(22)))
-    assert(classOf[String].isAssignableFrom(types(23)))
-    assert(classOf[String].isAssignableFrom(types(24)))
-    assert(classOf[String].isAssignableFrom(types(25)))
-    assert(classOf[String].isAssignableFrom(types(26)))
-    assert(classOf[String].isAssignableFrom(types(27)))
-    assert(classOf[String].isAssignableFrom(types(28)))
-    assert(classOf[Date].isAssignableFrom(types(29)))
-    assert(classOf[String].isAssignableFrom(types(30)))
-    assert(classOf[String].isAssignableFrom(types(31)))
-    assert(classOf[String].isAssignableFrom(types(32)))
-    assert(classOf[JBigDecimal].isAssignableFrom(types(33)))
-    assert(classOf[String].isAssignableFrom(types(34)))
-    assert(classOf[java.lang.Float].isAssignableFrom(types(35)))
-    assert(classOf[java.sql.Timestamp].isAssignableFrom(types(36)))
-    assert(classOf[java.sql.Timestamp].isAssignableFrom(types(37)))
-    assert(classOf[String].isAssignableFrom(types(38)))
-    assert(classOf[String].isAssignableFrom(types(39)))
-    assert(classOf[String].isAssignableFrom(types(40)))
-    assert(classOf[String].isAssignableFrom(types(41)))
-    assert(rows(0).getString(0).equals("hello"))
-    assert(rows(0).getInt(1) == 42)
-    assert(rows(0).getDouble(2) == 1.25)
-    assert(rows(0).getLong(3) == 123456789012345L)
-    assert(!rows(0).getBoolean(4))
-    // BIT(10)'s come back as ASCII strings of ten ASCII 0's and 1's...
-    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](5),
-      Array[Byte](49, 48, 48, 48, 49, 48, 48, 49, 48, 49)))
-    assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6),
-      Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte)))
-    assert(rows(0).getBoolean(7))
-    assert(rows(0).getString(8) == "172.16.0.42")
-    assert(rows(0).getString(9) == "192.168.0.0/16")
-    assert(rows(0).getSeq(10) == Seq(1, 2))
-    assert(rows(0).getSeq(11) == Seq("a", null, "b"))
-    assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
-    assert(rows(0).getSeq(13) == Seq("0.11", "0.22").map(BigDecimal(_).bigDecimal))
-    assert(rows(0).getString(14) == "d1")
-    assert(rows(0).getFloat(15) == 1.01f)
-    assert(rows(0).getShort(16) == 1)
-    assert(rows(0).getSeq(17) ==
-      Seq("111.222200000000000000", "333.444400000000000000").map(BigDecimal(_).bigDecimal))
-    assert(rows(0).getString(18) == "101010")
-    assert(rows(0).getString(19) == "(800,600)")
-    assert(rows(0).getString(20) == "{-4.359313077939234,-1,159.9516512549538}")
-    assert(rows(0).getString(21) == "[(80.12,131.24),(201.5,503.33)]")
-    assert(rows(0).getString(22) == "(20.21,11.23),(19.84,2.1)")
-    assert(rows(0).getString(23) == "((10.2,30.4),(50.6,70.8),(90.1,11.3))")
-    assert(rows(0).getString(24) == "((100.3,40.2),(20.198,83.1),(500.821,311.38))")
-    assert(rows(0).getString(25) == "<(500,200),100>")
-    assert(rows(0).getString(26) == "16/B374D848")
-    assert(rows(0).getString(27) == "ab")
-    assert(rows(0).getString(28) == "efg")
-    assert(rows(0).getDate(29) == new SimpleDateFormat("yyyy-MM-dd").parse("2021-02-02"))
-    assert(rows(0).getString(30) == "00:01:00")
-    assert(rows(0).getString(31) == "00:11:22:33:44:55")
-    assert(rows(0).getString(32) == "00:11:22:33:44:55:66:77")
-    assert(rows(0).getDecimal(33) == new JBigDecimal("12.3456"))
-    assert(rows(0).getString(34) == "10:20:10,14,15")
-    assert(rows(0).getFloat(35) == 1E+37F)
-    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.123"))
-    assert(rows(0).getTimestamp(37) == Timestamp.valueOf("2016-08-12 10:22:31.949271"))
-    assert(rows(0).getString(38) == "'cat':AB & 'dog':CD")
-    assert(rows(0).getString(39) == "'and' 'cat' 'dog' 'fox'")
-    assert(rows(0).getString(40) == "10:20:10,14,15")
-    assert(rows(0).getString(41) == "<key>id</key><value>10</value>")
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val rows = df.collect().sortBy(_.toString())
+      assert(rows.length == 2)
+      // Test the types, and values using the first row.
+      val types = rows(0).toSeq.map(x => x.getClass)
+      assert(types.length == 42)
+      assert(classOf[String].isAssignableFrom(types(0)))
+      assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
+      assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
+      assert(classOf[java.lang.Long].isAssignableFrom(types(3)))
+      assert(classOf[java.lang.Boolean].isAssignableFrom(types(4)))
+      assert(classOf[Array[Byte]].isAssignableFrom(types(5)))
+      assert(classOf[Array[Byte]].isAssignableFrom(types(6)))
+      assert(classOf[java.lang.Boolean].isAssignableFrom(types(7)))
+      assert(classOf[String].isAssignableFrom(types(8)))
+      assert(classOf[String].isAssignableFrom(types(9)))
+      assert(classOf[scala.collection.Seq[Int]].isAssignableFrom(types(10)))
+      assert(classOf[scala.collection.Seq[String]].isAssignableFrom(types(11)))
+      assert(classOf[scala.collection.Seq[Double]].isAssignableFrom(types(12)))
+      assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(13)))
+      assert(classOf[String].isAssignableFrom(types(14)))
+      assert(classOf[java.lang.Float].isAssignableFrom(types(15)))
+      assert(classOf[java.lang.Short].isAssignableFrom(types(16)))
+      assert(classOf[scala.collection.Seq[BigDecimal]].isAssignableFrom(types(17)))
+      assert(classOf[String].isAssignableFrom(types(18)))
+      assert(classOf[String].isAssignableFrom(types(19)))
+      assert(classOf[String].isAssignableFrom(types(20)))
+      assert(classOf[String].isAssignableFrom(types(21)))
+      assert(classOf[String].isAssignableFrom(types(22)))
+      assert(classOf[String].isAssignableFrom(types(23)))
+      assert(classOf[String].isAssignableFrom(types(24)))
+      assert(classOf[String].isAssignableFrom(types(25)))
+      assert(classOf[String].isAssignableFrom(types(26)))
+      assert(classOf[String].isAssignableFrom(types(27)))
+      assert(classOf[String].isAssignableFrom(types(28)))
+      assert(classOf[Date].isAssignableFrom(types(29)))
+      assert(classOf[String].isAssignableFrom(types(30)))
+      assert(classOf[String].isAssignableFrom(types(31)))
+      assert(classOf[String].isAssignableFrom(types(32)))
+      assert(classOf[JBigDecimal].isAssignableFrom(types(33)))
+      assert(classOf[String].isAssignableFrom(types(34)))
+      assert(classOf[java.lang.Float].isAssignableFrom(types(35)))
+      assert(classOf[java.sql.Timestamp].isAssignableFrom(types(36)))
+      assert(classOf[java.sql.Timestamp].isAssignableFrom(types(37)))
+      assert(classOf[String].isAssignableFrom(types(38)))
+      assert(classOf[String].isAssignableFrom(types(39)))
+      assert(classOf[String].isAssignableFrom(types(40)))
+      assert(classOf[String].isAssignableFrom(types(41)))
+      assert(rows(0).getString(0).equals("hello"))
+      assert(rows(0).getInt(1) == 42)
+      assert(rows(0).getDouble(2) == 1.25)
+      assert(rows(0).getLong(3) == 123456789012345L)
+      assert(!rows(0).getBoolean(4))
+      // BIT(10)'s come back as ASCII strings of ten ASCII 0's and 1's...
+      assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](5),
+        Array[Byte](49, 48, 48, 48, 49, 48, 48, 49, 48, 49)))
+      assert(java.util.Arrays.equals(rows(0).getAs[Array[Byte]](6),
+        Array[Byte](0xDE.toByte, 0xAD.toByte, 0xBE.toByte, 0xEF.toByte)))
+      assert(rows(0).getBoolean(7))
+      assert(rows(0).getString(8) == "172.16.0.42")
+      assert(rows(0).getString(9) == "192.168.0.0/16")
+      assert(rows(0).getSeq(10) == Seq(1, 2))
+      assert(rows(0).getSeq(11) == Seq("a", null, "b"))
+      assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
+      assert(rows(0).getSeq(13) == Seq("0.11", "0.22").map(BigDecimal(_).bigDecimal))
+      assert(rows(0).getString(14) == "d1")
+      assert(rows(0).getFloat(15) == 1.01f)
+      assert(rows(0).getShort(16) == 1)
+      assert(rows(0).getSeq(17) ==
+        Seq("111.222200000000000000", "333.444400000000000000").map(BigDecimal(_).bigDecimal))
+      assert(rows(0).getString(18) == "101010")
+      assert(rows(0).getString(19) == "(800,600)")
+      assert(rows(0).getString(20) == "{-4.359313077939234,-1,159.9516512549538}")
+      assert(rows(0).getString(21) == "[(80.12,131.24),(201.5,503.33)]")
+      assert(rows(0).getString(22) == "(20.21,11.23),(19.84,2.1)")
+      assert(rows(0).getString(23) == "((10.2,30.4),(50.6,70.8),(90.1,11.3))")
+      assert(rows(0).getString(24) == "((100.3,40.2),(20.198,83.1),(500.821,311.38))")
+      assert(rows(0).getString(25) == "<(500,200),100>")
+      assert(rows(0).getString(26) == "16/B374D848")
+      assert(rows(0).getString(27) == "ab")
+      assert(rows(0).getString(28) == "efg")
+      assert(rows(0).getDate(29) == new SimpleDateFormat("yyyy-MM-dd").parse("2021-02-02"))
+      assert(rows(0).getString(30) == "00:01:00")
+      assert(rows(0).getString(31) == "00:11:22:33:44:55")
+      assert(rows(0).getString(32) == "00:11:22:33:44:55:66:77")
+      assert(rows(0).getDecimal(33) == new JBigDecimal("12.3456"))
+      assert(rows(0).getString(34) == "10:20:10,14,15")
+      assert(rows(0).getFloat(35) == 1E+37F)
+      assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.123"))
+      assert(rows(0).getTimestamp(37) == Timestamp.valueOf("2016-08-12 10:22:31.949271"))
+      assert(rows(0).getString(38) == "'cat':AB & 'dog':CD")
+      assert(rows(0).getString(39) == "'and' 'cat' 'dog' 'fox'")
+      assert(rows(0).getString(40) == "10:20:10,14,15")
+      assert(rows(0).getString(41) == "<key>id</key><value>10</value>")
 
-    // Test reading null values using the second row.
-    assert(0.until(16).forall(rows(1).isNullAt(_)))
+      // Test reading null values using the second row.
+      assert(0.until(16).forall(rows(1).isNullAt(_)))
+    }
   }
 
   test("Basic write test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
     // Test only that it doesn't crash.
     df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
     // Test that written numeric type has same DataType as input
-    assert(sqlContext.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
+    assert(spark.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
       ArrayType(DecimalType(2, 2), true))
     // Test write null values.
     df.select(df.queryExecution.analyzed.output.map { a =>
@@ -299,16 +301,16 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Creating a table with shorts and floats") {
-    sqlContext.createDataFrame(Seq((1.0f, 1.toShort)))
+    spark.createDataFrame(Seq((1.0f, 1.toShort)))
       .write.jdbc(jdbcUrl, "shortfloat", new Properties)
-    val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
+    val schema = spark.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
   }
 
   test("SPARK-47390: Convert TIMESTAMP/TIME WITH TIME ZONE regardless of preferTimestampNTZ") {
     Seq(true, false).foreach { prefer =>
-      val df = sqlContext.read
+      val df = spark.read
         .option("preferTimestampNTZ", prefer)
         .jdbc(jdbcUrl, "ts_with_timezone", new Properties)
       checkAnswer(df, Row(
@@ -320,7 +322,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("SPARK-22291: Conversion error when transforming array types of " +
     "uuid, inet and cidr to StingType in PostgreSQL") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "st_with_array", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "st_with_array", new Properties)
     val rows = df.collect()
     assert(rows(0).getString(0) == "0a532531-cdf1-45e3-963d-5de90b6a30f1")
     assert(rows(0).getString(1) == "172.168.22.1")
@@ -350,8 +352,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     assert(rows(0).getSeq(21) == Seq("<(500.0,200.0),100.0>"))
     assert(rows(0).getSeq(22) == Seq("16/B374D848"))
     assert(rows(0).getSeq(23) == Seq("101010"))
-    assert(rows(0).getSeq(24) == Seq("0 years 0 mons 1 days 0 hours 0 mins 0.0 secs",
-      "0 years 0 mons 0 days 0 hours 2 mins 0.0 secs"))
+    assert(rows(0).getSeq(24) == Seq("1 days", "2 mins"))
     assert(rows(0).getSeq(25) == Seq("08:00:2b:01:02:03:04:05"))
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }
@@ -382,9 +383,9 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("write byte as smallint") {
-    sqlContext.createDataFrame(Seq((1.toByte, 2.toShort)))
+    spark.createDataFrame(Seq((1.toByte, 2.toShort)))
       .write.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
-    val df = sqlContext.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
     val schema = df.schema
     assert(schema.head.dataType == ShortType)
     assert(schema(1).dataType == ShortType)
@@ -395,18 +396,18 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("character type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "char_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "char_types", new Properties)
     checkAnswer(df, Row("abcd", "efgh", "ijkl", "mnop", "q", "eason", "c"))
   }
 
   test("SPARK-32576: character array type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "char_array_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "char_array_types", new Properties)
     checkAnswer(df, Row(Seq("a   ", "bcd "), Seq("ef  ", "gh  "), Seq("i", "j", "kl"),
       Seq("mnop"), Seq("q", "r"), Seq("Eason", "Ethan")))
   }
 
   test("SPARK-34333: money type tests") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "money_types", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "money_types", new Properties)
     val row = df.collect()
     assert(row.length === 1)
     assert(row(0).length === 1)
@@ -416,7 +417,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   test("SPARK-43040: timestamp_ntz read test") {
     val prop = new Properties
     prop.setProperty("preferTimestampNTZ", "true")
-    val df = sqlContext.read.jdbc(jdbcUrl, "timestamp_ntz", prop)
+    val df = spark.read.jdbc(jdbcUrl, "timestamp_ntz", prop)
     val row = df.collect()
     assert(row.length === 3)
     assert(row(0).length === 1)
@@ -444,7 +445,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-43267: user-defined column in array test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "custom_type", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "custom_type", new Properties)
     val row = df.collect()
     assert(row.length === 1)
     assert(row(0).length === 2)
@@ -453,7 +454,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-44280: infinity timestamp test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "infinity_timestamp", new Properties)
     val row = df.collect()
 
     assert(row.length == 2)
@@ -470,7 +471,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-47501: infinity date test") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "infinity_dates", new Properties)
     val row = df.collect()
 
     assert(row.length == 2)
@@ -496,7 +497,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-47628: Fix reading bit array type") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
+    val df = spark.read.jdbc(jdbcUrl, "test_bit_array", new Properties)
     val expected = Row(Array(true, false), Array(
       Array[Byte](48, 48, 48, 48, 49), Array[Byte](48, 48, 48, 49, 48)))
     checkAnswer(df, expected)

@@ -309,7 +309,13 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
         def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
             """
             Takes start offset as an input, return an iterator of tuples and
-            the start offset of next read.
+            the end offset (start offset for the next read). The end offset must
+            advance past the start offset when returning data; otherwise Spark
+            raises a validation exception.
+            For example, returning 2 records from start_idx 0 means end should
+            be {"offset": 2} (i.e. start + 2).
+            When there is no data to read, you may return the same offset as end and
+            start, but you must provide an empty iterator.
             """
             start_idx = start["offset"]
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])
@@ -331,6 +337,56 @@ This is the same dummy streaming reader that generates 2 rows every batch implem
             offset, this can be used to clean up resource.
             """
             pass
+
+Admission Control for Streaming Readers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To limit the amount of data processed per micro-batch, implement
+``getDefaultReadLimit()`` and have ``latestOffset(start, limit)`` honor the
+engine-provided ``ReadLimit``:
+
+.. code-block:: python
+
+    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
+
+    class MyStreamReader(DataSourceStreamReader):
+
+        def getDefaultReadLimit(self) -> ReadLimit:
+            """
+            Limit each micro-batch to at most 20 rows.
+
+            This value is just an example; in practice, configure the limit
+            based on source options (e.g., self.options.get("maxRowsPerBatch")).
+            """
+            return ReadMaxRows(20)
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            """
+            Return the latest offset, respecting the provided limit.
+            """
+            current = start["offset"]
+
+            if isinstance(limit, ReadMaxRows):
+                end = min(current + limit.max_rows, self.max_available)
+            elif isinstance(limit, ReadAllAvailable):
+                end = self.max_available
+            else:
+                raise ValueError(f"Unexpected ReadLimit type: {type(limit)}")
+
+            return {"offset": end}
+
+When Spark uses the default ``ReadMaxRows(20)`` limit, each micro-batch
+reads at most 20 rows, depending on the available rows. If Spark passes
+``ReadAllAvailable``, the reader should return all remaining rows instead.
+
+This is useful for:
+
+- **Controlling data ingestion rate**: Prevent overwhelming downstream systems
+- **Memory management**: Limit batch sizes to avoid out-of-memory errors
+- **Backpressure handling**: Process data at a sustainable rate
+
+For a complete working example, see:
+``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py``
 
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

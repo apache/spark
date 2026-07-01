@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+
 import functools
 import inspect
 import sys
@@ -167,14 +168,19 @@ class UserDefinedFunction:
     ):
         if not callable(func):
             raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "callable",
+                    "arg_name": "func",
+                    "arg_type": type(func).__name__,
+                },
             )
 
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
-                errorClass="NOT_DATATYPE_OR_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "DataType or str",
                     "arg_name": "returnType",
                     "arg_type": type(returnType).__name__,
                 },
@@ -182,8 +188,12 @@ class UserDefinedFunction:
 
         if not isinstance(evalType, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
-                messageParameters={"arg_name": "evalType", "arg_type": type(evalType).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "int",
+                    "arg_name": "evalType",
+                    "arg_type": type(evalType).__name__,
+                },
             )
 
         self.func = func
@@ -220,7 +230,7 @@ class UserDefinedFunction:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Pandas UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Pandas UDFs: {returnType}"
                     },
                 )
         elif (
@@ -233,7 +243,7 @@ class UserDefinedFunction:
                 raise PySparkNotImplementedError(
                     errorClass="NOT_IMPLEMENTED",
                     messageParameters={
-                        "feature": f"Invalid return type with scalar Arrow UDFs: " f"{returnType}"
+                        "feature": f"Invalid return type with scalar Arrow UDFs: {returnType}"
                     },
                 )
         elif (
@@ -273,7 +283,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in mapInPandas: " f"{returnType}"
+                            "feature": f"Invalid return type in mapInPandas: {returnType}"
                         },
                     )
             else:
@@ -315,8 +325,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": f"Invalid return type in cogroup.applyInPandas: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInPandas: {returnType}"
                         },
                     )
             else:
@@ -335,8 +344,7 @@ class UserDefinedFunction:
                     raise PySparkNotImplementedError(
                         errorClass="NOT_IMPLEMENTED",
                         messageParameters={
-                            "feature": "Invalid return type in cogroup.applyInArrow: "
-                            f"{returnType}"
+                            "feature": f"Invalid return type in cogroup.applyInArrow: {returnType}"
                         },
                     )
             else:
@@ -477,13 +485,17 @@ class UserDefinedFunction:
             else:  # memory_profiler_enabled
                 f = self.func
                 memory_profiler = sc.profiler_collector.new_memory_profiler(sc)
-                (sub_lines, start_line) = inspect.getsourcelines(f.__code__)
+                sub_lines, start_line = inspect.getsourcelines(f.__code__)
 
                 @functools.wraps(f)
                 def func(*args: Any, **kwargs: Any) -> Any:
                     assert memory_profiler is not None
                     return memory_profiler.profile(
-                        sub_lines, start_line, f, *args, **kwargs  # type: ignore[arg-type]
+                        sub_lines,  # type: ignore[arg-type]
+                        start_line,
+                        f,
+                        *args,
+                        **kwargs,
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
@@ -710,7 +722,7 @@ class UDFRegistration:
             return_udf = _create_udf(
                 f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, name=name
             )
-            register_udf = return_udf._unwrapped
+            register_udf = return_udf._unwrapped  # type: ignore[attr-defined]
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
@@ -809,7 +821,7 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("sql.udf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.udf, globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

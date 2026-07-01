@@ -33,26 +33,15 @@ def determine_modules_for_files(filenames):
     """
     Given a list of filenames, return the set of modules that contain those files.
     If a file is not associated with a more specific submodule, then this method will consider that
-    file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions,
-    and `README.md` is always ignored.
+    file to belong to the 'root' module. `.github` directory is counted only in GitHub Actions.
 
     >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'pyspark-errors', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
-    >>> [x.name for x in determine_modules_for_files(["sql/README.md"])]
-    []
     """
     changed_modules = set()
     for filename in filenames:
-        if filename.endswith("README.md"):
-            continue
-        if filename in (
-            "scalastyle-config.xml",
-            "dev/checkstyle.xml",
-            "dev/checkstyle-suppressions.xml",
-        ):
-            continue
         if ("GITHUB_ACTIONS" not in os.environ) and filename.startswith(".github"):
             continue
         matched_at_least_one_module = False
@@ -115,8 +104,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     >>> sorted([x.name for x in determine_modules_to_test([modules.sql])])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
-     'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
+     'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
@@ -124,8 +113,8 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
-     'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
-     'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
+     'mllib', 'pipelines', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-sql',
      'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
@@ -133,9 +122,9 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
-     'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'protobuf', 'pyspark-connect',
-     'pyspark-core', 'pyspark-install', 'pyspark-ml', 'pyspark-ml-connect', 'pyspark-mllib',
-     'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
+     'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'pipelines', 'protobuf',
+     'pyspark-connect', 'pyspark-core', 'pyspark-install', 'pyspark-ml', 'pyspark-ml-connect',
+     'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect', 'pyspark-pandas-slow',
      'pyspark-pandas-slow-connect', 'pyspark-pipelines', 'pyspark-resource', 'pyspark-sql',
      'pyspark-streaming', 'pyspark-structured-streaming', 'pyspark-structured-streaming-connect',
      'pyspark-testing', 'repl', 'root', 'sparkr', 'sql', 'sql-kafka-0-10', 'streaming',
@@ -157,6 +146,18 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     return toposort_flatten(
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True
     )
+
+
+def determine_dangling_python_tests(changed_files):
+    """
+    Given a list of changed files, return the set of Python tests that are not associated with any
+    module.
+    """
+    dangling_tests = set()
+    for filename in changed_files:
+        if os.path.exists(filename) and modules.root.missing_potential_python_test(filename):
+            dangling_tests.add(filename)
+    return dangling_tests
 
 
 def determine_tags_to_exclude(changed_modules):

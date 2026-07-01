@@ -68,12 +68,12 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
       expr(_.getLiteralBuilder.setString("foo").build()))
     val dataType = new StructType()
       .add("_1", DoubleType)
-      .add("_2", StringType)
+      .add("_2", StringType("UTF8_LCASE"))
       .add("_3", DoubleType)
-      .add("_4", StringType)
+      .add("_4", StringType("UTF8_LCASE"))
     val stringTypeWithCollation = proto.DataType
       .newBuilder()
-      .setString(proto.DataType.String.newBuilder().setCollation("UTF8_BINARY"))
+      .setString(proto.DataType.String.newBuilder().setCollation("UTF8_LCASE"))
       .build()
     testConversion(
       Literal((12.0, "north", 60.0, "west"), Option(dataType)),

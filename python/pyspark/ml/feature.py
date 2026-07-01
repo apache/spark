@@ -220,8 +220,7 @@ class Binarizer(
         threshold: float = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -230,8 +229,7 @@ class Binarizer(
         thresholds: Optional[List[float]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -261,8 +259,7 @@ class Binarizer(
         threshold: float = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ) -> "Binarizer":
-        ...
+    ) -> "Binarizer": ...
 
     @overload
     def setParams(
@@ -271,8 +268,7 @@ class Binarizer(
         thresholds: Optional[List[float]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> "Binarizer":
-        ...
+    ) -> "Binarizer": ...
 
     @keyword_only
     @since("1.4.0")
@@ -790,8 +786,7 @@ class Bucketizer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -801,8 +796,7 @@ class Bucketizer(
         splitsArray: Optional[List[List[float]]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -834,8 +828,7 @@ class Bucketizer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
-    ) -> "Bucketizer":
-        ...
+    ) -> "Bucketizer": ...
 
     @overload
     def setParams(
@@ -845,8 +838,7 @@ class Bucketizer(
         splitsArray: Optional[List[List[float]]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> "Bucketizer":
-        ...
+    ) -> "Bucketizer": ...
 
     @keyword_only
     @since("1.4.0")
@@ -1969,8 +1961,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
     missingValue: Param[float] = Param(
         Params._dummy(),
         "missingValue",
-        "The placeholder for the missing values. All occurrences of missingValue "
-        "will be imputed.",
+        "The placeholder for the missing values. All occurrences of missingValue will be imputed.",
         typeConverter=TypeConverters.toFloat,
     )
 
@@ -2121,8 +2112,7 @@ class Imputer(
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
         relativeError: float = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -2133,8 +2123,7 @@ class Imputer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -2166,8 +2155,7 @@ class Imputer(
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
         relativeError: float = ...,
-    ) -> "Imputer":
-        ...
+    ) -> "Imputer": ...
 
     @overload
     def setParams(
@@ -2178,8 +2166,7 @@ class Imputer(
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
-    ) -> "Imputer":
-        ...
+    ) -> "Imputer": ...
 
     @keyword_only
     @since("2.2.0")
@@ -2524,7 +2511,6 @@ class MinHashLSH(
     JavaMLReadable["MinHashLSH"],
     JavaMLWritable,
 ):
-
     """
     LSH class for Jaccard distance.
     The input can be dense or sparse vectors, but it is more efficient if it is sparse.
@@ -3192,8 +3178,7 @@ class OneHotEncoder(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         dropLast: bool = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -3203,8 +3188,7 @@ class OneHotEncoder(
         dropLast: bool = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -3234,8 +3218,7 @@ class OneHotEncoder(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         dropLast: bool = ...,
-    ) -> "OneHotEncoder":
-        ...
+    ) -> "OneHotEncoder": ...
 
     @overload
     def setParams(
@@ -3245,8 +3228,7 @@ class OneHotEncoder(
         dropLast: bool = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ) -> "OneHotEncoder":
-        ...
+    ) -> "OneHotEncoder": ...
 
     @keyword_only
     @since("2.3.0")
@@ -3626,8 +3608,7 @@ class QuantileDiscretizer(
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
         handleInvalid: str = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -3638,8 +3619,7 @@ class QuantileDiscretizer(
         numBucketsArray: Optional[List[int]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -3675,8 +3655,7 @@ class QuantileDiscretizer(
         outputCol: Optional[str] = ...,
         relativeError: float = ...,
         handleInvalid: str = ...,
-    ) -> "QuantileDiscretizer":
-        ...
+    ) -> "QuantileDiscretizer": ...
 
     @overload
     def setParams(
@@ -3687,8 +3666,7 @@ class QuantileDiscretizer(
         numBucketsArray: Optional[List[int]] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> "QuantileDiscretizer":
-        ...
+    ) -> "QuantileDiscretizer": ...
 
     @keyword_only
     @since("2.0.0")
@@ -3845,7 +3823,7 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     withScaling: Param[bool] = Param(
         Params._dummy(),
         "withScaling",
-        "Whether to scale the data to " "quantile range",
+        "Whether to scale the data to quantile range",
         typeConverter=TypeConverters.toBoolean,
     )
 
@@ -4670,8 +4648,7 @@ class StringIndexer(
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -4681,8 +4658,7 @@ class StringIndexer(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -4712,8 +4688,7 @@ class StringIndexer(
         outputCol: Optional[str] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ) -> "StringIndexer":
-        ...
+    ) -> "StringIndexer": ...
 
     @overload
     def setParams(
@@ -4723,8 +4698,7 @@ class StringIndexer(
         outputCols: Optional[List[str]] = ...,
         handleInvalid: str = ...,
         stringOrderType: str = ...,
-    ) -> "StringIndexer":
-        ...
+    ) -> "StringIndexer": ...
 
     @keyword_only
     @since("1.4.0")
@@ -5109,8 +5083,7 @@ class StopWordsRemover(
         stopWords: Optional[List[str]] = ...,
         caseSensitive: bool = ...,
         locale: Optional[str] = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -5121,8 +5094,7 @@ class StopWordsRemover(
         locale: Optional[str] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -5163,8 +5135,7 @@ class StopWordsRemover(
         stopWords: Optional[List[str]] = ...,
         caseSensitive: bool = ...,
         locale: Optional[str] = ...,
-    ) -> "StopWordsRemover":
-        ...
+    ) -> "StopWordsRemover": ...
 
     @overload
     def setParams(
@@ -5175,8 +5146,7 @@ class StopWordsRemover(
         locale: Optional[str] = ...,
         inputCols: Optional[List[str]] = ...,
         outputCols: Optional[List[str]] = ...,
-    ) -> "StopWordsRemover":
-        ...
+    ) -> "StopWordsRemover": ...
 
     @keyword_only
     @since("1.6.0")
@@ -5376,8 +5346,7 @@ class TargetEncoder(
         handleInvalid: str = ...,
         targetType: str = ...,
         smoothing: float = ...,
-    ):
-        ...
+    ): ...
 
     @overload
     def __init__(
@@ -5389,8 +5358,7 @@ class TargetEncoder(
         smoothing: float = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ):
-        ...
+    ): ...
 
     @keyword_only
     def __init__(
@@ -5424,8 +5392,7 @@ class TargetEncoder(
         handleInvalid: str = ...,
         targetType: str = ...,
         smoothing: float = ...,
-    ) -> "TargetEncoder":
-        ...
+    ) -> "TargetEncoder": ...
 
     @overload
     def setParams(
@@ -5437,8 +5404,7 @@ class TargetEncoder(
         smoothing: float = ...,
         inputCol: Optional[str] = ...,
         outputCol: Optional[str] = ...,
-    ) -> "TargetEncoder":
-        ...
+    ) -> "TargetEncoder": ...
 
     @keyword_only
     @since("4.0.0")
@@ -7855,7 +7821,7 @@ if __name__ == "__main__":
     temp_path = tempfile.mkdtemp()
     globs["temp_path"] = temp_path
     try:
-        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
         spark.stop()
     finally:
         from shutil import rmtree

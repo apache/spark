@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.replaceDefaultStringCharAndVarcharTypes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -86,19 +87,35 @@ object UserDefinedFunction {
   // The default Hive Metastore SQL schema length for function resource uri.
   private val HIVE_FUNCTION_RESOURCE_URI_LENGTH_THRESHOLD: Int = 4000
 
-  def parseRoutineParam(text: String, parser: ParserInterface): StructType = {
-    val parsed = parser.parseRoutineParam(text)
+  def parseRoutineParam(text: String, parser: ParserInterface, collation: Option[String])
+      : StructType = {
+    val parsed = StructType(parser.parseRoutineParam(text)
+      .map(field => field.copy(dataType = resolveReturnType(field.dataType, collation))))
     CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]
   }
 
-  def parseTableSchema(text: String, parser: ParserInterface): StructType = {
-    val parsed = parser.parseTableSchema(text)
+  def parseTableSchema(text: String, parser: ParserInterface, collation: Option[String])
+      : StructType = {
+    val parsed = StructType(parser.parseTableSchema(text)
+      .map(field => field.copy(dataType = resolveReturnType(field.dataType, collation))))
     CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]
   }
 
-  def parseDataType(text: String, parser: ParserInterface): DataType = {
-    val dataType = parser.parseDataType(text)
+  def parseDataType(text: String, parser: ParserInterface, collation: Option[String]): DataType = {
+    val dataType = resolveReturnType(parser.parseDataType(text), collation)
     CharVarcharUtils.failIfHasCharVarchar(dataType)
+  }
+
+  /**
+   * Resolve the return type by applying the default collation to non-collated string, char and
+   * varchar types.
+   *
+   * @param returnType The return type is taken from the RETURNS clause,
+   *                   or inferred from the function's return value if the clause is not specified.
+   * @param collation The default collation, if specified; otherwise, None.
+   */
+  def resolveReturnType(returnType: DataType, collation: Option[String]): DataType = {
+    collation.map(replaceDefaultStringCharAndVarcharTypes(returnType, _)).getOrElse(returnType)
   }
 
   private val _mapper: ObjectMapper = getObjectMapper

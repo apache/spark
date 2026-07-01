@@ -59,11 +59,14 @@ class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespa
 
   override val db = new OracleDatabaseOnDocker
 
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "oracle.jdbc.OracleDriver").asJava)
 
-  catalog.initialize("system", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("system", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

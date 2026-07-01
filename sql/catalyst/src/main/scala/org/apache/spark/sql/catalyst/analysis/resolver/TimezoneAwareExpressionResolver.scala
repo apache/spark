@@ -58,10 +58,12 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
       expressionWithResolvedChildren,
       traversals.current.sessionLocalTimeZone
     )
-    coerceExpressionTypes(
+    val coercedTimezoneAwareExpression = coerceExpressionTypes(
       expression = expressionWithResolvedChildrenAndTimeZone,
       expressionTreeTraversal = traversals.current
-    ) match {
+    )
+
+    coercedTimezoneAwareExpression match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
       case other =>

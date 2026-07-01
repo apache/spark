@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.{Expression, Generator, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Expression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -49,18 +49,18 @@ object UnsupportedExpressionInOperatorValidation {
       isSortOnTopOfAggregate: Boolean,
       isFilterOnTopOfAggregate: Boolean): Boolean = {
     expression match {
-      case _: WindowExpression => operator.isInstanceOf[Window]
+      case _: WindowExpression =>
+        !(operator.isInstanceOf[Project] ||
+        operator.isInstanceOf[Aggregate])
       case _: AggregateExpression =>
         !(operator.isInstanceOf[Project] ||
         operator.isInstanceOf[Aggregate] ||
         operator.isInstanceOf[Window] ||
         operator.isInstanceOf[CollectMetrics] ||
+        operator.isInstanceOf[Pivot] ||
         isSortOnTopOfAggregate ||
         isFilterOnTopOfAggregate ||
         onlyInLateralSubquery(operator))
-      case _: Generator =>
-        !(operator.isInstanceOf[Generate] ||
-        operator.isInstanceOf[BaseEvalPythonUDTF])
       case _ =>
         false
     }

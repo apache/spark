@@ -31,7 +31,7 @@ class MergeIntoWriter:
     `MergeIntoWriter` provides methods to define and execute merge actions based
     on specified conditions.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, df: "DataFrame", table: str, condition: Column):
@@ -239,7 +239,7 @@ def _test() -> None:
         spark = SparkSession(sc)
 
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.merge,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

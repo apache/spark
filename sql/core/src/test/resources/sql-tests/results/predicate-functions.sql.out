@@ -743,6 +743,7 @@ struct<(NOT (NULL IN (1, 2, NULL))):boolean>
 -- !query output
 NULL
 
+
 -- !query
 select 1 in ()
 -- !query schema
@@ -779,6 +780,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "not in ()"
   } ]
 }
+
 
 -- !query
 select 1 between 0 and 2

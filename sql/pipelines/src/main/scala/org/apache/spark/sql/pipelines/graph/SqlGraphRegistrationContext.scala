@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -116,11 +117,14 @@ class SqlGraphRegistrationContext(
       sqlFileText = sqlText,
       sqlFilePath = sqlFilePath
     ).foreach { case SqlQueryPlanWithOrigin(logicalPlan, queryOrigin) =>
-      processSqlQuery(logicalPlan, queryOrigin)
+      processSqlQuery(logicalPlan, queryOrigin, spark)
     }
   }
 
-  private def processSqlQuery(queryPlan: LogicalPlan, queryOrigin: QueryOrigin): Unit = {
+  private def processSqlQuery(
+      queryPlan: LogicalPlan,
+      queryOrigin: QueryOrigin,
+      spark: SparkSession): Unit = {
     queryPlan match {
       case setCommand: SetCommand =>
         // SET [ key | 'key' ] [ value | 'value' ]
@@ -139,7 +143,7 @@ class SqlGraphRegistrationContext(
         // objects such as tables are resolved from said catalog, until overwritten, within this
         // SQL processor scope. Note that the schema is cleared when the catalog is set, and must
         // be explicitly set again in order to implicitly qualify identifiers.
-        SetCatalogCommandHandler.handle(setCatalogCommand)
+        SetCatalogCommandHandler.handle(setCatalogCommand, queryOrigin, spark)
       case createPersistedViewCommand: CreateView =>
         // CREATE VIEW [ persisted_view_name ] [ options ] AS [ query ]
         CreatePersistedViewCommandHandler.handle(createPersistedViewCommand, queryOrigin)
@@ -233,7 +237,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this streaming table.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = stIdentifier,
           destinationIdentifier = stIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cst.query),
@@ -284,7 +288,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this materialized view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = mvIdentifier,
           destinationIdentifier = mvIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cmv.query),
@@ -327,7 +331,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this persisted view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = viewIdentifier,
           destinationIdentifier = viewIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cv.query),
@@ -371,7 +375,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow definition that backs this temporary view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = viewIdentifier,
           destinationIdentifier = viewIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cvc.plan),
@@ -447,7 +451,7 @@ class SqlGraphRegistrationContext(
         .identifier
 
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = flowIdentifier,
           destinationIdentifier = qualifiedDestinationIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
@@ -529,8 +533,24 @@ class SqlGraphRegistrationContext(
   }
 
   private object SetCatalogCommandHandler {
-    def handle(setCatalogCommand: SetCatalogCommand): Unit = {
-      context.setCurrentCatalog(setCatalogCommand.catalogName)
+    def handle(
+        setCatalogCommand: SetCatalogCommand,
+        queryOrigin: QueryOrigin,
+        spark: SparkSession): Unit = {
+      try {
+        // Analyze unresolved references before handling the command.
+        val analyzed = spark.sessionState.analyzer.executeAndCheck(
+          setCatalogCommand,
+          new QueryPlanningTracker
+        ).asInstanceOf[SetCatalogCommand]
+        context.setCurrentCatalog(analyzed.getCatalogName())
+      } catch {
+        case e: AnalysisException =>
+          throw SqlGraphElementRegistrationException(
+            msg = s"Failed to resolve catalog expression: ${e.getMessage}",
+            queryOrigin = queryOrigin
+          )
+      }
       context.clearCurrentDatabase()
     }
   }
@@ -589,7 +609,7 @@ object SqlGraphRegistrationContext {
    * terminated statement is not returned.
    */
   private def splitSqlTextBySemicolon(sqlText: String): List[String] = StringUtils
-    .splitSemiColonWithIndex(line = sqlText, enableSqlScripting = false)
+    .splitSemiColon(line = sqlText, enableSqlScripting = false)
 
   /** Class that holds the logical plan and query origin parsed from a SQL statement. */
   case class SqlQueryPlanWithOrigin(plan: LogicalPlan, queryOrigin: QueryOrigin)

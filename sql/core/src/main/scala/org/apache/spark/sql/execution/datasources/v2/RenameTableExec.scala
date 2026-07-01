@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -38,8 +39,6 @@ case class RenameTableExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-
     val optOldStorageLevel = invalidateCache()
     catalog.invalidateTable(oldIdent)
 

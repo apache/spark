@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import inspect
-import os
 from typing import IO
 
 from pyspark.errors import PySparkAssertionError, PySparkTypeError
@@ -29,8 +28,8 @@ from pyspark.serializers import (
 from pyspark.sql.datasource import DataSource, CaseInsensitiveDict
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.worker.utils import worker_run
-from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     utf8_deserializer,
@@ -112,21 +111,17 @@ def _main(infile: IO, outfile: IO) -> None:
             options[key] = value
 
         # Instantiate a data source.
-        data_source = data_source_cls(options=options)  # type: ignore
+        data_source = data_source_cls(options=options)
 
         # Get the schema of the data source.
         # If user_specified_schema is not None, use user_specified_schema.
         # Otherwise, use the schema of the data source.
         # Throw exception if the data source does not implement schema().
-        is_ddl_string = False
         if user_specified_schema is None:
             schema = data_source.schema()
-            if isinstance(schema, str):
-                # Here we cannot use _parse_datatype_string to parse the DDL string schema.
-                # as it requires an active Spark session.
-                is_ddl_string = True
         else:
-            schema = user_specified_schema  # type: ignore
+            assert isinstance(user_specified_schema, StructType)
+            schema = user_specified_schema
 
         assert schema is not None
 
@@ -134,11 +129,14 @@ def _main(infile: IO, outfile: IO) -> None:
     pickleSer._write_with_length(data_source, outfile)
 
     # Return the schema of the data source.
-    write_int(int(is_ddl_string), outfile)
-    if is_ddl_string:
-        write_with_length(schema.encode("utf-8"), outfile)  # type: ignore
+    if isinstance(schema, str):
+        # Here we cannot use _parse_datatype_string to parse the DDL string schema.
+        # as it requires an active Spark session.
+        write_int(1, outfile)
+        write_with_length(schema.encode("utf-8"), outfile)
     else:
-        write_with_length(schema.json().encode("utf-8"), outfile)  # type: ignore
+        write_int(0, outfile)
+        write_with_length(schema.json().encode("utf-8"), outfile)
 
 
 def main(infile: IO, outfile: IO) -> None:
@@ -146,12 +144,5 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

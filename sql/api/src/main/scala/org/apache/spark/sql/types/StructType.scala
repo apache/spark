@@ -122,6 +122,10 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   private lazy val nameToIndex: Map[String, Int] = SparkCollectionUtils.toMapWithIndex(fieldNames)
   private lazy val nameToIndexCaseInsensitive: CaseInsensitiveMap[Int] =
     CaseInsensitiveMap[Int](nameToIndex.toMap)
+  lazy val nameToDataType: collection.immutable.Map[String, DataType] =
+    fields.map(f => f.name -> f.dataType).toMap
+  lazy val nameToDataTypeCaseInsensitive: CaseInsensitiveMap[DataType] =
+    CaseInsensitiveMap[DataType](nameToDataType)
 
   override def equals(that: Any): Boolean = {
     that match {

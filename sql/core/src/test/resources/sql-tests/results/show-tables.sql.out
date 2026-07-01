@@ -214,7 +214,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`show_t*`"
+    "relationName" : "`show_t*`",
+    "searchPath" : "[`system`.`session`, `spark_catalog`.`showdb`]"
   },
   "queryContext" : [ {
     "objectType" : "",

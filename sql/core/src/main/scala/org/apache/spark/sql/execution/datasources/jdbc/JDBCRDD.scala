@@ -31,11 +31,10 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, TaskInterruptListener}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -80,6 +79,9 @@ object JDBCRDD extends Logging {
       case e: SQLException if ident.isDefined &&
         dialect.isObjectNotFoundException(e) =>
         throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
+      case e: SQLException if ident.isDefined &&
+        dialect.isNotSelectableObjectException(e) =>
+        throw QueryCompilationErrors.objectNotSelectableError(catalogName.get, ident.get, e)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
@@ -141,7 +143,7 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
-   * @param sample - The pushed down tableSample.
+   * @param sampleClause - The pushed down table sample SQL clause.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
    * @param sortOrders - The sort orders cooperates with limit to realize top N.
@@ -158,7 +160,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      sample: Option[TableSampleInfo] = None,
+      sampleClause: Option[String] = None,
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
       offset: Int = 0,
@@ -184,7 +186,7 @@ object JDBCRDD extends Logging {
       options,
       databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
       groupByColumns,
-      sample,
+      sampleClause,
       limit,
       sortOrders,
       offset,
@@ -209,7 +211,7 @@ class JDBCRDD(
     options: JDBCOptions,
     databaseMetadata: JDBCDatabaseMetadata,
     groupByColumns: Option[Array[String]],
-    sample: Option[TableSampleInfo],
+    sampleClause: Option[String],
     limit: Int,
     sortOrders: Array[String],
     offset: Int,
@@ -252,8 +254,8 @@ class JDBCRDD(
       builder = builder.withGroupByColumns(groupByKeys)
     }
 
-    sample.foreach { tableSampleInfo =>
-      builder = builder.withTableSample(tableSampleInfo)
+    sampleClause.foreach { clause =>
+      builder = builder.withTableSampleClause(clause)
     }
 
     builder.build()
@@ -343,8 +345,29 @@ class JDBCRDD(
     logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    stmt.setFetchSize(options.fetchSize)
+    stmt.setFetchSize(dialect.getFetchSize(options))
     stmt.setQueryTimeout(options.queryTimeout)
+
+    // JDBC socket reads (e.g., from executeQuery() / ResultSet.next()) are not interruptible via
+    // Thread.interrupt(). Register the listener immediately before executeQuery() so we close the
+    // partition connection on kill and unblock the native read. We capture conn in a local val
+    // (after connection setup) so the listener closes the same reference the task thread uses;
+    // we only close the connection (not rs/stmt) to avoid races with the completion listener.
+    // Tradeoff: interrupts during getConnection / sessionInitStatement / prepareStatement are not
+    // covered here; those steps are usually short compared to the main query + fetch loop.
+    val connForInterrupt = conn
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = {
+        try {
+          if (connForInterrupt != null && !connForInterrupt.isClosed) {
+            connForInterrupt.close()
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Exception closing JDBC connection on task interrupt", e)
+        }
+      }
+    })
 
     rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
       try {

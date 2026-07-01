@@ -21,8 +21,10 @@ import numpy as np
 import pandas as pd
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
+from pyspark.pandas.config import option_context
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils, SPARK_CONF_ARROW_ENABLED
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
 class IndexBasicMixin:
@@ -73,26 +75,20 @@ class IndexBasicMixin:
         self.assert_eq(psdf.index.copy(), pdf.index.copy())
 
     def test_holds_integer(self):
-        pidx = pd.Index([1, 2, 3, 4])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+        def check_holds_integer(pidx):
+            psidx = ps.from_pandas(pidx)
 
-        pidx = pd.Index([1.1, 2.2, 3.3, 4.4])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+            if LooseVersion(pd.__version__) < "3.0.0":
+                self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
+            else:
+                with self.assertRaises(AttributeError):
+                    psidx.holds_integer()
 
-        pidx = pd.Index(["A", "B", "C", "D"])
-        psidx = ps.from_pandas(pidx)
-        self.assert_eq(pidx.holds_integer(), psidx.holds_integer())
-
-        # MultiIndex
-        pmidx = pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "a")])
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.holds_integer(), psmidx.holds_integer())
-
-        pmidx = pd.MultiIndex.from_tuples([(10, 1), (10, 2), (20, 1)])
-        psmidx = ps.from_pandas(pmidx)
-        self.assert_eq(pmidx.holds_integer(), psmidx.holds_integer())
+        check_holds_integer(pd.Index([1, 2, 3, 4]))
+        check_holds_integer(pd.Index([1.1, 2.2, 3.3, 4.4]))
+        check_holds_integer(pd.Index(["A", "B", "C", "D"]))
+        check_holds_integer(pd.MultiIndex.from_tuples([("x", "a"), ("x", "b"), ("y", "a")]))
+        check_holds_integer(pd.MultiIndex.from_tuples([(10, 1), (10, 2), (20, 1)]))
 
     def test_item(self):
         pidx = pd.Index([10])
@@ -197,6 +193,45 @@ class IndexBasicMixin:
         psmidx = ps.from_pandas(pmidx)
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
+
+    def test_equals(self):
+        # Single Index
+        pidx = pd.Index(["a", "b", "c"])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.equals(pidx), psidx.equals(psidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                pidx.equals(pd.Index(["a", "b", "c"])),
+                psidx.equals(ps.Index(["a", "b", "c"])),
+            )
+            self.assert_eq(
+                pidx.equals(pd.Index(["b", "b", "a"])),
+                psidx.equals(ps.Index(["b", "b", "a"])),
+            )
+            # equals ignores the name (unlike identical)
+            self.assert_eq(
+                pd.Index([1, 2, 3], name="x").equals(pd.Index([1, 2, 3], name="y")),
+                ps.Index([1, 2, 3], name="x").equals(ps.Index([1, 2, 3], name="y")),
+            )
+
+        # MultiIndex
+        pmidx = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        psmidx = ps.from_pandas(pmidx)
+        self.assert_eq(pmidx.equals(pmidx), psmidx.equals(psmidx))
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                pmidx.equals(pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])),
+                psmidx.equals(ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])),
+            )
+            self.assert_eq(
+                pmidx.equals(pd.MultiIndex.from_tuples([("c", "z"), ("b", "y"), ("a", "x")])),
+                psmidx.equals(ps.MultiIndex.from_tuples([("c", "z"), ("b", "y"), ("a", "x")])),
+            )
+
+        # Index vs MultiIndex (different type) -> not equal
+        self.assert_eq(pidx.equals(pmidx), psidx.equals(psmidx))
 
 
 class IndexBasicTests(

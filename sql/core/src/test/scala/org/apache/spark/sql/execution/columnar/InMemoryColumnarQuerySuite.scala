@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -50,8 +50,7 @@ class TestCachedBatchSerializer(
   }
 }
 
-class InMemoryColumnarQuerySuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -185,25 +184,25 @@ class InMemoryColumnarQuerySuite extends QueryTest
   test("SPARK-1678 regression: compression must not lose repeated values") {
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
 
     spark.catalog.cacheTable("repeatedData")
 
     checkAnswer(
       sql("SELECT * FROM repeatedData"),
-      repeatedData.collect().toSeq.map(Row.fromTuple))
+      repeatedData.collect().toSeq)
   }
 
   test("with null values") {
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
 
     spark.catalog.cacheTable("nullableRepeatedData")
 
     checkAnswer(
       sql("SELECT * FROM nullableRepeatedData"),
-      nullableRepeatedData.collect().toSeq.map(Row.fromTuple))
+      nullableRepeatedData.collect().toSeq)
   }
 
   test("SPARK-2729 regression: timestamp data type") {
@@ -223,16 +222,46 @@ class InMemoryColumnarQuerySuite extends QueryTest
     }
   }
 
+  test("cache nanosecond-precision timestamp types") {
+    // Nanosecond timestamps are non-primitive for the default cache (DefaultCachedBatchSerializer
+    // .supportsColumnarOutput is true only for primitive types), so they always read back through
+    // the row path -- the vectorized reader is not exercised, the same as for CalendarInterval,
+    // Variant, and Decimal.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq("TIMESTAMP_NTZ(9)", "TIMESTAMP_LTZ(9)").foreach { typeName =>
+        withTempView("nanos") {
+          // Include sub-microsecond precision and a null to exercise the full payload and null
+          // handling through the cache.
+          val df = sql(
+            s"""SELECT * FROM VALUES
+               |  (cast('2020-01-01 00:00:00.123456789' as $typeName)),
+               |  (cast('1999-12-31 23:59:59.987654321' as $typeName)),
+               |  (cast(null as $typeName))
+               |  as t(ts)""".stripMargin)
+          df.createOrReplaceTempView("nanos")
+          val expected = sql("SELECT ts FROM nanos").collect().toSeq
+
+          spark.catalog.cacheTable("nanos")
+          try {
+            checkAnswer(sql("SELECT ts FROM nanos"), expected)
+          } finally {
+            spark.catalog.uncacheTable("nanos")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-3320 regression: batched column buffer building should work with empty partitions") {
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
 
     spark.catalog.cacheTable("withEmptyParts")
 
     checkAnswer(
       sql("SELECT * FROM withEmptyParts"),
-      withEmptyParts.collect().toSeq.map(Row.fromTuple))
+      withEmptyParts.collect().toSeq)
   }
 
   test("SPARK-4182 Caching complex types") {
@@ -362,7 +391,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.length * INT.defaultSize)
+    assert(cached.cacheBuilder.materializedSizeInBytes === expectedAnswer.length * INT.defaultSize)
   }
 
    test("cached row count should be calculated") {
@@ -376,7 +405,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right row count was calculated.
-    assert(cached.cacheBuilder.rowCountStats.value === 6)
+    assert(cached.cacheBuilder.materializedRowCount === 6)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {

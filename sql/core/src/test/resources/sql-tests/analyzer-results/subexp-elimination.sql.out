@@ -93,4 +93,4 @@ SELECT case when from_json(a, 'struct<a:int,b:string>').a > 5 then from_json(a, 
 -- !query
 DROP VIEW IF EXISTS testData
 -- !query analysis
-DropTempViewCommand testData
+DropTempViewCommand testData, true

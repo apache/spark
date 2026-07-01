@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.connector
 
+import java.util.Locale
+
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.connector.catalog._
@@ -111,7 +113,25 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
     val identToUse = Option(InMemoryTableSessionCatalog.customIdentifierResolution)
       .map(_(ident))
       .getOrElse(ident)
-    super.loadTable(identToUse)
+
+    // For single-part namespaces, follow Iceberg's pattern: first try to load the table
+    // normally, fall back to metadata table resolution only on NoSuchTableException
+    try {
+      super.loadTable(identToUse)
+    } catch {
+      case _: AnalysisException if identToUse.name().toLowerCase(Locale.ROOT) == "snapshots" =>
+        loadSnapshotTable(identToUse)
+    }
+  }
+
+  private def loadSnapshotTable(ident: Identifier): InMemorySnapshotsTable = {
+    val parentTableName = ident.namespace().last
+    val parentNamespace = ident.namespace().dropRight(1)
+    val parentIdent = Identifier.of(
+      if (parentNamespace.isEmpty) Array("default") else parentNamespace,
+      parentTableName)
+    val parentTable = super.loadTable(parentIdent).asInstanceOf[InMemoryTable]
+    new InMemorySnapshotsTable(parentTable)
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
@@ -160,9 +180,8 @@ object InMemoryTableSessionCatalog {
 }
 
 private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
-  extends QueryTest
-  with SharedSparkSession
-  with BeforeAndAfter {
+  extends SharedSparkSession
+  with BeforeAndAfter { self: InsertIntoSQLOnlyTests =>
 
   protected def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
@@ -196,6 +215,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).saveAsTable(t1)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -203,6 +223,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).mode("append").saveAsTable(t1)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 
@@ -226,10 +247,12 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
       df.select("id", "data").write.format(v2Format).saveAsTable(t1)
     }
     df.write.format(v2Format).mode("append").saveAsTable(t1)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
 
     // Check that appends are by name
     df.select($"data", $"id").write.format(v2Format).mode("append").saveAsTable(t1)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df.union(df))
   }
 
@@ -265,6 +288,7 @@ private [connector] trait SessionCatalogTest[T <: Table, Catalog <: TestV2Sessio
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).mode("ignore").saveAsTable(t1)
+    checkInsertMetrics(t1, numInsertedRows = 3)
     verifyTable(t1, df)
   }
 

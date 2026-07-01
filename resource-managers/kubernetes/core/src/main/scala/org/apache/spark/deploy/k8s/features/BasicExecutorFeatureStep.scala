@@ -42,6 +42,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorContainerImage = kubernetesConf.image
+  private val allowPrivilegeEscalation =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION)
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
@@ -164,7 +166,13 @@ private[spark] class BasicExecutorFeatureStep(
       KubernetesUtils.buildEnvVars(
         Seq(
           ENV_DRIVER_URL -> driverUrl,
-          ENV_EXECUTOR_CORES -> execResources.cores.get.toString,
+          ENV_EXECUTOR_CORES -> {
+            if (kubernetesConf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false)) {
+              kubernetesConf.get("spark.task.cpus", "1")
+            } else {
+              execResources.cores.get.toString
+            }
+          },
           ENV_EXECUTOR_MEMORY -> executorMemoryString,
           ENV_APPLICATION_ID -> kubernetesConf.appId,
           // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
@@ -217,6 +225,14 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
         .endResources()
+      .addNewResizePolicy()
+        .withResourceName("cpu")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
+      .addNewResizePolicy()
+        .withResourceName("memory")
+        .withRestartPolicy("NotRequired")
+        .endResizePolicy()
       .addNewEnv()
         .withName(ENV_SPARK_USER)
         .withValue(Utils.getCurrentUserName())
@@ -224,6 +240,9 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToEnv(executorEnv.asJava)
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
+      .editOrNewSecurityContext()
+        .withAllowPrivilegeEscalation(allowPrivilegeEscalation)
+        .endSecurityContext()
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {
       executorContainer
@@ -239,8 +258,8 @@ private[spark] class BasicExecutorFeatureStep(
       executorLimitCores.map { limitCores =>
         val executorCpuLimitQuantity = new Quantity(limitCores)
         if (executorCpuLimitQuantity.compareTo(executorCpuQuantity) < 0) {
-          throw new SparkException(s"The executor cpu request ($executorCpuQuantity) should be " +
-            s"less than or equal to cpu limit ($executorCpuLimitQuantity)")
+          throw new IllegalArgumentException(s"The executor cpu request ($executorCpuQuantity) " +
+            s"should be less than or equal to cpu limit ($executorCpuLimitQuantity)")
         }
         new ContainerBuilder(executorContainerWithConfVolume)
           .editResources()

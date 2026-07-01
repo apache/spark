@@ -35,15 +35,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -306,6 +307,20 @@ private[parquet] class ParquetRowConverter(
       parquetType: Type,
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // Passes all ParquetRowConverter constructor params to the extended newConverter overload
+    // so struct-backed types can create recursive converters.
+    ParquetTypeOps(catalystType)
+      .map(_.newConverter(
+        parquetType, updater, schemaConverter, convertTz,
+        datetimeRebaseSpec, int96RebaseSpec))
+      .getOrElse(newConverterDefault(parquetType, catalystType, updater))
+  }
+
+  private def newConverterDefault(
+      parquetType: Type,
+      catalystType: DataType,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
       parquetType.getLogicalTypeAnnotation match {
@@ -412,6 +427,12 @@ private[parquet] class ParquetRowConverter(
       case _: StringType =>
         new ParquetStringConverter(updater)
 
+      case geom: GeometryType =>
+        new ParquetGeometryConverter(geom.srid, updater)
+
+      case geog: GeographyType =>
+        new ParquetGeographyConverter(geog.srid, updater)
+
       // As long as the parquet type is INT64 timestamp, whether logical annotation
       // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
       case TimestampType
@@ -491,17 +512,6 @@ private[parquet] class ParquetRowConverter(
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {
             this.updater.set(dateRebaseFunc(value))
-          }
-        }
-
-      case _: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val nanos = DateTimeUtils.microsToNanos(value)
-            this.updater.setLong(nanos)
           }
         }
 
@@ -609,6 +619,78 @@ private[parquet] class ParquetRowConverter(
       val offset = buffer.arrayOffset() + buffer.position()
       val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
+    }
+  }
+
+  /**
+   * Parquet converter for geometries. A dictionary is used to minimize WKB decoding cost.
+   */
+  private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
+      extends ParquetPrimitiveConverter(updater) {
+
+    private var expandedDictionary: Array[BinaryView] = null
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
+        STUtils.stGeomFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe, srid)
+      }
+    }
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+    override def addBinary(value: Binary): Unit = {
+      val buffer = value.toByteBuffer
+      val numBytes = buffer.remaining()
+
+      val geometry = if (buffer.hasArray) {
+        val array = buffer.array()
+        val offset = buffer.arrayOffset() + buffer.position()
+        STUtils.stGeomFromWKB(array.slice(offset, offset + numBytes), srid)
+      } else {
+        STUtils.stGeomFromWKB(value.getBytesUnsafe, srid)
+      }
+
+      updater.set(geometry)
+    }
+  }
+
+  /**
+   * Parquet converter for geographies. A dictionary is used to minimize WKB decoding cost.
+   */
+  private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
+      extends ParquetPrimitiveConverter(updater) {
+
+    private var expandedDictionary: Array[BinaryView] = null
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
+        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe, srid)
+      }
+    }
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+    override def addBinary(value: Binary): Unit = {
+      val buffer = value.toByteBuffer
+      val numBytes = buffer.remaining()
+
+      val geography = if (buffer.hasArray) {
+        val array = buffer.array()
+        val offset = buffer.arrayOffset() + buffer.position()
+        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes), srid)
+      } else {
+        STUtils.stGeogFromWKB(value.getBytesUnsafe, srid)
+      }
+
+      updater.set(geography)
     }
   }
 

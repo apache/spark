@@ -295,6 +295,12 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        # pandas >= 3 infers large_string instead of string for object-dtype string Series
+        string_type = pa.large_string() if LooseVersion(pd.__version__) >= "3.0.0" else pa.string()
+        # pandas >= 3 defaults to microsecond resolution instead of nanosecond
+        ts_unit = "us" if LooseVersion(pd.__version__) >= "3.0.0" else "ns"
 
         sg = ZoneInfo("Asia/Singapore")
         la = "America/Los_Angeles"
@@ -315,22 +321,22 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([np.inf, 1.0, 2.0]), pa.float64()),
             (pd.Series([-np.inf, 1.0, 2.0]), pa.float64()),
             # String
-            (pd.Series(["a", "b", "c"]), pa.string()),
+            (pd.Series(["a", "b", "c"]), string_type),
             # Boolean
             (pd.Series([True, False, True]), pa.bool_()),
             # Temporal
             (pd.Series([date1, date2]), pa.date32()),
-            (pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp("ns")),
-            (pd.Series([pd.Timestamp("1970-01-01")]), pa.timestamp("ns")),
-            (pd.Series([pd.Timestamp.min]), pa.timestamp("ns")),
-            (pd.Series([pd.Timestamp.max]), pa.timestamp("ns")),
-            (pd.Series(pd.to_timedelta(["1 day", "2 hours"])), pa.duration("ns")),
-            (pd.Series([pd.Timedelta(0)]), pa.duration("ns")),
-            (pd.Series([pd.Timedelta.min]), pa.duration("ns")),
-            (pd.Series([pd.Timedelta.max]), pa.duration("ns")),
+            (pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp(ts_unit)),
+            (pd.Series([pd.Timestamp("1970-01-01")]), pa.timestamp(ts_unit)),
+            (pd.Series([pd.Timestamp.min]), pa.timestamp(ts_unit)),
+            (pd.Series([pd.Timestamp.max]), pa.timestamp(ts_unit)),
+            (pd.Series(pd.to_timedelta(["1 day", "2 hours"])), pa.duration(ts_unit)),
+            (pd.Series([pd.Timedelta(0)]), pa.duration(ts_unit)),
+            (pd.Series([pd.Timedelta.min]), pa.duration(ts_unit)),
+            (pd.Series([pd.Timedelta.max]), pa.duration(ts_unit)),
             # Timezone-aware
-            (pd.Series([dt1_sg, dt2_sg]), pa.timestamp("ns", tz="Asia/Singapore")),
-            (pd.Series([ts1_la, ts2_la]), pa.timestamp("ns", tz=la)),
+            (pd.Series([dt1_sg, dt2_sg]), pa.timestamp(ts_unit, tz="Asia/Singapore")),
+            (pd.Series([ts1_la, ts2_la]), pa.timestamp(ts_unit, tz=la)),
             # Binary
             (pd.Series([b"hello", b"world"]), pa.binary()),
             # Nested
@@ -356,6 +362,10 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
         import numpy as np
         import pandas as pd
         import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        # pandas >= 3 uses pyarrow-backed StringDtype, which infers large_string
+        string_type = pa.large_string() if LooseVersion(pd.__version__) >= "3.0.0" else pa.string()
 
         cases = [
             # Integer
@@ -379,8 +389,8 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([True, False, True], dtype=pd.BooleanDtype()), pa.bool_()),
             (pd.Series([True, False, None], dtype=pd.BooleanDtype()), pa.bool_()),
             # String
-            (pd.Series(["a", "b", "c"], dtype=pd.StringDtype()), pa.string()),
-            (pd.Series(["a", "b", None], dtype=pd.StringDtype()), pa.string()),
+            (pd.Series(["a", "b", "c"], dtype=pd.StringDtype()), string_type),
+            (pd.Series(["a", "b", None], dtype=pd.StringDtype()), string_type),
         ]
         self._run_inference_tests(cases)
 

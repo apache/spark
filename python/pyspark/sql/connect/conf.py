@@ -15,9 +15,6 @@
 # limitations under the License.
 #
 from pyspark.errors import PySparkValueError, PySparkTypeError
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
 
 from typing import Any, Dict, Optional, Union, cast
 import warnings
@@ -124,9 +121,10 @@ class RuntimeConf:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": identifier,
+                    "expected_type": "str",
                     "arg_type": type(obj).__name__,
                 },
             )
@@ -149,7 +147,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.connect.conf,
         globs=globs,
         optionflags=doctest.ELLIPSIS

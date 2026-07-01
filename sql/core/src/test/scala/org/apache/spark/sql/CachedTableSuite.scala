@@ -64,8 +64,7 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends QueryTest
-  with SharedSparkSession
+class CachedTableSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -106,7 +105,7 @@ class CachedTableSuite extends QueryTest
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
@@ -475,12 +474,12 @@ class CachedTableSuite extends QueryTest
       val toBeCleanedAccIds = new HashSet[Long]
 
       val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId1
 
       val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case i: InMemoryRelation => i.cacheBuilder.materializationAccumulatorId
       }.head
       toBeCleanedAccIds += accId2
 
@@ -507,6 +506,37 @@ class CachedTableSuite extends QueryTest
 
       assert(AccumulatorContext.get(accId1).isEmpty)
       assert(AccumulatorContext.get(accId2).isEmpty)
+    }
+  }
+
+  test("SPARK-57547: clearCache resets materialization bookkeeping") {
+    val df = spark.range(0, 100, 1, numPartitions = 4).filter($"id" >= 0)
+    df.cache()
+    try {
+      val cacheRelations = df.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }
+      assert(cacheRelations.length == 1)
+      val builder = cacheRelations.head.cacheBuilder
+      // Force the cache build directly (a plain df action can be served from the query-result
+      // cache and skip the rebuild after clearCache).
+      builder.cachedColumnBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+
+      builder.clearCache()
+      // The loaded latch and the materialization stats must not survive clearCache, otherwise a
+      // rebuilt cache would inherit a stale "loaded" state with stale/zero statistics.
+      assert(!builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 0L)
+      assert(builder.materializedSizeInBytes == 0L)
+
+      // Rebuilding works and reports correct stats again.
+      builder.cachedColumnBuffers.count()
+      assert(builder.isCachedColumnBuffersLoaded)
+      assert(builder.materializedRowCount == 100L)
+    } finally {
+      df.unpersist(blocking = true)
     }
   }
 
@@ -2660,6 +2690,24 @@ class CachedTableSuite extends QueryTest
       }
       assert(subqueryInMemoryTableScan.size == 1)
       checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
+  }
+
+  test("ALTER TABLE invalidates cached table") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 'a'), (2, 'b')")
+
+      sql(s"CACHE TABLE $t")
+      assertCached(sql(s"SELECT * FROM $t"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, "a"), Row(2, "b")))
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_col int")
+
+      val result = sql(s"SELECT * FROM $t ORDER BY id")
+      assertCached(result)
+      checkAnswer(result, Seq(Row(1, "a", null), Row(2, "b", null)))
     }
   }
 

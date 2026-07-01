@@ -1,0 +1,4 @@
+Project [id#0L, a#0, b#0, my_index#0L]
++- Project [id#0L, a#0, b#0, distributed_sequence_id#0L AS my_index#0L]
+   +- AttachDistributedSequence[distributed_sequence_id#0L, id#0L, a#0, b#0] Index: distributed_sequence_id#0L
+      +- LocalRelation <empty>, [id#0L, a#0, b#0]

@@ -46,13 +46,17 @@ private[window] object AggregateProcessor {
       functions: Array[Expression],
       ordinal: Int,
       inputAttributes: Seq[Attribute],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
+      filters: Array[Option[Expression]])
     : AggregateProcessor = {
+    assert(filters.length == functions.length,
+      s"filters length (${filters.length}) must match functions length (${functions.length})")
     val aggBufferAttributes = mutable.Buffer.empty[AttributeReference]
     val initialValues = mutable.Buffer.empty[Expression]
     val updateExpressions = mutable.Buffer.empty[Expression]
     val evaluateExpressions = mutable.Buffer.fill[Expression](ordinal)(NoOp)
     val imperatives = mutable.Buffer.empty[ImperativeAggregate]
+    val imperativeFilterExprs = mutable.Buffer.empty[Option[Expression]]
 
     // SPARK-14244: `SizeBasedWindowFunction`s are firstly created on driver side and then
     // serialized to executor side. These functions all reference a global singleton window
@@ -73,25 +77,34 @@ private[window] object AggregateProcessor {
     }
 
     // Add an AggregateFunction to the AggregateProcessor.
-    functions.foreach {
-      case agg: DeclarativeAggregate =>
+    functions.zip(filters).foreach {
+      case (agg: DeclarativeAggregate, filterOpt) =>
         aggBufferAttributes ++= agg.aggBufferAttributes
         initialValues ++= agg.initialValues
-        updateExpressions ++= agg.updateExpressions
+        filterOpt match {
+          case Some(filter) =>
+            updateExpressions ++= agg.updateExpressions.zip(agg.aggBufferAttributes).map {
+              case (updateExpr, attr) => If(filter, updateExpr, attr)
+            }
+          case None =>
+            updateExpressions ++= agg.updateExpressions
+        }
         evaluateExpressions += agg.evaluateExpression
-      case agg: ImperativeAggregate =>
+      case (agg: ImperativeAggregate, filterOpt) =>
         val offset = aggBufferAttributes.size
         val imperative = BindReferences.bindReference(agg
           .withNewInputAggBufferOffset(offset)
           .withNewMutableAggBufferOffset(offset),
           inputAttributes)
         imperatives += imperative
+        imperativeFilterExprs += filterOpt.map(f =>
+          BindReferences.bindReference(f, inputAttributes))
         aggBufferAttributes ++= imperative.aggBufferAttributes
         val noOps = Seq.fill(imperative.aggBufferAttributes.size)(NoOp)
         initialValues ++= noOps
         updateExpressions ++= noOps
         evaluateExpressions += imperative
-      case other =>
+      case (other, _) =>
         throw SparkException.internalError(s"Unsupported aggregate function: $other")
     }
 
@@ -108,6 +121,7 @@ private[window] object AggregateProcessor {
       updateProj,
       evalProj,
       imperatives.toArray,
+      imperativeFilterExprs.toArray,
       partitionSize.isDefined)
   }
 }
@@ -122,6 +136,7 @@ private[window] final class AggregateProcessor(
     private[this] val updateProjection: MutableProjection,
     private[this] val evaluateProjection: MutableProjection,
     private[this] val imperatives: Array[ImperativeAggregate],
+    private[this] val imperativeFilters: Array[Option[Expression]],
     private[this] val trackPartitionSize: Boolean) {
 
   private[this] val join = new JoinedRow
@@ -152,13 +167,41 @@ private[window] final class AggregateProcessor(
     updateProjection(join(buffer, input))
     var i = 0
     while (i < numImperatives) {
-      imperatives(i).update(buffer, input)
+      val shouldUpdate = imperativeFilters(i) match {
+        case Some(filter) =>
+          val result = filter.eval(input)
+          result != null && result.asInstanceOf[Boolean]
+        case None => true
+      }
+      if (shouldUpdate) {
+        imperatives(i).update(buffer, input)
+      }
       i += 1
     }
   }
 
   /** Evaluate buffer. */
-  def evaluate(target: InternalRow): Unit = {
-    evaluateProjection.target(target)(buffer)
+  def evaluate(target: InternalRow): Unit = evaluate(buffer, target)
+
+  /**
+   * Evaluate using an arbitrary `source` buffer (e.g. a segment-tree query
+   * result) instead of the internal one.
+   *
+   * '''Contract''': `source` must share this processor's internal
+   * `aggBufferAttributes` layout -- same field count, same dataTypes, in the
+   * same order. The segment-tree path enforces this upstream in
+   * `WindowEvaluatorFactoryBase.eligibleForSegTree`, which restricts eligible
+   * functions to `WindowSegmentTree.EligibleAggregates` (an explicit allowlist
+   * of `DeclarativeAggregate` classes). The same `functions: Array[DeclarativeAggregate]`
+   * drives both this processor's `bufferSchema` and `WindowSegmentTree`'s
+   * internal buffer schema. The contract is invisible at the call site and
+   * easy to break from either end; the cheap field-count `assert` below
+   * surfaces drift loudly instead of producing silently garbled output.
+   */
+  private[window] def evaluate(source: InternalRow, target: InternalRow): Unit = {
+    assert(source.numFields == bufferSchema.length,
+      s"source buffer has ${source.numFields} fields, " +
+        s"expected ${bufferSchema.length} to match aggBufferAttributes layout")
+    evaluateProjection.target(target)(source)
   }
 }

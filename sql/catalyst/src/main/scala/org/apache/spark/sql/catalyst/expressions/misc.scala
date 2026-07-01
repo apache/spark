@@ -97,6 +97,21 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
 
   override def prettyName: String = "raise_error"
 
+  override def sql: String = {
+    // When constructed from the single-argument form (just an error message string),
+    // output only the original message to produce valid, roundtrippable SQL.
+    (errorClass, errorParms) match {
+      case (Literal(cls, _), CreateMap(Seq(Literal(key, _), msg), _))
+        if cls != null &&
+          (cls.toString == "USER_RAISED_EXCEPTION" ||
+            cls.toString == "_LEGACY_ERROR_USER_RAISED_EXCEPTION") &&
+          key != null && key.toString == "errorMessage" =>
+        s"$prettyName(${msg.sql})"
+      case _ =>
+        super.sql
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     val error = errorClass.eval(input).asInstanceOf[UTF8String]
     val parms: MapData = errorParms.eval(input).asInstanceOf[MapData]
@@ -231,6 +246,28 @@ case class CurrentCatalog()
   with Unevaluable {
   override def nullable: Boolean = false
   override def prettyName: String = "current_catalog"
+  final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
+}
+
+/**
+ * Returns the current SQL path as a comma-separated list of qualified schema names
+ * (catalog.schema). The result reflects the current catalog and schema context.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current SQL path (qualified schema names).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       system.builtin,system.session,spark_catalog.default
+  """,
+  since = "4.2.0",
+  group = "misc_funcs")
+case class CurrentPath()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
+  override def nullable: Boolean = false
+  override def prettyName: String = "current_path"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 

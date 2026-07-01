@@ -29,7 +29,6 @@ from pyspark.pandas.series import Series
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.namespace import _get_index_map
 
-
 __all__ = ["sql"]
 
 from builtins import globals as builtin_globals
@@ -375,7 +374,7 @@ def _test() -> None:
         .appName("pyspark.pandas.sql_processor tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.sql_processor,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

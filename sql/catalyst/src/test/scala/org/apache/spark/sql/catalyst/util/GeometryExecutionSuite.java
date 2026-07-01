@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,6 +46,17 @@ class GeometryExecutionSuite {
     0x40
   };
 
+  // The same Geometry as before, representing a POINT(1 2), but with SRID 0 (i.e. undefined SRID).
+  private final byte[] testGeometryValNoSrid = new byte[] {
+    0x00, 0x00, 0x00, 0x00,
+    0x01, 0x01, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, (byte)0xF0,
+    0x3F, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x40
+  };
+
   /** Tests for Geometry factory methods and getters. */
 
   @Test
@@ -53,7 +68,7 @@ class GeometryExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeometryVal value = GeometryVal.fromBytes(testGeometryVal);
+    BinaryView value = BinaryView.fromBytes(testGeometryVal);
     Geometry geometry = Geometry.fromValue(value);
     assertNotNull(geometry);
     assertEquals(value, geometry.getValue());
@@ -82,26 +97,47 @@ class GeometryExecutionSuite {
 
   /** Tests for Geometry WKB parsing. */
 
+  // Helper method to create a simple WKB Point (0, 1)
+  private byte[] getTestWKBPoint() {
+    ByteBuffer bb = ByteBuffer.allocate(1 + 4 + 8 + 8);
+    bb.order(ByteOrder.LITTLE_ENDIAN);
+
+    bb.put((byte) 1);           // byte order = little endian
+    bb.putInt(1);               // type = 1 (Point)
+    bb.putDouble(0.0);          // X
+    bb.putDouble(1.0);          // Y
+    return bb.array();
+  }
+
   @Test
   void testFromWkbWithSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geometry geometry = Geometry.fromWkb(wkb, 4326);
     assertNotNull(geometry);
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(4326, geometry.srid());
   }
 
   @Test
   void testFromWkbNoSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
+    byte[] wkb = getTestWKBPoint();
     // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
     // Once we implement the appropriate parsing logic, this test should be updated accordingly.
     Geometry geometry = Geometry.fromWkb(wkb);
     assertNotNull(geometry);
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(0, geometry.srid());
+  }
+
+  @Test
+  void testFromWkbInvalidWkb() {
+    byte[] invalidWkb = new byte[]{111};
+    SparkIllegalArgumentException exception = assertThrows(
+      SparkIllegalArgumentException.class,
+      () -> Geometry.fromWkb(invalidWkb)
+    );
+    assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    assertTrue(exception.getMessage().contains("Unexpected end of WKB buffer"));
   }
 
   /** Tests for Geometry EWKB parsing. */
@@ -157,7 +193,7 @@ class GeometryExecutionSuite {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
     // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
     byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
-    assertArrayEquals(wkb, geometry.toWkb());
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.LITTLE_ENDIAN));
   }
 
   @Test
@@ -171,11 +207,9 @@ class GeometryExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geometry.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geometry WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test
@@ -211,23 +245,23 @@ class GeometryExecutionSuite {
   /** Tests for Geometry WKT and EWKT converters. */
 
   @Test
-  void testToWktUnsupported() {
+  void testToWkt() {
+    // The test geometry is POINT(1 2) with SRID 4326.
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geometry::toWkt
-    );
-    assertEquals("Geometry WKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("POINT(1 2)", new String(geometry.toWkt(), StandardCharsets.UTF_8));
+    // WKT output should be the same regardless of whether the Geometry SRID value.
+    Geometry geometryNoSrid = Geometry.fromBytes(testGeometryValNoSrid);
+    assertEquals("POINT(1 2)", new String(geometryNoSrid.toWkt(), StandardCharsets.UTF_8));
   }
 
   @Test
-  void testToEwktUnsupported() {
+  void testToEwkt() {
+    // The test geometry is POINT(1 2) with SRID 4326.
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geometry::toEwkt
-    );
-    assertEquals("Geometry EWKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("SRID=4326;POINT(1 2)", new String(geometry.toEwkt(), StandardCharsets.UTF_8));
+    // If the Geometry has SRID 0 (undefined SRID), then the EWKT output does not include it.
+    Geometry geometryNoSrid = Geometry.fromBytes(testGeometryValNoSrid);
+    assertEquals("POINT(1 2)", new String(geometryNoSrid.toEwkt(), StandardCharsets.UTF_8));
   }
 
   /** Tests for other Geometry methods. */
@@ -235,6 +269,35 @@ class GeometryExecutionSuite {
   @Test
   void testSrid() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    assertEquals(4326, geometry.srid());
+  }
+
+  @Test
+  void testSetSridOnTightOwner() {
+    // fromBytes wraps a tight on-heap array, so setSrid writes through in place.
+    Geometry geometry = Geometry.fromBytes(testGeometryVal.clone());
+    geometry.setSrid(3857);
+    assertEquals(3857, geometry.srid());
+  }
+
+  @Test
+  void testSetSridThrowsWhenNotTightOwner() {
+    // A sub-range view does not own a tight backing array, so getBytes() returns a copy and an
+    // in-place setSrid would be silently lost. It must fail loudly instead of dropping the write.
+    byte[] padded = new byte[testGeometryVal.length + 4];
+    System.arraycopy(testGeometryVal, 0, padded, 4, testGeometryVal.length);
+    Geometry geometry = Geometry.fromValue(
+      BinaryView.fromBytes(padded, 4, testGeometryVal.length));
+    // Reads still work (they copy out), and the original SRID is intact.
+    assertEquals(4326, geometry.srid());
+    SparkRuntimeException e = assertThrows(
+      SparkRuntimeException.class, () -> geometry.setSrid(3857));
+    assertEquals("INTERNAL_ERROR", e.getCondition());
+    // After copy() the value owns a tight array, so setSrid succeeds and writes through.
+    Geometry owned = geometry.copy();
+    owned.setSrid(3857);
+    assertEquals(3857, owned.srid());
+    // The original sub-range view is untouched.
     assertEquals(4326, geometry.srid());
   }
 }

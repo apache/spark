@@ -20,7 +20,6 @@ from typing import Any, TYPE_CHECKING
 from pyspark.ml import functions as PyMLFunctions
 from pyspark.sql.column import Column
 
-
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
 
@@ -76,7 +75,7 @@ def _test() -> None:
         .getOrCreate()
     )
 
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.ml.connect.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS

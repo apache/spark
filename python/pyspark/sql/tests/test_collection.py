@@ -18,6 +18,7 @@
 import datetime
 import unittest
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     Row,
     ArrayType,
@@ -32,14 +33,14 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pyarrow,
     have_pandas,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
@@ -95,18 +96,27 @@ class DataFrameCollectionTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas(self):
+        import pandas as pd
         import numpy as np
 
         pdf = self._to_pandas()
         types = pdf.dtypes
-        self.assertEqual(types[0], np.int32)
-        self.assertEqual(types[1], object)
-        self.assertEqual(types[2], bool)
-        self.assertEqual(types[3], np.float32)
-        self.assertEqual(types[4], object)  # datetime.date
-        self.assertEqual(types[5], "datetime64[ns]")
-        self.assertEqual(types[6], "datetime64[ns]")
-        self.assertEqual(types[7], "timedelta64[ns]")
+        self.assertEqual(types.iloc[0], np.int32)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(types.iloc[1], object)
+        else:
+            self.assertEqual(types.iloc[1], pd.StringDtype(na_value=np.nan))  # datetime.date
+        self.assertEqual(types.iloc[2], bool)
+        self.assertEqual(types.iloc[3], np.float32)
+        self.assertEqual(types.iloc[4], object)  # datetime.date
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(types.iloc[5], "datetime64[ns]")
+            self.assertEqual(types.iloc[6], "datetime64[ns]")
+            self.assertEqual(types.iloc[7], "timedelta64[ns]")
+        else:
+            self.assertEqual(types.iloc[5], "datetime64[us]")
+            self.assertEqual(types.iloc[6], "datetime64[us]")
+            self.assertEqual(types.iloc[7], "timedelta64[us]")
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_with_duplicated_column_names(self):
@@ -155,22 +165,27 @@ class DataFrameCollectionTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_avoid_astype(self):
+        import pandas as pd
         import numpy as np
 
         schema = StructType().add("a", IntegerType()).add("b", StringType()).add("c", IntegerType())
         data = [(1, "foo", 16777220), (None, "bar", None)]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
-        self.assertEqual(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
-        self.assertEqual(types[1], object)
-        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types.iloc[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(types.iloc[1], object)
+        else:
+            self.assertEqual(types.iloc[1], pd.StringDtype(na_value=np.nan))
+        self.assertEqual(types.iloc[2], np.float64)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_empty_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                self.check_to_pandas_from_empty_dataframe()
+            with self.subTest(arrow_enabled=value):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                    self.check_to_pandas_from_empty_dataframe()
 
     def check_to_pandas_from_empty_dataframe(self):
         # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
@@ -199,13 +214,15 @@ class DataFrameCollectionTestsMixin:
     def test_to_pandas_from_null_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                self.check_to_pandas_from_null_dataframe()
+            with self.subTest(arrow_enabled=value):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                    self.check_to_pandas_from_null_dataframe()
 
     def check_to_pandas_from_null_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
         # using arrow
+        import pandas as pd
         import numpy as np
 
         sql = """
@@ -223,24 +240,28 @@ class DataFrameCollectionTestsMixin:
             """
         pdf = self.spark.sql(sql).toPandas()
         types = pdf.dtypes
-        self.assertEqual(types[0], np.float64)
-        self.assertEqual(types[1], np.float64)
-        self.assertEqual(types[2], np.float64)
-        self.assertEqual(types[3], np.float64)
-        self.assertEqual(types[4], np.float32)
-        self.assertEqual(types[5], np.float64)
-        self.assertEqual(types[6], object)
-        self.assertEqual(types[7], object)
-        self.assertTrue(np.can_cast(np.datetime64, types[8]))
-        self.assertTrue(np.can_cast(np.datetime64, types[9]))
-        self.assertTrue(np.can_cast(np.timedelta64, types[10]))
+        self.assertEqual(types.iloc[0], np.float64)
+        self.assertEqual(types.iloc[1], np.float64)
+        self.assertEqual(types.iloc[2], np.float64)
+        self.assertEqual(types.iloc[3], np.float64)
+        self.assertEqual(types.iloc[4], np.float32)
+        self.assertEqual(types.iloc[5], np.float64)
+        self.assertEqual(types.iloc[6], object)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assertEqual(types.iloc[7], object)
+        else:
+            self.assertEqual(types.iloc[7], pd.StringDtype(na_value=np.nan))
+        self.assertTrue(np.can_cast(np.datetime64, types.iloc[8]))
+        self.assertTrue(np.can_cast(np.datetime64, types.iloc[9]))
+        self.assertTrue(np.can_cast(np.timedelta64, types.iloc[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_to_pandas_from_mixed_dataframe(self):
         is_arrow_enabled = [True, False]
         for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                self.check_to_pandas_from_mixed_dataframe()
+            with self.subTest(arrow_enabled=value):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                    self.check_to_pandas_from_mixed_dataframe()
 
     def check_to_pandas_from_mixed_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes

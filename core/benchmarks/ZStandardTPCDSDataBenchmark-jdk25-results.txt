@@ -1,0 +1,49 @@
+================================================================================================
+Benchmark ZStandardCompressionCodec
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1015-azure
+AMD EPYC 7763 64-Core Processor
+Compression:                                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+Compression 4 times at level 1 without buffer pool           2577           2577           0          0.0   644134142.3       1.0X
+Compression 4 times at level 2 without buffer pool           4194           4196           3          0.0  1048471607.5       0.6X
+Compression 4 times at level 3 without buffer pool           6231           6241          14          0.0  1557667092.3       0.4X
+Compression 4 times at level 1 with buffer pool              2579           2579           0          0.0   644779114.0       1.0X
+Compression 4 times at level 2 with buffer pool              4175           4176           2          0.0  1043641907.5       0.6X
+Compression 4 times at level 3 with buffer pool              6212           6225          18          0.0  1553055229.5       0.4X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1015-azure
+AMD EPYC 7763 64-Core Processor
+Decompression:                                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Decompression 4 times from level 1 without buffer pool            859            865          11          0.0   214700464.3       1.0X
+Decompression 4 times from level 2 without buffer pool           1143           1143           0          0.0   285665894.8       0.8X
+Decompression 4 times from level 3 without buffer pool           1373           1374           2          0.0   343196795.3       0.6X
+Decompression 4 times from level 1 with buffer pool               860            879          22          0.0   214939094.8       1.0X
+Decompression 4 times from level 2 with buffer pool              1152           1163          16          0.0   288071891.8       0.7X
+Decompression 4 times from level 3 with buffer pool              1355           1366          16          0.0   338782682.3       0.6X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1015-azure
+AMD EPYC 7763 64-Core Processor
+Parallel Compression at level 3:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parallel Compression with 0 workers                2096           2096           1          0.0   523895360.0       1.0X
+Parallel Compression with 1 workers                1890           1891           2          0.0   472430425.7       1.1X
+Parallel Compression with 2 workers                 976            981           8          0.0   243959449.5       2.1X
+Parallel Compression with 4 workers                 709            714           5          0.0   177327324.3       3.0X
+Parallel Compression with 8 workers                 784            802          26          0.0   196036047.0       2.7X
+Parallel Compression with 16 workers                798            826          28          0.0   199589171.3       2.6X
+
+OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1015-azure
+AMD EPYC 7763 64-Core Processor
+Parallel Compression at level 9:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Parallel Compression with 0 workers                8053           8078          35          0.0  2013222657.8       1.0X
+Parallel Compression with 1 workers                6908           6912           7          0.0  1726939967.8       1.2X
+Parallel Compression with 2 workers                3534           3553          27          0.0   883480920.5       2.3X
+Parallel Compression with 4 workers                3090           3109          27          0.0   772521046.0       2.6X
+Parallel Compression with 8 workers                3519           3541          32          0.0   879746664.0       2.3X
+Parallel Compression with 16 workers               3839           3847          13          0.0   959649252.0       2.1X
+
+

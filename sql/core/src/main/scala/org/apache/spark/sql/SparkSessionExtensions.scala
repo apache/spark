@@ -309,6 +309,23 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
+  private[this] val preOperatorOptimizationRuleBuilders = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildPreOperatorOptimizationRules(
+      session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    preOperatorOptimizationRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder into the [[SparkSession]]. The injected rules will be
+   * executed in a single pass (Once) before the main operator optimization fixed-point batch.
+   * Use this for rules that need to observe the plan as it enters the operator-optimization
+   * fixed point, before built-in rules like FoldablePropagation or ConstantFolding transform it.
+   */
+  def injectPreOperatorOptimizationRule(builder: RuleBuilder): Unit = {
+    preOperatorOptimizationRuleBuilders += builder
+  }
+
   private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]
 
   private[sql] def buildPreCBORules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
@@ -365,22 +382,30 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Only unqualified (1-part) names are supported — they are registered as builtins.
+      // Multi-part names were silently unreachable before and are ignored for compatibility.
+      if (name.database.isEmpty && name.catalog.isEmpty) {
+        functionRegistry.registerFunction(
+          FunctionRegistry.builtinFunctionIdentifier(name.funcName), expressionInfo, function)
+      }
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      if (name.database.isEmpty && name.catalog.isEmpty) {
+        tableFunctionRegistry.registerFunction(
+          FunctionRegistry.builtinFunctionIdentifier(name.funcName), expressionInfo, function)
+      }
     }
     tableFunctionRegistry
   }
 
   /**
-  * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
-  * at runtime for all sessions.
-  */
+   * Injects a custom function into the [[org.apache.spark.sql.catalyst.analysis.FunctionRegistry]]
+   * at runtime for all sessions.
+   */
   def injectFunction(functionDescription: FunctionDescription): Unit = {
     injectedFunctions += functionDescription
   }

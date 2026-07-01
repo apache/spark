@@ -23,9 +23,10 @@ import matplotlib as mat
 import numpy as np
 from matplotlib.axes._base import _process_plot_format  # type: ignore[attr-defined]
 from matplotlib.figure import Figure
+import pandas as pd
 from pandas.core.dtypes.inference import is_list_like
-from pandas.io.formats.printing import pprint_thing  # type: ignore[import-untyped]
-from pandas.plotting._matplotlib import (  # type: ignore[import-untyped]
+from pandas.io.formats.printing import pprint_thing  # type: ignore[import-not-found]
+from pandas.plotting._matplotlib import (  # type: ignore[import-not-found]
     BarPlot as PandasBarPlot,
     BoxPlot as PandasBoxPlot,
     HistPlot as PandasHistPlot,
@@ -37,7 +38,7 @@ from pandas.plotting._matplotlib import (  # type: ignore[import-untyped]
     KdePlot as PandasKdePlot,
 )
 from pandas.plotting._core import PlotAccessor
-from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot  # type: ignore[import-untyped]
+from pandas.plotting._matplotlib.core import MPLPlot as PandasMPLPlot  # type: ignore[import-not-found]
 
 from pyspark.pandas.plot import (
     TopNPlotBase,
@@ -202,7 +203,7 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
                 for stats, ci in zip(bxpstats, conf_intervals):
                     if ci is not None:
                         if len(ci) != 2:
-                            raise ValueError("each confidence interval must " "have two values")
+                            raise ValueError("each confidence interval must have two values")
                         else:
                             if ci[0] is not None:
                                 stats["cilo"] = ci[0]
@@ -450,9 +451,11 @@ class PandasOnSparkHistPlot(PandasHistPlot, HistogramPlotBase):
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
             # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
             # see pandas-dev/pandas#40078.
-            self._append_legend_handles_labels(artists[0], label) if hasattr(
-                self, "_append_legend_handles_labels"
-            ) else self._add_legend_handle(artists[0], label, index=i)
+            (
+                self._append_legend_handles_labels(artists[0], label)
+                if hasattr(self, "_append_legend_handles_labels")
+                else self._add_legend_handle(artists[0], label, index=i)
+            )
 
     @classmethod
     def _plot(cls, ax, y, style=None, bins=None, bottom=0, column_num=0, stacking_id=None, **kwds):
@@ -569,9 +572,11 @@ class PandasOnSparkKdePlot(PandasKdePlot, KdePlotBase):
             artists = self._plot(ax, y, column_num=i, stacking_id=stacking_id, **kwds)
             # `if hasattr(...)` makes plotting compatible with pandas < 1.3,
             # see pandas-dev/pandas#40078.
-            self._append_legend_handles_labels(artists[0], label) if hasattr(
-                self, "_append_legend_handles_labels"
-            ) else self._add_legend_handle(artists[0], label, index=i)
+            (
+                self._append_legend_handles_labels(artists[0], label)
+                if hasattr(self, "_append_legend_handles_labels")
+                else self._add_legend_handle(artists[0], label, index=i)
+            )
 
     @staticmethod
     def _get_ind(y, ind):
@@ -968,5 +973,10 @@ def _plot(data, x=None, y=None, subplots=False, ax=None, kind="line", **kwds):
 
         plot_obj = klass(data, subplots=subplots, ax=ax, kind=kind, **kwds)
     plot_obj.generate()
-    plot_obj.draw()
+    if LooseVersion(pd.__version__) < "3.0.0":
+        plot_obj.draw()
+    else:
+        import matplotlib.pyplot as plt
+
+        plt.draw_if_interactive()
     return plot_obj.result

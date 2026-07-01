@@ -23,7 +23,7 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   // sarutak/oracle-free is a custom fork of gvenzl/oracle-free which allows to set timeout for
   // password initialization. See SPARK-54076 for details.
   lazy override val imageName =
-    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "sarutak/oracle-free:23.26.0-slim")
+    sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "sarutak/oracle-free:23.26.2-slim")
   val oracle_password = "Th1s1sThe0racle#Pass"
   override val env = Map(
     "ORACLE_PWD" -> oracle_password, // oracle images uses this
@@ -32,6 +32,12 @@ class OracleDatabaseOnDocker extends DatabaseOnDocker with Logging {
   )
   override val usesIpc = false
   override val jdbcPort: Int = 1521
+
+  // The Oracle Free container is the heaviest of the JDBC integration test databases and
+  // intermittently takes longer than the default 10 minutes to fully bootstrap its listener,
+  // causing the suite to abort with "ORA-12541: No listener". Give it more headroom so the
+  // test is not flaky on slow CI runners.
+  override def connectionTimeout: Option[String] = Some("15min")
 
   override def getJdbcUrl(ip: String, port: Int): String = {
     s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/freepdb1"

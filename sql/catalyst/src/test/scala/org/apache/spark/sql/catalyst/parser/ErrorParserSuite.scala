@@ -61,10 +61,13 @@ class ErrorParserSuite extends AnalysisTest {
       exception = parseException("USE test-test"),
       condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-test"))
+    // SPARK-55155: SET CATALOG now supports expressions and the Parser will not
+    // treat test-test as error identifier.
     checkError(
       exception = parseException("SET CATALOG test-test"),
-      condition = "INVALID_IDENTIFIER",
-      parameters = Map("ident" -> "test-test"))
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "SET CATALOG test-test"),
+      context = ExpectedContext(fragment = "SET CATALOG test-test", start = 0, stop = 20))
     checkError(
       exception = parseException("CREATE DATABASE IF NOT EXISTS my-database"),
       condition = "INVALID_IDENTIFIER",

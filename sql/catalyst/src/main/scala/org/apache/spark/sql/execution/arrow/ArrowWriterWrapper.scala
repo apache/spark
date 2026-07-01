@@ -69,12 +69,10 @@ object ArrowWriterWrapper {
       schema: StructType,
       timeZoneId: String,
       allocatorOwner: String,
-      errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
       dataOut: DataOutputStream,
       context: TaskContext): ArrowWriterWrapper = {
-    val arrowSchema =
-      ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
     val allocator = ArrowUtils.rootAllocator.newChildAllocator(
       s"stdout writer for $allocatorOwner", 0, Long.MaxValue)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)

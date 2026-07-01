@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.utils
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow, UntypedFlow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -35,6 +35,9 @@ class TestGraphRegistrationContext(
       defaultDatabase = TestGraphRegistrationContext.DEFAULT_DATABASE,
       defaultSqlConf = sqlConf
     ) {
+
+  /** Expose all registered flows for tests */
+  def getFlows: List[UnresolvedFlow] = flows.toList
 
   // scalastyle:off
   // Disable scalastyle to ignore argument count.
@@ -171,7 +174,7 @@ class TestGraphRegistrationContext(
 
     if (query.isDefined) {
       registerFlow(
-        new UnresolvedFlow(
+        UntypedFlow(
           identifier = qualifiedIdentifier,
           destinationIdentifier = qualifiedIdentifier,
           func = query.get,
@@ -262,7 +265,7 @@ class TestGraphRegistrationContext(
     )
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = viewIdentifier,
         destinationIdentifier = viewIdentifier,
         func = query,
@@ -334,7 +337,7 @@ class TestGraphRegistrationContext(
       }
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = flowDestinationIdentifier,
         func = query,
@@ -355,19 +358,31 @@ class TestGraphRegistrationContext(
   /**
    * Creates a flow function from a logical plan that reads from a table with the given name.
    */
-  def readFlowFunc(name: String): FlowFunction = {
-    FlowAnalysis.createFlowFunctionFromLogicalPlan(UnresolvedRelation(TableIdentifier(name)))
+  def readFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
+    FlowAnalysis.createFlowFunctionFromLogicalPlan(
+      UnresolvedRelation(
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
+        isStreaming = false
+      )
+    )
   }
 
   /**
    * Creates a flow function from a logical plan that reads a stream from a table with the given
    * name.
    */
-  def readStreamFlowFunc(name: String): FlowFunction = {
+  def readStreamFlowFunc(
+       name: String,
+       extraOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
+  ): FlowFunction = {
     FlowAnalysis.createFlowFunctionFromLogicalPlan(
       UnresolvedRelation(
-        TableIdentifier(name),
-        extraOptions = CaseInsensitiveStringMap.empty(),
+        tableIdentifier = GraphIdentifierManager.parseTableIdentifier(name, spark),
+        extraOptions = extraOptions,
         isStreaming = true
       )
     )

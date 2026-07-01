@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class StringFunctionsSuite extends QueryTest with SharedSparkSession {
+class StringFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -145,6 +145,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
+  test("string jaro_winkler_similarity") {
+    val df = Seq(("MARTHA", "MARHTA"), ("ABC", "XYZ")).toDF("l", "r")
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", $"r")),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.selectExpr("jaro_winkler_similarity(l, r)"),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", lit(null))),
+      Seq(Row(null), Row(null)))
+  }
+
   test("string rlike / regexp / regexp_like") {
     val df = Seq(
       ("1a 2b 14m", "\\d+b"),
@@ -188,9 +201,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
         regexp_replace($"a", $"b", $"c"),
+        regexp_replace($"a", "(\\d+)", "num", 5),
+        regexp_replace($"a", $"b", $"c", lit(5)),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
-        Row("num-num", "400-400", "100") :: Nil)
+      Row("num-num", "300", "100-num", "100-200", "100") ::
+        Row("num-num", "400", "100-num", "100-200", "100") ::
+        Row("num-num", "400-400", "100-num", "100-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,
@@ -452,6 +468,47 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("instr(a, b)"),
       Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1)),
+      Row(2))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, b, 1, 2)"),
+      Row(2))
+
+    checkAnswer(
+      df.select(instr($"a", $"b", -1, 2)),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1, 2)"),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr('abcde', 'cd', -3, 1)"),
+      Row(3))
+
+    // Test throw exception when occurrence <= 0
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      parameters = Map(
+        "functionName" -> toSQLId("instr"),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> "0"
+      )
+    )
   }
 
   test("string substring_index function") {
@@ -1468,6 +1525,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       check(
         sql("SELECT * FROM test_table WHERE try_validate_utf8(b) = 'def'"),
         Seq(Row("abc", "def")))
+    }
+  }
+
+  test("SPARK-55747: GetArrayItem NPE on null array from split() with ANSI enabled") {
+    // GetArrayItem.nullable was incorrectly computed as false when the array type has
+    // containsNull=false (e.g., from StringSplit) but the array itself can be null.
+    // This caused codegen to skip null checks, leading to NPE when calling
+    // array.numElements() on a null array during bounds checking.
+    withTable("t") {
+      sql("CREATE TABLE t (s STRING) USING parquet")
+      sql("INSERT INTO t VALUES ('a-b'), (null)")
+      checkAnswer(
+        sql("SELECT split(s, '-')[size(split(s, '-')) - 1] FROM t"),
+        Seq(Row("b"), Row(null))
+      )
     }
   }
 }

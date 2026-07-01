@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * Test suite to handle metadata cache related.
  */
-abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
+abstract class MetadataCacheSuite extends SharedSparkSession {
 
   /** Removes one data file in the given directory. */
   protected def deleteOneFileInDirectory(dir: File): Unit = {

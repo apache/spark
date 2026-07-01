@@ -18,9 +18,11 @@
 from datetime import timedelta
 from typing import Any, Union
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     BooleanType,
     DayTimeIntervalType,
@@ -64,6 +66,45 @@ class TimedeltaOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col
 
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return col
+        else:
+            return col.astype(self.dtype)
+
+    def _with_inferred_unit(
+        self, result: SeriesOrIndex, left: IndexOpsLike, right: Union[IndexOpsMixin, timedelta]
+    ) -> SeriesOrIndex:
+        # pandas 3.0.0+ promotes timedelta arithmetic to the finer resolution of the
+        # operands; before that, pandas-on-Spark represented timedelta as nanoseconds.
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return result
+
+        def unit_of(obj: Union[IndexOpsMixin, timedelta]) -> str:
+            if isinstance(obj, IndexOpsMixin):
+                dtype = obj.dtype
+                if isinstance(dtype, np.dtype) and np.issubdtype(dtype, np.timedelta64):
+                    return np.datetime_data(dtype)[0]
+            elif isinstance(obj, pd.Timedelta):
+                return obj.unit
+            # datetime.timedelta scalars and object-backed interval columns map to microseconds.
+            return "us"
+
+        promoted = np.promote_types(
+            np.dtype(f"timedelta64[{unit_of(left)}]"),
+            np.dtype(f"timedelta64[{unit_of(right)}]"),
+        )
+        # DayTimeIntervalType stores microseconds and cannot represent finer resolutions.
+        if np.datetime_data(promoted)[0] == "ns":
+            promoted = np.dtype("timedelta64[us]")
+
+        field = result._internal.data_fields[0]
+        if field.dtype == promoted:
+            # Already the right resolution (the common us case); avoid rebuilding the field.
+            return result
+        return result._with_new_scol(result.spark.column, field=field.copy(dtype=promoted))
+
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
@@ -72,7 +113,8 @@ class TimedeltaOps(DataTypeOps):
             and isinstance(right.spark.data_type, DayTimeIntervalType)
             or isinstance(right, timedelta)
         ):
-            return pyspark_column_op("__sub__", left, right)
+            result = pyspark_column_op("__sub__", left, right)
+            return self._with_inferred_unit(result, left, right)
         else:
             raise TypeError("Timedelta subtraction can only be applied to timedelta series.")
 
@@ -80,7 +122,8 @@ class TimedeltaOps(DataTypeOps):
         _sanitize_list_like(right)
 
         if isinstance(right, timedelta):
-            return pyspark_column_op("__rsub__", left, right)
+            result = pyspark_column_op("__rsub__", left, right)
+            return self._with_inferred_unit(result, left, right)
         else:
             raise TypeError("Timedelta subtraction can only be applied to timedelta series.")
 

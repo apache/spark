@@ -21,8 +21,9 @@ import java.util.Locale
 
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -39,10 +40,11 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -105,7 +107,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
-    if (isFileFormat && ident.last.isEmpty) {
+    if (isFileFormat && SparkStringUtils.isBlank(ident.last)) {
       unresolved.failAnalysis(
         errorClass = "INVALID_EMPTY_LOCATION",
         messageParameters = Map("location" -> ident.last))
@@ -168,7 +170,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       val tableName = tableIdentWithDB.unquotedString
       val existingTable = catalog.getTableMetadata(tableIdentWithDB)
 
-      if (existingTable.tableType == CatalogTableType.VIEW) {
+      if (existingTable.isViewLike) {
         throw QueryCompilationErrors.saveDataIntoViewNotAllowedError()
       }
 
@@ -466,11 +468,37 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
       throw QueryCompilationErrors.unsupportedInsertWithSchemaEvolution()
     }
 
+    if (insert.replaceCriteriaOpt.isDefined) {
+      throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(tblName)
+    }
+
     val normalizedPartSpec = normalizePartitionSpec(
       insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val expectedColumns = {
+      val cols = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+      // When the legacy config is disabled, restore the original nullability from the
+      // catalog table schema. HadoopFsRelation forces dataSchema.asNullable for safe reads,
+      // which strips NOT NULL constraints (both top-level and nested) from the
+      // LogicalRelation output. We restore nullability so that AssertNotNull checks are
+      // properly injected.
+      if (conf.getConf(SQLConf.FILE_SOURCE_INSERT_ENFORCE_NOT_NULL)) {
+        catalogTable.map { ct =>
+          val catalogFields = ct.schema.fields.map(f => f.name -> f).toMap
+          cols.map { col =>
+            catalogFields.get(col.name) match {
+              case Some(field) =>
+                col.withNullability(field.nullable)
+                  .withDataType(restoreDataTypeNullability(col.dataType, field.dataType))
+              case None => col
+            }
+          }
+        }.getOrElse(cols)
+      } else {
+        cols
+      }
+    }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
       catalogTable.get.partitionColumnNames.nonEmpty &&
@@ -501,7 +529,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         query,
         byName,
         conf,
-        supportColDefaultValue = true)
+        TableOutputResolver.DefaultValueFillMode.FILL)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
@@ -530,7 +558,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _)
+    case i @ InsertIntoStatement(table, _, _, query, _, _, _, _, _)
       if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
@@ -545,6 +573,34 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
       }
+  }
+
+  /**
+   * Recursively restores nullability flags from the original data type into the resolved
+   * data type, keeping the resolved type structure intact.
+   */
+  private def restoreDataTypeNullability(resolved: DataType, original: DataType): DataType = {
+    (resolved, original) match {
+      case (r: StructType, o: StructType) =>
+        val origFields = o.fields.map(f => f.name -> f).toMap
+        StructType(r.fields.map { rf =>
+          origFields.get(rf.name) match {
+            case Some(of) =>
+              rf.copy(
+                nullable = of.nullable,
+                dataType = restoreDataTypeNullability(rf.dataType, of.dataType))
+            case None => rf
+          }
+        })
+      case (ArrayType(rElem, _), ArrayType(oElem, oNull)) =>
+        ArrayType(restoreDataTypeNullability(rElem, oElem), oNull)
+      case (MapType(rKey, rVal, _), MapType(oKey, oVal, oValNull)) =>
+        MapType(
+          restoreDataTypeNullability(rKey, oKey),
+          restoreDataTypeNullability(rVal, oVal),
+          oValNull)
+      case _ => resolved
+    }
   }
 }
 
@@ -611,7 +667,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
-          _, query, _, _, _, _) =>
+          _, query, _, _, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case l: LogicalRelation => l.relation
@@ -640,7 +696,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
               messageParameters = Map("relationId" -> toSQLId(relation.toString)))
         }
 
-      case InsertIntoStatement(t, _, _, _, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
@@ -682,19 +738,6 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
  * It does so by walking the resolved plan looking for View operators for persisted views.
  */
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
-
-  /**
-   * Checks if comment changes between view and table should trigger schema sync.
-   * When preserveUserComments flag is enabled, comment differences should NOT trigger sync
-   * because we want to preserve user-set view comments.
-   */
-  private def shouldTriggerRedoOnCommentChange(
-      viewField: StructField,
-      tableField: StructField,
-      preserveUserComments: Boolean): Boolean = {
-    !preserveUserComments && viewField.getComment() != tableField.getComment()
-  }
-
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case View(metaData, false, viewQuery, _)
@@ -713,50 +756,37 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           (field.dataType != planField.dataType ||
             field.nullable != planField.nullable ||
             (viewSchemaMode == SchemaEvolution && (
-              field.name != planField.name ||
-                shouldTriggerRedoOnCommentChange(
-                  field,
-                  planField,
-                  session.sessionState.conf.viewSchemaEvolutionPreserveUserComments))))
+              field.getComment() != planField.getComment() ||
+              field.name != planField.name)))
         }
-
-        lazy val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
 
         if (redo) {
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
             val newFields = viewQuery.schema.map {
               case StructField(name, dataType, nullable, _) =>
                 StructField(name, dataType, nullable,
-                  viewFieldsByName(name).metadata)
-            }
-            StructType(newFields)
-          } else if (session.sessionState.conf.viewSchemaEvolutionPreserveUserComments) {
-            // Adopt types/nullable/names from query, but preserve view comments.
-            val newFields = viewQuery.schema.map { planField =>
-              val newMetadata = viewFieldsByName.get(planField.name) match {
-                case Some(viewField) =>
-                  // Use table metadata but override with view comment
-                  val builder = new MetadataBuilder().withMetadata(planField.metadata)
-                  viewField.getComment() match {
-                    case Some(comment) => builder.putString("comment", comment)
-                    case None => builder.remove("comment")
-                  }
-                  builder.build()
-                case None =>
-                  // New column, use table metadata as-is
-                  planField.metadata
-              }
-              StructField(planField.name, planField.dataType, planField.nullable, newMetadata)
+                  viewFields.find(_.name == name).get.metadata)
             }
             StructType(newFields)
           } else {
-            // Legacy behavior: adopt everything from table including comments.
             viewQuery.schema
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
           val updatedViewMeta = metaData.copy(schema = newSchema)
-          session.sessionState.catalog.alterTable(updatedViewMeta)
+          try {
+            session.sessionState.catalog.alterTable(updatedViewMeta)
+          } catch {
+            case NonFatal(e) =>
+              throw new SparkException(
+                errorClass = "FAILED_UPDATE_VIEW_SCHEMA",
+                messageParameters = Map(
+                  "viewName" -> metaData.qualifiedName,
+                  "schemaMode" -> s"WITH SCHEMA ${viewSchemaMode.toString}",
+                  "newSchema" -> newSchema.treeString,
+                  "existingSchema" -> metaData.schema.treeString),
+                cause = e)
+          }
         }
       case _ => // OK
     }

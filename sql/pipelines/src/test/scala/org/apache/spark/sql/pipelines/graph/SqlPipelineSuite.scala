@@ -611,7 +611,7 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       )
     }
 
-    assert(ex.errorClass.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
+    assert(ex.errorClass.contains("INVALID_TEMP_OBJ_QUALIFIER"))
   }
 
   test("create view syntax for persisted views") {
@@ -734,6 +734,26 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       spark.sql(s"SELECT * FROM $pipelineCatalog.$pipelineDatabase.mv6"),
       Seq(Row(1), Row(2), Row(3), Row(4))
     )
+  }
+
+  gridTest("Set catalog throws error if catalog name expression cannot be resolved") (
+    Seq(
+      "CONCAT(foo, '1')",
+      "test.cat"
+    )
+  ) {
+    case catalogNameExpression =>
+    val graphRegistrationContext = new TestGraphRegistrationContext(spark)
+    val sqlGraphRegistrationContext = new SqlGraphRegistrationContext(graphRegistrationContext)
+
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      sqlGraphRegistrationContext.processSqlFile(
+        sqlText = s"SET CATALOG $catalogNameExpression",
+        sqlFilePath = "a.sql",
+        spark = spark
+      )
+    }
+    assert(ex.getMessage.contains("Failed to resolve catalog expression"))
   }
 
   test("Writing/reading datasets from fully and partially qualified names works") {

@@ -64,8 +64,8 @@ public class ParquetFooterReader {
     ParquetReadOptions readOptions = HadoopReadOptions
         .builder(inputFile.getConfiguration(), inputFile.getPath())
         .withMetadataFilter(filter).build();
-    try (var fileReader = ParquetFileReader.open(inputFile, readOptions)) {
-      return fileReader.getFooter();
+    try (var stream = inputFile.newStream()) {
+      return ParquetFileReader.readFooter(inputFile,  readOptions, stream);
     }
   }
 

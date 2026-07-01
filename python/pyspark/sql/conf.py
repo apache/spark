@@ -62,8 +62,12 @@ class RuntimeConfig:
         self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
     ) -> Optional[str]:
         """
-        Returns the value of Spark runtime configuration property for the given key,
-        assuming it is set.
+        Returns the value of Spark runtime configuration property for the given key.
+
+        If ``default`` is not provided and the key is not explicitly set, returns the key's
+        built-in default value if one exists, otherwise raises an exception. If ``default``
+        is provided and the key is not explicitly set, returns ``default`` instead of
+        the key's built-in default value (if any).
 
         .. versionadded:: 2.0.0
 
@@ -72,19 +76,43 @@ class RuntimeConfig:
         key : str
             key of the configuration to get.
         default : str, optional
-            value of the configuration to get if the key does not exist.
+            value to return if the key is not explicitly set. When provided, this overrides
+            the key's built-in default value.
 
         Returns
         -------
-        The string value of the configuration set, or None.
+        str or None
+            The value of the configuration property.
+
+        Raises
+        ------
+        pyspark.errors.SparkNoSuchElementException
+            If the key is not explicitly set, has no built-in default value, and ``default``
+            is not provided.
 
         Examples
         --------
+        A key with no built-in default returns the provided ``default`` when not explicitly set:
+
         >>> spark.conf.get("non-existent-key", "my_default")
         'my_default'
+
+        An explicitly set key returns its value:
+
         >>> spark.conf.set("my_key", "my_value")
         >>> spark.conf.get("my_key")
         'my_value'
+
+        A key with a built-in default returns that default when not explicitly set:
+
+        >>> spark.conf.unset("spark.sql.sources.partitionOverwriteMode")
+        >>> spark.conf.get("spark.sql.sources.partitionOverwriteMode")
+        'STATIC'
+
+        Providing ``default`` overrides the built-in default, not just the absence of a value:
+
+        >>> spark.conf.get("spark.sql.sources.partitionOverwriteMode", "DYNAMIC")
+        'DYNAMIC'
         """
         self._check_type(key, "key")
         if default is _NoValue:
@@ -136,9 +164,10 @@ class RuntimeConfig:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                errorClass="NOT_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": identifier,
+                    "expected_type": "str",
                     "arg_type": type(obj).__name__,
                 },
             )
@@ -163,7 +192,7 @@ def _test() -> None:
     globs = pyspark.sql.conf.__dict__.copy()
     spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS
     )
     spark.stop()

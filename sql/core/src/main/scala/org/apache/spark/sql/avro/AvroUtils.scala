@@ -16,18 +16,18 @@
  */
 package org.apache.spark.sql.avro
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException, IOException}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.avro.{Schema, SchemaFormatter}
-import org.apache.avro.file.{DataFileReader, FileReader}
+import org.apache.avro.{Schema, SchemaFormatter, SchemaParseException}
+import org.apache.avro.file.{DataFileReader, DataFileStream, FileReader}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.OutputWriterFactory
+import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, OutputWriterFactory}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -47,6 +47,30 @@ private[sql] object AvroUtils extends Logging {
 
   val JSON_INLINE_FORMAT: String = "json/inline"
   val JSON_PRETTY_FORMAT: String = "json/pretty"
+
+  /**
+   * Parses an Avro schema from a JSON string with proper error handling.
+   *
+   * The Avro 1.12.x library's Schema.Parser can throw NullPointerException from
+   * ParseContext.resolve() when the schema references named types that cannot be
+   * resolved. This method wraps such NPEs in SchemaParseException so they are
+   * handled by the existing error handling in from_avro/to_avro (which catches
+   * NonFatal exceptions and reports them via the parseMode mechanism).
+   *
+   * @param jsonFormatSchema the Avro schema in JSON string format
+   * @return the parsed Avro Schema
+   * @throws SchemaParseException if the schema cannot be parsed
+   */
+  def parseAvroSchema(jsonFormatSchema: String): Schema = {
+    try {
+      new Schema.Parser().setValidateDefaults(false).parse(jsonFormatSchema)
+    } catch {
+      case e: NullPointerException =>
+        val ex = new SchemaParseException(s"Failed to parse Avro schema: ${e.getMessage}")
+        ex.initCause(e)
+        throw ex
+    }
+  }
 
   def inferSchema(
       spark: SparkSession,
@@ -62,8 +86,22 @@ private[sql] object AvroUtils extends Logging {
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
       .getOrElse {
-        inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
-          new FileSourceOptions(CaseInsensitiveMap(options)).ignoreCorruptFiles)
+        val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(options))
+        // Tar archives are inferred by reading each entry's writer schema from its Avro header
+        // (streamed, never unpacked to disk), then any loose files. Avro has no DSv2 reader and
+        // does not merge schemas, so this is V1-only and uses the first readable writer schema.
+        val (archives, nonArchives) = if (fileSourceOptions.archiveFormatEnabled) {
+          files.partition(f => ArchiveReader.isArchivePath(f.getPath))
+        } else {
+          (Seq.empty[FileStatus], files)
+        }
+        if (archives.nonEmpty) {
+          inferAvroSchemaFromArchives(archives, nonArchives, conf, parsedOptions.ignoreExtension,
+            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles)
+        } else {
+          inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
+            fileSourceOptions.ignoreCorruptFiles)
+        }
       }
 
     SchemaConverters.toSqlType(
@@ -82,6 +120,8 @@ private[sql] object AvroUtils extends Logging {
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => false
+
+    case _: GeometryType | _: GeographyType => false
 
     case _: AtomicType => true
 
@@ -125,15 +165,17 @@ private[sql] object AvroUtils extends Logging {
                 case DEFLATE => Some(sqlConf.getConf(SQLConf.AVRO_DEFLATE_LEVEL), codecName)
                 case XZ => Some(sqlConf.getConf(SQLConf.AVRO_XZ_LEVEL), codecName)
                 case ZSTANDARD =>
-                  jobConf.setBoolean(AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
-                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED))
+                  DataSourceUtils.setConfIfAbsent(jobConf,
+                    AvroOutputFormat.ZSTD_BUFFERPOOL_KEY,
+                    sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_BUFFER_POOL_ENABLED).toString)
                   Some(sqlConf.getConf(SQLConf.AVRO_ZSTANDARD_LEVEL), "zstd")
                 case _ => None
               }
               levelAndCodecName.foreach { case (level, mapredCodecName) =>
+                val levelKey = s"avro.mapred.$mapredCodecName.level"
+                DataSourceUtils.setConfIfAbsent(jobConf, levelKey, level.toString)
                 logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} " +
-                  log"codec at level ${MDC(CODEC_LEVEL, level)}")
-                jobConf.setInt(s"avro.mapred.$mapredCodecName.level", level.toInt)
+                  log"codec at level ${MDC(CODEC_LEVEL, jobConf.get(levelKey))}")
               }
             } else {
               logInfo(log"Compressing Avro output using the ${MDC(CODEC_NAME, codecName)} codec")
@@ -191,6 +233,74 @@ private[sql] object AvroUtils extends Logging {
       case None =>
         throw new FileNotFoundException(
           "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
+    }
+  }
+
+  /**
+   * Infers an Avro schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) by reading the writer schema
+   * from the first readable archive entry's Avro header via a forward-only [[DataFileStream]] --
+   * the archive is streamed, never unpacked to disk, and records are never scanned. Mirrors
+   * [[inferAvroSchemaFromFiles]]: schema evolution is not supported, so the first readable writer
+   * schema (across the archives, then any loose files) is used for the whole dataset, and archives
+   * past the first readable one are never opened.
+   */
+  private def inferAvroSchemaFromArchives(
+      archives: Seq[FileStatus],
+      nonArchives: Seq[FileStatus],
+      conf: Configuration,
+      ignoreExtension: Boolean,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean): Schema = {
+    archives.iterator
+      .flatMap { f =>
+        firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+      }
+      .nextOption()
+      .getOrElse {
+        // No readable schema in any archive; fall back to the loose files. With none readable
+        // there either, `inferAvroSchemaFromFiles` raises the standard "no Avro files found" error.
+        inferAvroSchemaFromFiles(nonArchives, conf, ignoreExtension, ignoreCorruptFiles)
+      }
+  }
+
+  /**
+   * Reads the Avro writer schema of `path`'s first readable entry from its [[DataFileStream]]
+   * header (records are never scanned), then closes the archive without reading further entries.
+   * Returns `None` for an empty archive, or for a missing/corrupt archive under the respective
+   * ignore flag. Because only the first entry is read, a corrupt later entry never affects
+   * inference -- matching [[inferAvroSchemaFromFiles]], which stops at the first readable file.
+   */
+  private def firstArchiveEntrySchema(
+      path: Path,
+      conf: Configuration,
+      ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean): Option[Schema] = {
+    try {
+      // `readEntries` returns a Closeable iterator; take the first entry's schema and close it so
+      // the archive stream is released without draining the remaining entries.
+      val entries = ArchiveReader(path).readEntries(conf) { (_, in) =>
+        val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
+        try {
+          Iterator.single(stream.getSchema)
+        } finally {
+          stream.close()
+        }
+      }
+      try {
+        if (entries.hasNext) Some(entries.next()) else None
+      } finally {
+        entries match {
+          case c: Closeable => c.close()
+          case _ =>
+        }
+      }
+    } catch {
+      case _: FileNotFoundException if ignoreMissingFiles =>
+        logWarning(log"Skipped missing archive: ${MDC(PATH, path)}")
+        None
+      case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+        logWarning(log"Skipped the corrupted archive: ${MDC(PATH, path)}", e)
+        None
     }
   }
 

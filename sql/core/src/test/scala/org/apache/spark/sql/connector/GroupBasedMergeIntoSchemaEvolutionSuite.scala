@@ -27,5 +27,6 @@ class GroupBasedMergeIntoSchemaEvolutionSQLSuite
 // Scala/DataFrame API-based tests for group-based row-level operations
 class GroupBasedMergeIntoSchemaEvolutionScalaSuite
   extends MergeIntoSchemaEvolutionScalaSuiteBase
-  with MergeIntoSchemaEvolutionTests {
+  with MergeIntoSchemaEvolutionTests
+  with MergeIntoSchemaEvolutionExtraScalaTests {
 }

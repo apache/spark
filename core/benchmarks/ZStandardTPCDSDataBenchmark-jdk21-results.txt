@@ -2,48 +2,48 @@
 Benchmark ZStandardCompressionCodec
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1015-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Compression:                                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------------
-Compression 4 times at level 1 without buffer pool           2585           2586           1          0.0   646239352.5       1.0X
-Compression 4 times at level 2 without buffer pool           4211           4216           7          0.0  1052689958.8       0.6X
-Compression 4 times at level 3 without buffer pool           6328           6328           1          0.0  1581904435.8       0.4X
-Compression 4 times at level 1 with buffer pool              2585           2587           3          0.0   646306514.0       1.0X
-Compression 4 times at level 2 with buffer pool              4193           4195           3          0.0  1048293261.0       0.6X
-Compression 4 times at level 3 with buffer pool              6264           6284          28          0.0  1565962696.5       0.4X
+Compression 4 times at level 1 without buffer pool           2517           2518           2          0.0   629250174.5       1.0X
+Compression 4 times at level 2 without buffer pool           3905           3905           1          0.0   976131153.8       0.6X
+Compression 4 times at level 3 without buffer pool           5325           5376          71          0.0  1331330159.5       0.5X
+Compression 4 times at level 1 with buffer pool              2516           2517           0          0.0   629106044.3       1.0X
+Compression 4 times at level 2 with buffer pool              3918           3918           1          0.0   979446706.3       0.6X
+Compression 4 times at level 3 with buffer pool              5325           5327           2          0.0  1331359973.0       0.5X
 
-OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1015-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Decompression:                                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-Decompression 4 times from level 1 without buffer pool            845            877          53          0.0   211244491.3       1.0X
-Decompression 4 times from level 2 without buffer pool           1141           1145           6          0.0   285267829.3       0.7X
-Decompression 4 times from level 3 without buffer pool           1358           1366          11          0.0   339611143.3       0.6X
-Decompression 4 times from level 1 with buffer pool               856            862          10          0.0   213948489.5       1.0X
-Decompression 4 times from level 2 with buffer pool              1153           1156           5          0.0   288195943.3       0.7X
-Decompression 4 times from level 3 with buffer pool              1368           1375           9          0.0   342032342.0       0.6X
+Decompression 4 times from level 1 without buffer pool           1024           1049          35          0.0   255987056.0       1.0X
+Decompression 4 times from level 2 without buffer pool           1368           1372           6          0.0   342037553.8       0.7X
+Decompression 4 times from level 3 without buffer pool           1647           1650           4          0.0   411759793.3       0.6X
+Decompression 4 times from level 1 with buffer pool              1035           1037           2          0.0   258858886.3       1.0X
+Decompression 4 times from level 2 with buffer pool              1370           1374           7          0.0   342426423.0       0.7X
+Decompression 4 times from level 3 with buffer pool              1672           1673           2          0.0   417941590.0       0.6X
 
-OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1015-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Parallel Compression at level 3:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Parallel Compression with 0 workers                2128           2130           3          0.0   531987145.5       1.0X
-Parallel Compression with 1 workers                2117           2131          20          0.0   529324483.0       1.0X
-Parallel Compression with 2 workers                1106           1107           0          0.0   276552237.3       1.9X
-Parallel Compression with 4 workers                 771            774           3          0.0   192777338.5       2.8X
-Parallel Compression with 8 workers                 815            826          13          0.0   203648175.7       2.6X
-Parallel Compression with 16 workers                950            963          11          0.0   237496152.5       2.2X
+Parallel Compression with 0 workers                1781           1782           2          0.0   445337898.3       1.0X
+Parallel Compression with 1 workers                1521           1521           0          0.0   380137917.3       1.2X
+Parallel Compression with 2 workers                 799            804           5          0.0   199851421.5       2.2X
+Parallel Compression with 4 workers                 738            743           6          0.0   184412369.5       2.4X
+Parallel Compression with 8 workers                 756            772          14          0.0   189053821.8       2.4X
+Parallel Compression with 16 workers                790            812          19          0.0   197470363.0       2.3X
 
-OpenJDK 64-Bit Server VM 21.0.9+10-LTS on Linux 6.11.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1015-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Parallel Compression at level 9:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Parallel Compression with 0 workers                8976           9140         231          0.0  2244064460.3       1.0X
-Parallel Compression with 1 workers                7198           7214          24          0.0  1799376873.8       1.2X
-Parallel Compression with 2 workers                3836           3850          20          0.0   959020774.8       2.3X
-Parallel Compression with 4 workers                3271           3284          18          0.0   817803690.0       2.7X
-Parallel Compression with 8 workers                3806           3807           2          0.0   951490679.3       2.4X
-Parallel Compression with 16 workers               4004           4026          31          0.0  1000957120.3       2.2X
+Parallel Compression with 0 workers                8304           8305           2          0.0  2075989562.2       1.0X
+Parallel Compression with 1 workers                6985           6999          20          0.0  1746241689.7       1.2X
+Parallel Compression with 2 workers                3550           3562          17          0.0   887528608.8       2.3X
+Parallel Compression with 4 workers                3219           3220           1          0.0   804794456.5       2.6X
+Parallel Compression with 8 workers                3531           3539          11          0.0   882763912.3       2.4X
+Parallel Compression with 16 workers               4135           4162          37          0.0  1033785804.5       2.0X
 
 

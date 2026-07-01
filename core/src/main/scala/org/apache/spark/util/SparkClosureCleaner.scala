@@ -31,19 +31,25 @@ private[spark] object SparkClosureCleaner {
    * @param closure           the closure to clean
    * @param checkSerializable whether to verify that the closure is serializable after cleaning
    * @param cleanTransitively whether to clean enclosing closures transitively
+   * @return Cleaned closure if it was actually cleaned or the original closure otherwise
    */
-  def clean(
-      closure: AnyRef,
+  def clean[F <: AnyRef](
+      closure: F,
       checkSerializable: Boolean = true,
-      cleanTransitively: Boolean = true): Unit = {
-    if (ClosureCleaner.clean(closure, cleanTransitively, mutable.Map.empty)) {
+      cleanTransitively: Boolean = true): F = {
+    val cleanedClosureOpt = ClosureCleaner.clean(closure, cleanTransitively, mutable.Map.empty)
+    if (cleanedClosureOpt.isDefined) {
+      val cleanedClosure = cleanedClosureOpt.get
       try {
         if (checkSerializable && SparkEnv.get != null) {
-          SparkEnv.get.closureSerializer.newInstance().serialize(closure)
+          SparkEnv.get.closureSerializer.newInstance().serialize(cleanedClosure: AnyRef)
         }
       } catch {
         case ex: Exception => throw new SparkException("Task not serializable", ex)
       }
+      cleanedClosure
+    } else {
+      closure
     }
   }
 }

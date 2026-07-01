@@ -404,6 +404,15 @@ abstract class Expression extends TreeNode[Expression] {
     } else {
       ""
     }
+
+  /**
+   * Mark if an expression is likely to be expensive.
+   * The current only consumer of this is the pushdown optimizer.
+   * By default an expression is expensive if any of it's children are expensive.
+   */
+  def expensive: Boolean = hasExpensiveChild
+
+  protected lazy val hasExpensiveChild: Boolean = children.exists(_.expensive)
 }
 
 object ExpressionPatternBitMask {

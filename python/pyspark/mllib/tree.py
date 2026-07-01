@@ -47,12 +47,10 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
     """
 
     @overload
-    def predict(self, x: "VectorLike") -> float:
-        ...
+    def predict(self, x: "VectorLike") -> float: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[float]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[float]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[float, RDD[float]]:
         """
@@ -105,12 +103,10 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader["DecisionTree
     """
 
     @overload
-    def predict(self, x: "VectorLike") -> float:
-        ...
+    def predict(self, x: "VectorLike") -> float: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[float]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[float]: ...
 
     def predict(self, x: Union["VectorLike", RDD["VectorLike"]]) -> Union[float, RDD[float]]:
         """
@@ -876,7 +872,7 @@ def _test() -> None:
 
     spark = SparkSession.builder.master("local[4]").appName("mllib.tree tests").getOrCreate()
     globs["sc"] = spark.sparkContext
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
     )
     spark.stop()

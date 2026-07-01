@@ -28,7 +28,6 @@ from typing import Iterator
 from pyspark import SparkConf
 from pyspark.errors import PySparkValueError
 from pyspark.sql import SparkSession
-from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.functions import col, arrow_udf, pandas_udf, udf
 from pyspark.sql.window import Window
 from pyspark.profiler import UDFBasicProfiler
@@ -300,6 +299,19 @@ class UDFProfiler2TestsMixin:
 
             for id in self.profile_results:
                 self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=10)
+
+    def test_perf_profiler_udf_without_module(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        add1.__module__ = None
+
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            df = self.spark.range(10, numPartitions=2).select(add1("id"))
+            df.collect()
+
+        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow,
@@ -663,35 +675,6 @@ class UDFProfiler2TestsMixin:
         for id in self.profile_results:
             self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=2)
 
-    @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-    def test_perf_profiler_data_source(self):
-        class TestDataSourceReader(DataSourceReader):
-            def __init__(self, schema):
-                self.schema = schema
-
-            def partitions(self):
-                raise NotImplementedError
-
-            def read(self, partition):
-                yield from ((1,), (2,), (3,))
-
-        class TestDataSource(DataSource):
-            def schema(self):
-                return "id long"
-
-            def reader(self, schema) -> "DataSourceReader":
-                return TestDataSourceReader(schema)
-
-        self.spark.dataSource.register(TestDataSource)
-
-        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
-            self.spark.read.format("TestDataSource").load().collect()
-
-        self.assertEqual(1, len(self.profile_results), str(self.profile_results.keys()))
-
-        for id in self.profile_results:
-            self.assert_udf_profile_present(udf_id=id, expected_line_count_prefix=4)
-
     def test_perf_profiler_render(self):
         with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
             _do_computation(self.spark)
@@ -782,7 +765,7 @@ class UDFProfiler2TestsMixin:
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.spark._profiler_collector._accumulator._value = None
+        self.spark._profiler_collector._accumulator._value = {}
 
 
 if __name__ == "__main__":

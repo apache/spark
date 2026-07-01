@@ -24,7 +24,7 @@ import org.apache.spark.benchmark.BenchmarkBase
 /**
  * TPC-DS data preparation:
  * <p>
- * 1. Follow https://github.com/gregrahn/tpcds-kit.git to set up tpcds-kit
+ * 1. Follow https://github.com/databricks/tpcds-kit.git to set up tpcds-kit
  * <p>
  * 2. Create a folder and export environment variable SPARK_TPCDS_DATA_TEXT
  * {{{
@@ -48,13 +48,13 @@ abstract class TPCDSDataBenchmark extends BenchmarkBase {
 
   protected def prepareData(): Unit = {
     val tpcDsDataDir = sys.env.get("SPARK_TPCDS_DATA_TEXT")
-    assert(tpcDsDataDir.nonEmpty, "Can not find env var SPARK_TPCDS_DATA_TEXT")
+    require(tpcDsDataDir.nonEmpty, "Can not find env var SPARK_TPCDS_DATA_TEXT")
 
     val catalogSalesDatPath = Paths.get(tpcDsDataDir.get, "catalog_sales.dat")
-    assert(Files.exists(catalogSalesDatPath), s"File $catalogSalesDatPath does not exists, " +
+    require(Files.exists(catalogSalesDatPath), s"File $catalogSalesDatPath does not exists, " +
       s"please follow instruction to generate the TPC-DS (SF1) text data first.")
 
-    // the size of TPCDS catalog_sales.dat (SF1) is about 283M
+    // the size of TPC-DS catalog_sales.dat (SF1) is about 283M
     data = Files.readAllBytes(catalogSalesDatPath)
   }
 

@@ -51,7 +51,7 @@ import org.apache.spark.util.Utils
     To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
     set via the corresponding option.
   """,
-  group = "misc_funcs",
+  group = "avro_funcs",
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit
@@ -148,7 +148,7 @@ case class FromAvro(child: Expression, jsonFormatSchema: Expression, options: Ex
       > SELECT _FUNC_(s) IS NULL FROM (SELECT NULL AS s);
        [true]
   """,
-  group = "misc_funcs",
+  group = "avro_funcs",
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit
@@ -220,7 +220,7 @@ case class ToAvro(child: Expression, jsonFormatSchema: Expression)
       > SELECT _FUNC_('{"type": "record", "name": "struct", "fields": [{"name": "u", "type": ["int", "string"]}]}', map());
        STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>
   """,
-  group = "misc_funcs",
+  group = "avro_funcs",
   since = "4.0.0"
 )
 // scalastyle:on line.size.limit

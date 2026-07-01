@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder}
 import org.apache.spark.network.util.ByteUnit
 
 package object config extends Logging {
@@ -301,8 +301,27 @@ package object config extends Logging {
     .intConf
     .createWithDefault(1)
 
+  private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +
+        "Application Master JVM options in client mode. In cluster mode, use " +
+        "`spark.driver.limitActiveProcessorCount.enabled` instead.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val AM_DEFAULT_JAVA_OPTIONS = ConfigBuilder("spark.yarn.am.defaultJavaOptions")
+    .doc("Default Java options for the client-mode AM to prepend to " +
+      "`spark.yarn.am.extraJavaOptions`. This is intended to be set by administrators.")
+    .version("4.2.0")
+    .stringConf
+    .createOptional
+
   private[spark] val AM_JAVA_OPTIONS = ConfigBuilder("spark.yarn.am.extraJavaOptions")
-    .doc("Extra Java options for the client-mode AM.")
+    .withPrepended(AM_DEFAULT_JAVA_OPTIONS.key)
+    .doc("Extra Java options for the client-mode AM. " +
+      s"`${AM_DEFAULT_JAVA_OPTIONS.key}` will be prepended to this configuration.")
     .version("1.3.0")
     .stringConf
     .createOptional
@@ -338,6 +357,15 @@ package object config extends Logging {
       .version("1.4.0")
       .stringConf
       .createOptional
+
+  private[spark] val YARN_EXECUTOR_OOM_KILL_ENABLED =
+    ConfigBuilder("spark.yarn.executor.oomKill.enabled")
+      .doc("Whether to add `-XX:OnOutOfMemoryError='kill %p'` (or its counterpart on Windows) " +
+        "to executor JVM options.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   /* Unmanaged AM configuration. */
 

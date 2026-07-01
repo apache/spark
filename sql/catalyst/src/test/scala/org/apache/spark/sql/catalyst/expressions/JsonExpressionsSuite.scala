@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.{DecimalFormat, DecimalFormatSymbols, SimpleDateFormat}
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{PST, UTC, UTC_OPT}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -570,6 +572,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57456: from_json with nanos timestamp") {
+    val jsonData = """{"t": "2016-01-01T00:00:00.123456789"}"""
+    // No timestamp format option: the default formatter parses the full sub-second fraction and
+    // truncates the sub-precision digits toward zero to the declared precision.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      TimestampNanosTestUtils.foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
+        val ldt = LocalDateTime.of(2016, 1, 1, 0, 0, 0, nano)
+        checkEvaluation(
+          JsonToStructs(
+            StructType(StructField("t", TimestampNTZNanosType(p)) :: Nil),
+            Map.empty[String, String],
+            Literal(jsonData),
+            UTC_OPT),
+          InternalRow(TimestampNanosTestUtils.localDateTimeToNanosVal(ldt)))
+        // LTZ: the string has no zone, so it is interpreted in the given time zone (UTC here).
+        checkEvaluation(
+          JsonToStructs(
+            StructType(StructField("t", TimestampLTZNanosType(p)) :: Nil),
+            Map.empty[String, String],
+            Literal(jsonData),
+            UTC_OPT),
+          InternalRow(TimestampNanosTestUtils.instantToNanosVal(ldt.toInstant(ZoneOffset.UTC))))
+      }
+    }
+  }
+
   test("SPARK-19543: from_json empty input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
@@ -916,7 +945,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("14:30:45.123", 3),
       ("14:30:45.1234", 4),
       ("14:30:45.12345", 5),
-      ("23:59:59.999999", 6)
+      ("23:59:59.999999", 6),
+      ("14:30:45.1234567", 7),
+      ("14:30:45.12345678", 8),
+      ("23:59:59.999999999", 9)
     )
 
     testCases.foreach { case (timeStr, precision) =>
@@ -955,6 +987,42 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       StructsToJson(customFormat, Literal.create(create_row(time), schema), UTC_OPT),
       """{"t":"14-30-45.123456"}""")
+  }
+
+  test("to_json - sortKeys with struct") {
+    val schema = StructType(
+      StructField("c", IntegerType) ::
+      StructField("a", IntegerType) ::
+      StructField("b", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(3, 1, 2), schema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), struct, UTC_OPT),
+      """{"a":1,"b":2,"c":3}""")
+    checkEvaluation(
+      StructsToJson(Map.empty, struct, UTC_OPT),
+      """{"c":3,"a":1,"b":2}""")
+  }
+
+  test("to_json - sortKeys with map") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal(ArrayBasedMapData(Map(
+      UTF8String.fromString("c") -> 3,
+      UTF8String.fromString("a") -> 1,
+      UTF8String.fromString("b") -> 2)), schema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), input),
+      """{"a":1,"b":2,"c":3}""")
+  }
+
+  test("to_json - sortKeys with nested struct") {
+    val innerSchema = StructType(
+      StructField("z", IntegerType) :: StructField("y", IntegerType) :: Nil)
+    val outerSchema = StructType(
+      StructField("b", innerSchema) :: StructField("a", IntegerType) :: Nil)
+    val struct = Literal.create(create_row(create_row(2, 1), 0), outerSchema)
+    checkEvaluation(
+      StructsToJson(Map("sortKeys" -> "true"), struct, UTC_OPT),
+      """{"a":0,"b":{"y":1,"z":2}}""")
   }
 
   test("TIME type with arrays") {

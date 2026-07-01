@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -116,18 +117,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNulls(int rowId, int count) {
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)1;
-    }
+    Arrays.fill(nulls, rowId, rowId + count, (byte) 1);
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)0;
-    }
+    Arrays.fill(nulls, rowId, rowId + count, (byte) 0);
   }
 
   @Override
@@ -146,22 +143,19 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
-    byte v = (byte)((value) ? 1 : 0);
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = v;
-    }
+    byte v = (byte) (value ? 1 : 0);
+    Arrays.fill(byteData, rowId, rowId + count, v);
   }
 
   @Override
   public void putBooleans(int rowId, byte src) {
-    byteData[rowId] = (byte)(src & 1);
-    byteData[rowId + 1] = (byte)(src >>> 1 & 1);
-    byteData[rowId + 2] = (byte)(src >>> 2 & 1);
-    byteData[rowId + 3] = (byte)(src >>> 3 & 1);
-    byteData[rowId + 4] = (byte)(src >>> 4 & 1);
-    byteData[rowId + 5] = (byte)(src >>> 5 & 1);
-    byteData[rowId + 6] = (byte)(src >>> 6 & 1);
-    byteData[rowId + 7] = (byte)(src >>> 7 & 1);
+    assert rowId + 8 <= capacity :
+      "putBooleans requires 8 slots available at rowId=" + rowId + ", capacity=" + capacity;
+    long expanded = expandBoolByteToLong(src);
+    if (bigEndianPlatform) {
+      expanded = Long.reverseBytes(expanded);
+    }
+    Platform.putLong(byteData, Platform.BYTE_ARRAY_OFFSET + rowId, expanded);
   }
 
   @Override
@@ -192,14 +186,18 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = value;
-    }
+    Arrays.fill(byteData, rowId, rowId + count, value);
   }
 
   @Override
   public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
     System.arraycopy(src, srcIndex, byteData, rowId, count);
+  }
+
+  @Override
+  public void putBytes(int rowId, int count, ByteBuffer src, int srcIndex) {
+    // Absolute bulk get: single copy, does not modify src's position.
+    src.get(srcIndex, byteData, rowId, count);
   }
 
   @Override
@@ -232,6 +230,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromBytes(byteData, rowId, count);
+  }
+
+  @Override
   public ByteBuffer getByteBuffer(int rowId, int count) {
     return ByteBuffer.wrap(byteData, rowId, count);
   }
@@ -248,9 +251,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShorts(int rowId, int count, short value) {
-    for (int i = 0; i < count; ++i) {
-      shortData[i + rowId] = value;
-    }
+    Arrays.fill(shortData, rowId, rowId + count, value);
   }
 
   @Override
@@ -262,6 +263,20 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, shortData,
       Platform.SHORT_ARRAY_OFFSET + rowId * 2L, count * 2L);
+  }
+
+  @Override
+  public void putShortsFromIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
+    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+    if (bigEndianPlatform) {
+      for (int i = 0; i < count; ++i, srcOffset += 4) {
+        shortData[rowId + i] = (short) Integer.reverseBytes(Platform.getInt(src, srcOffset));
+      }
+    } else {
+      for (int i = 0; i < count; ++i, srcOffset += 4) {
+        shortData[rowId + i] = Platform.getShort(src, srcOffset);
+      }
+    }
   }
 
   @Override
@@ -300,9 +315,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInts(int rowId, int count, int value) {
-    for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = value;
-    }
+    Arrays.fill(intData, rowId, rowId + count, value);
   }
 
   @Override
@@ -318,12 +331,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 4) {
-      intData[i + rowId] = Platform.getInt(src, srcOffset);
-      if (bigEndianPlatform) {
-        intData[i + rowId] = java.lang.Integer.reverseBytes(intData[i + rowId]);
+    if (bigEndianPlatform) {
+      int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+      for (int i = 0; i < count; ++i, srcOffset += 4) {
+        intData[i + rowId] = java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset));
       }
+    } else {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, intData,
+        Platform.INT_ARRAY_OFFSET + rowId * 4L, count * 4L);
     }
   }
 
@@ -374,9 +389,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLongs(int rowId, int count, long value) {
-    for (int i = 0; i < count; ++i) {
-      longData[i + rowId] = value;
-    }
+    Arrays.fill(longData, rowId, rowId + count, value);
   }
 
   @Override
@@ -392,12 +405,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 8) {
-      longData[i + rowId] = Platform.getLong(src, srcOffset);
-      if (bigEndianPlatform) {
-        longData[i + rowId] = java.lang.Long.reverseBytes(longData[i + rowId]);
+    if (bigEndianPlatform) {
+      int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+      for (int i = 0; i < count; ++i, srcOffset += 8) {
+        longData[i + rowId] = java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset));
       }
+    } else {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, longData,
+        Platform.LONG_ARRAY_OFFSET + rowId * 8L, count * 8L);
     }
   }
 

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLValue
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
@@ -32,11 +33,14 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Query tests for the Bloom filter aggregate and filter function.
  */
 @ExtendedSQLTest
-class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
+class BloomFilterAggregateQuerySuite extends SharedSparkSession {
   import testImplicits._
 
-  val funcId_bloom_filter_agg = new FunctionIdentifier("bloom_filter_agg")
-  val funcId_might_contain = new FunctionIdentifier("might_contain")
+  // Registry requires 3-part identifiers (catalog.database.funcName) for session functions
+  private def sessionFuncId(name: String): FunctionIdentifier = FunctionIdentifier(
+    name, Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+  val funcId_bloom_filter_agg = sessionFuncId("bloom_filter_agg")
+  val funcId_might_contain = sessionFuncId("might_contain")
 
   override def beforeAll(): Unit = {
     super.beforeAll()

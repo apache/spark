@@ -44,6 +44,7 @@ object LiteralFunctionResolution {
     (CurrentDate().prettyName, () => CurrentDate(), e => toPrettySQL(e)),
     (CurrentTimestamp().prettyName, () => CurrentTimestamp(), e => toPrettySQL(e)),
     (CurrentTime().prettyName, () => CurrentTime(), e => toPrettySQL(e)),
+    ("localtime", () => CurrentTime(), e => toPrettySQL(e)),
     (CurrentUser().prettyName, () => CurrentUser(), e => toPrettySQL(e)),
     ("user", () => CurrentUser(), e => toPrettySQL(e)),
     ("session_user", () => CurrentUser(), e => toPrettySQL(e)),

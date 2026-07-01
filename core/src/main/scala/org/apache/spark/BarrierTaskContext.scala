@@ -213,6 +213,11 @@ class BarrierTaskContext private[spark] (
     this
   }
 
+  override def addTaskInterruptListener(listener: TaskInterruptListener): this.type = {
+    taskContext.addTaskInterruptListener(listener)
+    this
+  }
+
   override def stageId(): Int = taskContext.stageId()
 
   override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()

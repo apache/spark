@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -800,6 +801,23 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-57211: ANSI mode cast string to nanosecond timestamp with parse error") {
+    val invalidInputs = Seq(
+      "123", "2015-03-18 123142", "2015-03-18X", "2015/03/18", "abdef", "2015-031-8")
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      foreachNanosPrecision { precision =>
+        invalidInputs.foreach { str =>
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampLTZNanosType(precision), Option(zid.getId)),
+            castErrMsg(str, TimestampLTZNanosType(precision)))
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampNTZNanosType(precision)),
+            castErrMsg(str, TimestampNTZNanosType(precision)))
+        }
+      }
+    }
+  }
+
   test("ANSI mode: cast string to date with parse error") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
@@ -847,6 +865,15 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimeType()),
         castErrMsg(invalidInput, TimeType()))
+    }
+  }
+
+  test("SPARK-57588: cast invalid string input to time reports the target precision") {
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidInput = "not a time"
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType(precision)),
+        castErrMsg(invalidInput, TimeType(precision)))
     }
   }
 

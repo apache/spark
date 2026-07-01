@@ -404,7 +404,7 @@ class TorchDistributorLocalUnitTestsMixin:
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
     def test_local_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -427,7 +427,7 @@ class TorchDistributorLocalUnitTestsMixin:
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -451,7 +451,7 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
@@ -504,7 +504,7 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.spark.conf.set("spark.task.resource.gpu.amount", "1")
 
     def test_distributed_file_with_pytorch(self) -> None:
-        test_file_path = "python/test_support/test_pytorch_training_file.py"
+        test_file_path = "python/test_support/pytorch_training_test_file.py"
         learning_rate_str = "0.01"
         TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             test_file_path, learning_rate_str
@@ -526,7 +526,7 @@ class TorchDistributorDistributedUnitTests(
 ):
     @classmethod
     def setUpClass(cls):
-        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        cls.gpu_discovery_script_file_name, cls.mnist_dir_path = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_distributed_mode_conf().items():
             conf = conf.set(k, v)

@@ -210,6 +210,30 @@ class SparkConnectServerListenerSuite
     listener.onOtherEvent(SparkListenerConnectOperationClosed(unknownJob, "operationId", 0))
   }
 
+  test("SPARK-57601: listener can be created without an active SparkEnv (history server)") {
+    // The History Server replays event logs without a SparkContext/SparkEnv, so
+    // SparkEnv.get returns null there. The listener must read its config from the
+    // SparkConf passed to its constructor rather than from SparkEnv.get.conf.
+    val previousEnv = SparkEnv.get
+    try {
+      SparkEnv.set(null)
+      val sparkConf = new SparkConf()
+        .set(ASYNC_TRACKING_ENABLED, false)
+        .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
+        .set(CONNECT_UI_SESSION_LIMIT, 1)
+        .set(CONNECT_UI_STATEMENT_LIMIT, 10)
+      val store = new ElementTrackingStore(new InMemoryStore, sparkConf)
+      try {
+        val listener = new SparkConnectServerListener(store, sparkConf, live = false)
+        assert(listener.noLiveData())
+      } finally {
+        store.close(false)
+      }
+    } finally {
+      SparkEnv.set(previousEnv)
+    }
+  }
+
   private def createProperties: Properties = {
     val properties = new Properties()
     properties.setProperty(SparkContext.SPARK_JOB_TAGS, jobTag)
@@ -221,7 +245,6 @@ class SparkConnectServerListenerSuite
     sparkConf
       .set(ASYNC_TRACKING_ENABLED, false)
       .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-    SparkEnv.get.conf
       .set(CONNECT_UI_SESSION_LIMIT, 1)
       .set(CONNECT_UI_STATEMENT_LIMIT, 10)
     kvstore = new ElementTrackingStore(new InMemoryStore, sparkConf)

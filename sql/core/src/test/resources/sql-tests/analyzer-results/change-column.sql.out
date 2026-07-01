@@ -9,6 +9,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`test_change`, false
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -34,6 +35,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -54,6 +56,7 @@ org.apache.spark.sql.AnalysisException
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -84,6 +87,7 @@ org.apache.spark.sql.AnalysisException
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -118,6 +122,7 @@ org.apache.spark.sql.AnalysisException
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -142,6 +147,7 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`test_change`, c, Struct
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -160,6 +166,7 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`test_change`, a, Struct
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -187,6 +194,7 @@ org.apache.spark.sql.AnalysisException
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -199,6 +207,7 @@ AlterTableChangeColumnCommand `spark_catalog`.`default`.`test_change`, a, Struct
 DESC test_change
 -- !query analysis
 DescribeTableCommand `spark_catalog`.`default`.`test_change`, false, [col_name#x, data_type#x, comment#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.test_change, V1Table(default.test_change), [a#x, b#x, c#x]
 
 
 -- !query
@@ -269,4 +278,4 @@ DropTable false, false
 -- !query
 DROP VIEW global_temp.global_temp_view
 -- !query analysis
-DropTempViewCommand global_temp.global_temp_view
+DropTempViewCommand global_temp.global_temp_view, false

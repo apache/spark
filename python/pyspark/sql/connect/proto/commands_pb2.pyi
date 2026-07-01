@@ -33,6 +33,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
+
 import builtins
 import collections.abc
 import google.protobuf.any_pb2
@@ -558,7 +559,9 @@ class WriteOperation(google.protobuf.message.Message):
         ):  # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
-            TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
+            TABLE_SAVE_METHOD_SAVE_AS_TABLE: (
+                WriteOperation.SaveTable._TableSaveMethod.ValueType
+            )  # 1
             TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
 
         class TableSaveMethod(_TableSaveMethod, metaclass=_TableSaveMethodEnumTypeWrapper): ...
@@ -618,6 +621,7 @@ class WriteOperation(google.protobuf.message.Message):
     BUCKET_BY_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
+    WITH_SCHEMA_EVOLUTION_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -651,6 +655,8 @@ class WriteOperation(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns used for clustering the table."""
+    with_schema_evolution: builtins.bool
+    """(Optional) Whether schema evolution is enabled for the write."""
     def __init__(
         self,
         *,
@@ -664,6 +670,7 @@ class WriteOperation(google.protobuf.message.Message):
         bucket_by: global___WriteOperation.BucketBy | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        with_schema_evolution: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -711,6 +718,8 @@ class WriteOperation(google.protobuf.message.Message):
             b"source",
             "table",
             b"table",
+            "with_schema_evolution",
+            b"with_schema_evolution",
         ],
     ) -> None: ...
     @typing.overload
@@ -800,6 +809,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_FIELD_NUMBER: builtins.int
     OVERWRITE_CONDITION_FIELD_NUMBER: builtins.int
     CLUSTERING_COLUMNS_FIELD_NUMBER: builtins.int
+    WITH_SCHEMA_EVOLUTION_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` relation will be persisted according to the options."""
@@ -836,6 +846,8 @@ class WriteOperationV2(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Columns used for clustering the table."""
+    with_schema_evolution: builtins.bool
+    """(Optional) Whether schema evolution is enabled for the write."""
     def __init__(
         self,
         *,
@@ -851,6 +863,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         mode: global___WriteOperationV2.Mode.ValueType = ...,
         overwrite_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         clustering_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        with_schema_evolution: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -888,6 +901,8 @@ class WriteOperationV2(google.protobuf.message.Message):
             b"table_name",
             "table_properties",
             b"table_properties",
+            "with_schema_evolution",
+            b"with_schema_evolution",
         ],
     ) -> None: ...
     def WhichOneof(

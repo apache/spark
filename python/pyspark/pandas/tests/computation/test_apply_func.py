@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from datetime import datetime
-import sys
 from typing import List
 
 import numpy as np
@@ -25,7 +24,6 @@ from pyspark import pandas as ps
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Function application, GroupBy & Window'
@@ -154,7 +152,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.apply(identify2, axis=1)
@@ -216,6 +214,19 @@ class FrameApplyFunctionMixin:
             )
 
     def test_apply_batch_with_type(self):
+        using_pandas3 = LooseVersion(pd.__version__) >= "3.0.0"
+
+        def normalize_array_values(pdf: pd.DataFrame) -> pd.DataFrame:
+            if not using_pandas3:
+                return pdf
+
+            pdf = pdf.copy()
+            for column in pdf.columns:
+                pdf[column] = pdf[column].map(
+                    lambda value: list(value) if isinstance(value, np.ndarray) else value
+                )
+            return pdf
+
         pdf = self.pdf
         psdf = ps.from_pandas(pdf)
 
@@ -229,7 +240,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.pandas_on_spark.apply_batch(identify2)
@@ -248,7 +259,7 @@ class FrameApplyFunctionMixin:
 
         actual = psdf.pandas_on_spark.apply_batch(identify3)
         actual.columns = ["a", "b"]
-        self.assert_eq(actual, pdf)
+        self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
         # For NumPy typing, NumPy version should be 1.21+
         if LooseVersion(np.__version__) >= LooseVersion("1.21"):
@@ -263,7 +274,7 @@ class FrameApplyFunctionMixin:
 
             actual = psdf.pandas_on_spark.apply_batch(identify4)
             actual.columns = ["a", "b"]
-            self.assert_eq(actual, pdf)
+            self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
         arrays = [[1, 2, 3, 4, 5, 6, 7, 8, 9], ["a", "b", "c", "d", "e", "f", "g", "h", "i"]]
         idx = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
@@ -279,7 +290,7 @@ class FrameApplyFunctionMixin:
         actual = psdf.pandas_on_spark.apply_batch(identify4)
         actual.index.names = ["number", "color"]
         actual.columns = ["a", "b"]
-        self.assert_eq(actual, pdf)
+        self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
         def identify5(
             x,
@@ -289,7 +300,7 @@ class FrameApplyFunctionMixin:
             return x
 
         actual = psdf.pandas_on_spark.apply_batch(identify5)
-        self.assert_eq(actual, pdf)
+        self.assert_eq(normalize_array_values(actual._to_pandas()), normalize_array_values(pdf))
 
     def test_transform(self):
         pdf = pd.DataFrame(
@@ -425,7 +436,7 @@ class FrameApplyFunctionMixin:
         self.assert_eq(sorted(actual["c0"].to_numpy()), sorted(expected["a"].to_numpy()))
         self.assert_eq(sorted(actual["c1"].to_numpy()), sorted(expected["b"].to_numpy()))
 
-        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:  # noqa: F405
+        def identify2(x) -> ps.DataFrame[slice("a", int), slice("b", int)]:
             return x
 
         actual = psdf.pandas_on_spark.transform_batch(identify2)
@@ -559,7 +570,6 @@ class FrameApplyFunctionMixin:
 class FrameApplyFunctionTests(
     FrameApplyFunctionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

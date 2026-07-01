@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SparkTestUtils, Utils}
 
 class ArtifactManagerSuite extends SharedSparkSession {
 
@@ -40,7 +40,62 @@ class ArtifactManagerSuite extends SharedSparkSession {
     conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
   }
 
-  private val artifactPath = new File("src/test/resources/artifact-tests").toPath
+  private lazy val artifactPath: Path = {
+    val dir = Utils.createTempDir().toPath.resolve("artifact-tests")
+    Files.createDirectories(dir)
+    val cp = System.getProperty("java.class.path")
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    // Hello.class -- Scala class implementing Function1, used by classloader and UDF tests
+    val helloScala = File.createTempFile("Hello", ".scala")
+    helloScala.deleteOnExit()
+    Files.writeString(helloScala.toPath,
+      """class Hello(val name: String) extends (String => String) with Serializable {
+        |  def this() = this("World")
+        |  def msg(): String = "Hello " + name + "! Nice to meet you!"
+        |  def apply(s: String): String = msg()
+        |}""".stripMargin)
+    val helloJar = new File(Utils.createTempDir(), "Hello.jar")
+    SparkTestUtils.createJarWithScalaSources(Seq(helloScala), helloJar, cp)
+    extractClassFromJar(helloJar, "Hello.class", dir)
+    // HelloWithPackage.class -- Java class with package
+    val helloSrc = new File("src/test/resources/artifact-tests/HelloWithPackage.java")
+    SparkTestUtils.createCompiledClass("HelloWithPackage", dir.toFile,
+      new SparkTestUtils.JavaSourceFromString("my.custom.pkg.HelloWithPackage",
+        new String(Files.readAllBytes(helloSrc.toPath))), Seq.empty)
+    val pkgDir = dir.resolve("my/custom/pkg")
+    if (pkgDir.resolve("HelloWithPackage.class").toFile.exists) {
+      Files.move(pkgDir.resolve("HelloWithPackage.class"), dir.resolve("HelloWithPackage.class"))
+    }
+    // smallClassFile.class -- dummy class for transfer tests
+    SparkTestUtils.createCompiledClass("smallClassFile", dir.toFile,
+      new SparkTestUtils.JavaSourceFromString("smallClassFile",
+        "public class smallClassFile {}"), Seq.empty)
+    // IntSumUdf.class -- Scala UDF
+    val intSumSrc = new File("src/test/resources/artifact-tests/IntSumUdf.scala")
+    val intSumJar = new File(Utils.createTempDir(), "IntSumUdf.jar")
+    SparkTestUtils.createJarWithScalaSources(Seq(intSumSrc), intSumJar, cp)
+    extractClassFromJar(intSumJar, "IntSumUdf.class", dir)
+    dir
+  }
+
+  private def extractClassFromJar(jar: File, className: String, destDir: Path): Unit = {
+    val jarFile = new java.util.jar.JarFile(jar)
+    try {
+      val entry = jarFile.getEntry(className)
+      val in = jarFile.getInputStream(entry)
+      try { Files.copy(in, destDir.resolve(className)) } finally { in.close() }
+    } finally { jarFile.close() }
+  }
+
+  private lazy val udfNoAJar: Path = {
+    val srcFile = new File("../connect/client/jvm/src/test/resources/StubClassDummyUdf.scala")
+    val jarFile = new File(Utils.createTempDir(), "udf_noA.jar")
+    val cp = System.getProperty("java.class.path")
+      .split(File.pathSeparator).map(p => new File(p).toURI.toURL).toSeq
+    SparkTestUtils.createJarWithScalaSources(
+      Seq(srcFile), jarFile, cp, excludeClassPrefixes = Seq("A"))
+    jarFile.toPath
+  }
 
   private lazy val artifactManager = spark.artifactManager
 
@@ -64,7 +119,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("Class artifacts are added to the correct directory.") {
-    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
     Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -80,7 +134,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("Class file artifacts are added to SC classloader") {
-    assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
     Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -106,7 +159,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("UDF can reference added class file") {
-    assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
     Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -187,7 +239,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("SPARK-43790: Forward artifact file to cloud storage path") {
-    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
     val destFSDir = Utils.createTempDir().toPath
@@ -203,7 +254,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("Removal of resources") {
-    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
 
     withTempPath { path =>
       // Setup cache
@@ -249,7 +299,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("Classloaders for spark sessions are isolated") {
-    assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val session1 = spark.newSession()
     val session2 = spark.newSession()
@@ -307,7 +356,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   }
 
   test("SPARK-44300: Cleaning up resources only deletes session-specific resources") {
-    assume(artifactPath.resolve("Hello.class").toFile.exists)
 
     val copyDir = Utils.createTempDir().toPath
     Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
@@ -369,9 +417,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val targetPath2 = Paths.get(artifact2Path)
 
     val classPath1 = copyDir.resolve("Hello.class")
-    val classPath2 = copyDir.resolve("udf_noA.jar")
-    assume(artifactPath.resolve("Hello.class").toFile.exists)
-    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
+    val classPath2 = udfNoAJar
 
     val artifact1 = Artifact.newArtifactFromExtension(
       targetPath.getFileName.toString,
@@ -431,7 +477,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
   test("Added artifact can be loaded by the current SparkSession") {
     val path = artifactPath.resolve("IntSumUdf.class")
-    assume(path.toFile.exists)
     val buffer = Files.readAllBytes(path)
     spark.addArtifact(buffer, "IntSumUdf.class")
 
@@ -447,7 +492,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   private def testAddArtifactToLocalSession(
       classFileToUse: String, binaryName: String)(addFunc: Path => String): Unit = {
     val copyDir = Utils.createTempDir().toPath
-    assume(artifactPath.resolve(classFileToUse).toFile.exists)
 
     Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val classPath = copyDir.resolve(classFileToUse)
@@ -495,15 +539,13 @@ class ArtifactManagerSuite extends SharedSparkSession {
 
       // Register multiple kinds of artifacts
       val clsPath = path.resolve("Hello.class")
-      assume(clsPath.toFile.exists)
       artifactManager.addArtifact( // Class
         Paths.get("classes/Hello.class"), clsPath, None)
       artifactManager.addArtifact( // Python
         Paths.get("pyfiles/abc.zip"), randomFilePath, None, deleteStagedFile = false)
       val jarPath = Paths.get("jars/udf_noA.jar")
-      assume(jarPath.toFile.exists)
       artifactManager.addArtifact( // JAR
-        jarPath, path.resolve("udf_noA.jar"), None)
+        jarPath, udfNoAJar, None)
       artifactManager.addArtifact( // Cached
         Paths.get("cache/test"), randomFilePath, None)
       assert(Utils.listPaths(artifactManager.artifactPath.toFile).size() === 3)

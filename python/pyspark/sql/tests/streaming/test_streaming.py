@@ -24,7 +24,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 
 class StreamingTestsMixin:
@@ -382,7 +382,7 @@ class StreamingTestsMixin:
         # SPARK-46873: There should not be a new StreamingQueryManager created every time
         # spark.streams is called.
         for i in range(5):
-            self.assertTrue(self.spark.streams == self.spark.streams)
+            self.assertEqual(self.spark.streams, self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
@@ -391,7 +391,7 @@ class StreamingTestsMixin:
         q = df.writeStream.format("noop").start()
 
         self.assertTrue(q.isActive)
-        self.assertTrue(q.id == self.spark.streams.get(q.id).id)
+        self.assertEqual(q.id, self.spark.streams.get(q.id).id)
 
         q.stop()
 
@@ -500,6 +500,149 @@ class StreamingTestsMixin:
                 set([Row(value="view_a"), Row(value="view_b"), Row(value="view_c")]), set(result)
             )
 
+    def test_name_with_valid_names(self):
+        """Test that various valid source name patterns work correctly."""
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
+            valid_names = [
+                "mySource",
+                "my_source",
+                "MySource123",
+                "_private",
+                "source_123_test",
+                "123source",
+            ]
+
+            for name in valid_names:
+                with tempfile.TemporaryDirectory(prefix=f"test_{name}_") as tmpdir:
+                    self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                    df = (
+                        self.spark.readStream.format("parquet")
+                        .schema("id LONG")
+                        .name(name)
+                        .load(tmpdir)
+                    )
+                    self.assertTrue(
+                        df.isStreaming, f"DataFrame should be streaming for name: {name}"
+                    )
+
+    def test_name_method_chaining(self):
+        """Test that name() returns the reader for method chaining."""
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
+            with tempfile.TemporaryDirectory(prefix="test_chaining_") as tmpdir:
+                self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                df = (
+                    self.spark.readStream.format("parquet")
+                    .schema("id LONG")
+                    .name("my_source")
+                    .option("maxFilesPerTrigger", "1")
+                    .load(tmpdir)
+                )
+
+                self.assertTrue(df.isStreaming, "DataFrame should be streaming")
+
+    def test_name_before_format(self):
+        """Test that order doesn't matter - name can be set before format."""
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
+            with tempfile.TemporaryDirectory(prefix="test_before_format_") as tmpdir:
+                self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                df = (
+                    self.spark.readStream.name("my_source")
+                    .format("parquet")
+                    .schema("id LONG")
+                    .load(tmpdir)
+                )
+
+                self.assertTrue(df.isStreaming, "DataFrame should be streaming")
+
+    def test_invalid_names(self):
+        """Test that various invalid source names are rejected."""
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
+            invalid_names = [
+                "",  # empty string
+                "  ",  # whitespace only
+                "my-source",  # hyphen
+                "my source",  # space
+                "my.source",  # dot
+                "my@source",  # special char
+                "my$source",  # dollar sign
+                "my#source",  # hash
+                "my!source",  # exclamation
+            ]
+
+            for invalid_name in invalid_names:
+                with self.subTest(name=invalid_name):
+                    with tempfile.TemporaryDirectory(prefix="test_invalid_") as tmpdir:
+                        self.spark.range(10).write.mode("overwrite").parquet(tmpdir)
+                        with self.assertRaises(PySparkValueError) as context:
+                            self.spark.readStream.format("parquet").schema("id LONG").name(
+                                invalid_name
+                            ).load(tmpdir)
+
+                        # The error message should contain information about invalid name
+                        self.assertIn("source", str(context.exception).lower())
+
+    def test_invalid_name_wrong_type(self):
+        """Test that None and non-string types are rejected."""
+        invalid_types = [None, 123, 45.67, [], {}]
+
+        for invalid_value in invalid_types:
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(PySparkTypeError):
+                    self.spark.readStream.format("rate").name(invalid_value).load()
+
+    def test_name_with_different_formats(self):
+        """Test that name() works with different streaming data sources."""
+        with self.sql_conf(
+            {
+                "spark.sql.streaming.queryEvolution.enableSourceEvolution": "true",
+                "spark.sql.streaming.offsetLog.formatVersion": "2",
+            }
+        ):
+            with tempfile.TemporaryDirectory(prefix="test_name_formats_") as tmpdir:
+                # Create test data
+                self.spark.range(10).write.mode("overwrite").parquet(tmpdir + "/parquet_data")
+                self.spark.range(10).selectExpr("id", "CAST(id AS STRING) as value").write.mode(
+                    "overwrite"
+                ).json(tmpdir + "/json_data")
+
+                # Test with parquet
+                parquet_df = (
+                    self.spark.readStream.format("parquet")
+                    .name("parquet_source")
+                    .schema("id LONG")
+                    .load(tmpdir + "/parquet_data")
+                )
+                self.assertTrue(parquet_df.isStreaming, "Parquet DataFrame should be streaming")
+
+                # Test with json - specify schema
+                json_df = (
+                    self.spark.readStream.format("json")
+                    .name("json_source")
+                    .schema("id LONG, value STRING")
+                    .load(tmpdir + "/json_data")
+                )
+                self.assertTrue(json_df.isStreaming, "JSON DataFrame should be streaming")
+
     def test_streaming_drop_duplicate_within_watermark(self):
         """
         This verifies dropDuplicatesWithinWatermark works with a streaming dataframe.
@@ -523,6 +666,26 @@ class StreamingTestsMixin:
         q1.stop()
         result = self.spark.sql("SELECT * FROM test_streaming_drop_duplicates_within_wm").collect()
         self.assertTrue(len(result) >= 6 and len(result) <= 9)
+
+    def test_stream_reader_option_none_chains_safely(self):
+        df = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", None)
+            .options(numPartitions=None)
+            .option("rowsPerSecond", "5")
+            .load()
+        )
+        self.assertIsNotNone(df.schema)
+
+    def test_stream_writer_option_none_chains_safely(self):
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", "5").load()
+        writer = (
+            df.writeStream.format("memory")
+            .queryName("opt_none_test")
+            .option("checkpointLocation", None)
+            .options(checkpointLocation=None)
+        )
+        self.assertIsNotNone(writer)
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):

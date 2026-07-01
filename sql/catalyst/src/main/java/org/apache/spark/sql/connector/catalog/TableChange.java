@@ -304,6 +304,11 @@ public interface TableChange {
     }
 
     @Override
+    public String toString() {
+      return "SET PROPERTY " + property + " = " + value;
+    }
+
+    @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
@@ -347,6 +352,11 @@ public interface TableChange {
 
     public String property() {
       return property;
+    }
+
+    @Override
+    public String toString() {
+      return "REMOVE PROPERTY " + property;
     }
 
     @Override
@@ -430,6 +440,10 @@ public interface TableChange {
     String[] fieldNames();
   }
 
+  static String fieldPath(String[] fieldNames) {
+    return String.join(".", fieldNames);
+  }
+
   /**
    * A TableChange to add a field. The implementation may need to back-fill all the existing data
    * to add this new column, or remember the column default value specified here and let the reader
@@ -507,6 +521,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "ADD COLUMN " + TableChange.fieldPath(fieldNames) + " " + dataType.sql();
+    }
   }
 
   /**
@@ -550,6 +569,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "RENAME COLUMN " + TableChange.fieldPath(fieldNames) + " TO " + newName;
+    }
   }
 
   /**
@@ -591,6 +615,11 @@ public interface TableChange {
       int result = Objects.hash(newDataType);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " TYPE " + newDataType.sql();
     }
   }
 
@@ -634,6 +663,13 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return nullable
+          ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP NOT NULL"
+          : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " SET NOT NULL";
+    }
   }
 
   /**
@@ -676,6 +712,11 @@ public interface TableChange {
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " COMMENT";
+    }
   }
 
   /**
@@ -717,6 +758,11 @@ public interface TableChange {
       int result = Objects.hash(position);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
+    }
+
+    @Override
+    public String toString() {
+      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " " + position.toString();
     }
   }
 
@@ -774,6 +820,14 @@ public interface TableChange {
       result = 31 * result + Objects.hashCode(newCurrentDefault);
       return result;
     }
+
+    @Override
+    public String toString() {
+      return newCurrentDefault == null
+              ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP DEFAULT"
+              : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " SET DEFAULT " +
+                  newCurrentDefault.getSql();
+    }
   }
 
   /**
@@ -808,6 +862,11 @@ public interface TableChange {
     @Override
     public int hashCode() {
       return Arrays.hashCode(fieldNames);
+    }
+
+    @Override
+    public String toString() {
+      return "DROP COLUMN " + TableChange.fieldPath(fieldNames);
     }
   }
 

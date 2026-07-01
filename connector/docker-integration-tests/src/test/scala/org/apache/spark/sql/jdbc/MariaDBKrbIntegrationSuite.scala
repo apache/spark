@@ -25,9 +25,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnecti
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., mariadb:11.4.5):
+ * To run this test suite for a specific version (e.g., mariadb:12.2.2):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:11.4.5
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:12.2.2
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
  * }}}
@@ -40,7 +40,7 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override val db = new MariaDBDatabaseOnDocker() {
 
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=$principal"
+      s"jdbc:mysql://$ip:$port/mysql?user=$principal&permitMysqlScheme"
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,

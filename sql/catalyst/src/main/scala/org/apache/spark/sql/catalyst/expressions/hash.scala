@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
 import java.util.concurrent.TimeUnit._
-import java.util.zip.CRC32
 
 import scala.annotation.tailrec
 
-import org.apache.commons.codec.digest.DigestUtils
-import org.apache.commons.codec.digest.MessageDigestAlgorithms
-
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.network.util.JavaUtils.{digestToHexString, md5Hex, sha256Hex}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -41,7 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -72,11 +70,11 @@ case class Md5(child: Expression)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(md5Hex(input.asInstanceOf[Array[Byte]]))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
+      s"UTF8String.fromString(${classOf[JavaUtils].getName}.md5Hex($c))")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Md5 = copy(child = newChild)
@@ -122,35 +120,29 @@ case class Sha2(left: Expression, right: Expression)
     val input = input1.asInstanceOf[Array[Byte]]
     bitLength match {
       case 224 =>
-        UTF8String.fromString(
-          new DigestUtils(MessageDigestAlgorithms.SHA_224).digestAsHex(input))
+        UTF8String.fromString(digestToHexString("SHA-224", input))
       case 256 | 0 =>
-        UTF8String.fromString(DigestUtils.sha256Hex(input))
+        UTF8String.fromString(sha256Hex(input))
       case 384 =>
-        UTF8String.fromString(DigestUtils.sha384Hex(input))
+        UTF8String.fromString(digestToHexString("SHA-384", input))
       case 512 =>
-        UTF8String.fromString(DigestUtils.sha512Hex(input))
+        UTF8String.fromString(digestToHexString("SHA-512", input))
       case _ => null
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val digestUtils = classOf[DigestUtils].getName
-    val messageDigestAlgorithms = classOf[MessageDigestAlgorithms].getName
+    val javaUtils = classOf[JavaUtils].getName
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         if ($eval2 == 224) {
-          ${ev.value} = UTF8String.fromString(
-                          new $digestUtils($messageDigestAlgorithms.SHA_224).digestAsHex($eval1));
+          ${ev.value} = UTF8String.fromString($javaUtils.digestToHexString("SHA-224", $eval1));
         } else if ($eval2 == 256 || $eval2 == 0) {
-          ${ev.value} =
-            UTF8String.fromString($digestUtils.sha256Hex($eval1));
+          ${ev.value} = UTF8String.fromString($javaUtils.sha256Hex($eval1));
         } else if ($eval2 == 384) {
-          ${ev.value} =
-            UTF8String.fromString($digestUtils.sha384Hex($eval1));
+          ${ev.value} = UTF8String.fromString($javaUtils.digestToHexString("SHA-384", $eval1));
         } else if ($eval2 == 512) {
-          ${ev.value} =
-            UTF8String.fromString($digestUtils.sha512Hex($eval1));
+          ${ev.value} = UTF8String.fromString($javaUtils.digestToHexString("SHA-512", $eval1));
         } else {
           ${ev.isNull} = true;
         }
@@ -186,11 +178,11 @@ case class Sha1(child: Expression)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(digestToHexString("SHA-1", input.asInstanceOf[Array[Byte]]))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(${classOf[DigestUtils].getName}.sha1Hex($c))"
+      s"""UTF8String.fromString(${classOf[JavaUtils].getName}.digestToHexString("SHA-1", $c))"""
     )
   }
 
@@ -221,20 +213,13 @@ case class Crc32(child: Expression)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
-    val checksum = new CRC32
-    checksum.update(input.asInstanceOf[Array[Byte]], 0, input.asInstanceOf[Array[Byte]].length)
-    checksum.getValue
+    ExpressionImplUtils.crc32(input.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val CRC32 = "java.util.zip.CRC32"
-    val checksum = ctx.freshName("checksum")
+    val utils = classOf[ExpressionImplUtils].getName
     nullSafeCodeGen(ctx, ev, value => {
-      s"""
-        $CRC32 $checksum = new $CRC32();
-        $checksum.update($value, 0, $value.length);
-        ${ev.value} = $checksum.getValue();
-      """
+      s"${ev.value} = $utils.crc32($value);"
     })
   }
 
@@ -437,6 +422,11 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
+  protected def genHashTimestampNanos(input: String, result: String): String = {
+    val epochMicrosHash = s"$hasherClassName.hashLong($input.epochMicros, $result)"
+    s"$result = $hasherClassName.hashInt($input.nanosWithinMicro, $epochMicrosHash);"
+  }
+
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
     if (stringType.supportsBinaryEquality) {
@@ -556,6 +546,8 @@ abstract class HashExpression[E] extends Expression {
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
+    case _: AnyTimestampNanoType =>
+      genHashTimestampNanos(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
@@ -643,6 +635,7 @@ abstract class InterpretedHashFunction {
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
       case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
+      case t: TimestampNanosVal => hashInt(t.nanosWithinMicro, hashLong(t.epochMicros, seed))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
@@ -984,6 +977,12 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
 
+  override protected def genHashTimestampNanos(input: String, result: String): String =
+    s"""
+      $result = (int)
+        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestampNanos($input);
+     """
+
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
     if (stringType.supportsBinaryEquality || !isCollationAware) {
@@ -1152,6 +1151,17 @@ object HiveHashFunction extends InterpretedHashFunction {
   }
 
   /**
+   * Extends [[hashTimestamp]] with the sub-microsecond nanoseconds carried by a
+   * [[TimestampNanosVal]], folding the extra field in with the same `* 37 + field` idiom used by
+   * [[hashCalendarInterval]]. Hive has no nanosecond-precision timestamp type, so this is a
+   * Spark-defined, self-consistent hash (equal values hash equally) rather than a Hive-compatible
+   * one.
+   */
+  def hashTimestampNanos(t: TimestampNanosVal): Long = {
+    (hashTimestamp(t.epochMicros) * 37) + t.nanosWithinMicro
+  }
+
+  /**
    * Hive allows input intervals to be defined using units below but the intervals
    * have to be from the same category:
    * - year, month (stored as HiveIntervalYearMonth)
@@ -1249,6 +1259,7 @@ object HiveHashFunction extends InterpretedHashFunction {
 
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
       case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case timestampNanos: TimestampNanosVal => hashTimestampNanos(timestampNanos)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
       case _ => super.hash(value, dataType, 0, isCollationAware, legacyCollationAwareHashing)
     }

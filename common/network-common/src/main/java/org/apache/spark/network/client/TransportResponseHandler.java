@@ -247,6 +247,14 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
           } catch (Exception e) {
             logger.error("Error installing stream handler.", e);
             deactivateStream();
+            try {
+              callback.onFailure(resp.streamId, e);
+            } catch (IOException ioe) {
+              logger.warn("Error in stream failure handler.", ioe);
+            }
+            // Installing the interceptor failed, so incoming data on this channel can no longer
+            // be decoded. Close it so the broken connection is not reused from the pool.
+            channel.close();
           }
         } else {
           try {

@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Locale
+
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
-class DataTypeSuite extends SparkFunSuite {
+class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
   private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
@@ -255,6 +259,20 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(TimestampNTZType)
   checkDataTypeFromDDL(TimestampNTZType)
 
+  test("SPARK-56876: from Json roundtrip for nanos timestamp types (preview flag enabled)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(
+        TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION),
+        TimestampLTZNanosType(8),
+        TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+        TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
+        TimestampNTZNanosType(8),
+        TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION)).foreach { dt =>
+        assert(DataType.fromJson(dt.json) === dt)
+      }
+    }
+  }
+
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)
 
@@ -403,6 +421,19 @@ class DataTypeSuite extends SparkFunSuite {
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
   checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
   checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION), 10)
+  checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION), 10)
+
+  test("PhysicalDataType for nanosecond timestamp types") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampNTZNanosType(p)) != UninitializedPhysicalType)
+    }
+    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampLTZNanosType(p)) != UninitializedPhysicalType)
+    }
+  }
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -1428,7 +1459,7 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("Parse time(n) as TimeType(n)") {
-    0 to 6 foreach { n =>
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { n =>
       assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
       val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
       assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
@@ -1436,15 +1467,203 @@ class DataTypeSuite extends SparkFunSuite {
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
-        DataType.fromJson("\"time(9)\"")
+        DataType.fromJson("\"time(10)\"")
       },
       condition = "INVALID_JSON_DATA_TYPE",
-      parameters = Map("invalidType" -> "time(9)"))
+      parameters = Map("invalidType" -> "time(10)"))
     checkError(
       exception = intercept[ParseException] {
         DataType.fromDDL("t time(-1)")
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'time'", "hint" -> ""))
+  }
+
+  test("SPARK-56876: precisions of nanos-capable TIMESTAMP_LTZ and TIMESTAMP_NTZ types") {
+    TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { p =>
+      assert(TimestampLTZNanosType(p).sql === s"TIMESTAMP_LTZ($p)")
+      assert(TimestampNTZNanosType(p).sql === s"TIMESTAMP_NTZ($p)")
+    }
+
+    Seq(6, 10, Int.MinValue, Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampLTZNanosType(p)
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_LTZ"))
+      checkError(
+        exception = intercept[SparkException] {
+          TimestampNTZNanosType(p)
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> "TIMESTAMP_NTZ"))
+    }
+  }
+
+  test("SPARK-56876: parse timestamp with nanosecond precision from JSON") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // (json-type-name, sql-type-name-in-error, factory)
+      val variants = Seq[(String, String, Int => DataType)](
+        ("timestamp_ltz", "TIMESTAMP_LTZ", TimestampLTZNanosType(_)),
+        ("timestamp_ntz", "TIMESTAMP_NTZ", TimestampNTZNanosType(_)))
+      val overflowing = "9" * 20
+
+      variants.foreach { case (name, sqlTypeName, factory) =>
+        // Happy path across valid precisions, tolerant of surrounding whitespace.
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          assert(DataType.fromJson(s"""\"$name($n)\"""") === factory(n))
+          assert(DataType.fromJson(s"""\"$name( $n)\"""") === factory(n))
+          assert(DataType.fromJson(s"""\"$name($n )\"""") === factory(n))
+        }
+
+        // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. Precision 6 is
+        // valid (maps to the GA type) and is covered separately. Precision 5 is included
+        // to pin the lower boundary of the p=6 carve-out. The overflowing case verifies
+        // the original digit string is preserved instead of leaking NumberFormatException.
+        Seq("0", "5", "10", overflowing).foreach { p =>
+          checkError(
+            exception = intercept[SparkException] {
+              DataType.fromJson(s"""\"$name($p)\"""")
+            },
+            condition = "INVALID_TIMESTAMP_PRECISION",
+            parameters = Map("precision" -> p, "type" -> sqlTypeName))
+        }
+
+        // Malformed precision forms that don't match the regex fall through to
+        // INVALID_JSON_DATA_TYPE: negative, empty parens, non-numeric, and uppercase
+        // (JSON type-name convention is lowercase).
+        Seq(
+          s"$name(-1)",
+          s"$name()",
+          s"$name(abc)",
+          s"${name.toUpperCase(Locale.ROOT)}(7)").foreach { raw =>
+          checkError(
+            exception = intercept[SparkIllegalArgumentException] {
+              DataType.fromJson(s"""\"$raw\"""")
+            },
+            condition = "INVALID_JSON_DATA_TYPE",
+            parameters = Map("invalidType" -> raw))
+        }
+      }
+
+      // JSON round-trip for nanos timestamp types inside struct, array, and map.
+      val structWithNanos = StructType(Seq(
+        StructField("ntz", TimestampNTZNanosType(7)),
+        StructField("ltz", TimestampLTZNanosType(8))))
+      assert(DataType.fromJson(structWithNanos.json) === structWithNanos)
+      val arrayOfNanos = ArrayType(TimestampNTZNanosType(9), containsNull = false)
+      assert(DataType.fromJson(arrayOfNanos.json) === arrayOfNanos)
+      val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
+      assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
+
+      // Family B agrees with Family A: a nanos type's typeName re-parses (as a JSON name) to
+      // the same type. For atomic types `json` is exactly the quoted `typeName`, so this pins
+      // the type-name spelling that Family A produces against Family B's JSON parser.
+      variants.foreach { case (_, _, factory) =>
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          val t = factory(n)
+          assert(DataType.fromJson("\"" + t.typeName + "\"") === t)
+        }
+      }
+    }
+
+    // Bare names without parens still map to the legacy single-precision types, regardless
+    // of the preview flag.
+    assert(DataType.fromJson("\"timestamp_ltz\"") === TimestampType)
+    assert(DataType.fromJson("\"timestamp_ntz\"") === TimestampNTZType)
+  }
+
+  test("SPARK-57163: parse timestamp_*(6) as the GA microsecond types") {
+    // Precision 6 maps to the GA types regardless of the preview flag.
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> flag) {
+        // Compact form and whitespace-tolerant forms (mirrors the nanos-type test pattern).
+        assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz( 6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz(6 )\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz( 6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz(6 )\"") === TimestampNTZType)
+        assert(DataType.fromDDL("ts timestamp_ntz(6)") ===
+          StructType(Seq(StructField("ts", TimestampNTZType))))
+        assert(DataType.fromDDL("ts timestamp_ltz(6)") ===
+          StructType(Seq(StructField("ts", TimestampType))))
+      }
+    }
+  }
+
+  test("SPARK-56965: JSON parser rejects nanos timestamp types when preview flag is off") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq(
+        "\"timestamp_ltz(7)\"" -> "Nanosecond-precision timestamp types",
+        "\"timestamp_ntz(9)\"" -> "Nanosecond-precision timestamp types").foreach {
+        case (json, featureName) =>
+          checkError(
+            exception = intercept[SparkException] {
+              DataType.fromJson(json)
+            },
+            condition = "FEATURE_NOT_ENABLED",
+            parameters = Map(
+              "featureName" -> featureName,
+              "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+              "configValue" -> "true"))
+      }
+      // Precision 6 maps to the GA types and stays accepted with the gate off.
+      assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+      assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("timestamp_ltz" -> "TIMESTAMP_LTZ", "timestamp_ntz" -> "TIMESTAMP_NTZ").foreach {
+        case (name, sqlTypeName) =>
+          Seq("0", "5", "10").foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                DataType.fromJson(s"""\"$name($p)\"""")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p, "type" -> sqlTypeName))
+          }
+      }
+    }
+  }
+
+  test("singleton DataType equality after deserialization") {
+    // Singleton DataTypes that use `case object` pattern matching (e.g., `case BinaryType =>`).
+    // If a non-singleton instance is created (e.g., via Kryo deserialization which doesn't call
+    // readResolve), the pattern match would fail without proper equals/hashCode overrides.
+    val singletonTypes: Seq[(DataType, Class[_ <: DataType])] = Seq(
+      (BinaryType, classOf[BinaryType]),
+      (BooleanType, classOf[BooleanType]),
+      (ByteType, classOf[ByteType]),
+      (ShortType, classOf[ShortType]),
+      (IntegerType, classOf[IntegerType]),
+      (LongType, classOf[LongType]),
+      (FloatType, classOf[FloatType]),
+      (DoubleType, classOf[DoubleType]),
+      (DateType, classOf[DateType]),
+      (TimestampType, classOf[TimestampType]),
+      (TimestampNTZType, classOf[TimestampNTZType]),
+      (NullType, classOf[NullType]),
+      (CalendarIntervalType, classOf[CalendarIntervalType]),
+      (VariantType, classOf[VariantType])
+    )
+
+    singletonTypes.foreach { case (singleton, clazz) =>
+      val ctor = clazz.getDeclaredConstructor()
+      ctor.setAccessible(true)
+      val nonSingleton = ctor.newInstance()
+      assert(nonSingleton ne singleton,
+        s"${clazz.getSimpleName}: reflection should create a distinct instance")
+
+      assert(nonSingleton == singleton,
+        s"${clazz.getSimpleName}: non-singleton == singleton should be true")
+      assert(singleton == nonSingleton,
+        s"${clazz.getSimpleName}: singleton == non-singleton should be true")
+      assert(nonSingleton.hashCode == singleton.hashCode,
+        s"${clazz.getSimpleName}: hashCode should be equal")
+
+      assert(PhysicalDataType(nonSingleton) != UninitializedPhysicalType,
+        s"${clazz.getSimpleName}: PhysicalDataType should recognize non-singleton instance")
+    }
   }
 }

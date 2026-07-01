@@ -81,7 +81,8 @@ class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
     hadoopConf: Configuration,
     oldSchemaFilePaths: List[Path] = List.empty,
-    newSchemaFilePath: Option[Path] = None) extends Logging {
+    newSchemaFilePath: Option[Path] = None,
+    createSchemaDir: Boolean = true) extends Logging {
 
   // For OperatorStateMetadataV1: Only one schema file present per operator
   // per query
@@ -96,7 +97,12 @@ class StateSchemaCompatibilityChecker(
 
   private val fm = CheckpointFileManager.create(schemaFileLocation, hadoopConf)
 
-  fm.mkdirs(schemaFileLocation.getParent)
+  if (createSchemaDir && !fm.exists(schemaFileLocation.getParent)) {
+    fm.mkdirs(schemaFileLocation.getParent)
+  } else if (!createSchemaDir) {
+    logInfo(log"Skipping schema directory creation (createSchemaDir=false) " +
+      log"at ${MDC(LogKeys.CHECKPOINT_LOCATION, schemaFileLocation.getParent.toString)}")
+  }
 
   private val conf = SparkSession.getActiveSession.map(_.sessionState.conf).getOrElse(new SQLConf())
 
@@ -112,7 +118,7 @@ class StateSchemaCompatibilityChecker(
   def readSchemaFiles(): Map[String, List[StateStoreColFamilySchema]] = {
     val stateSchemaFilePaths = (oldSchemaFilePaths ++ List(schemaFileLocation)).distinct
     stateSchemaFilePaths.flatMap { schemaFile =>
-        if (fm.exists(schemaFile)) {
+        if (fm.exists(schemaFile.getParent) && fm.exists(schemaFile)) {
           val inStream = fm.open(schemaFile)
           StateSchemaCompatibilityChecker.readSchemaFile(inStream)
         } else {
@@ -126,8 +132,8 @@ class StateSchemaCompatibilityChecker(
       stateStoreColFamilySchema: List[StateStoreColFamilySchema],
       stateSchemaVersion: Int): Unit = {
     // Ensure that schema file path is passed explicitly for schema version 3
-    if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFilePath.isEmpty) {
-      throw new IllegalStateException("Schema file path is required for schema version 3")
+    if (stateSchemaVersion >= SCHEMA_FORMAT_V3 && newSchemaFilePath.isEmpty) {
+      throw new IllegalStateException("Schema file path is required for schema version 3+")
     }
 
     val schemaWriter = SchemaWriter.createSchemaWriter(stateSchemaVersion)
@@ -163,7 +169,7 @@ class StateSchemaCompatibilityChecker(
    *         otherwise
    */
   private def getExistingKeyAndValueSchema(): List[StateStoreColFamilySchema] = {
-    if (fm.exists(schemaFileLocation)) {
+    if (fm.exists(schemaFileLocation.getParent) && fm.exists(schemaFileLocation)) {
       readSchemaFile()
     } else {
       List.empty
@@ -296,7 +302,7 @@ class StateSchemaCompatibilityChecker(
           newColFamilies.diff(oldColFamilies).toList,
           oldColFamilies.diff(newColFamilies).toList)
       }
-      if (stateSchemaVersion == SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
+      if (stateSchemaVersion >= SCHEMA_FORMAT_V3 && newSchemaFileWritten) {
         createSchemaFile(evolvedSchemas.sortBy(_.colFamilyName), stateSchemaVersion)
       }
 
@@ -404,10 +410,10 @@ object StateSchemaCompatibilityChecker extends Logging {
       throw result.get
     }
     val schemaFileLocation = if (evolvedSchema) {
-      // if we are using the state schema v3, and we have
+      // if we are using the state schema v3+, and we have
       // evolved schema, this newSchemaFilePath should be defined
       // and we want to populate the metadata with this file
-      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
+      if (stateSchemaVersion >= SCHEMA_FORMAT_V3) {
         newSchemaFilePath.get.toString
       } else {
         // if we are using any version less than v3, we have written
@@ -416,10 +422,10 @@ object StateSchemaCompatibilityChecker extends Logging {
       }
     } else {
       // if we have not evolved schema (there has been a previous schema)
-      // and we are using state schema v3, this file path would be defined
+      // and we are using state schema v3+, this file path would be defined
       // so we would just populate the next run's metadata file with this
       // file path
-      if (stateSchemaVersion == SCHEMA_FORMAT_V3) {
+      if (stateSchemaVersion >= SCHEMA_FORMAT_V3) {
         oldSchemaFilePaths.last.toString
       } else {
         // if we are using any version less than v3, we have written

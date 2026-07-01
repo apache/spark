@@ -50,13 +50,13 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper with InsertIntoSchemaEvolutionTests {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
@@ -70,6 +70,28 @@ abstract class DataSourceV2SQLSuite
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  protected def doInsertWithSchemaEvolution(
+      tableName: String,
+      insert: DataFrame,
+      mode: SaveMode = SaveMode.Append,
+      byName: Boolean = false,
+      replaceWhere: Option[String] = None): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val byNameClause = if (byName) " BY NAME" else ""
+      replaceWhere match {
+        case Some(predicate) =>
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName$byNameClause" +
+            s" REPLACE WHERE $predicate SELECT * FROM $tmpView")
+        case None =>
+          val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+          sql(s"INSERT WITH SCHEMA EVOLUTION $overwrite TABLE $tableName$byNameClause" +
+            s" SELECT * FROM $tmpView")
+      }
     }
   }
 
@@ -138,6 +160,20 @@ class DataSourceV2SQLSuiteV1Filter
     val namespace = nameParts.drop(1).init.toArray
     v2Catalog.loadTable(Identifier.of(namespace, nameParts.last))
   }
+
+  private def assertCurrentCatalog(expectedName: String): Unit = {
+    assert(spark.sessionState.catalogManager.currentCatalog.name() == expectedName)
+  }
+
+  private def checkSetCatalogNotFoundError(catalogName: String, identifierStr: String): Unit =
+  checkError(
+    exception = intercept[CatalogNotFoundException] {
+      sql(s"SET CATALOG $identifierStr")
+    },
+    condition = "CATALOG_NOT_FOUND",
+    parameters = Map(
+      "catalogName" -> s"`${catalogName}`",
+      "config" -> s""""spark.sql.catalog.${catalogName}""""))
 
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint NOT NULL, data string) USING foo")
@@ -403,6 +439,7 @@ class DataSourceV2SQLSuiteV1Filter
     Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
       case (catalog, identifier) =>
         spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        checkInsertMetrics(identifier, numInsertedRows = 3)
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
@@ -417,6 +454,44 @@ class DataSourceV2SQLSuiteV1Filter
         checkAnswer(spark.internalCreateDataFrame(rdd,
           CatalogV2Util.v2ColumnsToStructType(table.columns)),
           spark.table("source"))
+    }
+  }
+
+  test("CreateTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    // Use a non-numeric marker so it can never clash with InMemoryTable's sequential numeric IDs.
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 
@@ -575,6 +650,44 @@ class DataSourceV2SQLSuiteV1Filter
           spark.internalCreateDataFrame(rdd,
             CatalogV2Util.v2ColumnsToStructType(replacedTable.columns)),
           spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 
@@ -1321,8 +1434,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
@@ -1472,7 +1585,7 @@ class DataSourceV2SQLSuiteV1Filter
     val catalogManager = spark.sessionState.catalogManager
 
     // Validate the initial current catalog and namespace.
-    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace === Array("default"))
 
     // The following implicitly creates namespaces.
@@ -1484,41 +1597,41 @@ class DataSourceV2SQLSuiteV1Filter
 
     // Catalog is resolved to 'testcat'.
     sql("USE testcat.ns1.ns1_1")
-    assert(catalogManager.currentCatalog.name() == "testcat")
+    assertCurrentCatalog("testcat")
     assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
 
     // Catalog is resolved to 'testcat2'.
     sql("USE testcat2.ns2.ns2_2")
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
     assert(catalogManager.currentNamespace === Array("ns2", "ns2_2"))
 
     // Only the namespace is changed.
     sql("USE ns3.ns3_3")
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
     assert(catalogManager.currentNamespace === Array("ns3", "ns3_3"))
 
     // Only the namespace is changed (explicit).
     sql("USE NAMESPACE testcat")
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
     assert(catalogManager.currentNamespace === Array("testcat"))
 
     // Only the namespace is changed (explicit).
     sql("USE NAMESPACE testcat.ns1.ns1_1")
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
     assert(catalogManager.currentNamespace === Array("testcat", "ns1", "ns1_1"))
 
     // Catalog is resolved to `testcat`.
     sql("USE testcat")
-    assert(catalogManager.currentCatalog.name() == "testcat")
+    assertCurrentCatalog("testcat")
     assert(catalogManager.currentNamespace === Array())
   }
 
   test("Use: set v2 catalog as a current catalog") {
     val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
 
     sql("USE testcat")
-    assert(catalogManager.currentCatalog.name() == "testcat")
+    assertCurrentCatalog("testcat")
   }
 
   test("Use: v2 session catalog is used and namespace does not exist") {
@@ -1547,7 +1660,7 @@ class DataSourceV2SQLSuiteV1Filter
       val catalogManager = spark.sessionState.catalogManager
 
       sql("USE dummy.ns1")
-      assert(catalogManager.currentCatalog.name() == "dummy")
+      assertCurrentCatalog("dummy")
       assert(catalogManager.currentNamespace === Array("ns1"))
     }
   }
@@ -1639,49 +1752,61 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-41290: Generated column expression must be valid generation expression") {
+  test("SPARK-41290: generation expression with an unresolved function fails") {
     val tblName = "my_tab"
-    def checkUnsupportedGenerationExpression(
-        expr: String,
-        expectedReason: String,
-        genColType: String = "INT",
-        customTableDef: Option[String] = None): Unit = {
-      val tableDef =
-        s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
-      withTable(s"testcat.$tblName") {
-        checkError(
-          exception = analysisException(customTableDef.getOrElse(tableDef)),
-          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-          parameters = Map(
-            "fieldName" -> "b",
-            "expressionStr" -> expr,
-            "reason" -> expectedReason)
-        )
-      }
-    }
-
-    // Expression cannot be resolved since it doesn't exist
-    checkUnsupportedGenerationExpression(
+    checkUnresolvedRoutineExceptionForCreate(
+      tblName,
       "not_a_function(a)",
-      "failed to resolve `not_a_function` to a built-in function"
+      "`not_a_function`"
     )
+  }
 
-    // Expression cannot be resolved since it's not a built-in function
+  test("SPARK-41290: generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
     spark.udf.register("timesTwo", (x: Int) => x * 2)
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "timesTwo(a)",
       "failed to resolve `timesTwo` to a built-in function"
     )
+  }
 
-    // Generated column can't reference itself
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // CreateTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "CreateTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "b + 1",
       "generation expression cannot reference itself"
     )
     // Obeys case sensitivity when intercepting the error message
     // Intercepts when case-insensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "B + 1",
         "generation expression cannot reference itself"
       )
@@ -1689,12 +1814,15 @@ class DataSourceV2SQLSuiteV1Filter
     // Doesn't intercept when case-sensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
+        val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (B + 1)) USING foo"
+        // "B" appears at position 62 in the SQL string
+        val bPosition = sql.indexOf("(B + 1)") + 1
         checkError(
-          exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, " +
-              "b INT GENERATED ALWAYS AS (B + 1)) USING foo"),
+          exception = analysisException(sql),
           condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
-          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "B", start = bPosition, stop = bPosition)
         )
       }
     }
@@ -1706,9 +1834,12 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference other generated columns
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot reference other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "c + 1",
       "generation expression cannot reference another generated column",
       customTableDef = Some(
@@ -1718,7 +1849,8 @@ class DataSourceV2SQLSuiteV1Filter
     )
     // Respects case-insensitivity
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "C + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1726,7 +1858,8 @@ class DataSourceV2SQLSuiteV1Filter
             "b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
         )
       )
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "c + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1743,26 +1876,37 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference non-existent column
+  test("SPARK-41290: generation expression cannot reference a non-existent column") {
+    val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
+      val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = sql.indexOf("(c + 1)") + 1
       checkError(
-        exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED " +
-          s"ALWAYS AS (c + 1)) USING foo"),
+        exception = analysisException(sql),
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
-        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
       )
     }
+  }
 
-    // Expression must be deterministic
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "rand()",
       "generation expression is not deterministic"
     )
+  }
 
+  test("SPARK-41290: generation expression data type must be compatible with the column type") {
+    val tblName = "my_tab"
     // Data type is incompatible
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "a + 1",
       "generation expression data type int is incompatible with column data type boolean",
       "BOOLEAN"
@@ -1772,31 +1916,208 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
       assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
     }
+  }
 
-    // No subquery expressions
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1)",
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT (SELECT 2) + 1)", // nested
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1) + a", // refers to another column
       "subquery expressions are not allowed for generated columns"
     )
     withTable("other") {
       sql("create table other(x INT) using parquet")
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "(select min(x) from other)", // refers to another table
         "subquery expressions are not allowed for generated columns"
       )
     }
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(select min(x) from faketable)", // refers to a non-existent table
       "subquery expressions are not allowed for generated columns"
     )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with an unresolved function fails") {
+    val tblName = "my_tab"
+    checkUnresolvedRoutineExceptionForReplace(
+      tblName,
+      "not_a_function(a)",
+      "`not_a_function`"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // ReplaceTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "ReplaceTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+    // Obeys case sensitivity when intercepting the error message
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "B + 1",
+        "generation expression cannot reference itself"
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference " +
+    "other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"REPLACE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference a " +
+    "non-existent column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      val replaceSql = s"REPLACE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = replaceSql.indexOf("(c + 1)") + 1
+      checkError(
+        exception = analysisException(replaceSql),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "rand()",
+      "generation expression is not deterministic"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression data type must be " +
+    "compatible with the column type") {
+    val tblName = "my_tab"
+    // Data type is incompatible
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "a + 1",
+      "generation expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+    // But we allow valid up-casts
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      sql(s"REPLACE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
+      assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1)",
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT (SELECT 2) + 1)", // nested
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1) + a", // refers to another column
+      "subquery expressions are not allowed for generated columns"
+    )
+    withTable("other") {
+      sql("create table other(x INT) using parquet")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "(select min(x) from other)", // refers to another table
+        "subquery expressions are not allowed for generated columns"
+      )
+    }
+  }
+
+  test("SPARK-57360: generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
+  test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
   }
 
   test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
@@ -2568,7 +2889,7 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`global_temp`.`ns1`.`ns2`"))
+        "identifier" -> "`global_temp`.`ns1`.`ns2`.`tbl`"))
   }
 
   test("table name same as catalog can be used") {
@@ -2602,7 +2923,9 @@ class DataSourceV2SQLSuiteV1Filter
           checkError(
             exception = analysisException(sql),
             condition = "REQUIRES_SINGLE_PART_NAMESPACE",
-            parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> ""))
+            parameters = Map(
+              "sessionCatalog" -> "spark_catalog",
+              "identifier" -> "`t`"))
         }
 
         verify(s"select * from $t")
@@ -2928,13 +3251,13 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(
         e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+        condition = "MISSING_CATALOG_ABILITY.VIEWS",
+        parameters = Map("plugin" -> "testcat"))
     }
 
     validateViewCommand("DROP VIEW testcat.v")
@@ -2979,65 +3302,189 @@ class DataSourceV2SQLSuiteV1Filter
   }
 
   test("SPARK-36481: Test for SET CATALOG statement") {
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+    registerCatalog("testcat3", classOf[InMemoryCatalog])
+    registerCatalog("testcat4", classOf[InMemoryCatalog])
+
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
 
     sql("SET CATALOG testcat")
-    assert(catalogManager.currentCatalog.name() == "testcat")
+    assertCurrentCatalog("testcat")
 
     sql("SET CATALOG testcat2")
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
 
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG not_exist_catalog")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map(
-        "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\""))
+    sql("SET CATALOG 'testcat3'")
+    assertCurrentCatalog("testcat3")
+
+    sql("SET CATALOG \"testcat4\"")
+    assertCurrentCatalog("testcat4")
+
+    checkSetCatalogNotFoundError("not_exist_catalog", "not_exist_catalog")
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER should work") {
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
 
     sql("SET CATALOG IDENTIFIER('testcat')")
-    assert(catalogManager.currentCatalog.name() == "testcat")
+    assertCurrentCatalog("testcat")
 
     spark.sql("SET CATALOG IDENTIFIER(:param)", Map("param" -> "testcat2"))
-    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assertCurrentCatalog("testcat2")
 
-    checkError(
-      exception = intercept[CatalogNotFoundException] {
-        sql("SET CATALOG IDENTIFIER('not_exist_catalog')")
-      },
-      condition = "CATALOG_NOT_FOUND",
-      parameters = Map(
-        "catalogName" -> "`not_exist_catalog`",
-        "config" -> "\"spark.sql.catalog.not_exist_catalog\"")
-    )
+    checkSetCatalogNotFoundError("not_exist_catalog", "IDENTIFIER('not_exist_catalog')")
   }
 
   test("SPARK-49757: SET CATALOG statement with IDENTIFIER with multipart name should fail") {
-    val catalogManager = spark.sessionState.catalogManager
-    assert(catalogManager.currentCatalog.name() == SESSION_CATALOG_NAME)
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
 
-    val sqlText = "SET CATALOG IDENTIFIER(:param)"
     checkError(
-      exception = intercept[ParseException] {
-        spark.sql(sqlText, Map("param" -> "testcat.ns1"))
+      exception = intercept[AnalysisException] {
+        spark.sql("SET CATALOG IDENTIFIER(:param)", Map("param" -> "testcat.ns1"))
       },
       condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
       parameters = Map(
         "name" -> "`testcat`.`ns1`",
         "statement" -> "SET CATALOG"
-      ),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 29)
+      ))
+  }
+
+  test("SPARK-55155: SET CATALOG statement with foldable expressions") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    sql("SET CATALOG CAST(\"testcat\" AS STRING)")
+    assertCurrentCatalog("testcat")
+
+    sql("SET CATALOG CONCAT('test', 'cat2')")
+    assertCurrentCatalog("testcat2")
+  }
+
+  test("SPARK-55155: SET CATALOG statement is case-sensitive") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    checkSetCatalogNotFoundError("teStCaT", "teStCaT")
+    checkSetCatalogNotFoundError("teStCaT", "'teStCaT'")
+    checkSetCatalogNotFoundError("teStCaT", "IDENTIFIER('teStCaT')")
+    checkSetCatalogNotFoundError("teStCaT", "CONCAT('teSt', 'CaT')")
+  }
+
+  test("SPARK-55155: SET CATALOG with session temp variable") {
+    registerCatalog("testcat3", classOf[InMemoryCatalog])
+    registerCatalog("testcat4", classOf[InMemoryCatalog])
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    // Declare and set the session temp variable
+    sql("DECLARE cat_name STRING DEFAULT 'testcat'")
+    sql("DECLARE cat_name2 STRING")
+    sql("SET VAR cat_name2 = 'testcat2'")
+
+    // Using the session temp variable without IDENTIFIER()
+    sql("SET CATALOG cat_name")
+    assertCurrentCatalog("testcat")
+    sql("SET CATALOG cat_name2")
+    assertCurrentCatalog("testcat2")
+    // Using the session temp variable with IDENTIFIER()
+    sql("SET CATALOG IDENTIFIER(cat_name)")
+    assertCurrentCatalog("testcat")
+    sql("SET CATALOG IDENTIFIER(cat_name2)")
+    assertCurrentCatalog("testcat2")
+
+    // Fallback to literal when name is not a variable
+    sql("SET CATALOG testcat3")
+    assertCurrentCatalog("testcat3")
+    sql("SET CATALOG testcat4")
+    assertCurrentCatalog("testcat4")
+  }
+
+  test("SPARK-55155: SET CATALOG with multipart identifiers should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG testcat.ns1")
+      },
+      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+      parameters = Map(
+        "name" -> "`testcat`.`ns1`",
+        "statement" -> "SET CATALOG"
+      ))
+  }
+
+  test("SPARK-55155: SET CATALOG with unresolved expressions should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG substring(foo, 1, 3)")
+      },
+      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+      parameters = Map("objectName" -> "`foo`"),
+      queryContext = Array(ExpectedContext(fragment = "foo", start = 22, stop = 24)))
+  }
+
+  test("SPARK-55155: SET CATALOG with non-deterministic expressions should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG rand()")
+      },
+      condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+      parameters = Map("sqlExprs" -> "\"rand()\""),
+      queryContext =
+        Array(ExpectedContext(fragment = "SET CATALOG rand()", start = 0, stop = 17)))
+  }
+
+  test("SPARK-55155: SET CATALOG with null values should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG NULL")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "NULL", "name" -> "IDENTIFIER", "dataType" -> "void"),
+      queryContext = Array(ExpectedContext(fragment = "NULL", start = 12, stop = 15)))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG CAST(NULL AS STRING)")
+      },
+      condition = "NOT_A_CONSTANT_STRING.NULL",
+      parameters = Map("expr" -> "CAST(NULL AS STRING)", "name" -> "IDENTIFIER"),
+      queryContext =
+        Array(ExpectedContext(fragment = "CAST(NULL AS STRING)", start = 12, stop = 31)))
+  }
+
+  test("SPARK-55155: SET CATALOG with non-string types should fail") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG 42")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "42", "name" -> "IDENTIFIER", "dataType" -> "int"),
+      queryContext = Array(ExpectedContext(fragment = "42", start = 12, stop = 13))
     )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SET CATALOG 3.14")
+      },
+      condition = "NOT_A_CONSTANT_STRING.WRONG_TYPE",
+      parameters = Map("expr" -> "3.14BD", "name" -> "IDENTIFIER", "dataType" -> "decimal(3,2)"),
+      queryContext = Array(ExpectedContext(fragment = "3.14", start = 12, stop = 15)))
+  }
+
+  test("SET CATALOG with special characters with backticks in identifier") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    // Test catalog name with special characters like %, @, -, $, #
+    val catalogName = "te%s@t-c$a#t"
+    registerCatalog(catalogName, classOf[InMemoryCatalog])
+    // Use backtick-quoted identifier
+    sql(s"SET CATALOG `$catalogName`")
+    assertCurrentCatalog(catalogName)
+  }
+
+  test("SET CATALOG with backtick character in identifier") {
+    assertCurrentCatalog(SESSION_CATALOG_NAME)
+
+    val catalogName = "test`quote"
+    registerCatalog(catalogName, classOf[InMemoryCatalog])
+    // Use double backticks to escape the backtick in the name
+    sql("SET CATALOG `test``quote`")
+    assertCurrentCatalog(catalogName)
   }
 
   test("SPARK-35973: ShowCatalogs") {
@@ -3059,6 +3506,37 @@ class DataSourceV2SQLSuiteV1Filter
 
     assert(sql("SHOW CATALOGS LIKE 'testcat*'").collect() === Array(
       Row("testcat"), Row("testcat2")))
+  }
+
+  test("SPARK-49543: ShowCollations") {
+    val schema = new StructType()
+      .add("NAME", StringType, nullable = false)
+      .add("LANGUAGE", StringType, nullable = true)
+      .add("COUNTRY", StringType, nullable = true)
+      .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+      .add("CASE_SENSITIVITY", StringType, nullable = false)
+      .add("PAD_ATTRIBUTE", StringType, nullable = false)
+      .add("ICU_VERSION", StringType, nullable = true)
+
+    val df = sql("SHOW COLLATIONS")
+    assert(df.schema === schema)
+
+    val allCollations = df.collect()
+    assert(allCollations.exists(_.getString(0) == "UTF8_BINARY"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE"))
+    assert(allCollations.exists(_.getString(0) == "UNICODE_CI"))
+
+    val utf8Row = allCollations.find(_.getString(0) == "UTF8_BINARY").get
+    assert(utf8Row.getString(3) == "ACCENT_SENSITIVE")
+    assert(utf8Row.getString(4) == "CASE_SENSITIVE")
+
+    val likeResult = sql("SHOW COLLATIONS LIKE 'UNICODE*'").collect()
+    assert(likeResult.nonEmpty)
+    assert(likeResult.forall(_.getString(0).startsWith("UNICODE")))
+
+    val exactResult = sql("SHOW COLLATIONS LIKE 'UTF8_BINARY'").collect()
+    assert(exactResult.length == 1)
+    assert(exactResult.head.getString(0) == "UTF8_BINARY")
   }
 
   test("CREATE INDEX should fail") {
@@ -3545,6 +4023,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Session variable in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      spark.sql("DECLARE OR REPLACE VARIABLE replacement_id BIGINT DEFAULT 2")
+      try {
+        spark.sql(
+          s"""
+             |INSERT INTO $t
+             |  REPLACE WHERE id = replacement_id
+             |  VALUES (2, 'bb')
+             |""".stripMargin)
+
+        checkAnswer(
+          spark.table(t),
+          Seq(Row(1L, "a"), Row(2L, "bb"), Row(3L, "c")))
+      } finally {
+        spark.sql("DROP TEMPORARY VARIABLE IF EXISTS replacement_id")
+      }
+    }
+  }
+
   test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -3719,8 +4220,8 @@ class DataSourceV2SQLSuiteV1Filter
         QueryTest.checkAnswer(
           descriptionDf.filter(
             "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
-              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
-              "'Type', '_partition', ''))"),
+              "'index', 'Location', 'Name', 'Namespace', 'Owner', 'Provider', 'Table', " +
+              "'Table Properties', 'Type', '_partition', ''))"),
           Seq(
             Row("# Detailed Table Information", "", ""),
             Row("# Column Default Values", "", ""),
@@ -4109,6 +4610,28 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-56587: Show table names for V2 write nodes in UI") {
+    val t1 = s"testcat.ns1.ns2.table_name"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df1 = sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+      val executed1 = df1.queryExecution.executedPlan
+      assert(executed1.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+
+      val df2 = sql(s"INSERT OVERWRITE $t1 VALUES (2, 'b')")
+      val executed2 = df2.queryExecution.executedPlan
+      assert(executed2.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -4119,10 +4642,131 @@ class DataSourceV2SQLSuiteV1Filter
       sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
+
+  private def checkUnsupportedGenerationExpression(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      expectedReason: String,
+      createFirst: Boolean): Unit = {
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> expr,
+          "reason" -> expectedReason))
+    }
+  }
+
+  private def checkUnsupportedGenerationExpressionForCreate(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = false)
+  }
+
+  private def checkUnsupportedGenerationExpressionForReplace(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"REPLACE TABLE testcat.$tblName(a INT, b $genColType " +
+        s"GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = true)
+  }
+
+  private def checkUnresolvedRoutineException(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      routineName: String,
+      createFirst: Boolean): Unit = {
+    val start = tableDef.indexOf(expr)
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> routineName,
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1))
+    }
+  }
+
+  private def checkUnresolvedRoutineExceptionForCreate(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = false)
+  }
+
+  private def checkUnresolvedRoutineExceptionForReplace(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = true)
+  }
 }
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
+  import org.apache.spark.sql.catalyst.expressions.DynamicPruning
+  import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
+
+  test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+
+      // Verify query correctness
+      checkAnswer(df, Row(3, 3))
+
+      // Verify runtime filters contain the scalar subquery filter
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.nonEmpty,
+        "Expected runtimeFilters to contain scalar subquery filter")
+      assert(!batchScan.runtimeFilters.exists(
+        _.isInstanceOf[DynamicPruning]),
+        "Expected non-DPP runtime filter (scalar subquery)")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {

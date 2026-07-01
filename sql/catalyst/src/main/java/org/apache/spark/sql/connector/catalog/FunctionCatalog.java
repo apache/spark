@@ -31,6 +31,11 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 public interface FunctionCatalog extends CatalogPlugin {
 
   /**
+   * A reserved property to specify the collation of the function.
+   */
+  String PROP_COLLATION = "collation";
+
+  /**
    * List the functions in a namespace from the catalog.
    * <p>
    * If there are no functions in the namespace, implementations should return an empty array.

@@ -30,18 +30,15 @@ if TYPE_CHECKING:
 class ObservedMetrics(abc.ABC):
     @property
     @abc.abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @abc.abstractmethod
-    def pairs(self) -> Dict[str, Any]:
-        ...
+    def pairs(self) -> Dict[str, Any]: ...
 
     @property
     @abc.abstractmethod
-    def keys(self) -> List[str]:
-        ...
+    def keys(self) -> List[str]: ...
 
 
 class MetricValue:
@@ -279,9 +276,7 @@ class CollectedMetrics:
                     </TR>
                     <TR><TD COLSPAN="2"><FONT POINT-SIZE=\"10\">Metrics</FONT></TD></TR>
                     {}
-                    </TABLE>>""".format(
-                        v.name, rows
-                    ),
+                    </TABLE>>""".format(v.name, rows),
                 )
                 for c in v.children:
                     dot.edge(str(k), str(c))

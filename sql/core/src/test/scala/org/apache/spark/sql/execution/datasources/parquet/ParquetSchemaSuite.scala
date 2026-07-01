@@ -60,6 +60,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       nanosAsLong = nanosAsLong)
   }
 
+  // scalastyle:off argcount
   protected def testParquetToCatalyst(
       testName: String,
       sqlSchema: StructType,
@@ -70,13 +71,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       inferTimestampNTZ: Boolean = true,
       sparkReadSchema: Option[StructType] = None,
       expectedParquetColumn: Option[ParquetColumn] = None,
-      nanosAsLong: Boolean = false): Unit = {
+      nanosAsLong: Boolean = false,
+      timestampNanosTypesEnabled: Boolean = false): Unit = {
+    // scalastyle:on argcount
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
       inferTimestampNTZ = inferTimestampNTZ,
-      nanosAsLong = nanosAsLong)
+      nanosAsLong = nanosAsLong,
+      timestampNanosTypesEnabled = timestampNanosTypesEnabled)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -126,7 +130,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
       expectedParquetColumn: Option[ParquetColumn] = None,
-      nanosAsLong: Boolean = false): Unit = {
+      nanosAsLong: Boolean = false,
+      timestampNanosTypesEnabled: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -142,7 +147,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString,
       int96AsTimestamp,
       expectedParquetColumn = expectedParquetColumn,
-      nanosAsLong = nanosAsLong)
+      nanosAsLong = nanosAsLong,
+      timestampNanosTypesEnabled = timestampNanosTypesEnabled)
   }
 
   protected def compareParquetColumn(actual: ParquetColumn, expected: ParquetColumn): Unit = {
@@ -1111,13 +1117,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.parquet(testDataPath).collect()
-      },
-      condition = "PARQUET_TYPE_ILLEGAL",
-      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
-    )
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.parquet(testDataPath).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
+      )
+    }
   }
 
   test("SPARK-47261: parquet file with unsupported type") {
@@ -2204,6 +2212,247 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
                           Seq("f1", "key_value", "value", "g2", "list", "element", "h2"))))))))
           ))))))
 
+  // ==============================================================
+  // Tests for BINARY geospatial logical types (Geometry/Geography)
+  // ==============================================================
+
+  /** Parquet to Catalyst conversion for geospatial types. */
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation (with CRS and algorithm)",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY(OGC:CRS84, SPHERICAL));
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOMETRY logical type annotation with binaryAsString",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true)
+
+  testParquetToCatalyst(
+    "Parquet to Catalyst - BINARY with GEOGRAPHY logical type annotation with binaryAsString",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true)
+
+  /** Catalyst to Parquet conversion for geospatial types. */
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeometryType",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeographyType",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeometryType with non-nullable field",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84"), nullable = false))),
+    """message root {
+      |  required binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Catalyst to Parquet - GeographyType with non-nullable field",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), nullable = false))),
+    """message root {
+      |  required binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  /** Round trip conversion for geospatial types. */
+
+  testSchema(
+    "Round-trip schema conversion - GeometryType",
+    StructType(Seq(StructField("f1", GeometryType("OGC:CRS84")))),
+    """message root {
+      |  optional binary f1 (GEOMETRY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
+
+  testSchema(
+    "Round-trip schema conversion - GeographyType",
+    StructType(Seq(StructField("f1",
+      GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL)))),
+    """message root {
+      |  optional binary f1 (GEOGRAPHY);
+      |}
+    """.stripMargin,
+    binaryAsString = false,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false)
+
+  /** Complex types with geospatial types. */
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - array element",
+    StructType(Seq(
+      StructField("f1", ArrayType(GeometryType("OGC:CRS84"), containsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional binary element (GEOMETRY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - array element",
+    StructType(Seq(
+      StructField("f1", ArrayType(
+        GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), containsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (LIST) {
+      |    repeated group list {
+      |      optional binary element (GEOGRAPHY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - nested struct",
+    StructType(Seq(
+      StructField("outer", StructType(Seq(
+        StructField("geom", GeometryType("OGC:CRS84"))
+      )))
+    )),
+    """message root {
+      |  optional group outer {
+      |    optional binary geom (GEOMETRY);
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - nested struct",
+    StructType(Seq(
+      StructField("outer", StructType(Seq(
+        StructField("geog", GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL))
+      )))
+    )),
+    """message root {
+      |  optional group outer {
+      |    optional binary geog (GEOGRAPHY);
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeometryType - map value",
+    StructType(Seq(
+      StructField("f1", MapType(StringType, GeometryType("OGC:CRS84"), valueContainsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required binary key (UTF8);
+      |      optional binary value (GEOMETRY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testCatalystToParquet(
+    "Complex types with GeographyType - map value",
+    StructType(Seq(
+      StructField("f1", MapType(StringType,
+        GeographyType("OGC:CRS84", EdgeInterpolationAlgorithm.SPHERICAL), valueContainsNull = true))
+    )),
+    """message root {
+      |  optional group f1 (MAP) {
+      |    repeated group key_value {
+      |      required binary key (UTF8);
+      |      optional binary value (GEOGRAPHY);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
   // =================================
   // Tests for conversion for decimals
   // =================================
@@ -2388,6 +2637,53 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       int96AsTimestamp = int96AsTimestamp,
       inferTimestampNTZ = true)
   }
+
+  // The nanosecond timestamp types are written as INT64 with the TIMESTAMP(NANOS) annotation
+  // and, with `spark.sql.timestampNanosTypes.enabled`, read back at the canonical precision 9.
+  testSchema(
+    "SPARK-57102: TimestampNTZNanos written and read as INT64 with TIMESTAMP(NANOS,false)",
+    StructType(Seq(StructField("f1", TimestampNTZNanosType(9)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,false));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false,
+    timestampNanosTypesEnabled = true)
+
+  testSchema(
+    "SPARK-57102: TimestampLTZNanos written and read as INT64 with TIMESTAMP(NANOS,true)",
+    StructType(Seq(StructField("f1", TimestampLTZNanosType(9)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,true));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false,
+    timestampNanosTypesEnabled = true)
+
+  testCatalystToParquet(
+    "SPARK-57102: TimestampNTZNanos(7) is written as INT64 with TIMESTAMP(NANOS,false)",
+    StructType(Seq(StructField("f1", TimestampNTZNanosType(7)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,false));
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testParquetToCatalyst(
+    "SPARK-57102: legacy nanosAsLong takes precedence over the nanos timestamp types",
+    StructType(Seq(StructField("f1", LongType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,true));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    nanosAsLong = true,
+    timestampNanosTypesEnabled = true)
 
   testCatalystToParquet(
     "TimestampNTZ Spark to Parquet conversion for complex types",

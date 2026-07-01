@@ -340,3 +340,27 @@ one	1	one	5	one	4	one	9
 one	1	one	5	one	6	one	7
 one	1	one	5	one	6	one	9
 two	2	two	22	two	5	two	8
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS ID) t1 NATURAL JOIN (SELECT 1 AS id) t2
+-- !query schema
+struct<ID:int>
+-- !query output
+1
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS c1, 2 AS c1, 3 AS c2) NATURAL JOIN (SELECT 1 AS c1, 2 AS c1, 3 AS c2)
+-- !query schema
+struct<c1:int,c1:int,c2:int,c1:int,c1:int>
+-- !query output
+1	1	3	2	2
+
+
+-- !query
+SELECT * FROM (SELECT 1 AS c1, 2 AS c1, 3 AS c2) NATURAL JOIN (SELECT 1 AS c1, 3 AS c2)
+-- !query schema
+struct<c1:int,c2:int,c1:int>
+-- !query output
+1	3	2

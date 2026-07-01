@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.LanguageSQL
@@ -57,6 +58,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       exprText = exprText,
       queryText = queryText,
       comment = comment,
+      collation = None,
       isDeterministic = isDeterministic,
       containsSQL = containsSQL,
       language = LanguageSQL,
@@ -86,6 +88,7 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       exprText = exprText,
       queryText = queryText,
       comment = comment,
+      collation = None,
       isDeterministic = isDeterministic,
       containsSQL = containsSQL,
       isTableFunc = isTableFunc,
@@ -113,25 +116,33 @@ class CreateSQLFunctionParserSuite extends AnalysisTest {
       parser.parsePlan("CREATE OR REPLACE TEMPORARY FUNCTION a() RETURNS INT RETURN 1"),
       createSQLFunctionCommand("a", exprText = Some("1"), replace = true))
 
-    checkParseError(
-      "CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1",
-      errorClass = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-      parameters = Map("database" -> "`a`"),
-      queryContext = Array(
-        ExpectedContext("CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1", 0, 51)
-      )
-    )
-
-    checkParseError(
-      "CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1",
-      errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
+    val e1 = intercept[AnalysisException] {
+      parser.parsePlan("CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1")
+    }
+    checkError(
+      exception = e1,
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
       parameters = Map(
-        "statement" -> "CREATE TEMPORARY FUNCTION",
-        "name" -> "`a`.`b`.`c`"),
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
       queryContext = Array(
-        ExpectedContext("CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1", 0, 53)
-      )
-    )
+        ExpectedContext(
+          "CREATE TEMPORARY FUNCTION a.b() RETURNS INT RETURN 1", 0, 51)))
+
+    val e2 = intercept[AnalysisException] {
+      parser.parsePlan("CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1")
+    }
+    checkError(
+      exception = e2,
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`c`",
+        "qualifier" -> "`a`.`b`"),
+      queryContext = Array(
+        ExpectedContext(
+          "CREATE TEMPORARY FUNCTION a.b.c() RETURNS INT RETURN 1", 0, 53)))
 
     checkParseError(
       "CREATE TEMPORARY FUNCTION IF NOT EXISTS a() RETURNS INT RETURN 1",

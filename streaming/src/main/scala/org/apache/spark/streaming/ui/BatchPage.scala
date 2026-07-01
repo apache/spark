@@ -244,7 +244,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     <div>
       {outputOp.name}
       <span
-        onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
+        data-toggle-details=".stage-details"
         class="expand-details">
           +details
       </span>

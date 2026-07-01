@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable
+
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
 import org.apache.spark.sql.connector.catalog.PartitionInternalRow
 import org.apache.spark.sql.types.IntegerType
 
@@ -41,30 +41,28 @@ object InternalRowComparableWrapperBenchmark extends BenchmarkBase {
     val partitionNum = 200_000
     val bucketNum = 4096
     val day = 20240401
-    val partitions = (0 until partitionNum).map { i =>
+    val partitionKeys = (0 until partitionNum).map { i =>
       val bucketId = i % bucketNum
       PartitionInternalRow.apply(Array(day, bucketId));
     }
     val benchmark = new Benchmark("internal row comparable wrapper", partitionNum, output = output)
 
+    val comparableKeyWrapperFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        Seq(IntegerType, IntegerType))
+    val comparablePartitionKeys = partitionKeys.map(comparableKeyWrapperFactory)
+
     benchmark.addCase("toSet") { _ =>
-      val internalRowComparableWrapperFactory =
-        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
-          Seq(IntegerType, IntegerType))
-      val distinct = partitions
-        .map(internalRowComparableWrapperFactory)
-        .toSet
+      val distinct = comparablePartitionKeys.toSet
+
       assert(distinct.size == bucketNum)
     }
 
     benchmark.addCase("mergePartitions") { _ =>
-      // just to mock the data types
-      val expressions = (Seq(Literal(day, IntegerType), Literal(0, IntegerType)))
+      val leftKeySet = mutable.HashSet.from(comparablePartitionKeys)
+      val rightKeySet = mutable.HashSet.from(comparablePartitionKeys)
+      val merged = leftKeySet.union(rightKeySet)
 
-      val leftPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
-      val rightPartitioning = KeyGroupedPartitioning(expressions, bucketNum, partitions)
-      val merged = InternalRowComparableWrapper.mergePartitions(
-        leftPartitioning.partitionValues, rightPartitioning.partitionValues, expressions)
       assert(merged.size == bucketNum)
     }
 

@@ -21,7 +21,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameTableValuedFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("explode") {

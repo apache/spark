@@ -158,7 +158,8 @@ class TestAutoSnapshotLoader(
 
   override protected def beforeLoad(): Unit = {}
 
-  override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+  override protected def loadSnapshotFromCheckpoint(
+      snapshotVersion: Long, uniqueId: Option[String]): Unit = {
     // Track the snapshot version
     requestedSnapshotVersions += snapshotVersion
 
@@ -170,7 +171,8 @@ class TestAutoSnapshotLoader(
 
   override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {}
 
-  override protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long] = eligibleSnapshots
+  override protected def getEligibleSnapshots(
+      versionToLoad: Long): Seq[(Long, Option[String])] = eligibleSnapshots.map((_, None))
 }
 
 class TestLoadException(val snapshotVersion: Long)

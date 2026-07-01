@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -24,6 +23,13 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
+/**
+ * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
+ * that has its own {@link Table} object returns that instead. Views are described by the sibling
+ * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
+ * a view object.
+ */
 public class TableInfo {
 
   private final Column[] columns;
@@ -33,9 +39,8 @@ public class TableInfo {
 
   /**
    * Constructor for TableInfo used by the builder.
-   * @param builder Builder.
    */
-  private TableInfo(Builder builder) {
+  protected TableInfo(Builder builder) {
     this.columns = builder.columns;
     this.properties = builder.properties;
     this.partitions = builder.partitions;
@@ -60,21 +65,12 @@ public class TableInfo {
 
   public Constraint[] constraints() { return constraints; }
 
-  public static class Builder {
-    private Column[] columns;
-    private Map<String, String> properties = new HashMap<>();
-    private Transform[] partitions = new Transform[0];
-    private Constraint[] constraints = new Constraint[0];
+  public static class Builder extends RelationBuilder<Builder> {
+    protected Transform[] partitions = new Transform[0];
+    protected Constraint[] constraints = new Constraint[0];
 
-    public Builder withColumns(Column[] columns) {
-      this.columns = columns;
-      return this;
-    }
-
-    public Builder withProperties(Map<String, String> properties) {
-      this.properties = properties;
-      return this;
-    }
+    @Override
+    protected Builder self() { return this; }
 
     public Builder withPartitions(Transform[] partitions) {
       this.partitions = partitions;
@@ -83,6 +79,17 @@ public class TableInfo {
 
     public Builder withConstraints(Constraint[] constraints) {
       this.constraints = constraints;
+      return this;
+    }
+
+    /** Writes {@link TableCatalog#PROP_PROVIDER} into the current properties map. */
+    public Builder withProvider(String provider) {
+      properties.put(TableCatalog.PROP_PROVIDER, provider);
+      return this;
+    }
+
+    public Builder withLocation(String location) {
+      properties.put(TableCatalog.PROP_LOCATION, location);
       return this;
     }
 

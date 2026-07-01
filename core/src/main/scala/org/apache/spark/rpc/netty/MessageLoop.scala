@@ -116,7 +116,7 @@ private class SharedMessageLoop(
       .getOrElse(math.max(2, availableCores))
 
     conf.get(EXECUTOR_ID).map { id =>
-      val role = if (id == SparkContext.DRIVER_IDENTIFIER) "driver" else "executor"
+      val role = if (SparkContext.isDriver(id)) "driver" else "executor"
       conf.getInt(s"spark.$role.rpc.netty.dispatcher.numThreads", modNumThreads)
     }.getOrElse(modNumThreads)
   }

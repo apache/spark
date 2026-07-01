@@ -35,12 +35,11 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 @SlowHiveTest
 class HiveUDAFSuite extends QueryTest
-  with TestHiveSingleton with SQLTestUtils with AdaptiveSparkPlanHelper {
+  with TestHiveSingleton with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {

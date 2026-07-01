@@ -55,7 +55,6 @@ from pyspark.sql.types import (
     BooleanType,
 )
 
-
 __all__ = [
     "Vector",
     "DenseVector",
@@ -198,9 +197,9 @@ class VectorUDT(UserDefinedType):
     def deserialize(
         self, datum: Tuple[int, Optional[int], Optional[List[int]], List[float]]
     ) -> "Vector":
-        assert (
-            len(datum) == 4
-        ), "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        assert len(datum) == 4, (
+            "VectorUDT.deserialize given row with length %d but requires 4" % len(datum)
+        )
         tpe = datum[0]
         if tpe == 0:
             return SparseVector(cast(int, datum[1]), cast(List[int], datum[2]), datum[3])
@@ -266,9 +265,9 @@ class MatrixUDT(UserDefinedType):
         self,
         datum: Tuple[int, int, int, Optional[List[int]], Optional[List[int]], List[float], bool],
     ) -> "Matrix":
-        assert (
-            len(datum) == 7
-        ), "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
+        assert len(datum) == 7, (
+            "MatrixUDT.deserialize given row with length %d but requires 7" % len(datum)
+        )
         tpe = datum[0]
         if tpe == 0:
             return SparseMatrix(*datum[1:])  # type: ignore[arg-type]
@@ -461,12 +460,10 @@ class DenseVector(Vector):
         return self.array
 
     @overload
-    def __getitem__(self, item: int) -> np.float64:
-        ...
+    def __getitem__(self, item: int) -> np.float64: ...
 
     @overload
-    def __getitem__(self, item: slice) -> np.ndarray:
-        ...
+    def __getitem__(self, item: slice) -> np.ndarray: ...
 
     def __getitem__(self, item: Union[int, slice]) -> Union[np.float64, np.ndarray]:
         return self.array[item]
@@ -541,24 +538,19 @@ class SparseVector(Vector):
     """
 
     @overload
-    def __init__(self, size: int, __indices: bytes, __values: bytes):
-        ...
+    def __init__(self, size: int, __indices: bytes, __values: bytes): ...
 
     @overload
-    def __init__(self, size: int, *args: Tuple[int, float]):
-        ...
+    def __init__(self, size: int, *args: Tuple[int, float]): ...
 
     @overload
-    def __init__(self, size: int, __indices: Iterable[int], __values: Iterable[float]):
-        ...
+    def __init__(self, size: int, __indices: Iterable[int], __values: Iterable[float]): ...
 
     @overload
-    def __init__(self, size: int, __pairs: Iterable[Tuple[int, float]]):
-        ...
+    def __init__(self, size: int, __pairs: Iterable[Tuple[int, float]]): ...
 
     @overload
-    def __init__(self, size: int, __map: Dict[int, float]):
-        ...
+    def __init__(self, size: int, __map: Dict[int, float]): ...
 
     def __init__(
         self,
@@ -604,7 +596,7 @@ class SparseVector(Vector):
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
-            if type(pairs) == dict:
+            if isinstance(pairs, dict):
                 pairs = pairs.items()
             pairs = cast(Iterable[Tuple[int, float]], sorted(pairs))
             self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
@@ -633,11 +625,12 @@ class SparseVector(Vector):
                     )
 
         if self.indices.size > 0:
-            assert (
-                np.max(self.indices) < self.size
-            ), "Index %d is out of the size of vector with size=%d" % (
-                np.max(self.indices),
-                self.size,
+            assert np.max(self.indices) < self.size, (
+                "Index %d is out of the size of vector with size=%d"
+                % (
+                    np.max(self.indices),
+                    self.size,
+                )
             )
             assert np.min(self.indices) >= 0, "Contains negative index %d" % (np.min(self.indices))
 
@@ -867,7 +860,6 @@ class SparseVector(Vector):
 
 
 class Vectors:
-
     """
     Factory methods for working with vectors.
 
@@ -881,28 +873,23 @@ class Vectors:
 
     @staticmethod
     @overload
-    def sparse(size: int, __indices: bytes, __values: bytes) -> SparseVector:
-        ...
+    def sparse(size: int, __indices: bytes, __values: bytes) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, *args: Tuple[int, float]) -> SparseVector:
-        ...
+    def sparse(size: int, *args: Tuple[int, float]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __indices: Iterable[int], __values: Iterable[float]) -> SparseVector:
-        ...
+    def sparse(size: int, __indices: Iterable[int], __values: Iterable[float]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __pairs: Iterable[Tuple[int, float]]) -> SparseVector:
-        ...
+    def sparse(size: int, __pairs: Iterable[Tuple[int, float]]) -> SparseVector: ...
 
     @staticmethod
     @overload
-    def sparse(size: int, __map: Dict[int, float]) -> SparseVector:
-        ...
+    def sparse(size: int, __map: Dict[int, float]) -> SparseVector: ...
 
     @staticmethod
     def sparse(
@@ -937,18 +924,15 @@ class Vectors:
 
     @overload
     @staticmethod
-    def dense(*elements: float) -> DenseVector:
-        ...
+    def dense(*elements: float) -> DenseVector: ...
 
     @overload
     @staticmethod
-    def dense(__arr: bytes) -> DenseVector:
-        ...
+    def dense(__arr: bytes) -> DenseVector: ...
 
     @overload
     @staticmethod
-    def dense(__arr: Iterable[float]) -> DenseVector:
-        ...
+    def dense(__arr: Iterable[float]) -> DenseVector: ...
 
     @staticmethod
     def dense(*elements: Union[float, bytes, np.ndarray, Iterable[float]]) -> DenseVector:
@@ -1375,7 +1359,7 @@ def _test() -> None:
         np.set_printoptions(legacy="1.13")
     except TypeError:
         pass
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(optionflags=doctest.ELLIPSIS)
     if failure_count:
         sys.exit(-1)
 

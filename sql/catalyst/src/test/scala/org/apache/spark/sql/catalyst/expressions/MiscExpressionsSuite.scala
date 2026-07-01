@@ -55,6 +55,16 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-55109: RaiseError.sql uses single-argument form only for known error classes") {
+    assert(RaiseError(Literal("error!")).sql === "raise_error('error!')")
+
+    // A custom errorClass should NOT produce the single-argument form
+    val customError = RaiseError(
+      Literal("CUSTOM_ERROR"),
+      CreateMap(Seq(Literal("errorMessage"), Literal("error!"))))
+    assert(customError.sql === "raise_error('CUSTOM_ERROR', map('errorMessage', 'error!'))")
+  }
+
   test("uuid") {
     checkEvaluation(Length(Uuid(Some(0))), 36)
     val r = new Random()

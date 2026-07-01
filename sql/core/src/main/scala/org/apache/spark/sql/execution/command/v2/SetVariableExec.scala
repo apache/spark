@@ -66,7 +66,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     }
 
     val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+    val scriptingVariableManager = SqlScriptingContextManager.get().flatMap(_.getVariableManager)
 
     val variableManager = variable.catalog match {
       case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
@@ -80,7 +80,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       case FakeLocalCatalog => scriptingVariableManager.get
 
       case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
+        throw unresolvedVariableError(
+          namePartsCaseAdjusted, Seq(Seq("SYSTEM", "SESSION")), variable.origin)
 
       case FakeSystemCatalog => tempVariableManager
 
@@ -90,7 +91,7 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     val varDef = VariableDefinition(
       variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
 
-    variableManager.set(namePartsCaseAdjusted, varDef)
+    variableManager.set(namePartsCaseAdjusted, varDef, variable.origin)
   }
 
   override def output: Seq[Attribute] = Seq.empty

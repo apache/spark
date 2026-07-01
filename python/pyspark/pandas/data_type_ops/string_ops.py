@@ -17,9 +17,11 @@
 
 from typing import Any, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegralType, StringType
 from pyspark.sql.utils import pyspark_column_op
@@ -32,7 +34,11 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import (
+    handle_dtype_as_extension_dtype,
+    is_str_dtype,
+    pandas_on_spark_type,
+)
 from pyspark.sql.types import BooleanType
 
 
@@ -124,23 +130,34 @@ class StringOps(DataTypeOps):
             return _as_categorical_type(index_ops, dtype, spark_type)
 
         if isinstance(spark_type, BooleanType):
-            if isinstance(dtype, extension_dtypes):
+            if handle_dtype_as_extension_dtype(dtype):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+                # pandas 3 maps `str` to StringDtype, where astype(bool)
+                # treats missing values as True.
+                null_value = F.lit(True) if is_str_dtype(self.dtype) else F.lit(False)
+                scol = F.when(index_ops.spark.column.isNull(), null_value).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(
                 scol,
-                field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type  # type: ignore[arg-type]
-                ),
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
             )
         elif isinstance(spark_type, StringType):
             null_str = str(pd.NA) if isinstance(self, StringExtensionOps) else str(None)
             return _as_string_type(index_ops, dtype, null_str=null_str)
         else:
             return _as_other_type(index_ops, dtype, spark_type)
+
+    def restore(self, col: pd.Series) -> pd.Series:
+        """Restore column when to_pandas."""
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return super().restore(col)
+        else:
+            if is_str_dtype(col.dtype) and not is_str_dtype(self.dtype):
+                # treat missing values as None for string dtype
+                col = col.replace({np.nan: None})
+            return col.astype(self.dtype)
 
 
 class StringExtensionOps(StringOps):

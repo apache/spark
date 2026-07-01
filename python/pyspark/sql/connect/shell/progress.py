@@ -16,6 +16,7 @@
 #
 
 """Implementation of a progress bar that is displayed while a query is running."""
+
 import abc
 from dataclasses import dataclass
 import time

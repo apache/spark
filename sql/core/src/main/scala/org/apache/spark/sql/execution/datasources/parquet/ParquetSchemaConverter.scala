@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.column.schema.EdgeInterpolationAlgorithm
 import org.apache.parquet.io.{ColumnIO, ColumnIOFactory, GroupColumnIO, PrimitiveColumnIO}
 import org.apache.parquet.schema._
 import org.apache.parquet.schema.LogicalTypeAnnotation._
@@ -29,8 +30,10 @@ import org.apache.parquet.schema.Type.Repetition._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterpolationAlgorithm}
 
 /**
  * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]]
@@ -58,9 +61,12 @@ class ParquetToSparkSchemaConverter(
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
     inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
     nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
+    timestampNanosTypesEnabled: Boolean = false,
     useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
     val ignoreVariantAnnotation: Boolean =
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get) {
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get,
+    val respectUnknownTypeAnnotation: Boolean =
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -68,8 +74,11 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.caseSensitiveAnalysis,
     inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
     nanosAsLong = conf.legacyParquetNanosAsLong,
+    timestampNanosTypesEnabled = conf.timestampNanosTypesEnabled,
     useFieldId = conf.parquetFieldIdReadEnabled,
-    ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation)
+    ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation,
+    respectUnknownTypeAnnotation =
+      conf.parquetReaderRespectUnknownTypeAnnotation)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -77,10 +86,15 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
+    timestampNanosTypesEnabled =
+      conf.getBoolean(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, false),
     useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get),
     ignoreVariantAnnotation = conf.getBoolean(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
-      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get))
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get),
+    respectUnknownTypeAnnotation = conf.getBoolean(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -225,7 +239,11 @@ class ParquetToSparkSchemaConverter(
       primitiveColumn: PrimitiveColumnIO,
       sparkReadType: Option[DataType] = None): ParquetColumn = {
     val parquetType = primitiveColumn.getType.asPrimitiveType()
-    val typeAnnotation = primitiveColumn.getType.getLogicalTypeAnnotation
+    val typeAnnotation = primitiveColumn.getType.getLogicalTypeAnnotation match {
+      case unknown: UnknownLogicalTypeAnnotation =>
+        if (respectUnknownTypeAnnotation) unknown else null
+      case other => other
+    }
     val typeName = primitiveColumn.getPrimitive
 
     def typeString =
@@ -314,11 +332,20 @@ class ParquetToSparkSchemaConverter(
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
             LongType
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.NANOS && timestampNanosTypesEnabled =>
+            if (timestamp.isAdjustedToUTC) {
+              TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION)
+            } else {
+              TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION)
+            }
           case time: TimeLogicalTypeAnnotation
             if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
             TimeType(TimeType.MICROS_PRECISION)
-          case _ =>
-            illegalType()
+          case time: TimeLogicalTypeAnnotation
+            if time.getUnit == TimeUnit.NANOS && !time.isAdjustedToUTC =>
+            TimeType(TimeType.NANOS_PRECISION)
+          case _ => illegalType()
         }
 
       case INT96 =>
@@ -336,6 +363,17 @@ class ParquetToSparkSchemaConverter(
           case null => BinaryType
           case _: BsonLogicalTypeAnnotation => BinaryType
           case _: DecimalLogicalTypeAnnotation => makeDecimalType()
+          case geom: GeometryLogicalTypeAnnotation =>
+            GeometryType(Option(geom.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS))
+          case geog: GeographyLogicalTypeAnnotation =>
+            val crs = Option(geog.getCrs).getOrElse(LogicalTypeAnnotation.DEFAULT_CRS)
+            val sparkAlgorithm = if (geog.getAlgorithm != null) {
+              SparkEdgeInterpolationAlgorithm.fromString(geog.getAlgorithm.toString)
+                .getOrElse(SparkEdgeInterpolationAlgorithm.SPHERICAL)
+            } else {
+              SparkEdgeInterpolationAlgorithm.SPHERICAL
+            }
+            GeographyType(crs, sparkAlgorithm)
           case _ => illegalType()
         }
 
@@ -620,8 +658,15 @@ class SparkToParquetSchemaConverter(
       field: StructField,
       repetition: Type.Repetition,
       inShredded: Boolean): Type = {
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition, inShredded))
+      .getOrElse(convertFieldDefault(field, repetition, inShredded))
+  }
 
-    field.dataType match {
+  private def convertFieldDefault(
+      field: StructField,
+      repetition: Type.Repetition,
+      inShredded: Boolean): Type = field.dataType match {
       // ===================
       // Simple atomic types
       // ===================
@@ -653,13 +698,20 @@ class SparkToParquetSchemaConverter(
         Types.primitive(BINARY, repetition)
           .as(LogicalTypeAnnotation.stringType()).named(field.name)
 
+      case geom: GeometryType =>
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.geometryType(geom.crs)).named(field.name)
+
+      case geog: GeographyType =>
+        val logicalType = LogicalTypeAnnotation.geographyType(
+          geog.crs,
+          EdgeInterpolationAlgorithm.valueOf(geog.algorithm.toString))
+        Types.primitive(BINARY, repetition)
+          .as(logicalType).named(field.name)
+
       case DateType =>
         Types.primitive(INT32, repetition)
           .as(LogicalTypeAnnotation.dateType()).named(field.name)
-
-      case _: TimeType =>
-        Types.primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)).named(field.name)
 
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
@@ -700,6 +752,7 @@ class SparkToParquetSchemaConverter(
       case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
+
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 
@@ -881,7 +934,6 @@ class SparkToParquetSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
-  }
 }
 
 private[sql] object ParquetSchemaConverter {

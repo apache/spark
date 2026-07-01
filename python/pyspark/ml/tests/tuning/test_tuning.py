@@ -203,7 +203,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         paramGrid = ParamGridBuilder().addGrid(lr.regParam, [0.5, 1]).build()
         for param in paramGrid:
             for v in param.values():
-                assert type(v) == float
+                assert isinstance(v, float)
 
     def test_parallel_evaluation(self):
         dataset = self.spark.createDataFrame(

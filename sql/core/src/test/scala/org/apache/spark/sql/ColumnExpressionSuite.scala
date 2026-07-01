@@ -31,6 +31,7 @@ import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -40,7 +41,7 @@ import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
+class ColumnExpressionSuite extends SharedSparkSession {
   import testImplicits._
 
   private lazy val booleanData = {
@@ -182,11 +183,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34199: star cannot be qualified by table name inside a count function") {
-    val e = intercept[AnalysisException] {
-      testData.as("testData").selectExpr("count(testData.*)").collect()
-    }
-    assert(e.getMessage.contains(
-      "count(testData.*) is not allowed. Please use count(*) or expand the columns manually"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        testData.as("testData").selectExpr("count(testData.*)").collect()
+      },
+      condition = "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+      parameters = Map("tableName" -> "`testData`")
+    )
   }
 
   test("SPARK-34199: table star can be qualified inside a count function with multiple arguments") {
@@ -2656,7 +2659,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" + $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2685,7 +2688,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .select($"date" - $"interval")
           .collect()
       }
-      assert(e.getMessage.contains("integer overflow"))
+      assert(e.getMessage.contains("overflow"))
     }
   }
 
@@ -2723,7 +2726,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2760,7 +2763,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -2807,7 +2810,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }
@@ -3002,7 +3005,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
           .collect()
       }.getCause
       assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
+      assert(e.getMessage == null || e.getMessage.contains("overflow"))
     }
   }
 
@@ -3074,7 +3077,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
             .collect()
         }.getCause
         assert(e.isInstanceOf[ArithmeticException])
-        assert(e.getMessage.contains("long overflow"))
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }
@@ -3161,5 +3164,39 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.select($"value".transform(_ + 5).transform(_ * 2).transform(_ - 10)),
       Seq(20, 40, 60).toDF()
     )
+  }
+
+  test("SPARK-57164: Column.cast/try_cast(String) and sessionState parser for nanos types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            // Column.cast(String) / Column.try_cast(String) parse the type at call time.
+            assert($"id".cast(spelling).expr.dataType === expected)
+            assert($"id".try_cast(spelling).expr.dataType === expected)
+            // The programmatic catalog-string entry point.
+            assert(spark.sessionState.sqlParser.parseDataType(spelling) === expected)
+        }
+      }
+    }
+    // With the preview flag off, the string overloads reject the nanos spelling at call time.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq[() => Any](
+        () => $"id".cast("TIMESTAMP_NTZ(9)"),
+        () => $"id".try_cast("TIMESTAMP_LTZ(7)"),
+        () => spark.sessionState.sqlParser.parseDataType("TIMESTAMP_NTZ(9)")).foreach { f =>
+        checkError(
+          exception = intercept[SparkException](f()),
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
   }
 }

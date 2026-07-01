@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -232,7 +232,8 @@ case class DropTableCommand(
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadata(tableName).tableType match {
-        case CatalogTableType.VIEW if !isView =>
+        // Both VIEW and METRIC_VIEW are conceptually views and must be dropped via DROP VIEW.
+        case t if CatalogTable.isViewLike(t) && !isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP TABLE",
             requiredType = s"${CatalogTableType.EXTERNAL.name} or ${CatalogTableType.MANAGED.name}",
@@ -240,10 +241,11 @@ case class DropTableCommand(
             foundType = catalog.getTableMetadata(tableName).tableType.name,
             alternative = "DROP VIEW"
           )
-        case o if o != CatalogTableType.VIEW && isView =>
+        case o if !CatalogTable.isViewLike(o) && isView =>
           throw QueryCompilationErrors.wrongCommandForObjectTypeError(
             operation = "DROP VIEW",
-            requiredType = CatalogTableType.VIEW.name,
+            requiredType =
+              s"${CatalogTableType.VIEW.name} or ${CatalogTableType.METRIC_VIEW.name}",
             objectName = catalog.getTableMetadata(tableName).qualifiedName,
             foundType = o.name,
             alternative = "DROP TABLE"
@@ -269,21 +271,35 @@ case class DropTableCommand(
   }
 }
 
-case class DropTempViewCommand(ident: Identifier) extends LeafRunnableCommand {
+case class DropTempViewCommand(ident: Identifier, ifExists: Boolean = false)
+    extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(ident.namespace().isEmpty || ident.namespace().length == 1)
+    // namespace: empty (unqualified), 1 part (session or global_temp), or 2 parts (system.session)
+    val ns = ident.namespace()
+    assert(ns.isEmpty || ns.length == 1 ||
+      (ns.length == 2 &&
+        ns(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        ns(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)))
     val nameParts = (ident.namespace() :+ ident.name()).toImmutableArraySeq
     val catalog = sparkSession.sessionState.catalog
-    catalog.getRawLocalOrGlobalTempView(nameParts).foreach { view =>
-      val hasViewText = view.tableMeta.viewText.isDefined
-      sparkSession.sharedState.cacheManager.uncacheTableOrView(
-        sparkSession, nameParts, cascade = hasViewText)
-      view.refresh()
-      if (ident.namespace().isEmpty) {
-        catalog.dropTempView(ident.name())
-      } else {
-        catalog.dropGlobalTempView(ident.name())
-      }
+    catalog.getRawLocalOrGlobalTempView(nameParts) match {
+      case Some(view) =>
+        val hasViewText = view.tableMeta.viewText.isDefined
+        sparkSession.sharedState.cacheManager.uncacheTableOrView(
+          sparkSession, nameParts, cascade = hasViewText)
+        view.refresh()
+        if (ident.namespace().isEmpty) {
+          catalog.dropTempView(ident.name())
+        } else if (ident.namespace().length == 1 &&
+            catalog.isGlobalTempViewDB(ident.namespace().head)) {
+          catalog.dropGlobalTempView(ident.name())
+        } else {
+          // session, or system.session qualified -> local temp view
+          catalog.dropTempView(ident.name())
+        }
+      case None if !ifExists =>
+        throw QueryCompilationErrors.noSuchTableError(nameParts)
+      case None => ()
     }
     Seq.empty[Row]
   }
@@ -1073,11 +1089,11 @@ object DDLUtils extends Logging {
       isView: Boolean): Unit = {
     if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
-        case CatalogTableType.VIEW if !isView =>
+        case t if CatalogTable.isViewLike(t) && !isView =>
           throw QueryCompilationErrors.cannotAlterViewWithAlterTableError(
             viewName = tableMetadata.identifier.table
           )
-        case o if o != CatalogTableType.VIEW && isView =>
+        case o if !CatalogTable.isViewLike(o) && isView =>
           throw QueryCompilationErrors.cannotAlterTableWithAlterViewError(
             tableName = tableMetadata.identifier.table
           )

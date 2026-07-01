@@ -33,5 +33,5 @@ FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 pushd "$FWDIR" > /dev/null
 . "$FWDIR/find-r.sh"
 
-# Generate Rd files if devtools is installed
-"$R_SCRIPT_PATH/Rscript" -e ' if(requireNamespace("devtools", quietly=TRUE)) { setwd("'$FWDIR'"); devtools::document(pkg="./pkg", roclets="rd") }'
+# Generate Rd files if roxygen2 is installed
+"$R_SCRIPT_PATH/Rscript" -e ' if(requireNamespace("roxygen2", quietly=TRUE)) { setwd("'$FWDIR'"); roxygen2::roxygenize(package.dir="./pkg", roclets=c("rd")) }'

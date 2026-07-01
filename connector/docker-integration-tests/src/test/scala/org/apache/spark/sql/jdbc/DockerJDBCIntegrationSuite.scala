@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.net.ServerSocket
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -37,7 +37,6 @@ import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{DockerUtils, Utils}
 import org.apache.spark.util.Utils.timeStringAsSeconds
@@ -98,10 +97,19 @@ abstract class DatabaseOnDocker {
   def beforeContainerStart(
       hostConfigBuilder: HostConfig,
       containerConfigBuilder: ContainerConfig): Unit = {}
+
+  /**
+   * Optional per-database override for how long to wait for the database to accept JDBC
+   * connections after the container has started. Some databases (e.g. Oracle) take
+   * considerably longer to fully bootstrap their listener, so they can extend the default.
+   * The value is a duration string such as "15min". When `None`, the suite default
+   * (`spark.test.docker.connectionTimeout`, "10min") is used.
+   */
+  def connectionTimeout: Option[String] = None
 }
 
 abstract class DockerJDBCIntegrationSuite
-  extends QueryTest with SharedSparkSession with Eventually with DockerIntegrationFunSuite {
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
@@ -113,25 +121,23 @@ abstract class DockerJDBCIntegrationSuite
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
-  protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
+  // `lazy` so that `db` (abstract, defined by concrete suites) is initialized before it is read.
+  // A database may extend the connection timeout via `db.connectionTimeout` (e.g. Oracle, whose
+  // container takes longer to bootstrap its listener); otherwise the suite default is used.
+  protected lazy val connectionTimeout: PatienceConfiguration.Timeout = {
+    val timeoutStr = db.connectionTimeout.getOrElse(
+      sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min"))
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
-  protected lazy val externalPort: Int = {
-    val sock = new ServerSocket(0)
-    val port = sock.getLocalPort
-    sock.close()
-    port
-  }
+  protected var externalPort: Int = -1
   private var container: CreateContainerResponse = _
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
-    super.beforeAll()
     try {
       val config = DefaultDockerClientConfig.createDefaultConfigBuilder.build
       val httpClient = new ZerodepDockerHttpClient.Builder()
@@ -181,7 +187,7 @@ abstract class DockerJDBCIntegrationSuite
         .newHostConfig()
         .withNetworkMode("bridge")
         .withPrivileged(db.privileged)
-        .withPortBindings(PortBinding.parse(s"$externalPort:${db.jdbcPort}"))
+        .withPortBindings(PortBinding.parse(s"0:${db.jdbcPort}"))
 
       if (db.usesIpc) {
         hostConfig.withIpcMode("host")
@@ -209,7 +215,14 @@ abstract class DockerJDBCIntegrationSuite
         val response = docker.inspectContainerCmd(container.getId).exec()
         assert(response.getState.getRunning)
       }
+      // Resolve the actual port assigned by Docker to avoid TOCTOU race conditions
+      externalPort = docker.inspectContainerCmd(container.getId).exec()
+        .getNetworkSettings.getPorts.getBindings
+        .get(ExposedPort.tcp(db.jdbcPort)).head.getHostPortSpec.toInt
+      // Initialize SparkSession after port is known so sparkConf can read the correct url
+      super.beforeAll()
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
+      sleepBeforeTesting()
       var conn: Connection = null
       eventually(connectionTimeout, interval(1.second)) {
         conn = getConnection()
@@ -224,6 +237,10 @@ abstract class DockerJDBCIntegrationSuite
       case NonFatal(e) =>
         logError(log"Failed to initialize Docker container for " +
           log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
+        // Dump the container's own logs BEFORE afterAll() tears it down, so that a
+        // connection timeout (e.g. Oracle "ORA-12541: No listener") can be diagnosed
+        // from the database's bootstrap output rather than guessed at.
+        dumpContainerLogs()
         try {
           afterAll()
         } finally {
@@ -251,9 +268,42 @@ abstract class DockerJDBCIntegrationSuite
   }
 
   /**
+   * Best-effort dump of the database container's stdout/stderr to the test log. Used when
+   * container initialization fails (e.g. the JDBC connection never succeeds within
+   * `connectionTimeout`) so the database's own bootstrap output is available for diagnosis.
+   * Never throws.
+   */
+  private def dumpContainerLogs(): Unit = {
+    if (docker == null || container == null) return
+    try {
+      val logs = new StringBuilder
+      docker.logContainerCmd(container.getId)
+        .withStdOut(true)
+        .withStdErr(true)
+        .withTail(2000)
+        .exec(new ResultCallback.Adapter[Frame]() {
+          override def onNext(frame: Frame): Unit = {
+            logs.append(new String(frame.getPayload, StandardCharsets.UTF_8))
+          }
+        })
+        .awaitCompletion(60, TimeUnit.SECONDS)
+      logWarning(s"Docker container logs for ${this.getClass.getName} " +
+        s"(image=${db.imageName}, container=${container.getId}):\n${logs.toString}")
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to capture Docker container logs: ${e.getMessage}")
+    }
+  }
+
+  /**
    * Prepare databases and tables for testing.
    */
   def dataPreparation(connection: Connection): Unit
+
+  /**
+   * Sleep for a while before testing.
+   */
+  def sleepBeforeTesting(): Unit = {}
 
   private def cleanupContainer(): Unit = {
     if (docker != null && container != null && !keepContainer) {

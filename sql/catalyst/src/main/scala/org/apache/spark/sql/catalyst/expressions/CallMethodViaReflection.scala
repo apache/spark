@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -66,6 +67,9 @@ case class CallMethodViaReflection(
   with DefaultStringProducingExpression
   with CodegenFallback
   with QueryErrorsBase {
+
+  // This could be pretty much anything.
+  override def expensive: Boolean = true
 
   def this(children: Seq[Expression]) =
     this(children, true)
@@ -123,6 +127,14 @@ case class CallMethodViaReflection(
 
       unexpectedParameter match {
         case Some(mismatch) => mismatch
+        case _ if !methodAllowed =>
+          DataTypeMismatch(
+            errorSubClass = "METHOD_NOT_ALLOWED",
+            messageParameters = Map(
+              "methodName" -> methodName,
+              "className" -> className,
+              "config" -> toSQLConf(StaticSQLConf.REFLECT_ALLOW_LIST.key))
+          )
         case _ if !classExists =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_CLASS_TYPE",
@@ -172,6 +184,17 @@ case class CallMethodViaReflection(
 
   /** Name of the method */
   @transient private lazy val methodName = children(1).eval(null).asInstanceOf[UTF8String].toString
+
+  /**
+   * True if the canonical `class.method` name fully matches one of the regular expressions in
+   * the allow list configured by [[StaticSQLConf.REFLECT_ALLOW_LIST]]. An empty list (the default)
+   * allows every call.
+   */
+  @transient private lazy val methodAllowed: Boolean = {
+    val allowList = SQLConf.get.getConf(StaticSQLConf.REFLECT_ALLOW_LIST)
+    val canonicalName = s"$className.$methodName"
+    allowList.isEmpty || allowList.exists(canonicalName.matches)
+  }
 
   /** The reflection method. */
   @transient lazy val method: Method = CallMethodViaReflection

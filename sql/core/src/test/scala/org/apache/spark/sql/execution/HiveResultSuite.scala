@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import java.time.{Duration, Period, Year}
+import java.time.{Duration, LocalDateTime, Period, Year, ZoneOffset}
 
-import org.apache.spark.sql.YearUDT
+import scala.jdk.CollectionConverters._
+
+import org.apache.spark.sql.{Row, YearUDT}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.types.{YearMonthIntervalType, YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.{StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, YearMonthIntervalType, YearMonthIntervalType => YM}
 
 
 class HiveResultSuite extends SharedSparkSession {
@@ -74,6 +76,89 @@ class HiveResultSuite extends SharedSparkSession {
     val executedPlan2 = df.selectExpr("array(b)").queryExecution.executedPlan
     val result2 = hiveResultString(executedPlan2)
     assert(result2 == timestamps.map(x => s"[$x]"))
+  }
+
+  test("SPARK-57257: nanosecond timestamp formatting in hive result") {
+    // Each input fraction maps to the expected rendered fraction at precision 7, 8, 9. Sub-`p`
+    // digits are floored and trailing zeros trimmed, so an all-zero fraction renders as no
+    // fraction at all (e.g. ".000000001" at p=7/8). The flooring/trimming is independent of the
+    // epoch sign, so the pre-1970 base (negative epoch micros + positive nanosWithinMicro)
+    // shares the same expected fractions.
+    val bases = Seq("2020-01-01 00:00:00", "1960-01-01 00:00:00")
+    val cases = Seq(
+      ".123456789" -> Seq(".1234567", ".12345678", ".123456789"),
+      ".999999999" -> Seq(".9999999", ".99999999", ".999999999"),
+      ".999999000" -> Seq(".999999", ".999999", ".999999"),
+      ".000000001" -> Seq("", "", ".000000001"),
+      ".000000999" -> Seq(".0000009", ".00000099", ".000000999"))
+    // Render LTZ in a fixed zone so the wall-clock fields round-trip from the cast.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(7, 8, 9).zipWithIndex.foreach { case (p, idx) =>
+        bases.foreach { base =>
+          cases.foreach { case (frac, expectedByPrecision) =>
+            val input = base + frac
+            val expected = base + expectedByPrecision(idx)
+            Seq("timestamp_ltz", "timestamp_ntz").foreach { typeName =>
+              val df = spark.sql(s"SELECT CAST('$input' AS $typeName($p)) AS b")
+              assert(hiveResultString(df.queryExecution.executedPlan) === Seq(expected),
+                s"type = $typeName($p), input = $input")
+              val nested = spark.sql(s"SELECT array(CAST('$input' AS $typeName($p))) AS b")
+              assert(hiveResultString(nested.queryExecution.executedPlan) === Seq(s"[$expected]"),
+                s"nested type = $typeName($p), input = $input")
+            }
+          }
+        }
+      }
+
+      // NULL values: handled by the generic `(null, _)` branch in `toHiveString` (before the
+      // type-specific cases), so the path is type-agnostic. Verify top-level and nested NULLs.
+      Seq("timestamp_ltz(9)", "timestamp_ntz(9)").foreach { typeName =>
+        val nullCast = s"CAST(NULL AS $typeName)"
+        val topLevel = spark.sql(s"SELECT $nullCast AS b")
+        assert(hiveResultString(topLevel.queryExecution.executedPlan) === Seq("NULL"),
+          s"top-level NULL of $typeName")
+        val inArray = spark.sql(s"SELECT array($nullCast) AS b")
+        assert(hiveResultString(inArray.queryExecution.executedPlan) === Seq("[null]"),
+          s"array NULL of $typeName")
+        val inMap = spark.sql(s"SELECT map('k', $nullCast) AS b")
+        assert(hiveResultString(inMap.queryExecution.executedPlan) === Seq("{\"k\":null}"),
+          s"map NULL of $typeName")
+        val inStruct = spark.sql(s"SELECT named_struct('f', $nullCast) AS b")
+        assert(hiveResultString(inStruct.queryExecution.executedPlan) === Seq("{\"f\":null}"),
+          s"struct NULL of $typeName")
+      }
+    }
+  }
+
+  test("SPARK-57257: LTZ nanos timestamp honors session time zone, NTZ is zone-independent") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // A fixed instant and the matching local date-time at UTC.
+      val ldt = LocalDateTime.of(2020, 1, 1, 12, 0, 0, 123456789)
+      val instant = ldt.toInstant(ZoneOffset.UTC)
+      val ltzDf = spark.createDataFrame(
+        Seq(Row(instant)).asJava,
+        StructType(Seq(StructField("b", TimestampLTZNanosType(9)))))
+      val ntzDf = spark.createDataFrame(
+        Seq(Row(ldt)).asJava,
+        StructType(Seq(StructField("b", TimestampNTZNanosType(9)))))
+
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        assert(hiveResultString(ltzDf.queryExecution.executedPlan) ===
+          Seq("2020-01-01 12:00:00.123456789"))
+        assert(hiveResultString(ntzDf.queryExecution.executedPlan) ===
+          Seq("2020-01-01 12:00:00.123456789"))
+      }
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        // LTZ shifts with the session zone (UTC-08:00 on this date) ...
+        assert(hiveResultString(ltzDf.queryExecution.executedPlan) ===
+          Seq("2020-01-01 04:00:00.123456789"))
+        // ... while NTZ stays the same wall-clock value.
+        assert(hiveResultString(ntzDf.queryExecution.executedPlan) ===
+          Seq("2020-01-01 12:00:00.123456789"))
+      }
+    }
   }
 
   test("toHiveString correctly handles UDTs") {
@@ -171,6 +256,51 @@ class HiveResultSuite extends SharedSparkSession {
     assert(hiveResultString(plan1) === Seq("5 00:00:00.010000000"))
     val plan2 = df.selectExpr("array(i)").queryExecution.executedPlan
     assert(hiveResultString(plan2) === Seq("[5 00:00:00.010000000]"))
+  }
+
+  test("geometry formatting in hive result") {
+    // Geometry with no SRID.
+    val df = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("POINT(1 2)"))
+    // Geometry with SRID 0.
+    val dfSrid0 = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 0)")
+    val resultSrid0 = hiveResultString(dfSrid0.queryExecution.executedPlan)
+    assert(resultSrid0 === Seq("POINT(1 2)"))
+    // Geometry with SRID 4326.
+    val dfSrid4326 = spark.sql(
+      "SELECT ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326)")
+    val resultSrid4326 = hiveResultString(dfSrid4326.queryExecution.executedPlan)
+    assert(resultSrid4326 === Seq("SRID=4326;POINT(1 2)"))
+  }
+
+  test("nested geometry formatting in hive result") {
+    // Geometry with no SRID.
+    val df = spark.sql(
+      "SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("[\"POINT(1 2)\"]"))
+    // Geometry with SRID 4326.
+    val dfSrid4326 = spark.sql(
+      "SELECT array(ST_GeomFromWKB(X'0101000000000000000000f03f0000000000000040', 4326))")
+    val resultSrid4326 = hiveResultString(dfSrid4326.queryExecution.executedPlan)
+    assert(resultSrid4326 === Seq("[\"SRID=4326;POINT(1 2)\"]"))
+  }
+
+  test("geography formatting in hive result") {
+    val df = spark.sql(
+      "SELECT ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040')")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("SRID=4326;POINT(1 2)"))
+  }
+
+  test("nested geography formatting in hive result") {
+    val df = spark.sql(
+      "SELECT array(ST_GeogFromWKB(X'0101000000000000000000f03f0000000000000040'))")
+    val result = hiveResultString(df.queryExecution.executedPlan)
+    assert(result === Seq("[\"SRID=4326;POINT(1 2)\"]"))
   }
 
   test("SPARK-52650: Use stringifyValue to get UDT string representation") {

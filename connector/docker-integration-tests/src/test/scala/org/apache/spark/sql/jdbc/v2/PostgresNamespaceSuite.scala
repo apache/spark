@@ -26,9 +26,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.2-alpine):
+ * To run this test suite for a specific version (e.g., postgres:18.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:18.2-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresNamespaceSuite"
  * }}}
  */
@@ -36,11 +36,14 @@ import org.apache.spark.tags.DockerTest
 class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
   override val db = new PostgresDatabaseOnDocker
 
-  val map = new CaseInsensitiveStringMap(
+  lazy val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "org.postgresql.Driver").asJava)
 
-  catalog.initialize("postgresql", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("postgresql", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 

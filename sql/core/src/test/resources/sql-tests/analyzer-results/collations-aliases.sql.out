@@ -325,7 +325,7 @@ Project [concat_ws(' ' collate UTF8_LCASE, utf8_lcase, utf8_lcase)#x]
 -- !query
 drop view v1
 -- !query analysis
-DropTempViewCommand v1
+DropTempViewCommand v1, false
 
 
 -- !query

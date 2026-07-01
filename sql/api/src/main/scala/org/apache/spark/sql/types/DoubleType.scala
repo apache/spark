@@ -34,6 +34,10 @@ class DoubleType private () extends FractionalType {
    */
   override def defaultSize: Int = 8
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[DoubleType]
+
+  override def hashCode(): Int = classOf[DoubleType].getSimpleName.hashCode
+
   private[spark] override def asNullable: DoubleType = this
 }
 

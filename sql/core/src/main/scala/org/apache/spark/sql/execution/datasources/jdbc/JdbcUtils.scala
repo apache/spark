@@ -51,8 +51,8 @@ import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDiale
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{NextIterator, TaskInterruptListener}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.NextIterator
 
 /**
  * Util functions for JDBC tables.
@@ -77,7 +77,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     executionResult match {
       case Success(_) => true
-      case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) => false
+      case Failure(e: SQLException)
+        if dialect.isObjectNotFoundException(e) || dialect.isNotSelectableObjectException(e) =>
+        false
       case Failure(e) => throw e  // Re-throw unexpected exceptions
     }
   }
@@ -164,6 +166,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // Note that some dialects override this setting, e.g. as SQL Server.
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
+      case t: TimeType => Option(JdbcType(s"TIME(${t.precision})", java.sql.Types.TIME))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
@@ -227,7 +230,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
-    case java.sql.Types.TIME => getTimestampType(isTimestampNTZ)
+    case java.sql.Types.TIME =>
+      if (conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled) {
+        // Use reported scale (fractional digits) as precision; TIME(0) is valid
+        val timePrecision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
+          else TimeType.DEFAULT_PRECISION
+        TimeType(timePrecision)
+      } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
@@ -439,6 +448,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
           row.setInt(pos, fromJavaDate(dialect.convertJavaDateToDate(dateVal)))
+        } else {
+          row.update(pos, null)
+        }
+
+    case _: TimeType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val localTime = rs.getObject(pos + 1, classOf[java.time.LocalTime])
+        if (localTime != null) {
+          row.setLong(pos, localTime.toNanoOfDay)
         } else {
           row.update(pos, null)
         }
@@ -720,6 +738,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
       }
 
+    case _: TimeType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val localTime = row.getAs[java.time.LocalTime](pos)
+        stmt.setObject(pos + 1, localTime)
+
     case t: DecimalType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
         stmt.setBigDecimal(pos + 1, row.getDecimal(pos))
@@ -798,6 +821,26 @@ object JdbcUtils extends Logging with SQLConfHelper {
     val outMetrics = TaskContext.get().taskMetrics().outputMetrics
 
     val conn = dialect.createConnectionFactory(options)(-1)
+
+    // Close JDBC connection so blocked native reads (e.g. executeBatch) fail instead of
+    // ignoring Thread.interrupt(). Listener registered after opening the connection; we don't need
+    // to synchronize or use atomic references.
+    // Interrupt during connection setup can miss the listener; finally still closes the
+    // connection. After registration, closing connection makes later JDBC calls throw
+    // SQLException and the task unwinds.
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskInterruptListener(new TaskInterruptListener {
+        override def onTaskInterrupted(context: TaskContext, reason: String): Unit = {
+          try {
+            conn.close()
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Exception closing JDBC connection on task interrupt", e)
+          }
+        }
+      })
+    }
+
     var committed = false
 
     var finalIsolationLevel = Connection.TRANSACTION_NONE
@@ -859,6 +902,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
           rowCount += 1
           totalRowCount += 1
           if (rowCount % batchSize == 0) {
+            // Hot spot for native blocking reads; TaskInterruptListener (registered after
+            // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
+            // methods on a closed Connection throw SQLException (expected for major drivers).
+            // Mid-batch kill may drop the in-flight batch; still better than hanging forever.
             stmt.executeBatch()
             rowCount = 0
           }
@@ -899,7 +946,16 @@ object JdbcUtils extends Logging with SQLConfHelper {
         // let the exception through unless rollback() or close() want to
         // tell the user about another problem.
         if (supportsTransactions) {
-          conn.rollback()
+          // The connection may already be closed by the task interrupt listener; rollback
+          // is best-effort in that case.
+          try {
+            if (!conn.isClosed) {
+              conn.rollback()
+            }
+          } catch {
+            case NonFatal(e) =>
+              logWarning("Exception rolling back transaction on task failure", e)
+          }
         } else {
           outMetrics.setRecordsWritten(totalRowCount)
         }

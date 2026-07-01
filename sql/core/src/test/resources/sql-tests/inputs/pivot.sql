@@ -298,3 +298,22 @@ PIVOT (
   sum(Earnings)
   FOR Course IN ('dotNET', 'Java')
 );
+
+-- pivot with alias and target column aliases
+SELECT pv.year, pv.net, pv.jv FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET' as net, 'Java' as jv)
+) AS pv;
+
+-- pivot with alias - join with another table
+SELECT pv.year, pv.dotNET, y.s FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) pv
+JOIN years y ON pv.year = y.y;

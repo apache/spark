@@ -78,7 +78,7 @@ private[spark] object PythonWorkerUtils extends Logging {
     val json = Serialization.write(Map(
         "isBarrier" -> context.isInstanceOf[BarrierTaskContext],
         "connInfo" -> connInfo.merge,
-        "secret" -> secret,
+        "secret" -> secret.orNull,
         "stageId" -> context.stageId(),
         "partitionId" -> context.partitionId(),
         "attemptNumber" -> context.attemptNumber(),

@@ -19,7 +19,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesCumulativeMixin:
@@ -68,7 +67,9 @@ class SeriesCumulativeMixin:
         self.assert_eq(pser.cumsum().astype(int), psser.cumsum())
         self.assert_eq(pser.cumsum(skipna=False).astype(int), psser.cumsum(skipna=False))
 
-        with self.assertRaisesRegex(TypeError, r"Could not convert object \(string\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c", "d"]).cumsum()
 
     def test_cumprod(self):
@@ -109,14 +110,15 @@ class SeriesCumulativeMixin:
         self.assert_eq(pser.cumprod(), psser.cumprod())
         self.assert_eq(pser.cumprod(skipna=False).astype(int), psser.cumprod(skipna=False))
 
-        with self.assertRaisesRegex(TypeError, r"Could not convert object \(string\) to numeric"):
+        with self.assertRaisesRegex(
+            TypeError, r"Could not convert (object|str) \(string\) to numeric"
+        ):
             ps.Series(["a", "b", "c", "d"]).cumprod()
 
 
 class SeriesCumulativeTests(
     SeriesCumulativeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, CommitMetadata, CommitMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.{col, window}
@@ -47,6 +47,102 @@ class RocksDBWithChangelogCheckpointStateDataSourceChangeDataReaderSuite extends
     super.beforeAll()
     spark.conf.set("spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled",
       "true")
+  }
+
+  test("read stream-stream join v4 state change feed") {
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "4",
+      SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "true") {
+      withTempDir { tempDir =>
+        runStreamStreamJoinQuery(tempDir.getAbsolutePath)
+
+        // event time in microseconds, timestamp in milliseconds
+        def evtTime(sec: Int): Long = sec * 1000000L
+        def ts(sec: Int): Timestamp = new Timestamp(sec * 1000L)
+
+        val keyWithTsToValuesDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "left-keyWithTsToValues")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (leftId: Int, leftTime: Timestamp, matched: Boolean),
+        //   partition_id)
+        // In V4 inner join, the matched flag on the other side is not updated as an
+        // optimization (since the matched flag is only needed for outer/semi joins).
+        // Therefore, only "append" records appear -- no "update" records.
+        checkAnswer(keyWithTsToValuesDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(2, ts(2), false), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(4, ts(4), false), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(6, ts(6), false), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(8, ts(8), false), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(10, ts(10), false), 2)
+        ))
+
+        val tsWithKeyDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "left-tsWithKey")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (__dummy__: Void),
+        //   partition_id)
+        checkAnswer(tsWithKeyDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(null), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(null), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(null), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(null), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(null), 2)
+        ))
+
+        val rightKeyWithTsToValuesDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "right-keyWithTsToValues")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (rightId: Int, rightTime: Timestamp, matched: Boolean),
+        //   partition_id)
+        // Right side values are appended with matched=true directly because the
+        // right side is processed after the left side within the same batch,
+        // so the match is found immediately.
+        checkAnswer(rightKeyWithTsToValuesDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(2, ts(2), true), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(4, ts(4), true), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(6, ts(6), true), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(8, ts(8), true), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(10, ts(10), true), 2)
+        ))
+
+        val rightTsWithKeyDf = spark.read.format("statestore")
+          .option(StateSourceOptions.STORE_NAME, "right-tsWithKey")
+          .option(StateSourceOptions.READ_CHANGE_FEED, value = true)
+          .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+          .option(StateSourceOptions.CHANGE_END_BATCH_ID, 1)
+          .load(tempDir.getAbsolutePath)
+
+        // Schema: (batch_id, change_type,
+        //   key: (field0: Int, __event_time: Long),
+        //   value: (__dummy__: Void),
+        //   partition_id)
+        checkAnswer(rightTsWithKeyDf, Seq(
+          Row(0L, "append", Row(2, evtTime(2)), Row(null), 4),
+          Row(0L, "append", Row(4, evtTime(4)), Row(null), 2),
+          Row(1L, "append", Row(6, evtTime(6)), Row(null), 4),
+          Row(1L, "append", Row(8, evtTime(8)), Row(null), 3),
+          Row(1L, "append", Row(10, evtTime(10)), Row(null), 2)
+        ))
+      }
+    }
   }
 }
 
@@ -141,11 +237,11 @@ abstract class StateDataSourceChangeDataReaderSuite extends StateDataSourceTestB
         new File(tempDir.getAbsolutePath, "commits").getAbsolutePath)
 
       // Start version: treated as v1 (no operator unique ids)
-      val startMetadata = CommitMetadata(0, None)
+      val startMetadata = CommitMetadata(0)
       assert(commitLog.add(0, startMetadata))
 
       // End version: treated as v2 (operator 0 has unique ids)
-      val endMetadata = CommitMetadata(0,
+      val endMetadata = CommitMetadataV2(0,
         Some(Map[Long, Array[Array[String]]](0L -> Array(Array("uid")))))
       assert(commitLog.add(1, endMetadata))
 

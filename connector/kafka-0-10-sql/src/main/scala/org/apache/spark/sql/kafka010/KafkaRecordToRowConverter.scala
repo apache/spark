@@ -39,13 +39,13 @@ private[kafka010] class KafkaRecordToRowConverter {
   val toInternalRowWithoutHeaders: Record => InternalRow =
     (cr: Record) => InternalRow(
       cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(cr.timestamp)), cr.timestampType.id
+      parseTimestamp(cr), cr.timestampType.id
     )
 
   val toInternalRowWithHeaders: Record => InternalRow =
     (cr: Record) => InternalRow(
       cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
-      DateTimeUtils.fromJavaTimestamp(new Timestamp(cr.timestamp)), cr.timestampType.id,
+      parseTimestamp(cr), cr.timestampType.id,
       if (cr.headers.iterator().hasNext) {
         new GenericArrayData(cr.headers.iterator().asScala
           .map(header =>
@@ -89,5 +89,20 @@ private[kafka010] object KafkaRecordToRowConverter {
 
   def kafkaSchema(includeHeaders: Boolean): StructType = {
     if (includeHeaders) schemaWithHeaders else schemaWithoutHeaders
+  }
+
+  private def parseTimestamp(cr: Record): Long = {
+    try {
+      DateTimeUtils.fromJavaTimestamp(new Timestamp(cr.timestamp))
+    } catch {
+      case e: ArithmeticException =>
+        throw KafkaExceptions.kafkaMalformedRecordTimestamp(
+          cr.topic(),
+          cr.partition(),
+          cr.offset(),
+          cr.timestamp(),
+          e
+        )
+    }
   }
 }

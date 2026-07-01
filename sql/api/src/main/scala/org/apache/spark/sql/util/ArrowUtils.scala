@@ -27,6 +27,7 @@ import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, Interval
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -39,6 +40,14 @@ private[sql] object ArrowUtils {
 
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
   def toArrowType(dt: DataType, timeZoneId: String, largeVarTypes: Boolean = false): ArrowType =
+    TypeApiOps(dt)
+      .flatMap(_.toArrowType(timeZoneId))
+      .getOrElse(toArrowTypeDefault(dt, timeZoneId, largeVarTypes))
+
+  private def toArrowTypeDefault(
+      dt: DataType,
+      timeZoneId: String,
+      largeVarTypes: Boolean): ArrowType =
     dt match {
       case BooleanType => ArrowType.Bool.INSTANCE
       case ByteType => new ArrowType.Int(8, true)
@@ -58,7 +67,6 @@ private[sql] object ArrowUtils {
       case TimestampType => new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       case TimestampNTZType =>
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, null)
-      case _: TimeType => new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8)
       case NullType => ArrowType.Null.INSTANCE
       case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
       case _: DayTimeIntervalType => new ArrowType.Duration(TimeUnit.MICROSECOND)
@@ -67,7 +75,10 @@ private[sql] object ArrowUtils {
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
 
-  def fromArrowType(dt: ArrowType): DataType = dt match {
+  def fromArrowType(dt: ArrowType): DataType =
+    TypeApiOps.fromArrowType(dt).getOrElse(fromArrowTypeDefault(dt))
+
+  private def fromArrowTypeDefault(dt: ArrowType): DataType = dt match {
     case ArrowType.Bool.INSTANCE => BooleanType
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 => ByteType
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 2 => ShortType
@@ -89,8 +100,6 @@ private[sql] object ArrowUtils {
         if ts.getUnit == TimeUnit.MICROSECOND && ts.getTimezone == null =>
       TimestampNTZType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
-    case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
-      TimeType(TimeType.MICROS_PRECISION)
     case ArrowType.Null.INSTANCE => NullType
     case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH =>
       YearMonthIntervalType()
@@ -101,6 +110,16 @@ private[sql] object ArrowUtils {
   }
 
   private val metadataKey = "SPARK::metadata::json"
+  // Arrow's Timestamp type carries only (unit, timezone) and has no fractional-second precision
+  // field, so the precision of the nanosecond timestamp types is stored in the Arrow field
+  // metadata under this dedicated key (namespaced like `metadataKey`, separate from the user
+  // metadata blob so user metadata is untouched) and recovered on read in `fromArrowField`.
+  private val timestampNanosPrecisionKey = "SPARK::timestampNanos::precision"
+  // Arrow's Time type carries only (unit, bitWidth) and has no fractional-second precision field,
+  // so the precision of TimeType is stored in the Arrow field metadata under this dedicated key
+  // (namespaced like `metadataKey`, separate from the user metadata blob so user metadata is
+  // untouched) and recovered on read in `fromArrowField`.
+  private val timePrecisionKey = "SPARK::time::precision"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -114,6 +133,27 @@ private[sql] object ArrowUtils {
     } else {
       Metadata.empty // Spark metadata defaults to Metadata.empty
     }
+  }
+
+  /**
+   * Builds an Arrow field for a type whose Arrow representation cannot encode its
+   * fractional-second precision (nanosecond timestamps, TIME), stashing the column precision in
+   * the field metadata under `precisionKey` (alongside the user metadata) so it can be recovered
+   * in `fromArrowField`.
+   */
+  private def toPrecisionTaggedArrowField(
+      name: String,
+      dt: DataType,
+      precision: Int,
+      precisionKey: String,
+      nullable: Boolean,
+      timeZoneId: String,
+      largeVarTypes: Boolean,
+      metadata: Metadata): Field = {
+    val base = Option(toArrowMetaData(metadata)).map(_.asScala.toMap).getOrElse(Map.empty)
+    val md = (base + (precisionKey -> precision.toString)).asJava
+    val fieldType = new FieldType(nullable, toArrowType(dt, timeZoneId, largeVarTypes), null, md)
+    new Field(name, fieldType, Seq.empty[Field].asJava)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
@@ -222,6 +262,36 @@ private[sql] object ArrowUtils {
           Seq(
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
+      case t: TimestampNTZNanosType =>
+        toPrecisionTaggedArrowField(
+          name,
+          t,
+          t.precision,
+          timestampNanosPrecisionKey,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata)
+      case t: TimestampLTZNanosType =>
+        toPrecisionTaggedArrowField(
+          name,
+          t,
+          t.precision,
+          timestampNanosPrecisionKey,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata)
+      case t: TimeType =>
+        toPrecisionTaggedArrowField(
+          name,
+          t,
+          t.precision,
+          timePrecisionKey,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata)
       case dataType =>
         val fieldType = new FieldType(
           nullable,
@@ -301,6 +371,30 @@ private[sql] object ArrowUtils {
           StructField(child.getName, dt, child.isNullable, fromArrowMetaData(child.getMetadata))
         }
         StructType(fields.toArray)
+      // Recover the exact precision of nanosecond timestamps from the field metadata written by
+      // `toPrecisionTaggedArrowField`. Foreign Arrow data (or an out-of-range value) has no usable
+      // key, so fall back to the canonical maximum precision via `fromArrowType`.
+      case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.NANOSECOND =>
+        val precision = Option(field.getMetadata.get(timestampNanosPrecisionKey))
+          .flatMap(s => scala.util.Try(s.toInt).toOption)
+          .filter { p =>
+            p >= TimestampNTZNanosType.MIN_PRECISION && p <= TimestampNTZNanosType.MAX_PRECISION
+          }
+        precision match {
+          case Some(p) if ts.getTimezone == null => TimestampNTZNanosType(p)
+          case Some(p) => TimestampLTZNanosType(p)
+          case None => fromArrowType(ts)
+        }
+      // Recover the exact precision of TIME from the field metadata written by `toArrowField`.
+      // Foreign Arrow data has no precision key, and a present-but-invalid value (out of [0, 9] or
+      // non-numeric) is unusable, so either way fall back to the canonical microsecond precision
+      // via `fromArrowType`.
+      case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND =>
+        Option(field.getMetadata.get(timePrecisionKey))
+          .flatMap(s => scala.util.Try(s.toInt).toOption)
+          .filter(p => p >= TimeType.MIN_PRECISION && p <= TimeType.MAX_PRECISION)
+          .map(TimeType(_))
+          .getOrElse(fromArrowType(t))
       case arrowType => fromArrowType(arrowType)
     }
   }
@@ -322,6 +416,51 @@ private[sql] object ArrowUtils {
         largeVarTypes,
         field.metadata)
     }.asJava)
+  }
+
+  /**
+   * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
+   */
+  def toArrowSchema(schema: StructType, timeZoneId: String, largeVarTypes: Boolean): Schema = {
+    new Schema(schema.map { field =>
+      toArrowField(
+        field.name,
+        field.dataType,
+        field.nullable,
+        timeZoneId,
+        largeVarTypes,
+        field.metadata)
+    }.asJava)
+  }
+
+  /**
+   * Check the schema and fail once an insider struct type contains duplicated field names. Note
+   * that the first level accepts duplicated names.
+   */
+  def failDuplicatedFieldNames(schema: StructType): Unit = {
+    schema.fields.foreach { field => failDuplicatedFieldNamesImpl(field.dataType) }
+  }
+
+  /**
+   * Check the schema and fail once a struct type contains duplicated field names.
+   */
+  private def failDuplicatedFieldNamesImpl(dt: DataType): Unit = {
+    dt match {
+      case st: StructType =>
+        if (st.names.toSet.size != st.names.length) {
+          throw ExecutionErrors.duplicatedFieldNameInArrowStructError(
+            st.names.toImmutableArraySeq)
+        }
+        st.fields.foreach { field => failDuplicatedFieldNamesImpl(field.dataType) }
+      case arr: ArrayType =>
+        failDuplicatedFieldNamesImpl(arr.elementType)
+      case map: MapType =>
+        failDuplicatedFieldNamesImpl(map.keyType)
+        failDuplicatedFieldNamesImpl(map.valueType)
+      case udt: UserDefinedType[_] =>
+        failDuplicatedFieldNamesImpl(udt.sqlType)
+      case _ =>
+    }
   }
 
   def fromArrowSchema(schema: Schema): StructType = {

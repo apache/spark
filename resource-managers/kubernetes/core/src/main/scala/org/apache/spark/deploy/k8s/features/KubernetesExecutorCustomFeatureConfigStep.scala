@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import org.apache.spark.annotation.{DeveloperApi, Unstable}
+import org.apache.spark.annotation.{DeveloperApi, Since, Stable}
 import org.apache.spark.deploy.k8s.KubernetesExecutorConf
 
 /**
@@ -65,8 +65,9 @@ import org.apache.spark.deploy.k8s.KubernetesExecutorConf
  *   }
  * }}}
  */
-@Unstable
+@Stable
 @DeveloperApi
+@Since("3.3.0")
 trait KubernetesExecutorCustomFeatureConfigStep extends KubernetesFeatureConfigStep {
   /**
    * Initialize the configuration for executor user feature step, this only applicable when user

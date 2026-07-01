@@ -56,8 +56,8 @@ from pyspark.sql.pandas.types import (
     to_arrow_schema,
 )
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -71,7 +71,7 @@ if have_pandas:
     from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa  # noqa: F401
+    import pyarrow as pa
 
 
 class ArrowTestsMixin:
@@ -666,7 +666,7 @@ class ArrowTestsMixin:
             self.assertEqual(len(exception.args), 1)
             self.assertRegex(
                 exception.args[0],
-                "with name '7_date_t' " "to Arrow Array \\(decimal128\\(38, 18\\)\\)",
+                "with name '7_date_t' to Arrow Array \\(decimal128\\(38, 18\\)\\)",
             )
 
             # the inner exception provides us with the incorrect types
@@ -747,6 +747,23 @@ class ArrowTestsMixin:
         pdf_copy = pdf.copy(deep=True)
         self.spark.createDataFrame(pdf, schema=self.schema)
         self.assertTrue(pdf.equals(pdf_copy))
+
+    def test_createDataFrame_pandas_chunked_array_backed(self):
+        # SPARK-46776: pa.Array.from_pandas can return a pa.ChunkedArray when the
+        # input pandas Series is backed by a multi-chunk pyarrow array (e.g. the
+        # pyarrow-backed string extension dtype). pa.RecordBatch.from_arrays does
+        # not accept ChunkedArray, so createDataFrame previously failed with
+        # "Cannot convert pyarrow.lib.ChunkedArray to pyarrow.lib.Array".
+        chunked = pa.chunked_array([pa.array(["a", "b"]), pa.array(["c", "d", "e"])])
+        self.assertEqual(chunked.num_chunks, 2)
+        pdf = pd.DataFrame({"s": pd.Series(chunked, dtype="string[pyarrow]")})
+
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                    df = self.spark.createDataFrame(pdf)
+                self.assertEqual(df.count(), 5)
+                self.assertEqual([r.s for r in df.collect()], ["a", "b", "c", "d", "e"])
 
     def test_createDataFrame_arrow_truncate_timestamp(self):
         t_in = pa.Table.from_arrays(
@@ -889,7 +906,7 @@ class ArrowTestsMixin:
         expected = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_arrow_with_array_type_nulls(self):
         t = pa.table({"a": [[1, 2], None, [3, 4]], "b": [["x", "y"], ["y", "z"], None]})
@@ -901,7 +918,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toPandas_with_array_type(self):
         for arrow_enabled in [True, False]:
@@ -918,7 +935,7 @@ class ArrowTestsMixin:
         result = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toArrow_with_array_type_nulls(self):
         expected = [([1, 2], ["x", "y"]), (None, ["y", "z"]), ([3, 4], None)]
@@ -933,7 +950,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_pandas_with_map_type(self):
         with self.quiet():
@@ -1870,6 +1887,41 @@ class ArrowTestsMixin:
                     t = df.toArrow()
                     self.assertEqual(t.num_rows, 10000)
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
+
+    def test_toPandas_double_nested_array_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(ArrayType(StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_array_of_map_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_triple_nested_array_empty_outer(self):
+        # SPARK-55056: This used to trigger SIGSEGV before the upstream arrow-java fix.
+        # When the outer array is empty, the second-level ArrayWriter is never
+        # invoked, so its count stays 0. Arrow format requires ListArray offset
+        # buffer to have N+1 entries even when N=0, but getBufferSizeFor(0)
+        # returns 0 and the buffer is omitted in IPC serialization.
+        schema = StructType([StructField("data", ArrayType(ArrayType(ArrayType(StringType()))))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_nested_array_with_map_empty_outer(self):
+        schema = StructType(
+            [StructField("data", ArrayType(ArrayType(MapType(StringType(), StringType()))))]
+        )
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
 
 
 @unittest.skipIf(

@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeographyDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -129,6 +129,16 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with Geography SRIDs") {
+    Seq(4267, 4269).foreach { srid =>
+      val geog = Geography.fromWKB(point1, srid)
+      val schema = StructType(Seq(StructField("g", GeographyType(srid), nullable = false)))
+      checkAnswer(
+        spark.createDataFrame(sparkContext.parallelize(Seq(Row(geog))), schema),
+        Seq(Row(geog)))
+    }
+  }
+
   test("createDataFrame APIs with Geography.fromWKB") {
     // 1. Test createDataFrame with RDD of Geography objects
     val geography1 = Geography.fromWKB(point1, 4326)
@@ -177,6 +187,24 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(s"SELECT ST_GeogFromWKB(X'$pointString')")
     val expectedGeog = Geography.fromWKB(pointBytes, 4326)
     checkAnswer(df, Seq(Row(expectedGeog)))
+  }
+
+  test("SPARK-57058: ORDER BY on a Geography column fails with INVALID_ORDERING_TYPE") {
+    val rdd = sparkContext.parallelize(Seq(
+      Row(Geography.fromWKB(point1, 4326)),
+      Row(Geography.fromWKB(point2, 4326))))
+    val schema = StructType(Seq(StructField("g", GeographyType(4326), nullable = false)))
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("geog_t")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT g FROM geog_t ORDER BY g").collect()
+      },
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"GEOGRAPHY(4326)\"",
+        "sqlExpr" -> "\"g ASC NULLS FIRST\""),
+      queryContext = Array(ExpectedContext("g", 30, 30)))
   }
 
   test("geospatial feature disabled") {

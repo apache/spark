@@ -90,7 +90,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val mapSideCombine: Boolean = false,
     val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
     val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
-    private val _checksumMismatchFullRetryEnabled: Boolean = false)
+    private val _checksumMismatchFullRetryEnabled: Boolean = false,
+    val checksumMismatchQueryLevelRollbackEnabled: Boolean = false)
   extends Dependency[Product2[K, V]] with Logging {
 
   def this(

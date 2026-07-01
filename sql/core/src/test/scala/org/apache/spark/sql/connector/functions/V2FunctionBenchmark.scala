@@ -108,8 +108,10 @@ object V2FunctionBenchmark extends SqlBasedBenchmark {
   case class NativeAdd(
       left: Expression,
       right: Expression,
-      override val nullable: Boolean) extends BinaryArithmetic {
-    override val evalContext: NumericEvalContext = NumericEvalContext(EvalMode.LEGACY)
+      override val nullable: Boolean,
+      override val evalContext: NumericEvalContext = NumericEvalContext(EvalMode.LEGACY))
+    extends BinaryArithmetic {
+
     override def inputType: AbstractDataType = NumericType
     override def symbol: String = "+"
 

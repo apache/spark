@@ -19,7 +19,6 @@
 A collections of builtin protobuf functions
 """
 
-
 from typing import Dict, Optional, TYPE_CHECKING, cast
 
 from pyspark.sql.column import Column
@@ -63,7 +62,7 @@ def from_protobuf(
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
-    messageName: str, optional
+    messageName: str
         the protobuf message name to look for in descriptor file, or
         The Protobuf class name when descFilePath parameter is not set.
         E.g. `com.example.protos.ExampleEvent`.
@@ -196,7 +195,7 @@ def to_protobuf(
     ----------
     data : :class:`~pyspark.sql.Column` or str
         the data column.
-    messageName: str, optional
+    messageName: str
         the protobuf message name to look for in descriptor file, or
         The Protobuf class name when descFilePath parameter is not set.
         E.g. `com.example.protos.ExampleEvent`.
@@ -322,7 +321,7 @@ def _test() -> None:
         .getOrCreate()
     )
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.protobuf.functions,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

@@ -148,7 +148,7 @@ private[v2] trait V2JDBCTest
       partitionColumn: String)
   val tableNameToPartinioningOptions: Map[String, PartitioningInfo] = Map(
     "employee" -> PartitioningInfo("4", "1", "8", "dept"),
-    // new_table is used in "SPARK-37038: Test TABLESAMPLE" test
+    // new_table is used in "SPARK-37038,SPARK-57040: Test TABLESAMPLE" test
     "new_table" -> PartitioningInfo("4", "1", "20", "col1")
   )
 
@@ -470,6 +470,8 @@ private[v2] trait V2JDBCTest
 
   def supportsTableSample: Boolean = false
 
+  def supportsTableSampleSystem: Boolean = false
+
   test("SPARK-48172: Test CONTAINS") {
     val df1 = spark.sql(
       s"""
@@ -699,9 +701,56 @@ private[v2] trait V2JDBCTest
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
+  // Whether the dialect can push down IS [NOT] NULL over a predicate operand, e.g.
+  // `(a = 10000) IS NULL`. MsSqlServer has no boolean type, so it cannot and Spark evaluates it.
+  protected def supportsIsNullOverPredicate: Boolean = true
+
+  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
+    val tbl = s"$catalogName.composite_is_null"
+    withTable(tbl) {
+      // b is a string label so the result type is the same across dialects (an INT column
+      // comes back as BigDecimal on some engines such as Oracle).
+      sql(s"CREATE TABLE $tbl (a INT, b VARCHAR(8))")
+      Seq[(Option[Int], String)]((Some(10000), "x"), (Some(20000), "y"), (None, "z"))
+        .toDF("a", "b").write.insertInto(tbl)
+
+      // Binary comparison operand must be parenthesized as `(a = 10000) IS [NOT] NULL`.
+      // The NULL row exercises the IS NULL branch: (NULL = 10000) is NULL, so it matches
+      // IS NULL and not IS NOT NULL. Dialects without a boolean type (e.g. SQL Server) cannot
+      // push this, but Spark evaluates it and returns the same rows.
+      val df1 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NOT NULL")
+      checkFilterPushed(df1, supportsIsNullOverPredicate)
+      assert(df1.collect().map(_.getString(0)).sorted === Array("x", "y"))
+
+      val df2 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NULL")
+      checkFilterPushed(df2, supportsIsNullOverPredicate)
+      assert(df2.collect().map(_.getString(0)) === Array("z"))
+
+      // An arithmetic operand is not a predicate, so it is pushed down by every dialect.
+      val df3 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NOT NULL")
+      checkFilterPushed(df3)
+      assert(df3.collect().map(_.getString(0)).sorted === Array("x", "y"))
+
+      val df4 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NULL")
+      checkFilterPushed(df4)
+      assert(df4.collect().map(_.getString(0)) === Array("z"))
+    }
+  }
+
+  test("SPARK-57040: TABLESAMPLE with replacement is not pushed down") {
+    withTable(s"$catalogName.new_table") {
+      sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
+      spark.range(10).select($"id" * 2, $"id" * 2 + 1).write.insertInto(s"$catalogName.new_table")
+      val df = spark.read.table(s"$catalogName.new_table")
+        .sample(withReplacement = true, fraction = 0.5, seed = 12345)
+      checkSamplePushed(df, false)
+      assert(df.collect().length > 0)
+    }
+  }
+
   val partitioningEnabledTestCase = Seq(true, false)
   gridTest(
-    "SPARK-37038: Test TABLESAMPLE"
+    "SPARK-37038,SPARK-57040: Test TABLESAMPLE"
   )(partitioningEnabledTestCase) { partitioningEnabled =>
     if (supportsTableSample) {
       withTable(s"$catalogName.new_table") {
@@ -789,6 +838,27 @@ private[v2] trait V2JDBCTest
         checkSamplePushed(df8, false)
         checkFilterPushed(df8)
         assert(df8.collect().length < 10)
+
+        // SYSTEM sampling pushdown
+        if (supportsTableSampleSystem) {
+          val df9 = sql(s"SELECT * FROM $catalogName.new_table $tableOptions " +
+            "TABLESAMPLE SYSTEM (50 PERCENT)")
+          checkSamplePushed(df9)
+          if (partitioningEnabled) {
+            multiplePartitionAdditionalCheck(df1, partitionInfo)
+          }
+          assert(df9.collect().length <= 10)
+
+          // SYSTEM sampling + column pruning
+          val df10 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions " +
+            "TABLESAMPLE SYSTEM (50 PERCENT)")
+          checkSamplePushed(df10)
+          checkColumnPruned(df10, "col1")
+          if (partitioningEnabled) {
+            multiplePartitionAdditionalCheck(df1, partitionInfo)
+          }
+          assert(df10.collect().length <= 10)
+        }
       }
     }
   }

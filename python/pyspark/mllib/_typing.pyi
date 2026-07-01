@@ -19,7 +19,7 @@
 from typing import List, Tuple, TYPE_CHECKING, TypeVar, Union
 
 from typing_extensions import Literal
-from numpy import ndarray  # noqa: F401
+from numpy import ndarray
 from py4j.java_gateway import JavaObject
 
 from pyspark.mllib.linalg import Vector

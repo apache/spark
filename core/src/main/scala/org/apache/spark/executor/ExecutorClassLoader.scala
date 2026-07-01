@@ -25,8 +25,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.xbean.asm9._
-import org.apache.xbean.asm9.Opcodes._
+import org.apache.xbean.asm9.{ClassReader, ClassVisitor, ClassWriter, MethodVisitor, Opcodes}
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -238,21 +237,21 @@ class ExecutorClassLoader(
 }
 
 class ConstructorCleaner(className: String, cv: ClassVisitor)
-extends ClassVisitor(ASM9, cv) {
+extends ClassVisitor(Opcodes.ASM9, cv) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     val mv = cv.visitMethod(access, name, desc, sig, exceptions)
-    if (name == "<init>" && (access & ACC_STATIC) == 0) {
+    if (name == "<init>" && (access & Opcodes.ACC_STATIC) == 0) {
       // This is the constructor, time to clean it; just output some new
       // instructions to mv that create the object and set the static MODULE$
       // field in the class to point to it, but do nothing otherwise.
       mv.visitCode()
-      mv.visitVarInsn(ALOAD, 0) // load this
-      mv.visitMethodInsn(INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
-      mv.visitVarInsn(ALOAD, 0) // load this
+      mv.visitVarInsn(Opcodes.ALOAD, 0) // load this
+      mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
+      mv.visitVarInsn(Opcodes.ALOAD, 0) // load this
       // val classType = className.replace('.', '/')
-      // mv.visitFieldInsn(PUTSTATIC, classType, "MODULE$", "L" + classType + ";")
-      mv.visitInsn(RETURN)
+      // mv.visitFieldInsn(Opcodes.PUTSTATIC, classType, "MODULE$", "L" + classType + ";")
+      mv.visitInsn(Opcodes.RETURN)
       mv.visitMaxs(-1, -1) // stack size and local vars will be auto-computed
       mv.visitEnd()
       null

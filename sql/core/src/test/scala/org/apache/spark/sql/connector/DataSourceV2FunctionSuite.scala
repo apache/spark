@@ -141,18 +141,20 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("undefined function") {
-    checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT testcat.non_exist('abc')").collect()
-      ),
-      condition = "UNRESOLVED_ROUTINE",
-      parameters = Map(
-        "routineName" -> "`testcat`.`non_exist`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`.`default`]"),
-      context = ExpectedContext(
-        fragment = "testcat.non_exist('abc')",
-        start = 7,
-        stop = 30))
+    withSQLConf(SQLConf.DEFAULT_CATALOG.key -> "testcat") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SELECT testcat.non_exist('abc')").collect()
+        ),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`testcat`.`non_exist`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`]"),
+        context = ExpectedContext(
+          fragment = "testcat.non_exist('abc')",
+          start = 7,
+          stop = 30))
+    }
   }
 
   test("non-function catalog") {
@@ -185,7 +187,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -204,7 +206,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -240,7 +242,7 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       condition = "REQUIRES_SINGLE_PART_NAMESPACE",
       parameters = Map(
         "sessionCatalog" -> "spark_catalog",
-        "namespace" -> "`default`.`ns1`.`ns2`")
+        "identifier" -> "`default`.`ns1`.`ns2`.`fun`")
     )
   }
 
@@ -723,6 +725,28 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     addFunction(Identifier.of(Array("ns"), "simple_strlen"), SimpleStrLen)
     checkAnswer(sql("SELECT testcat.ns.simple_strlen('abc')"), Row(3) :: Nil)
     checkAnswer(sql("SELECT testcat.ns.simple_strlen('hello world')"), Row(11) :: Nil)
+  }
+
+  test("SPARK-55982: function should not resolve after namespace is dropped") {
+    withNamespace("testcat.dropns") {
+      val cat = catalog("testcat").asInstanceOf[InMemoryCatalog]
+      cat.createNamespace(Array("dropns"), new java.util.HashMap[String, String]())
+      addFunction(Identifier.of(Array("dropns"), "strlen"), SimpleStrLen)
+      checkAnswer(sql("SELECT testcat.dropns.strlen('abc')"), Row(3) :: Nil)
+      sql("DROP NAMESPACE testcat.dropns CASCADE")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testcat.dropns.strlen('abc')").collect()
+        },
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`testcat`.`dropns`.`strlen`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "testcat.dropns.strlen('abc')",
+          start = 7,
+          stop = 34))
+    }
   }
 }
 

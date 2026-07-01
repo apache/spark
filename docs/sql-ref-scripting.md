@@ -21,7 +21,7 @@ license: |
 
 You can employ powerful procedural logic using SQL/PSM standard-based scripting syntax.
 Any SQL script consists of and starts with a [compound statement](control-flow/compound-stmt.html) block (`BEGIN ... END`).
-A compound statement starts with a section to declare local variables, user-defined conditions, and condition handlers, which are used to catch exceptions.
+A compound statement starts with a section to declare local variables, cursors, user-defined conditions, and condition handlers, which are used to catch exceptions.
 This is followed by the compound statement body, which consists of:
 
 - Flow control statements include loops over predicate expressions, [FOR](control-flow/for-stmt.html) loops over query results, conditional logic such as [IF](control-flow/if-stmt.html) and [CASE](control-flow/case-stmt.html), and means to break out loops such as [LEAVE](control-flow/leave-stmt.html) and [ITERATE](control-flow/iterate-stmt.html).
@@ -30,7 +30,8 @@ This is followed by the compound statement body, which consists of:
 - [Queries](sql-ref-syntax-qry-select.html) that return result sets to the invoker of the script.
 - [SET](sql-ref-syntax-aux-set-var.html) statements to set local variables as well as session variables.
 - The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html) statement.
-- Nested compound statements, which provide nested scopes for variables, conditions, and condition handlers.
+- Cursor processing with [OPEN](control-flow/open-stmt.html), [FETCH](control-flow/fetch-stmt.html), and [CLOSE](control-flow/close-stmt.html) statements.
+- Nested compound statements, which provide nested scopes for variables, cursors, conditions, and condition handlers.
 
 ## Passing data between the invoker and the compound statement
 
@@ -39,15 +40,18 @@ There are two ways to pass data to and from a SQL script:
 - Use session variables to pass scalar values or small sets of arrays or maps from one SQL script to another.
 - Use parameter markers to pass scalar values or small sets of arrays or map data from a notebook widget, Python, or another language to the SQL Script.
 
-## Variable scoping
+## Variable and cursor scoping
 
 Variables declared within a compound statement can be referenced in any expression within a compound statement.
 Spark resolves identifiers from the innermost scope outward, following the rules described in [Name Resolution](sql-ref-name-resolution.html).
 You can use the optional compound statement labels to disambiguate duplicate variable names.
 
+Cursors declared within a compound statement can be referenced in `OPEN`, `FETCH`, and `CLOSE` statements within that compound statement.
+Like variables, you can use optional compound statement labels to disambiguate duplicate cursor names in nested scopes.
+
 ## Condition handling
 
-SQL Scripting supports condition handlers, which are used to intercept and process exceptions to `EXIT` processing of the SQL script.
+SQL Scripting supports condition handlers, which are used to intercept and process exceptions to either `EXIT` the compound statement or `CONTINUE` execution.
 
 Condition handlers can be defined to handle three distinct classes of conditions:
 
@@ -58,6 +62,8 @@ Condition handlers can be defined to handle three distinct classes of conditions
   These handlers can handle any condition associated with that `SQLSTATE`.
 
 - A generic `SQLEXCEPTION` handler can catch all conditions falling into the `SQLEXCEPTION` (any `SQLSTATE` which is not `XX***` and not `02***`).
+
+- A `NOT FOUND` handler catches all conditions with SQLSTATE class `'02xxx'`, which includes the `CURSOR_NO_MORE_ROWS` condition raised when fetching beyond the end of a cursor's result set.
 
 The following are used to decide which condition handler applies to an exception.
 This condition handler is called the **most appropriate handler**:
@@ -70,7 +76,11 @@ This condition handler is called the **most appropriate handler**:
   For example, a handler on a named condition is more specific than one on a named `SQLSTATE`.
   A generic `EXCEPTION` handler is the least specific.
 
-The outcome of a condition handler is to execute the statement following the compound statement that declared the handler to execute next.
+The outcome of a condition handler is as follows:
+
+- An `EXIT` handler executes its statement, then exits the compound statement that declared the handler. All cursors opened within that compound statement and nested compound statements are implicitly closed.
+
+- A `CONTINUE` handler executes its statement, then continues execution with the statement following the one that raised the condition.
 
 The following is a list of supported control flow statements:
 
@@ -83,3 +93,9 @@ The following is a list of supported control flow statements:
 * [LOOP](control-flow/loop-stmt.html)
 * [REPEAT](control-flow/repeat-stmt.html)
 * [WHILE](control-flow/while-stmt.html)
+
+The following is a list of cursor statements:
+
+* [OPEN](control-flow/open-stmt.html)
+* [FETCH](control-flow/fetch-stmt.html)
+* [CLOSE](control-flow/close-stmt.html)

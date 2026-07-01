@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_groupby_expanding import GroupByExpandingTestingFuncMixin
 
 
 class GroupByExpandingAdvMixin(GroupByExpandingTestingFuncMixin):
+    def test_groupby_expanding_median(self):
+        self._test_groupby_expanding_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_groupby_expanding_quantile(self):
         self._test_groupby_expanding_func(
             lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")

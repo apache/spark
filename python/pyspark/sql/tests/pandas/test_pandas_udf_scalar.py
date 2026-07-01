@@ -65,12 +65,14 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     test_compiled,
     test_not_compiled_message,
+)
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd
@@ -232,9 +234,9 @@ class ScalarPandasUDFTestsMixin:
 
         @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
         def return_cols(cols):
-            assert type(cols) == pd.Series
-            assert type(cols[0]) == np.ndarray
-            assert type(cols[0][0]) == dict
+            assert isinstance(cols, pd.Series)
+            assert isinstance(cols[0], np.ndarray)
+            assert isinstance(cols[0][0], dict)
             return cols
 
         df = self.spark.createDataFrame(
@@ -686,7 +688,7 @@ class ScalarPandasUDFTestsMixin:
                 yield pd.Series(1)
 
         with self.assertRaisesRegex(
-            Exception, "The length of output in Scalar iterator.*" "the length of output was 1"
+            Exception, "The number of output rows.*must match the number of input rows"
         ):
             df.select(iter_udf_wong_output_size(col("id"))).collect()
 
@@ -699,7 +701,7 @@ class ScalarPandasUDFTestsMixin:
 
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df1 = self.spark.range(10).repartition(1)
-            with self.assertRaisesRegex(Exception, "pandas iterator UDF should exhaust"):
+            with self.assertRaisesRegex(Exception, "The input iterator must be fully consumed"):
                 df1.select(iter_udf_not_reading_all_input(col("id"))).collect()
 
     def test_vectorized_udf_chained(self):
@@ -1540,34 +1542,34 @@ class ScalarPandasUDFTestsMixin:
 
         @udf("int")
         def f1(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 1
 
         @pandas_udf("int")
         def f2_scalar(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 10
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f2_iter(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 10
 
         @udf("int")
         def f3(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 100
 
         @pandas_udf("int")
         def f4_scalar(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 1000
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f4_iter(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 1000
 
         expected_chained_1 = df.withColumn("f2_f1", df["v"] + 11).collect()
@@ -1665,7 +1667,7 @@ class ScalarPandasUDFTestsMixin:
 
         @udf("int")
         def f1(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 1
 
         def f2(x):
@@ -1674,13 +1676,13 @@ class ScalarPandasUDFTestsMixin:
 
         @pandas_udf("int")
         def f3s(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 100
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f3i(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 100
 
         expected = (
@@ -2041,6 +2043,25 @@ class ScalarPandasUDFTestsMixin:
                 with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
                     result = df.select(plus_two("id").alias("result")).collect()
                     self.assertEqual(expected, result)
+
+    def test_scalar_iter_pandas_udf_with_single_output_batch(self):
+        @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+        def return_one(iterator):
+            rows = 0
+            batches = 0
+            for s in iterator:
+                rows += len(s)
+                batches += 1
+
+            assert rows == 1000, rows
+            assert batches == 200, batches
+            yield pd.Series([1] * rows)
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 5}):
+            df = self.spark.range(0, 1000, 1, 1)
+            expected = [Row(one=1) for i in range(1000)]
+            result = df.select(return_one("id").alias("one")).collect()
+            self.assertEqual(expected, result)
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

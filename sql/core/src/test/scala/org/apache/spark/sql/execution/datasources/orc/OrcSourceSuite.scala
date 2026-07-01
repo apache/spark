@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Period}
@@ -25,26 +25,28 @@ import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector
 import org.apache.logging.log4j.Level
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
+import org.apache.orc.TypeDescription
 import org.apache.orc.impl.RecordReaderImpl
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite
-  extends OrcTest with CommonFileDataSourceSuite with SQLTestUtilsBase {
+  extends OrcTest with CommonFileDataSourceSuite with QueryTestBase {
   import testImplicits._
 
   override protected def dataSourceFormat = "orc"
@@ -197,7 +199,7 @@ abstract class OrcSuite
 
   protected def testMergeSchemasInParallel(
       ignoreCorruptFiles: Boolean,
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType]): Unit = {
     withSQLConf(
       SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
       SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
@@ -228,7 +230,7 @@ abstract class OrcSuite
   }
 
   protected def testMergeSchemasInParallel(
-      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+      schemaReader: (Seq[FileStatus], Configuration, Boolean, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
     checkErrorMatchPVals(
       exception = intercept[SparkException] {
@@ -457,6 +459,42 @@ abstract class OrcSuite
       // it is ok if no schema merging
       withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
         assert(spark.read.orc(basePath).columns.length === 2)
+      }
+    }
+  }
+
+  test("SPARK-55857: test schema merging with missing files") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
+      withTempDir { dir =>
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val basePath = dir.getCanonicalPath
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(0, 10).toDF("a").coalesce(1).write.orc(path1.toString)
+        spark.range(0, 10).toDF("b").coalesce(1).write.orc(path2.toString)
+
+        // Collect FileStatuses before deleting, to simulate the race condition where a file
+        // is listed for schema inference but then disappears before it can be read.
+        // Filter to actual ORC data files (exclude _SUCCESS and directories).
+        val allStatuses = Seq(fs.listStatus(path1), fs.listStatus(path2)).flatten
+        val fileStatuses = allStatuses.filter(s => s.isFile && !s.getPath.getName.startsWith("_"))
+        val deletedFile = fileStatuses.head
+        fs.delete(deletedFile.getPath, false)
+
+        val hadoopConf = spark.sessionState.newHadoopConf()
+
+        // ignoreMissingFiles=true: skips the missing file, returns schema from remaining files
+        val schemas = OrcUtils.readOrcSchemasInParallel(
+          fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = true)
+        assert(schemas.nonEmpty)
+
+        // ignoreMissingFiles=false: the FileNotFoundException propagates uncaught.
+        // ThreadUtils.parmap wraps it in a SparkException; unwrap to verify the cause.
+        val ex = intercept[SparkException] {
+          OrcUtils.readOrcSchemasInParallel(
+            fileStatuses, hadoopConf, ignoreCorruptFiles = false, ignoreMissingFiles = false)
+        }
+        assert(ex.getCause.isInstanceOf[FileNotFoundException])
       }
     }
   }
@@ -836,6 +874,30 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
             ArrayType(
               StructType(
                 StructField("456", StringType) :: Nil))))))
+    }
+  }
+
+  test("SPARK-57455: plain ORC timestamp stays TimestampType without Spark nanos metadata") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val outputFile = new Path(new File(dir, "part-00000.orc").getCanonicalPath)
+        val schema = TypeDescription.fromString("struct<ts:timestamp>")
+        val writerOptions = OrcFile
+          .writerOptions(spark.sessionState.newHadoopConf())
+          .setSchema(schema)
+        Utils.tryWithResource(OrcFile.createWriter(outputFile, writerOptions)) { writer =>
+          val batch = schema.createRowBatch()
+          val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+          batch.size = 1
+          tsCol.time(0) = 0L
+          tsCol.nanos(0) = 123000000
+          writer.addRowBatch(batch)
+        }
+
+        val readBack = spark.read.orc(dir.getCanonicalPath)
+        assert(readBack.schema("ts").dataType === TimestampType)
+        assert(readBack.count() === 1)
+      }
     }
   }
 

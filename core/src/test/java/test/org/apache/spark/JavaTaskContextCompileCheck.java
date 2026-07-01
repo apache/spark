@@ -23,6 +23,7 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.resource.ResourceInformation;
 import org.apache.spark.util.TaskCompletionListener;
 import org.apache.spark.util.TaskFailureListener;
+import org.apache.spark.util.TaskInterruptListener;
 
 /**
  * Something to make sure that TaskContext can be used in Java.
@@ -37,6 +38,7 @@ public class JavaTaskContextCompileCheck {
 
     tc.addTaskCompletionListener(new JavaTaskCompletionListenerImpl());
     tc.addTaskFailureListener(new JavaTaskFailureListenerImpl());
+    tc.addTaskInterruptListener(new JavaTaskInterruptListenerImpl());
 
     tc.attemptNumber();
     tc.partitionId();
@@ -74,6 +76,12 @@ public class JavaTaskContextCompileCheck {
   static class JavaTaskFailureListenerImpl implements TaskFailureListener {
     @Override
     public void onTaskFailure(TaskContext context, Throwable error) {
+    }
+  }
+
+  static class JavaTaskInterruptListenerImpl implements TaskInterruptListener {
+    @Override
+    public void onTaskInterrupted(TaskContext context, String reason) {
     }
   }
 

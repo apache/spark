@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.sql.util.SchemaValidationMode
-import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object V2TableUtil extends SQLConfHelper {
@@ -46,14 +47,16 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedColumns(
       table: Table,
       relation: DataSourceV2Relation,
-      mode: SchemaValidationMode): Seq[String] = {
-    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq, mode)
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq, mode, checkIds)
   }
 
   /**
    * Validates that captured data columns match the current table schema.
    *
    * Checks for:
+   *  - Column ID changes (top-level and nested field IDs)
    *  - Column type or nullability changes
    *  - Removed columns (missing from the current table schema)
    *  - Added columns (new in the current table schema)
@@ -61,15 +64,17 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    * @param table the current table metadata
    * @param originCols the originally captured columns
    * @param mode validation mode that defines what changes are acceptable
+   * @param checkIds whether to check field IDs
    * @return validation errors, or empty sequence if valid
    */
   def validateCapturedColumns(
       table: Table,
       originCols: Seq[Column],
-      mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
     val originSchema = CatalogV2Util.v2ColumnsToStructType(originCols)
     val schema = CatalogV2Util.v2ColumnsToStructType(table.columns)
-    SchemaUtils.validateSchemaCompatibility(originSchema, schema, resolver, mode)
+    SchemaUtils.validateSchemaCompatibility(originSchema, schema, resolver, mode, checkIds)
   }
 
   /**
@@ -83,8 +88,9 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   def validateCapturedMetadataColumns(
       table: Table,
       relation: DataSourceV2Relation,
-      mode: SchemaValidationMode): Seq[String] = {
-    validateCapturedMetadataColumns(table, extractMetadataColumns(relation), mode)
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    validateCapturedMetadataColumns(table, extractMetadataColumns(relation), mode, checkIds)
   }
 
   /**
@@ -95,30 +101,36 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    */
   def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
     val metaAttrNames = relation.output.filter(_.isMetadataCol).map(_.name)
-    filter(metaAttrNames, metadataColumns(relation.table))
+    if (metaAttrNames.isEmpty) Nil else filter(metaAttrNames, metadataColumns(relation.table))
   }
 
   /**
    * Validates that captured metadata columns are consistent with the current table metadata.
    *
    * Checks for:
+   *  - Column ID changes (top-level and nested field IDs)
    *  - Metadata column type or nullability changes
    *  - Removed metadata columns (missing from current table)
    *
    * @param table the current table metadata
    * @param originMetaCols the originally captured metadata columns
    * @param mode validation mode that defines what changes are acceptable
+   * @param checkIds whether to check IDs
    * @return validation errors, or empty sequence if valid
    */
   def validateCapturedMetadataColumns(
       table: Table,
       originMetaCols: Seq[MetadataColumn],
-      mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkIds: Boolean): Seq[String] = {
+    require(
+      mode == PROHIBIT_CHANGES || mode == ALLOW_NEW_FIELDS,
+      s"Unsupported schema validation mode for metadata columns: $mode")
     val originMetaColNames = originMetaCols.map(_.name)
     val originMetaSchema = CatalogV2Util.toStructType(originMetaCols)
     val metaCols = filter(originMetaColNames, metadataColumns(table))
     val metaSchema = CatalogV2Util.toStructType(metaCols)
-    SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode)
+    SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode, checkIds)
   }
 
   private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {
@@ -129,6 +141,20 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   private def metadataColumns(table: Table): Seq[MetadataColumn] = table match {
     case hasMeta: SupportsMetadataColumns => hasMeta.metadataColumns.toImmutableArraySeq
     case _ => Seq.empty
+  }
+
+  /**
+   * Validates that the identity of a loaded table matches a previously captured table id.
+   * Throws if the table was dropped and recreated under the same name (which changes the id).
+   * No-op if the connector does not support table ids (capturedId is null).
+   */
+  def validateTableId(name: String, capturedId: String, currentTable: Table): Unit = {
+    if (capturedId != null && capturedId != currentTable.id) {
+      throw QueryCompilationErrors.tableIdChangedAfterAnalysis(
+        name,
+        capturedTableId = capturedId,
+        currentTableId = currentTable.id)
+    }
   }
 
   private def normalize(name: String): String = {

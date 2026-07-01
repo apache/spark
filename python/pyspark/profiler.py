@@ -19,7 +19,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Iterator,
     List,
     Optional,
     Tuple,
@@ -29,21 +28,13 @@ from typing import (
     cast,
 )
 import cProfile
-import inspect
 import pstats
 import linecache
 import os
 import atexit
 import sys
-import warnings
 
-try:
-    from memory_profiler import CodeMap, LineProfiler
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
-
+import pyspark
 from pyspark.accumulators import AccumulatorParam
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 
@@ -170,115 +161,6 @@ class Profiler:
         raise NotImplementedError
 
 
-if has_memory_profiler:
-
-    class CodeMapForUDF(CodeMap):
-        def add(
-            self,
-            code: Any,
-            toplevel_code: Optional[Any] = None,
-            *,
-            sub_lines: Optional[List] = None,
-            start_line: Optional[int] = None,
-        ) -> None:
-            if code in self:
-                return
-
-            if toplevel_code is None:
-                toplevel_code = code
-                filename = code.co_filename
-                if sub_lines is None or start_line is None:
-                    (sub_lines, start_line) = inspect.getsourcelines(code)
-                linenos = range(start_line, start_line + len(sub_lines))
-                self._toplevel.append((filename, code, linenos))
-                self[code] = {}
-            else:
-                self[code] = self[toplevel_code]
-            for subcode in filter(inspect.iscode, code.co_consts):
-                self.add(subcode, toplevel_code=toplevel_code)
-
-    class CodeMapForUDFV2(CodeMap):
-        def add(
-            self,
-            code: Any,
-            toplevel_code: Optional[Any] = None,
-        ) -> None:
-            if code in self:
-                return
-
-            if toplevel_code is None:
-                toplevel_code = code
-                filename = code.co_filename
-                self._toplevel.append((filename, code))
-                self[code] = {}
-            else:
-                self[code] = self[toplevel_code]
-            for subcode in filter(inspect.iscode, code.co_consts):
-                self.add(subcode, toplevel_code=toplevel_code)
-
-        def items(self) -> Iterator[Tuple[str, Iterator[Tuple[int, Any]]]]:
-            """Iterate on the toplevel code blocks."""
-            for filename, code in self._toplevel:
-                measures = self[code]
-                if not measures:
-                    continue  # skip if no measurement
-                line_iterator = ((line, measures[line]) for line in measures.keys())
-                yield (filename, line_iterator)
-
-    class UDFLineProfiler(LineProfiler):
-        def __init__(self, **kw: Any) -> None:
-            super().__init__(**kw)
-            include_children = kw.get("include_children", False)
-            backend = kw.get("backend", "psutil")
-            self.code_map = CodeMapForUDF(include_children=include_children, backend=backend)
-
-        def __call__(
-            self,
-            func: Optional[Callable[..., Any]] = None,
-            precision: int = 1,
-            *,
-            sub_lines: Optional[List] = None,
-            start_line: Optional[int] = None,
-        ) -> Callable[..., Any]:
-            if func is not None:
-                self.add_function(func, sub_lines=sub_lines, start_line=start_line)
-                f = self.wrap_function(func)
-                f.__module__ = func.__module__
-                f.__name__ = func.__name__
-                f.__doc__ = func.__doc__
-                f.__dict__.update(getattr(func, "__dict__", {}))
-                return f
-            else:
-
-                def inner_partial(f: Callable[..., Any]) -> Any:
-                    return self.__call__(f, precision=precision)
-
-                return inner_partial
-
-        def add_function(
-            self,
-            func: Callable[..., Any],
-            *,
-            sub_lines: Optional[List] = None,
-            start_line: Optional[int] = None,
-        ) -> None:
-            """Record line profiling information for the given Python function."""
-            try:
-                # func_code does not exist in Python3
-                code = func.__code__
-            except AttributeError:
-                warnings.warn("Could not extract a code object for the object %r" % func)
-            else:
-                self.code_map.add(code, sub_lines=sub_lines, start_line=start_line)
-
-    class UDFLineProfilerV2(LineProfiler):
-        def __init__(self, **kw: Any) -> None:
-            super().__init__(**kw)
-            include_children = kw.get("include_children", False)
-            backend = kw.get("backend", "psutil")
-            self.code_map = CodeMapForUDFV2(include_children=include_children, backend=backend)
-
-
 class PStatsParam(AccumulatorParam[Optional[pstats.Stats]]):
     """PStatsParam is used to merge pstats.Stats"""
 
@@ -329,15 +211,14 @@ class MemUsageParam(AccumulatorParam[Optional[CodeMapDict]]):
                 if c1_line and c2_line:
                     # c1, c2 should have same keys - line number
                     udf_code_map[lineno] = (
-                        cast(MemoryTuple, c1_line)[0] + cast(MemoryTuple, c2_line)[0],  # increment
-                        cast(MemoryTuple, c1_line)[1] + cast(MemoryTuple, c2_line)[1],  # mem_usage
-                        cast(MemoryTuple, c1_line)[2]
-                        + cast(MemoryTuple, c2_line)[2],  # occurrences
+                        c1_line[0] + c2_line[0],  # increment
+                        c1_line[1] + c2_line[1],  # mem_usage
+                        c1_line[2] + c2_line[2],  # occurrences
                     )
                 elif c1_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c1_line)
+                    udf_code_map[lineno] = c1_line
                 elif c2_line:
-                    udf_code_map[lineno] = cast(MemoryTuple, c2_line)
+                    udf_code_map[lineno] = c2_line
                 else:
                     udf_code_map[lineno] = None
             value1[filename] = [(k, v) for k, v in udf_code_map.items()]
@@ -434,8 +315,8 @@ class MemoryProfiler(Profiler):
         **kwargs: Any,
     ) -> Any:
         """Runs and profiles the method func passed in. A profile object is returned."""
-        if has_memory_profiler:
-            profiler = UDFLineProfiler()
+        if pyspark.memory_profiler_ext.has_memory_profiler:
+            profiler = pyspark.memory_profiler_ext.UDFLineProfiler()
             wrapped = profiler(func, sub_lines=sub_lines, start_line=start_line)
             ret = wrapped(*args, **kwargs)
             codemap_dict = {
@@ -471,6 +352,17 @@ class MemoryProfiler(Profiler):
             stream.write("Filename: " + filename + "\n\n")
             stream.write(header + "\n")
             stream.write("=" * len(header) + "\n")
+
+            if "pyspark.zip/pyspark/" in filename:
+                # if the original filename is in pyspark.zip file, we try to find the actual
+                # file in pyspark module by concatenating pyspark module directory and the
+                # rest of the filename
+                # Eventually we should ask the data provider to provide the actual lines
+                # because there's no guarantee that we can always find the actual file
+                # on driver side
+                filename = os.path.join(
+                    os.path.dirname(pyspark.__file__), filename.rsplit("pyspark.zip/pyspark/", 1)[1]
+                )
 
             all_lines = linecache.getlines(filename)
             if len(all_lines) == 0:
@@ -525,6 +417,6 @@ class MemoryProfiler(Profiler):
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
+class JDBCTableCatalogSuite extends SharedSparkSession {
 
   val tempDir = Utils.createTempDir()
   val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
@@ -528,7 +528,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         },
         condition = "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG",
         parameters = Map(
-          "change" -> "org.apache.spark.sql.connector.catalog.TableChange\\$UpdateColumnComment.*",
+          "change" -> "ALTER COLUMN .* COMMENT",
           "tableName" -> "`test`.`alt_table`"
         ),
         matchPVals = true)

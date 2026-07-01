@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{Externalizable, ObjectInput, ObjectOutput}
+import java.io.{Externalizable, ObjectInput, ObjectOutput, PrintWriter, StringWriter}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
@@ -36,9 +36,10 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
-import org.scalatest.Assertions._
 import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.{Matcher, MatchResult}
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
@@ -507,25 +508,33 @@ class ExecutorSuite extends SparkFunSuite
         e: => Throwable,
         depthToCheck: Int,
         isFatal: Boolean): Unit = {
-      import Executor.isFatalError
+
+      class BeFatalError(isFatal: Boolean) extends Matcher[Throwable] {
+        override def apply(t: Throwable): MatchResult = {
+          val stringWriter = new StringWriter()
+          t.printStackTrace(new PrintWriter(stringWriter))
+          val isFatalError = Executor.isFatalError(t, depthToCheck)
+          MatchResult(
+            isFatalError == isFatal,
+            s"Executor.isFatalError($t) is $isFatalError != $isFatal: " + stringWriter.toString,
+            s"Executor.isFatalError($t) is $isFatalError == $isFatal: " + stringWriter.toString
+          )
+        }
+      }
+
+      def beFatalError(isFatal: Boolean) = new BeFatalError(isFatal)
+
       // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
+      e should beFatalError(depthToCheck >= 1 && isFatal)
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(errorInGuavaCache(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(
-        new SparkException("foo", e),
-        depthToCheck) == (depthToCheck >= 2 && isFatal))
+      errorInThreadPool(e) should beFatalError(depthToCheck >= 2 && isFatal)
+      errorInGuavaCache(e) should beFatalError(depthToCheck >= 2 && isFatal)
+      new SparkException("foo", e) should beFatalError(depthToCheck >= 2 && isFatal)
       // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
-      assert(isFatalError(
-        errorInThreadPool(errorInGuavaCache(e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
-      assert(isFatalError(
-        errorInGuavaCache(errorInThreadPool(e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
-      assert(isFatalError(
-        new SparkException("foo", new SparkException("foo", e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
+      errorInThreadPool(errorInGuavaCache(e)) should beFatalError(depthToCheck >= 3 && isFatal)
+      errorInGuavaCache(errorInThreadPool(e)) should beFatalError(depthToCheck >= 3 && isFatal)
+      new SparkException("foo", new SparkException("foo", e)) should
+        beFatalError(depthToCheck >= 3 && isFatal)
     }
 
     for (depthToCheck <- 0 to 5) {
@@ -651,6 +660,64 @@ class ExecutorSuite extends SparkFunSuite
       } finally {
         // Restore the original threadPool
         threadPoolField.set(executor, originalThreadPool)
+      }
+    }
+  }
+
+  test(
+    "SPARK-55093: launchTask should handle TaskRunner construction failures"
+  ) {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+
+    val mockExecutorBackend = mock[ExecutorBackend]
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+
+    withExecutor("id", "localhost", env) { executor =>
+      // Use reflection to make createTaskRunner throw an exception by replacing runningTasks
+      // with a mock that throws when put is called. This simulates a failure after TaskRunner
+      // construction but tests the same cleanup logic.
+      val executorClass = classOf[Executor]
+      val runningTasksField = executorClass.getDeclaredField("runningTasks")
+      runningTasksField.setAccessible(true)
+      val originalRunningTasks = runningTasksField.get(executor)
+
+      // Create a mock ConcurrentHashMap that throws when put is called
+      val testException = new RuntimeException("TaskRunner construction failed")
+      type TaskRunnerType = executor.TaskRunner
+      val mockRunningTasks =
+        mock[java.util.concurrent.ConcurrentHashMap[Long, TaskRunnerType]]
+      when(mockRunningTasks.put(any[Long], any[TaskRunnerType]))
+        .thenThrow(testException)
+      runningTasksField.set(executor, mockRunningTasks)
+
+      try {
+        // Launch the task - this should catch the exception and send statusUpdate
+        executor.launchTask(mockExecutorBackend, taskDescription)
+
+        // Verify that statusUpdate was called with FAILED state
+        verify(mockExecutorBackend).statusUpdate(
+          meq(taskDescription.taskId),
+          meq(TaskState.FAILED),
+          statusCaptor.capture()
+        )
+
+        // Verify that the exception was correctly serialized
+        val failureData = statusCaptor.getValue
+        val failReason = serializer
+          .newInstance()
+          .deserialize[ExceptionFailure](failureData)
+        assert(failReason.exception.isDefined)
+        assert(failReason.exception.get.isInstanceOf[RuntimeException])
+        assert(
+          failReason.exception.get.getMessage === "TaskRunner construction failed"
+        )
+      } finally {
+        // Restore the original runningTasks
+        runningTasksField.set(executor, originalRunningTasks)
       }
     }
   }

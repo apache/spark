@@ -21,25 +21,28 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.CollapseProject
+import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -51,6 +54,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       pushDownFilters,
       pushDownJoin,
       pushDownAggregates,
+      // Apply the fallback after the source has tried the lower aggregation, but before its
+      // required columns are finalized by pruneColumns.
+      collapseGroupedSumOfCount,
       pushDownVariants,
       pushDownLimitAndOffset,
       buildScanWithPushedAggregate,
@@ -60,6 +66,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
       pushDownRule(newPlan)
+    }
+  }
+
+  private def collapseGroupedSumOfCount(plan: LogicalPlan): LogicalPlan = {
+    val excludedRules = SQLConf.get.optimizerExcludedRules.toSeq.flatMap(Utils.stringToSeq)
+    if (excludedRules.contains(CollapseGroupedSumOfCount.ruleName)) {
+      plan
+    } else {
+      CollapseGroupedSumOfCount(plan)
     }
   }
 
@@ -80,8 +95,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+      val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(sHolder.relation)
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery)
+        sHolder.builder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
@@ -93,6 +109,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+
+      // Compute the pushed filter expressions: the normalized filters that were fully pushed
+      // down (i.e., not in postScanFilters). These are stored on the scan relation for
+      // potential future use in constraint propagation.
+      val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
+      sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
+        .filterNot(postScanFilterSet.contains)
+        .filter(_.deterministic)
 
       logInfo(
         log"""
@@ -141,6 +165,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
+        // Do not push down join if either side has a pushed sample with
+        // fraction < 1, because the merged scan builder would silently
+        // discard it and change the result. At fraction = 1 without
+        // replacement the sample is a no-op on the result set, so dropping
+        // it is safe. With replacement (Poisson sampling), even fraction 1
+        // can emit each row 0, 1, 2, ... times, so it is not a no-op.
+        // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
+        //   samples so sources supporting both can handle the composition.
+        leftHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
+        rightHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
@@ -322,11 +358,30 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case agg: Aggregate => rewriteAggregate(agg)
   }
 
-  def pushDownVariants(plan: LogicalPlan): LogicalPlan = plan.transformDown {
-    case p@PhysicalOperation(projectList, filters, sHolder @ ScanBuilderHolder(_, _,
-        builder: SupportsPushDownVariantExtractions))
-        if conf.getConf(org.apache.spark.sql.internal.SQLConf.PUSH_VARIANT_INTO_SCAN) =>
-      pushVariantExtractions(p, projectList, filters, sHolder, builder)
+  // Two-visit protocol explanation:
+  // `transformDown` is pre-order and always recurses into children, because
+  // `pushVariantExtractions` returns `originalPlan` unchanged (same object reference).
+  // This means a tree like Project(pl, ScanBuilderHolder) gets visited twice:
+  //   (1) Outer visit: PhysicalOperation collapses Project->ScanBuilderHolder and
+  //       yields the real (projectList, filters, sHolder). This is the authoritative
+  //       visit where column pruning decisions are made.
+  //   (2) Inner leaf visit: PhysicalOperation on a bare ScanBuilderHolder LeafNode
+  //       yields (sHolder.output, Nil, sHolder) -- projectList = full schema output.
+  //       Without a guard, this would add fullVariant for *every* variant column.
+  //
+  // The `pushedVariants.isEmpty` guard prevents the inner visit from re-running once
+  // the outer visit has completed (successfully or not). An empty-mapping sentinel
+  // `Some(new VariantInRelation())` is written by the outer visit when there is
+  // nothing to push; `buildScanWithPushedVariants` requires `mapping.nonEmpty` to
+  // fire, so the sentinel correctly bypasses it while still suppressing the inner visit.
+  def pushDownVariants(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDown {
+      case p@PhysicalOperation(projectList, filters, sHolder @ ScanBuilderHolder(_, _,
+          builder: SupportsPushDownVariantExtractions))
+          if conf.getConf(org.apache.spark.sql.internal.SQLConf.PUSH_VARIANT_INTO_SCAN) &&
+             sHolder.pushedVariants.isEmpty =>
+        pushVariantExtractions(p, projectList, filters, sHolder, builder)
+    }
   }
 
   /**
@@ -382,17 +437,54 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
       variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
     }
-    if (variants.mapping.isEmpty) return originalPlan
+    if (variants.mapping.isEmpty) {
+      // No variant columns in the schema. Mark as attempted so the guard in
+      // pushDownVariants prevents a spurious second visit on the leaf node.
+      sHolder.pushedVariants = Some(new VariantInRelation())
+      return originalPlan
+    }
 
     // Collect requested fields from project list and filters
     projectList.foreach(variants.collectRequestedFields)
     filters.foreach(variants.collectRequestedFields)
 
-    // If no variant columns remain after collection, return original plan
-    if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
+    // Drop a variant whose sole requested field targets VariantType (a whole-variant read: bare
+    // `SELECT v`, 2-arg `variant_get(v, '$.a')`, or a column lifted to feed a variant_get above a
+    // barrier). Shredding it to a lone variant-typed slot saves no I/O and is mishandled: the
+    // reader collapses such a slot to a boolean placeholder while catalyst keeps it VariantType, so
+    // holder.output and readSchema disagree. Leaving it raw avoids that. The predicate matches the
+    // reader's collapse condition by target type, not the exact `fullVariant` value -- the latter
+    // would miss 2-arg variant_get and non-UTC sessions (different path/tz, same broken slot).
+    // When the field coexists with real extractions the struct has >= 2 slots and is not collapsed,
+    // so this is scoped to the sole-field case. Runs before the IsNull/IsNotNull injection so
+    // presence-only references, which legitimately shred to a placeholder, are unaffected.
+    variants.mapping.values.foreach { pathToFields =>
+      pathToFields.filterInPlace { case (_, fields) =>
+        !(fields.size == 1 && fields.head._1.targetType.isInstanceOf[VariantType])
+      }
+    }
+    variants.mapping.filterInPlace { case (_, pathToFields) => pathToFields.nonEmpty }
+
+    // If a variant column is referenced only via IsNull/IsNotNull (e.g. WHERE isnotnull(v)),
+    // collectRequestedFields adds nothing to its field map (the IsNull/IsNotNull branch is a
+    // no-op). Inject a fullVariant entry for each such column so rewriteType generates the
+    // placeholder struct and the extraction is pushed on this (outer) visit. Without this,
+    // the inner leaf visit would fire with sHolder.output as its projectList, causing all
+    // variant columns -- including unreferenced siblings -- to receive fullVariant treatment.
+    val referencedAttrs = AttributeSet((projectList ++ filters).flatMap(_.references))
+    for (a <- sHolder.relation.output) {
+      if (variants.mapping.contains(a.exprId) &&
+          variants.mapping(a.exprId).values.forall(_.isEmpty) &&
+          referencedAttrs.contains(a)) {
+        variants.collectRequestedFields(a)
+      }
+    }
 
     // Build individual VariantExtraction for each field access
     // Track which extraction corresponds to which (attr, field, ordinal)
+    // Cast-error deferral attaches a synthetic companion field to every strict-cast extraction;
+    // record whether any are generated so we can require reader support below.
+    var hasCompanionExtraction = false
     val extractionInfo = schemaAttributes.flatMap { topAttr =>
       val variantFields = variants.mapping.get(topAttr.exprId)
       if (variantFields.isEmpty || variantFields.get.isEmpty) {
@@ -406,7 +498,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             Seq(topAttr.name) ++
               getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
           }
-          fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
+          // Keep data extractions in the same order as `VariantInRelation.rewriteType`, so
+          // companion fields can refer to their paired data field by name.
+          val sorted = fields.toArray.sortBy(_._2)
+          val dataExtractions = sorted.map { case (field, ordinal) =>
             val extraction = new VariantExtractionImpl(
               columnName.toArray,
               field.path.toMetadata,
@@ -414,19 +509,50 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             )
             (extraction, topAttr, field, ordinal)
           }
+          if (variants.deferCastErrorEnabled) {
+            val companionExtractions = sorted.collect {
+              case (field, ordinal) if variants.shouldWrapCastError(field) =>
+                val extraction = new VariantExtractionImpl(
+                  columnName.toArray,
+                  VariantMetadata.castErrorCompanionMetadata(ordinal.toString),
+                  StringType
+                )
+                (extraction, topAttr, field, ordinal)
+            }
+            if (companionExtractions.nonEmpty) hasCompanionExtraction = true
+            dataExtractions ++ companionExtractions
+          } else {
+            dataExtractions
+          }
         }
       }
     }
 
-    // Call the API to push down variant extractions
-    if (extractionInfo.isEmpty) return originalPlan
+    // No extraction was requested for any variant column. Set the sentinel to suppress
+    // the inner leaf visit and avoid a spurious empty push.
+    if (extractionInfo.isEmpty) {
+      sHolder.pushedVariants = Some(new VariantInRelation())
+      return originalPlan
+    }
+
+    // Companion extractions can only be honored by readers that support cast-error deferral. If
+    // none were generated, the pushdown carries only non-strict accesses (`try_variant_get`, plain
+    // variant reads, casts to variant/string) that are safe regardless of deferral support.
+    if (hasCompanionExtraction && !builder.supportsDeferCastError()) {
+      // Set the sentinel like the other early returns, else the leaf is re-visited (double-visit).
+      sHolder.pushedVariants = Some(new VariantInRelation())
+      return originalPlan
+    }
 
     val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
     val pushedResults = builder.pushVariantExtractions(extractions)
 
     // Filter to only the accepted extractions
     val acceptedExtractions = extractionInfo.zip(pushedResults).filter(_._2).map(_._1)
-    if (acceptedExtractions.isEmpty) return originalPlan
+    if (acceptedExtractions.isEmpty) {
+      sHolder.pushedVariants = Some(new VariantInRelation())
+      return originalPlan
+    }
 
     // Group accepted extractions by attribute to rebuild the struct schemas
     val extractionsByAttr = acceptedExtractions.groupBy(_._2)
@@ -450,6 +576,31 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     sHolder.pushedVariants = Some(variants)
     sHolder.pushedVariantAttributeMap = attributeMap
     sHolder.output = newOutput
+
+    // Commit the required top-level columns to the builder now, while projectList and
+    // filters are in scope. This mirrors how rewriteAggregate sets holder.output to only
+    // the pushed-down aggregate columns before build() -- both patterns ensure that
+    // buildScanWithPushed* can call build() and zip holder.output with readSchema() directly.
+    //
+    // projectList/filters reference original ExprIds (this function returns originalPlan
+    // unchanged). holder.relation.output carries those original ExprIds, so AttributeSet
+    // matching works directly against it.
+    //
+    // attributeMap maps old ExprId -> new AttributeReference (with a fresh ExprId for rewritten
+    // variant columns). Invert it to map new ExprId -> old ExprId so we can filter holder.output
+    // (which carries new ExprIds) against requiredColumns (which carries old ExprIds).
+    sHolder.builder match {
+      case r: SupportsPushDownRequiredColumns =>
+        val requiredColumns = AttributeSet((projectList ++ filters).flatMap(_.references))
+        val neededRelOutput = sHolder.relation.output.filter(requiredColumns.contains)
+        val newToOldExprId = attributeMap.map { case (oldId, newAttr) => newAttr.exprId -> oldId }
+        val oldExprIdToRelAttr = sHolder.relation.output.map(a => a.exprId -> a).toMap
+        sHolder.output = sHolder.output.filter { a =>
+          oldExprIdToRelAttr.get(newToOldExprId(a.exprId)).exists(requiredColumns.contains)
+        }
+        r.pruneColumns(neededRelOutput.toStructType)
+      case _ => // builder does not support column pruning; holder.output stays full-schema
+    }
 
     // Return the original plan unchanged - transformation happens in buildScanWithPushedVariants
     originalPlan
@@ -697,6 +848,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes to aggregate columns. When validConstraints is wired up, this needs revisiting.
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
@@ -714,6 +867,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes with pushed join. When validConstraints is wired up, this needs revisiting.
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // When join is pushed down, the real output is going to be, for example,
@@ -728,14 +883,20 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def buildScanWithPushedVariants(plan: LogicalPlan): LogicalPlan = plan.transform {
     case p@PhysicalOperation(projectList, filters, holder: ScanBuilderHolder)
-        if holder.pushedVariants.isDefined =>
+        if holder.pushedVariants.exists(_.mapping.nonEmpty) =>
       val variants = holder.pushedVariants.get
       val attributeMap = holder.pushedVariantAttributeMap
 
       // Build the scan
       val scan = holder.builder.build()
       val realOutput = toAttributes(scan.readSchema())
+      assert(realOutput.length == holder.output.length,
+        s"The data source returns ${realOutput.length} columns but the plan expected " +
+        s"${holder.output.length}: scan=[${realOutput.map(_.name).mkString(",")}], " +
+        s"plan=[${holder.output.map(_.name).mkString(",")}]")
       val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // Create projection to map real output to expected output (with transformed types)
@@ -786,13 +947,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
+
+      // Remap pushed filter attributes to the pruned output schema and drop filters
+      // whose references are no longer in the pruned output. Catch FIELD_NOT_FOUND
+      // because ProjectionOverSchema throws when a pushed filter references a nested
+      // struct field that was pruned from the schema.
+      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
+        try Some(projectionFunc(filter))
+        catch {
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+            None
+        }
+      }.filter(_.references.subsetOf(AttributeSet(output)))
+      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
+        pushedFilters = remappedPushedFilters)
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
@@ -817,15 +990,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
-          sample.seed)
+          // TODO(SPARK-56573): The * 1000 limits the seed to only 1000 distinct values.
+          //   Kept here for consistency with SampleExec.resolvedSeed; will be fixed
+          //   across all call sites in SPARK-56573.
+          sample.seed.getOrElse((math.random() * 1000).toLong),
+          sampleMethod = sample.sampleMethod)
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
           sHolder.pushedSample = Some(tableSample)
           sample.child
+        } else if (sample.sampleMethod == SampleMethod.System) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM",
+            messageParameters = Map.empty)
         } else {
           sample
         }
-
+      case _ if sample.sampleMethod == SampleMethod.System =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_NO_SCAN",
+          messageParameters = Map.empty)
       case _ => sample
     }
   }
@@ -1017,6 +1201,8 @@ case class ScanBuilderHolder(
   var pushedVariantAttributeMap: Map[ExprId, AttributeReference] = Map.empty
 
   var pushedVariants: Option[VariantInRelation] = None
+
+  var pushedFilterExpressions: Seq[Expression] = Seq.empty
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

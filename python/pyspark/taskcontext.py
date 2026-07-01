@@ -14,19 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
+from typing import Any, ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
 from pyspark.resource import ResourceInformation
 
-
 T = TypeVar("T", bound="TaskContext")
 
 
 class TaskContext:
-
     """
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
@@ -132,7 +130,7 @@ class TaskContext:
     _cpus: Optional[int] = None
     _resources: Optional[Dict[str, "ResourceInformation"]] = None
 
-    def __new__(cls: Type["TaskContext"], **kwargs: Dict) -> "TaskContext":
+    def __new__(cls: Type["TaskContext"], **kwargs: Any) -> "TaskContext":
         """
         Even if users construct :class:`TaskContext` instead of using get, give them the singleton.
         """
@@ -144,7 +142,7 @@ class TaskContext:
 
     def __init__(
         self,
-        **kwargs: Dict,
+        **kwargs: Any,
     ) -> None:
         # Set attributes only if they are passed in and not None
         # The kwargs are auto-mapped to the private attributes of TaskContext
@@ -163,7 +161,7 @@ class TaskContext:
         return cls._taskContext
 
     @classmethod
-    def _setTaskContext(cls: Type["TaskContext"], taskContext: "TaskContext") -> None:
+    def _setTaskContext(cls: Type["TaskContext"], taskContext: Optional["TaskContext"]) -> None:
         cls._taskContext = taskContext
 
     @classmethod
@@ -301,7 +299,7 @@ def _load_from_socket(
     Load data from a given socket, this is a blocking method thus only return when the socket
     connection has been closed.
     """
-    (sockfile, sock) = local_connect_and_auth(conn_info, auth_secret)
+    sockfile, sock = local_connect_and_auth(conn_info, auth_secret)
 
     # The call may block forever, so no timeout
     sock.settimeout(None)
@@ -331,7 +329,6 @@ def _load_from_socket(
 
 
 class BarrierTaskContext(TaskContext):
-
     """
     A :class:`TaskContext` with extra contextual info and tooling for tasks in a barrier stage.
     Use :func:`BarrierTaskContext.get` to obtain the barrier context for a running barrier task.
@@ -533,7 +530,7 @@ def _test() -> None:
     globs["spark"] = (
         SparkSession.builder.master("local[2]").appName("taskcontext tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["spark"].stop()
 
     if failure_count:

@@ -22,10 +22,10 @@ import java.util.{Arrays, Locale}
 
 import scala.concurrent.duration._
 
-import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-private[spark] object MetricUtils {
+private[spark] object MetricUtils extends Logging {
 
   val SUM_METRIC: String = "sum"
   val SIZE_METRIC: String = "size"
@@ -82,7 +82,9 @@ private[spark] object MetricUtils {
       } else if (metricsType == NS_TIMING_METRIC) {
         duration => Utils.msDurationToString(duration.nanos.toMillis)
       } else {
-        throw SparkException.internalError(s"unexpected metrics type: $metricsType")
+        logDebug(s"unexpected metrics type: $metricsType")
+        val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+        v: Long => s"[unknown] ${numberFormat.format(v)}"
       }
 
       val validValues = values.filter(_ >= 0)

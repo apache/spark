@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,7 +57,7 @@ class GeographyExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeographyVal value = GeographyVal.fromBytes(testGeographyVal);
+    BinaryView value = BinaryView.fromBytes(testGeographyVal);
     Geography geography = Geography.fromValue(value);
     assertNotNull(geography);
     assertEquals(value, geography.getValue());
@@ -82,26 +86,44 @@ class GeographyExecutionSuite {
 
   /** Tests for Geography WKB parsing. */
 
+  // Helper method to create a simple WKB for POINT(0, 1).
+  private byte[] getTestWKBPoint() {
+    ByteBuffer bb = ByteBuffer.allocate(1 + 4 + 8 + 8);
+    bb.order(ByteOrder.LITTLE_ENDIAN);
+    bb.put((byte) 1); // byte order (LE)
+    bb.putInt(1); // type = 1 (Point)
+    bb.putDouble(0.0); // X = 0
+    bb.putDouble(1.0); // Y = 0
+    return bb.array();
+  }
+
   @Test
   void testFromWkbWithSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb, 4326);
     assertNotNull(geography);
-    assertArrayEquals(wkb, geography.toWkb());
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(4326, geography.srid());
   }
 
   @Test
   void testFromWkbNoSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geography geography = Geography.fromWkb(wkb);
     assertNotNull(geography);
-    assertArrayEquals(wkb, geography.toWkb());
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
     assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testFromWkbInvalidWkb() {
+    byte[] invalidWkb = new byte[]{111};
+    SparkIllegalArgumentException exception = assertThrows(
+      SparkIllegalArgumentException.class,
+      () -> Geometry.fromWkb(invalidWkb)
+    );
+    assertEquals("WKB_PARSE_ERROR", exception.getCondition());
+    assertTrue(exception.getMessage().contains("Unexpected end of WKB buffer"));
   }
 
   /** Tests for Geography EWKB parsing. */
@@ -157,7 +179,7 @@ class GeographyExecutionSuite {
     Geography geography = Geography.fromBytes(testGeographyVal);
     // WKB value (endianness: NDR) corresponding to WKT: POINT(1 2).
     byte[] wkb = HexFormat.of().parseHex("0101000000000000000000f03f0000000000000040");
-    assertArrayEquals(wkb, geography.toWkb());
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.LITTLE_ENDIAN));
   }
 
   @Test
@@ -171,11 +193,9 @@ class GeographyExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geography.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geography WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geography.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test
@@ -211,23 +231,17 @@ class GeographyExecutionSuite {
   /** Tests for Geography WKT and EWKT converters. */
 
   @Test
-  void testToWktUnsupported() {
+  void testToWkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toWkt
-    );
-    assertEquals("Geography WKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("POINT(1 2)", new String(geography.toWkt(), StandardCharsets.UTF_8));
   }
 
   @Test
-  void testToEwktUnsupported() {
+  void testToEwkt() {
+    // The test geography is POINT(1 2) with SRID 4326.
     Geography geography = Geography.fromBytes(testGeographyVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      geography::toEwkt
-    );
-    assertEquals("Geography EWKT conversion is not yet supported.", exception.getMessage());
+    assertEquals("SRID=4326;POINT(1 2)", new String(geography.toEwkt(), StandardCharsets.UTF_8));
   }
 
   /** Tests for other Geography methods. */
@@ -235,6 +249,35 @@ class GeographyExecutionSuite {
   @Test
   void testSrid() {
     Geography geography = Geography.fromBytes(testGeographyVal);
+    assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testSetSridOnTightOwner() {
+    // fromBytes wraps a tight on-heap array, so setSrid writes through in place.
+    Geography geography = Geography.fromBytes(testGeographyVal.clone());
+    geography.setSrid(4269);
+    assertEquals(4269, geography.srid());
+  }
+
+  @Test
+  void testSetSridThrowsWhenNotTightOwner() {
+    // A sub-range view does not own a tight backing array, so getBytes() returns a copy and an
+    // in-place setSrid would be silently lost. It must fail loudly instead of dropping the write.
+    byte[] padded = new byte[testGeographyVal.length + 4];
+    System.arraycopy(testGeographyVal, 0, padded, 4, testGeographyVal.length);
+    Geography geography = Geography.fromValue(
+      BinaryView.fromBytes(padded, 4, testGeographyVal.length));
+    // Reads still work (they copy out), and the original SRID is intact.
+    assertEquals(4326, geography.srid());
+    SparkRuntimeException e = assertThrows(
+      SparkRuntimeException.class, () -> geography.setSrid(4269));
+    assertEquals("INTERNAL_ERROR", e.getCondition());
+    // After copy() the value owns a tight array, so setSrid succeeds and writes through.
+    Geography owned = geography.copy();
+    owned.setSrid(4269);
+    assertEquals(4269, owned.srid());
+    // The original sub-range view is untouched.
     assertEquals(4326, geography.srid());
   }
 }

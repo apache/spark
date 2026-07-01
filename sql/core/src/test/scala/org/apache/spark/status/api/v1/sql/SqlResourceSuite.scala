@@ -142,6 +142,9 @@ object SqlResourceSuite {
     assert(executionData.failedJobIds == Seq.empty)
     assert(executionData.nodes == nodes)
     assert(executionData.edges == edges)
+    assert(executionData.queryId == "efe98ba7-1532-491e-9b4f-4be621cef37c")
+    assert(executionData.errorMessage == null)
+    assert(executionData.rootExecutionId == 1)
   }
 
 }
@@ -224,5 +227,24 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
         d,
         SparkPlanGraph(nodes, edges), true, true)
     assert(executionData.status == "FAILED")
+    assert(executionData.errorMessage == "now you see me, now you don't")
+    assert(executionData.rootExecutionId == 1)
+  }
+
+  test("SPARK-55881: queryId, errorMessage, rootExecutionId in ExecutionData") {
+    // Test with null queryId (backward compat with old event logs)
+    val d = new SQLExecutionUIData(
+      0, -1, DESCRIPTION, details = "", PLAN_DESCRIPTION, Map.empty,
+      metrics = metrics, submissionTime = 1586768888233L,
+      completionTime = Some(new Date(1586768888999L)),
+      jobs = Map(0 -> JobExecutionStatus.SUCCEEDED),
+      stages = Set[Int](), metricValues = getMetricValues(),
+      errorMessage = None, queryId = null)
+    val executionData =
+      sqlResource invokePrivate prepareExecutionData(
+        d, SparkPlanGraph(Seq.empty, Seq.empty), false, false)
+    assert(executionData.queryId == null)
+    assert(executionData.errorMessage == null)
+    assert(executionData.rootExecutionId == -1)
   }
 }

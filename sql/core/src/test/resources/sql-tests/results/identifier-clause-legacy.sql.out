@@ -1011,7 +1011,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -1027,7 +1027,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -1043,7 +1043,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -1059,7 +1059,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`",
+    "identifier" : "`a`.`b`.`c`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -1075,7 +1075,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
+    "identifier" : "`a`.`b`.`c`.`d`",
     "sessionCatalog" : "spark_catalog"
   }
 }
@@ -1115,7 +1115,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
   "sqlState" : "42K05",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
+    "identifier" : "`a`.`b`.`c`.`d`",
     "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
@@ -1135,10 +1135,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "database" : "`default`"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1157,11 +1159,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "name" : "`default`.`myDoubleAvg`",
-    "statement" : "DROP TEMPORARY FUNCTION"
+    "objectName" : "`myDoubleAvg`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1180,10 +1183,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS",
-  "sqlState" : "428EK",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "actualName" : "`default`.`v`"
+    "objectName" : "`v`",
+    "objectType" : "VIEW",
+    "qualifier" : "`default`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1545,7 +1550,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`v`"
+    "relationName" : "`v`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1607,7 +1613,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1645,7 +1652,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1683,7 +1691,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab`"
+    "relationName" : "`tab`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1737,7 +1746,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`tab_renamed`"
+    "relationName" : "`tab_renamed`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1875,7 +1885,7 @@ struct<createtab_stmt:string>
 -- !query output
 CREATE TABLE spark_catalog.identifier_clause_test_schema.test_show (
   c1 INT,
-  c2 STRING)
+  c2 STRING COLLATE UTF8_BINARY)
 USING CSV
 
 
@@ -2444,7 +2454,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`test_view`"
+    "relationName" : "`test_view`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`identifier_clause_test_schema`]"
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
@@ -2466,7 +2477,8 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTableException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`"
+    "relationName" : "`spark_catalog`.`identifier_clause_test_schema`.`test_view`",
+    "searchPath" : "[`spark_catalog`.`identifier_clause_test_schema`]"
   }
 }
 

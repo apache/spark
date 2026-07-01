@@ -237,7 +237,7 @@ function getBaseURI() {
 
 function detailsUINode(isMultiline, message) {
   if (isMultiline) {
-    const span = '<span onclick="this.parentNode.querySelector(\'.stacktrace-details\').classList.toggle(\'collapsed\')" class="expand-details">+details</span>';
+    const span = '<span data-toggle-details=".stacktrace-details" class="expand-details">+details</span>';
     const pre = '<pre>' + message + '</pre>';
     const div = '<div class="stacktrace-details collapsed">' + pre + '</div>';
     return span + div;

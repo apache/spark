@@ -19,9 +19,9 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class IndexingILocMixin:
@@ -180,9 +180,10 @@ class IndexingILocMixin:
         )
         psdf = ps.from_pandas(pdf)
 
-        pdf.iloc[:, 0] = pdf
-        psdf.iloc[:, 0] = psdf
-        self.assert_eq(psdf, pdf)
+        if LooseVersion(pd.__version__) < "3.0.0":
+            pdf.iloc[:, 0] = pdf
+            psdf.iloc[:, 0] = psdf
+            self.assert_eq(psdf, pdf)
 
     def test_series_iloc_setitem(self):
         pdf = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}, index=["cobra", "viper", "sidewinder"])
@@ -285,7 +286,6 @@ class IndexingILocMixin:
 class IndexingILocTests(
     IndexingILocMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

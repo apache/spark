@@ -322,6 +322,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       when(executor.threadPool).thenReturn(threadPool)
       val runningTasks = new ConcurrentHashMap[Long, Executor#TaskRunner]
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      val killMarks = spy(new ConcurrentHashMap[Long, Long])
+      when(executor.killMarks).thenAnswer(_ => killMarks)
       when(executor.conf).thenReturn(conf)
 
       def getFakeTaskRunner(taskDescription: TaskDescription): Executor#TaskRunner = {
@@ -417,6 +419,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
         new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      val killMarks = spy(new ConcurrentHashMap[Long, Long])
+      when(executor.killMarks).thenAnswer(_ => killMarks)
       when(executor.conf).thenReturn(conf)
 
       // We don't really verify the data, just pass it around.
@@ -509,6 +513,8 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val runningTasks = spy[ConcurrentHashMap[Long, Executor#TaskRunner]](
         new ConcurrentHashMap[Long, Executor#TaskRunner])
       when(executor.runningTasks).thenAnswer(_ => runningTasks)
+      val killMarks = spy(new ConcurrentHashMap[Long, Long])
+      when(executor.killMarks).thenAnswer(_ => killMarks)
       when(executor.conf).thenReturn(conf)
 
       // We don't really verify the data, just pass it around.

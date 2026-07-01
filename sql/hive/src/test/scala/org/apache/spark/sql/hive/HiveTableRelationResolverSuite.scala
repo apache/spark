@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   MetadataResolver,
@@ -27,10 +28,9 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-class HiveTableRelationResolverSuite extends TestHiveSingleton with SQLTestUtils {
+class HiveTableRelationResolverSuite extends TestHiveSingleton with QueryTest {
   private val keyValueTableSchema = StructType(
     Seq(
       StructField("key", IntegerType, true),

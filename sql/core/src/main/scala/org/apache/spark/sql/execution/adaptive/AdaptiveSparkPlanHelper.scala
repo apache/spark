@@ -95,6 +95,21 @@ trait AdaptiveSparkPlanHelper {
   }
 
   /**
+   * Returns true if the condition specified by `f` is satisfied by any node in this tree.
+   */
+  def exists(p: SparkPlan)(f: SparkPlan => Boolean): Boolean = {
+    find(p)(f).isDefined
+  }
+
+  /**
+   * Like [[exists]], but also considers plan nodes inside subqueries.
+   */
+  def existsWithSubqueries(
+      p: SparkPlan)(f: SparkPlan => Boolean): Boolean = {
+    exists(p)(f) || subqueriesAll(p).exists(exists(_)(f))
+  }
+
+  /**
    * Finds and returns the first [[SparkPlan]] of the tree for which the given partial function
    * is defined (pre-order), and applies the partial function to it.
    */
@@ -138,3 +153,5 @@ trait AdaptiveSparkPlanHelper {
     case other => other
   }
 }
+
+private[sql] object AdaptiveSparkPlanHelper extends AdaptiveSparkPlanHelper

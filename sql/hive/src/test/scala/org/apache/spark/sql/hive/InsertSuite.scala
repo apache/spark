@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,8 +38,7 @@ case class TestData(key: Int, value: String)
 
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
-class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -351,8 +349,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       exception = intercept[AnalysisException] {
         Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
       },
-      condition = "_LEGACY_ERROR_TEMP_1309",
-      parameters = Map.empty
+      condition = "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO",
+      parameters = Map("tableName" -> tableName)
     )
   }
 
@@ -472,6 +470,36 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 26, 27, (28, 29)")
         },
         condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+  }
+
+  testPartitionedTable("INSERT INTO ... REPLACE ON is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE ON t.a = 1 " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "operation" -> "INSERT INTO ... REPLACE ON/USING")
+      )
+  }
+
+  testPartitionedTable("INSERT INTO ... REPLACE USING is currently unsupported") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT INTO $tableName AS t REPLACE USING (a) " +
+            s"SELECT 25, 26, 27, 28")
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "operation" -> "INSERT INTO ... REPLACE ON/USING")
       )
   }
 
@@ -651,6 +679,31 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         checkAnswer(
           spark.read.orc(dir.getCanonicalPath),
           sql("select * from test_insert_table"))
+      }
+    }
+  }
+
+  test("SPARK-57556: TIME type is unsupported when writing to a Hive serde directory") {
+    // Disable native data source conversion so that the write goes through the Hive serde
+    // path (HiveFileFormat) instead of a native data source that may support TIME.
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      withTempDir { dir =>
+        // InsertIntoHiveDirCommand wraps the failure in a SparkException, so assert on the cause.
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+               |STORED AS PARQUET
+               |SELECT TIME'12:01:02' AS c
+             """.stripMargin)
+        }
+        checkError(
+          exception = e.getCause.asInstanceOf[AnalysisException],
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`c`",
+            "columnType" -> s"\"${TimeType().sql}\"",
+            "format" -> "Hive"))
       }
     }
   }
@@ -882,7 +935,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |SELECT 1
             """.stripMargin)
         },
-        condition = "_LEGACY_ERROR_TEMP_1076",
+        condition = "INVALID_PARTITION_SPEC",
         parameters = Map(
           "details" -> "The spec ([d=Some()]) contains an empty partition column value")
       )

@@ -104,7 +104,14 @@ EXAMPLES_PATH = os.path.join(SPARK_HOME, "examples/src/main/python")
 SCRIPTS_PATH = os.path.join(SPARK_HOME, "bin")
 USER_SCRIPTS_PATH = os.path.join(SPARK_HOME, "sbin")
 DATA_PATH = os.path.join(SPARK_HOME, "data")
-LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
+# The classic PySpark package bundles the assembly jars, so it ships the binary
+# license texts (licenses-binary), which enumerate those jars' licenses, mirroring
+# the binary distribution. The connect/client packages bundle no jars.
+LICENSES_PATH = os.path.join(SPARK_HOME, "licenses-binary")
+if not os.path.isdir(LICENSES_PATH):
+    # In a binary release dist (the RELEASE mode below), the binary license texts
+    # were already copied to licenses/ (see dev/make-distribution.sh).
+    LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
@@ -149,9 +156,10 @@ if in_spark:
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
 # Also don't forget to update python/docs/source/getting_started/install.rst,
+# python/docs/source/tutorial/sql/arrow_pandas.rst,
 # python/packaging/client/setup.py, and python/packaging/connect/setup.py
 _minimum_pandas_version = "2.2.0"
-_minimum_numpy_version = "1.21"
+_minimum_numpy_version = "1.23.2"
 _minimum_pyarrow_version = "18.0.0"
 _minimum_grpc_version = "1.76.0"
 _minimum_googleapis_common_protos_version = "1.71.0"
@@ -266,6 +274,8 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
+            "pyspark.messages",
+            "pyspark.messages.socket",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",
@@ -340,7 +350,7 @@ try:
             ],
             "pyspark.python.lib": ["*.zip"],
             "pyspark.data": ["*.txt", "*.data"],
-            "pyspark.licenses": ["*.txt"],
+            "pyspark.licenses": ["*"],
             "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
         },
         scripts=scripts,
@@ -381,16 +391,14 @@ try:
                 "pyyaml>=%s" % _minimum_pyyaml_version,
             ],
         },
-        python_requires=">=3.10",
+        python_requires=">=3.11",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
             "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
-            "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",
         ],
         cmdclass={

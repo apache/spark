@@ -153,7 +153,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
     // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
     // children, hence not matched directly by previous HiveTableRelation case.
-    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _)
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _, _)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       i.copy(table = hiveTableWithStats(relation))
   }
@@ -168,7 +168,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
-          r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, _)
+          r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, _, _)
         if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
         ifPartitionNotExists, query.output.map(_.name))
@@ -243,6 +243,7 @@ case class RelationConversions(
             overwrite,
             ifPartitionNotExists,
             byName,
+            replaceCriteriaOpt,
             withSchemaEvolution)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
@@ -256,6 +257,7 @@ case class RelationConversions(
           overwrite,
           ifPartitionNotExists,
           byName,
+          replaceCriteriaOpt,
           withSchemaEvolution)
 
       // Read path

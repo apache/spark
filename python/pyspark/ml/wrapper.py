@@ -34,7 +34,6 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
     from py4j.java_gateway import JavaObject, JavaClass

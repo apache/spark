@@ -51,6 +51,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -66,6 +67,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -81,6 +83,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -96,6 +99,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -111,6 +115,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -126,6 +131,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -141,6 +147,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -156,6 +163,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -171,6 +179,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -186,6 +195,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -201,6 +211,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -216,6 +227,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -231,6 +243,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -263,6 +276,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -282,6 +296,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -299,6 +314,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -325,6 +341,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -340,6 +357,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -355,6 +373,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -385,6 +404,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -402,6 +422,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',
@@ -419,6 +440,7 @@ class DataFrameQueryContextTestsMixin:
                 exception=pe.exception,
                 errorClass="CAST_INVALID_INPUT",
                 messageParameters={
+                    "ansiConfig": '"spark.sql.ansi.enabled"',
                     "expression": "'string'",
                     "sourceType": '"STRING"',
                     "targetType": '"BIGINT"',

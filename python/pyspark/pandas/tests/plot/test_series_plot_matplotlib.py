@@ -263,7 +263,7 @@ class SeriesPlotMatplotlibTestsMixin:
                 "signups": [5, 5, 6, 12, 14, 13],
                 "visits": [20, 42, 28, 62, 81, 50],
             },
-            index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="M"),
+            index=pd.date_range(start="2018/01/01", end="2018/07/01", freq="ME"),
         )
         psdf = ps.from_pandas(pdf)
 
@@ -321,7 +321,7 @@ class SeriesPlotMatplotlibTestsMixin:
             check_box_plot(p, k, showfliers=True)
             check_box_plot(p, k, sym="")
             check_box_plot(p, k, sym=".", color="r")
-            check_box_plot(p, k, use_index=False, labels=["Test"])
+            check_box_plot(p, k, use_index=False)
             check_box_plot(p, k, usermedians=[2.0])
             check_box_plot(p, k, conf_intervals=[(1.0, 3.0)])
 

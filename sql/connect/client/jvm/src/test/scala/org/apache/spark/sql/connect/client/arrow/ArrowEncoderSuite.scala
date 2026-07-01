@@ -16,21 +16,26 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
+import java.io.File
 import java.math.BigInteger
+import java.net.URLClassLoader
 import java.time.{Duration, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util
 import java.util.{Collections, Objects}
+import java.util.concurrent.{ConcurrentLinkedQueue, CyclicBarrier}
 
 import scala.beans.BeanProperty
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.classTag
+import scala.reflect.runtime.{universe => ru}
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
-import org.apache.spark.sql.{AnalysisException, Encoders, Row}
+import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, RowEncoder, ScalaDecimalEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, YearMonthIntervalEncoder}
@@ -807,7 +812,6 @@ class ArrowEncoderSuite extends ConnectFunSuite {
 
   private val wideSchemaEncoder = toRowEncoder(
     new StructType()
-      .add("a", "int")
       .add("b", "string")
       .add(
         "c",
@@ -827,30 +831,29 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     new StructType()
       .add("b", "string")
       .add(
+        "C",
+        new StructType()
+          .add("Ca", "array<int>")
+          .add("Cb", "binary"))
+      .add(
         "d",
         ArrayType(
           new StructType()
             .add("da", "decimal(20, 10)")
-            .add("dc", "boolean")))
-      .add(
-        "C",
-        new StructType()
-          .add("Ca", "array<int>")
-          .add("Cb", "binary")))
+            .add("db", "string"))))
 
   test("bind to schema") {
-    // Binds to a wider schema. The narrow schema has fewer (nested) fields, has a slightly
-    // different field order, and uses different cased names in a couple of places.
+    // Binds to a wider schema. The narrow schema has fewer (nested) fields, and uses different
+    // cased names in a couple of places.
     withAllocator { allocator =>
       val input = Row(
-        887,
         "foo",
         Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte), 5f),
         Seq(Row(null, "a", false), Row(javaBigDecimal(57853, 10), "b", false)))
       val expected = Row(
         "foo",
-        Seq(Row(null, false), Row(javaBigDecimal(57853, 10), false)),
-        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)))
+        Row(Seq(1, 7, 5), Array[Byte](8.toByte, 756.toByte)),
+        Seq(Row(null, "a"), Row(javaBigDecimal(57853, 10), "b")))
       val arrowBatches = serializeToArrow(Iterator.single(input), wideSchemaEncoder, allocator)
       val result =
         ArrowDeserializers.deserializeFromArrow(
@@ -858,18 +861,21 @@ class ArrowEncoderSuite extends ConnectFunSuite {
           narrowSchemaEncoder,
           allocator,
           timeZoneId = "UTC")
-      val actual = result.next()
-      assert(result.isEmpty)
-      assert(expected === actual)
-      result.close()
-      arrowBatches.close()
+      try {
+        val actual = result.next()
+        assert(result.isEmpty)
+        assert(expected === actual)
+      } finally {
+        result.close()
+        arrowBatches.close()
+      }
     }
   }
 
   test("unknown field") {
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, narrowSchemaEncoder, allocator)
-      intercept[AnalysisException] {
+      intercept[SparkRuntimeException] {
         ArrowDeserializers.deserializeFromArrow(
           arrowBatches,
           wideSchemaEncoder,
@@ -881,6 +887,8 @@ class ArrowEncoderSuite extends ConnectFunSuite {
   }
 
   test("duplicate fields") {
+    // Arrow data with [foO, Foo] decoded into [foo]: positional matching binds foo → foO (pos 0),
+    // and the extra Foo column is ignored (over-complete schema is allowed).
     val duplicateSchemaEncoder = toRowEncoder(
       new StructType()
         .add("foO", "string")
@@ -890,13 +898,65 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         .add("foo", "string"))
     withAllocator { allocator =>
       val arrowBatches = serializeToArrow(Iterator.empty, duplicateSchemaEncoder, allocator)
-      intercept[AnalysisException] {
+      // Should not throw: RowEncoder uses positional binding, so foo binds to foO at position 0.
+      val result = ArrowDeserializers.deserializeFromArrow(
+        arrowBatches,
+        fooSchemaEncoder,
+        allocator,
+        timeZoneId = "UTC")
+      assert(!result.hasNext)
+      arrowBatches.close()
+      result.close()
+    }
+  }
+
+  test("row with duplicate column names") {
+    // Spark DataFrames allow duplicate column names. collect() must round-trip such rows
+    // without throwing AMBIGUOUS_COLUMN_OR_FIELD.
+    val schema = new StructType()
+      .add("channel", "string")
+      .add("channel", "string")
+    val encoder = toRowEncoder(schema)
+    val rows = Seq(Row("a", "b"), Row("c", "d"), Row(null, "e"))
+    val iterator = roundTrip(encoder, rows.iterator)
+    try {
+      compareIterators(rows.iterator, iterator)
+    } finally {
+      iterator.close()
+    }
+  }
+
+  test("row schema validation - column name mismatch") {
+    val serializeEncoder = toRowEncoder(new StructType().add("a", "string").add("b", "string"))
+    val deserializeEncoder = toRowEncoder(new StructType().add("a", "string").add("x", "string"))
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, serializeEncoder, allocator)
+      val e = intercept[SparkRuntimeException] {
         ArrowDeserializers.deserializeFromArrow(
           arrowBatches,
-          fooSchemaEncoder,
+          deserializeEncoder,
           allocator,
           timeZoneId = "UTC")
       }
+      assert(e.getCondition == "ARROW_SCHEMA_FIELD_NAME_MISMATCH")
+      arrowBatches.close()
+    }
+  }
+
+  test("row schema validation - encoder has more fields than Arrow data") {
+    val serializeEncoder = toRowEncoder(new StructType().add("a", "string"))
+    val deserializeEncoder =
+      toRowEncoder(new StructType().add("a", "string").add("b", "string"))
+    withAllocator { allocator =>
+      val arrowBatches = serializeToArrow(Iterator.empty, serializeEncoder, allocator)
+      val e = intercept[SparkRuntimeException] {
+        ArrowDeserializers.deserializeFromArrow(
+          arrowBatches,
+          deserializeEncoder,
+          allocator,
+          timeZoneId = "UTC")
+      }
+      assert(e.getCondition == "ARROW_SCHEMA_FIELD_COUNT_MISMATCH")
       arrowBatches.close()
     }
   }
@@ -1104,6 +1164,76 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         ArrowSerializer.serializerFor(StringEncoder, new VarBinaryVector("bytes", allocator))
       }
     }
+  }
+
+  // SPARK-57371: ArrowDeserializers resolves Scala collection companions and Enumeration modules
+  // via runtime reflection, which is not thread-safe (scala/bug#6240): a concurrent
+  // `mirror.classSymbol(cls).companion/.module.asModule` can observe the symbol as `NoSymbol` and
+  // throw `ScalaReflectionException: <none> is not a module`. ArrowDeserializers serializes the
+  // reflection through a single monitor. The race only manifests while a mirror's symbol table is
+  // cold, so each repetition below builds a fresh mirror over a classloader parented at the
+  // platform loader (so `scala.*` is reloaded cold) and drives the real synchronized method from
+  // several threads released at once; without the lock it races red.
+
+  private val collectionCompanionClassNames = Seq(
+    "scala.collection.immutable.List",
+    "scala.collection.immutable.Vector",
+    "scala.collection.immutable.Set",
+    "scala.collection.immutable.Map",
+    "scala.collection.mutable.ArrayBuffer",
+    "scala.collection.mutable.HashMap")
+
+  /** A fresh classloader parented at the platform loader, so `scala.*` is reloaded cold. */
+  private def newColdLoader(): URLClassLoader = {
+    val urls = System
+      .getProperty("java.class.path")
+      .split(File.pathSeparator)
+      .filter(_.nonEmpty)
+      .map(p => new File(p).toURI.toURL)
+    new URLClassLoader(urls, ClassLoader.getPlatformClassLoader)
+  }
+
+  // Drive `resolve` against a fresh cold mirror from 8 threads, 50 times; fail on any error/hang.
+  private def hammerReflection(
+      names: Seq[String],
+      resolve: (ru.Mirror, Class[_]) => Any): Unit = {
+    val errors = new ConcurrentLinkedQueue[Throwable]()
+    for (_ <- 0 until 50) {
+      val loader = newColdLoader()
+      val mirror = ru.runtimeMirror(loader)
+      val classes = names.map(loader.loadClass)
+      val barrier = new CyclicBarrier(8)
+      val threads = (0 until 8).map { _ =>
+        new Thread(() => {
+          barrier.await() // release all threads simultaneously onto the cold mirror
+          classes.foreach { cls =>
+            try resolve(mirror, cls)
+            catch { case e: Throwable => errors.add(e) }
+          }
+        })
+      }
+      threads.foreach(_.start())
+      threads.foreach { t =>
+        t.join(60000)
+        assert(!t.isAlive, "thread did not finish within 60s (possible deadlock)")
+      }
+    }
+    assert(
+      errors.isEmpty,
+      s"reflection raced under concurrent access (${errors.size} error(s)): " +
+        errors.asScala.map(e => s"${e.getClass.getName}: ${e.getMessage}").toSet.mkString("; "))
+  }
+
+  test("SPARK-57371: resolveCompanion is thread-safe under concurrent cold-mirror access") {
+    hammerReflection(
+      collectionCompanionClassNames,
+      (m, c) => ArrowDeserializers.resolveCompanionFromMirror(m, c))
+  }
+
+  test("SPARK-57371: resolveEnum is thread-safe under concurrent cold-mirror access") {
+    hammerReflection(
+      Seq(FooEnum.getClass.getName),
+      (m, c) => ArrowDeserializers.resolveEnumFromMirror(m, c))
   }
 }
 

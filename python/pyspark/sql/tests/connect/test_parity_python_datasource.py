@@ -18,8 +18,7 @@ from pyspark.sql.tests.test_python_datasource import BasePythonDataSourceTestsMi
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PythonDataSourceParityTests(BasePythonDataSourceTestsMixin, ReusedConnectTestCase):
-    ...
+class PythonDataSourceParityTests(BasePythonDataSourceTestsMixin, ReusedConnectTestCase): ...
 
 
 if __name__ == "__main__":

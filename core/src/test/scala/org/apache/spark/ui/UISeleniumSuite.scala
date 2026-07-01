@@ -362,7 +362,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       eventually(timeout(5.seconds), interval(50.milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
+        find(cssSelector(".progress-cell .progress-stacked")).get.text should be ("2/2 (1 failed)")
       }
       val jobJson = getJson(sc.ui.get, "jobs")
       (jobJson \\ "numTasks").extract[Int]should be (2)

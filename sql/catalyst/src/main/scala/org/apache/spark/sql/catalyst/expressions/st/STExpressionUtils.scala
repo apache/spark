@@ -56,7 +56,7 @@ private[sql] object STExpressionUtils {
    * Returns the input GEOMETRY value with the specified SRID. If the SRID expression is a literal,
    * the SRID value can be directly extracted. Otherwise, only the mixed SRID value can be used.
    */
-  private def geometryTypeWithSrid(srid: Expression): GeometryType = {
+  def geometryTypeWithSrid(srid: Expression): GeometryType = {
     srid match {
       case Literal(sridValue: Int, IntegerType) =>
         // If the SRID expression is a literal, the SRID value can be directly extracted.

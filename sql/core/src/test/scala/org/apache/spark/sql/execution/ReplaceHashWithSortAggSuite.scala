@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class ReplaceHashWithSortAggSuiteBase
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
   private def checkNumAggs(df: DataFrame, hashAggCount: Int, sortAggCount: Int): Unit = {

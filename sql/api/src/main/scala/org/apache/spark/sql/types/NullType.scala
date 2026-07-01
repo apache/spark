@@ -31,6 +31,10 @@ class NullType private () extends DataType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[NullType]
+
+  override def hashCode(): Int = classOf[NullType].getSimpleName.hashCode
+
   private[spark] override def asNullable: NullType = this
 
   override def typeName: String = "void"

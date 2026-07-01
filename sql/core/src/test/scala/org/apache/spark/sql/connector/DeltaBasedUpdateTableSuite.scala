@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.InSubquery
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
@@ -90,5 +92,82 @@ class DeltaBasedUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase {
       checkLastWriteLog(
         updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(1, -1, "hr")))
     }
+  }
+
+  test("update runtime group filtering (DPP enabled)") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      checkUpdateRuntimeGroupFiltering()
+    }
+  }
+
+  test("update runtime group filtering (DPP disabled)") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
+      checkUpdateRuntimeGroupFiltering()
+    }
+  }
+
+  test("update runtime group filtering (AQE enabled)") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      checkUpdateRuntimeGroupFiltering()
+    }
+  }
+
+  test("update runtime group filtering (AQE disabled)") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkUpdateRuntimeGroupFiltering()
+    }
+  }
+
+  private def checkUpdateRuntimeGroupFiltering(): Unit = {
+    withTable(tableNameAsString) {
+      withTempView("deleted_id") {
+        createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+          """{ "pk": 1, "id": 1, "salary": 300, "dep": "hr" }
+            |{ "pk": 2, "id": 2, "salary": 150, "dep": "software" }
+            |{ "pk": 3, "id": 3, "salary": 120, "dep": "hr" }
+            |""".stripMargin)
+
+        val deletedIdDF = Seq(Some(1), None).toDF()
+        deletedIdDF.createOrReplaceTempView("deleted_id")
+
+        executeAndCheckScans(
+          s"UPDATE $tableNameAsString SET salary = -1 WHERE id IN (SELECT * FROM deleted_id)",
+          primaryScanSchema = "pk INT, id INT, dep STRING, _partition STRING",
+          groupFilterScanSchema = Some("id INT, dep STRING"))
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Row(1, 1, -1, "hr") :: Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
+      }
+    }
+  }
+
+  test("update does not double plan table") {
+    createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+      """{ "pk": 1, "id": 1, "salary": 300, "dep": 'hr' }
+        |{ "pk": 2, "id": 2, "salary": 150, "dep": 'software' }
+        |{ "pk": 3, "id": 3, "salary": 120, "dep": 'hr' }
+        |""".stripMargin)
+
+    val (cond, groupFilterCond) = executeAndKeepConditions {
+      sql(
+        s"""UPDATE $tableNameAsString SET salary = -1
+           |WHERE id IN (SELECT id FROM $tableNameAsString WHERE salary > 200)
+           |""".stripMargin)
+    }
+
+    cond match {
+      case InSubquery(_, query) => assertNoScanPlanning(query.plan)
+      case _ => fail(s"unexpected condition: $cond")
+    }
+
+    groupFilterCond match {
+      case Some(InSubquery(_, query)) => assertNoScanPlanning(query.plan)
+      case _ => fail(s"unexpected group filter: $groupFilterCond")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, -1, "hr") :: Row(2, 2, 150, "software") :: Row(3, 3, 120, "hr") :: Nil)
   }
 }

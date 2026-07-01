@@ -24,8 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -136,6 +135,7 @@ class HiveSessionStateBuilder(
         new InvokeProcedures(session) +:
         ResolveExecuteImmediate(session, catalogManager) +:
         ExtractSemiStructuredFields +:
+        ResolveEventTimeWatermark +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -245,13 +245,8 @@ object HiveUDFExpressionBuilder extends SparkUDFExpressionBuilder {
           case i: InvocationTargetException => i.getCause
           case o => o
         }
-        val analysisException = new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3084",
-          messageParameters = Map(
-            "clazz" -> clazz.getCanonicalName,
-            "e" -> e.toString))
-        analysisException.setStackTrace(e.getStackTrace)
-        throw analysisException
+        throw QueryCompilationErrors.cannotInstantiateHiveFunctionError(
+          clazz.getCanonicalName, e)
     }
     udfExpr.getOrElse {
       throw QueryCompilationErrors.invalidUDFClassError(clazz.getCanonicalName)

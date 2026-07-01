@@ -26,14 +26,16 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
+import org.apache.spark.sql.connector.read.{SampleMethod => V2SampleMethod}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.connector.PartitionPredicateImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -56,6 +58,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   def resolveRefs[T <: NamedExpression](refs: Seq[NamedReference], plan: LogicalPlan): Seq[T] = {
     refs.map(ref => resolveRef[T](ref, plan))
+  }
+
+  /**
+   * Resolves [[NamedReference]]s against the given output and returns them as an [[AttributeSet]].
+   */
+  def resolveAttributeRefs(
+      refs: Array[NamedReference],
+      output: Seq[Attribute]): AttributeSet = {
+    val plan = LocalRelation(output)
+    AttributeSet(resolveRefs[Attribute](refs.toImmutableArraySeq, plan))
   }
 
   /**
@@ -157,6 +169,11 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     case V2NullOrdering.NULLS_LAST => NullsLast
   }
 
+  def toCatalyst(sampleMethod: V2SampleMethod): SampleMethod = sampleMethod match {
+    case V2SampleMethod.BERNOULLI => SampleMethod.Bernoulli
+    case V2SampleMethod.SYSTEM => SampleMethod.System
+  }
+
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
       arguments: Seq[Expression]): Expression = {
@@ -213,6 +230,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     case l: V2Literal[_] => Some(Literal(l.value, l.dataType))
     case r: NamedReference => Some(UnresolvedAttribute(r.fieldNames.toImmutableArraySeq))
     case c: V2Cast => toCatalyst(c.expression).map(Cast(_, c.dataType, ansiEnabled = true))
+    case p: PartitionPredicateImpl => Some(p.expression)
     case e: GeneralScalarExpression => convertScalarExpr(e)
     case _ => None
   }

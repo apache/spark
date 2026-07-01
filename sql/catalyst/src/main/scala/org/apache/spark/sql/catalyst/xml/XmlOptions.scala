@@ -117,6 +117,7 @@ class XmlOptions(
   val ignoreSurroundingSpaces = getBool(IGNORE_SURROUNDING_SPACES, true)
   val parseMode = ParseMode.fromString(parameters.getOrElse(MODE, PermissiveMode.name))
   val inferSchema = getBool(INFER_SCHEMA, true)
+  val respectVariantInferSchema = SQLConf.get.xmlVariantRespectInferSchema
   val rowValidationXSDPath = parameters.get(ROW_VALIDATION_XSD_PATH).orNull
   val wildcardColName =
     parameters.getOrElse(WILDCARD_COL_NAME, XmlOptions.DEFAULT_WILDCARD_COL_NAME)

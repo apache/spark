@@ -1651,6 +1651,46 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
       trimStr = if (trimStr.isDefined) Some(newChildren.last) else None)
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, substr[, start[, occurrence]]) - Returns the (1-based) index of the specified
+      occurrence of `substr` in `str`, starting the search from position `start`.
+      If `start` is positive, the search proceeds forward;
+      if `start` is negative, the search proceeds backward.
+      `start` = 0 returns 0.
+      If `start` is not specified, it defaults to 1.
+      `occurrence` must be a positive integer and defaults to 1.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('SparkSQL', 'SQL');
+       6
+      > SELECT _FUNC_('abcabc', 'b', 1);
+       2
+      > SELECT _FUNC_('abcabc', 'b', 1, 2);
+       5
+      > SELECT _FUNC_('abcabc', 'b', -1, 1);
+       5
+  """,
+  since = "1.5.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+object StringInstrExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val size = expressions.size
+    if (size == 2) {
+      StringInstr(expressions.head, expressions(1))
+    } else if (size == 3) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), Literal(1))
+    } else if (size == 4) {
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), expressions(3))
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3, 4), size)
+    }
+  }
+}
+
 /**
  * A function that returns the position of the first occurrence of substr in the given string.
  * Returns null if either of the arguments are null and
@@ -1658,17 +1698,6 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('SparkSQL', 'SQL');
-       6
-  """,
-  since = "1.5.0",
-  group = "string_funcs")
-// scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
@@ -1699,6 +1728,70 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): StringInstr = copy(str = newLeft, substr = newRight)
+}
+
+/**
+ * A function that returns the position of the specified occurrence of `substr` in the given
+ * string, starting the search from position `start`. If `start` is positive, the search proceeds
+ * forward; if `start` is negative, the search proceeds backward. `start` = 0 returns 0. If
+ * `start` is not specified, it defaults to 1. If `occurrence` is specified, it determines which
+ * occurrence of `substr` to return; `occurrence` must be a positive integer and defaults to 1.
+ *
+ * Returns null if either of the arguments are null and
+ * returns 0 if substr could not be found in str.
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ */
+case class StringInstrWithOccurrence(
+    str: Expression,
+    sub: Expression,
+    start: Expression,
+    occurrence: Expression)
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+  final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
+
+  override def first: Expression = str
+  override def second: Expression = sub
+  override def third: Expression = start
+  override def fourth: Expression = occurrence
+  override def dataType: DataType = IntegerType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      StringTypeNonCSAICollation(supportsTrimCollation = true),
+      IntegerType,
+      IntegerType
+    )
+
+  override def nullSafeEval(string: Any, sub: Any, start: Any, occurrence: Any): Any = {
+    val occ = occurrence.asInstanceOf[Int]
+    if (occ <= 0) {
+      throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
+    }
+    CollationSupport.StringInstrWithOccurrence.exec(string.asInstanceOf[UTF8String],
+      sub.asInstanceOf[UTF8String], start.asInstanceOf[Int], occ, collationId) + 1
+  }
+
+  override def prettyName: String = "instr"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (string, substring, start, occurrence) => {
+      val eval = CollationSupport.StringInstrWithOccurrence
+        .genCode(string, substring, start, occurrence, collationId) + " + 1"
+      s"""
+        if ($occurrence <= 0) {
+          throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);
+        } else {
+          ${ev.value} = $eval;
+        }
+      """
+    })
+  }
+
+  override protected def withNewChildrenInternal(first: Expression, second: Expression,
+      third: Expression, fourth: Expression): StringInstrWithOccurrence =
+    copy(str = first, sub = second, start = third, occurrence = fourth)
 }
 
 /**
@@ -2721,6 +2814,42 @@ case class Levenshtein(
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2) - Returns the Jaro-Winkler similarity between the two given strings. The result is a double between 0 and 1, where 1 means identical.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MARTHA', 'MARHTA');
+       0.9611111111111111
+      > SELECT _FUNC_('kitten', 'sitting');
+       0.746031746031746
+      > SELECT _FUNC_('ABC', 'XYZ');
+       0.0
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class JaroWinkler(left: Expression, right: Expression)
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    DoubleType,
+    "jaroWinklerSimilarity",
+    Seq(left, right),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    StringTypeWithCollation(supportsTrimCollation = true),
+    StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def prettyName: String = "jaro_winkler_similarity"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+}
+
 /**
  * A function that return Soundex code of the given string expression.
  */
@@ -2773,27 +2902,11 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  protected override def nullSafeEval(string: Any): Any = {
-    // only pick the first character to reduce the `toString` cost
-    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
-    if (firstCharStr.numChars > 0) {
-      firstCharStr.toString.codePointAt(0)
-    } else {
-      0
-    }
-  }
+  protected override def nullSafeEval(string: Any): Any =
+    ExpressionImplUtils.ascii(string.asInstanceOf[UTF8String])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      val firstCharStr = ctx.freshName("firstCharStr")
-      s"""
-        UTF8String $firstCharStr = $child.substring(0, 1);
-        if ($firstCharStr.numChars() > 0) {
-          ${ev.value} = $firstCharStr.toString().codePointAt(0);
-        } else {
-          ${ev.value} = 0;
-        }
-       """})
+    defineCodeGen(ctx, ev, c => s"${classOf[ExpressionImplUtils].getName}.ascii($c)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
@@ -2821,31 +2934,14 @@ case class Chr(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
-    val longVal = lon.asInstanceOf[Long]
-    if (longVal < 0) {
-      UTF8String.EMPTY_UTF8
-    } else if ((longVal & 0xFF) == 0) {
-      UTF8String.fromString(Character.MIN_VALUE.toString)
-    } else {
-      UTF8String.fromString((longVal & 0xFF).toChar.toString)
-    }
+    ExpressionImplUtils.chr(lon.asInstanceOf[Long])
   }
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, lon => {
-      s"""
-        if ($lon < 0) {
-          ${ev.value} = UTF8String.EMPTY_UTF8;
-        } else if (($lon & 0xFF) == 0) {
-          ${ev.value} = UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
-        } else {
-          char c = (char)($lon & 0xFF);
-          ${ev.value} = UTF8String.fromString(String.valueOf(c));
-        }
-      """
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    nullSafeCodeGen(ctx, ev, lon => s"${ev.value} = $utils.chr($lon);")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
@@ -3387,11 +3483,6 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private var lastDStringValue: Option[String] = None
 
-  // A cached DecimalFormat, for performance concern, we will change it
-  // only if the d value changed.
-  @transient
-  private lazy val pattern: StringBuffer = new StringBuffer()
-
   // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
   // as a decimal separator.
   @transient
@@ -3409,31 +3500,15 @@ case class FormatNumber(x: Expression, d: Expression)
           case Some(last) if last == dValue =>
           // use the current pattern
           case _ =>
-            // construct a new DecimalFormat only if a new dValue
-            pattern.delete(0, pattern.length)
-            pattern.append(defaultFormat)
-
-            // decimal place
-            if (dValue > 0) {
-              pattern.append(".")
-
-              var i = 0
-              while (i < dValue) {
-                i += 1
-                pattern.append("0")
-              }
-            }
-
+            // construct a new pattern only if a new dValue
             lastDIntValue = Some(dValue)
-
-            numberFormat.applyLocalizedPattern(pattern.toString)
+            ExpressionImplUtils.applyNumberFormatScale(numberFormat, defaultFormat, dValue)
         }
       case _: StringType =>
         val dValue = dObject.asInstanceOf[UTF8String].toString
         lastDStringValue match {
           case Some(last) if last == dValue =>
           case _ =>
-            pattern.delete(0, pattern.length)
             lastDStringValue = Some(dValue)
             if (dValue.isEmpty) {
               numberFormat.applyLocalizedPattern(defaultFormat)
@@ -3465,7 +3540,6 @@ case class FormatNumber(x: Expression, d: Expression)
         }
       }
 
-      val sb = classOf[StringBuffer].getName
       val df = classOf[DecimalFormat].getName
       val dfs = classOf[DecimalFormatSymbols].getName
       val l = classOf[Locale].getName
@@ -3477,24 +3551,14 @@ case class FormatNumber(x: Expression, d: Expression)
 
       right.dataType match {
         case IntegerType =>
-          val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
-          val i = ctx.freshName("i")
           val lastDValue =
             ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
+          val utils = classOf[ExpressionImplUtils].getName
           s"""
             if ($d >= 0) {
-              $pattern.delete(0, $pattern.length());
               if ($d != $lastDValue) {
-                $pattern.append("$defaultFormat");
-
-                if ($d > 0) {
-                  $pattern.append(".");
-                  for (int $i = 0; $i < $d; $i++) {
-                    $pattern.append("0");
-                  }
-                }
                 $lastDValue = $d;
-                $numberFormat.applyLocalizedPattern($pattern.toString());
+                $utils.applyNumberFormatScale($numberFormat, "$defaultFormat", $d);
               }
               ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
             } else {

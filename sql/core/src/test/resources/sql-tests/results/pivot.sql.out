@@ -562,3 +562,34 @@ PIVOT (
 struct<a:string,z:string,b:string,y:string,c:string,x:string,d:string,w:string,dotNET:bigint,Java:bigint>
 -- !query output
 a	z	b	y	c	x	d	w	63000	50000
+
+
+-- !query
+SELECT pv.year, pv.net, pv.jv FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET' as net, 'Java' as jv)
+) AS pv
+-- !query schema
+struct<year:int,net:bigint,jv:bigint>
+-- !query output
+2012	15000	20000
+2013	48000	30000
+
+
+-- !query
+SELECT pv.year, pv.dotNET, y.s FROM (
+  SELECT year, course, earnings FROM courseSales
+)
+PIVOT (
+  sum(earnings)
+  FOR course IN ('dotNET', 'Java')
+) pv
+JOIN years y ON pv.year = y.y
+-- !query schema
+struct<year:int,dotNET:bigint,s:int>
+-- !query output
+2012	15000	1
+2013	48000	2

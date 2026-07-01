@@ -42,10 +42,9 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
-import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHiveSingleton, TestSpark21101Jar, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
 
@@ -72,7 +71,7 @@ case class Order(
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHiveSingleton {
+abstract class SQLQuerySuiteBase extends QueryTest with TestHiveSingleton {
   import hiveContext._
   import spark.implicits._
 
@@ -258,13 +257,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - user defined functions") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count" -> false) {
       sql(
         s"""
            |CREATE FUNCTION udtf_count
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
+           |USING JAR '${TestUDTFJar.jar.toURI}'
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count"),
@@ -284,13 +282,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - temporary user defined functions") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count_temp" -> true) {
       sql(
         s"""
            |CREATE TEMPORARY FUNCTION udtf_count_temp
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
+           |USING JAR '${TestUDTFJar.jar.toURI}'
         """.stripMargin)
 
       checkKeywordsExist(sql("describe function udtf_count_temp"),
@@ -1282,7 +1279,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql(
           s"""FROM(
             |  FROM test SELECT TRANSFORM(a, b)
-            |  USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
+            |  USING 'python3 $scriptFilePath/scripts/do_transform.py "\t"'
             |  AS (c STRING, d STRING)
             |) t
             |SELECT c
@@ -1304,7 +1301,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           |SELECT TRANSFORM(a, b)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
-          |USING 'python3 $scriptFilePath/scripts/test_transform.py "|"'
+          |USING 'python3 $scriptFilePath/scripts/do_transform.py "|"'
           |AS (c STRING, d STRING)
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
           |WITH SERDEPROPERTIES('field.delim' = '|')
@@ -2348,7 +2345,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         val e = intercept[SparkException] {
           sql(
             s"""FROM test SELECT TRANSFORM(a)
-               |USING 'python3 $scriptFilePath/scripts/test_transform.py "\t"'
+               |USING 'python3 $scriptFilePath/scripts/do_transform.py "\t"'
              """.stripMargin).collect()
         }
         assert(e.getMessage.contains("Failed to produce data."))
@@ -2484,19 +2481,19 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("SPARK-21101-1.0.jar") != null)
+    val jarUri = TestSpark21101Jar.jar.toURI
     withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
       sql(
         s"""
            |CREATE TEMPORARY FUNCTION udtf_stack1
            |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+           |USING JAR '$jarUri'
         """.stripMargin)
       sql(
         s"""
            |CREATE TEMPORARY FUNCTION udtf_stack2
            |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+           |USING JAR '$jarUri'
         """.stripMargin)
 
       Seq("udtf_stack1", "udtf_stack2").foreach { udf =>

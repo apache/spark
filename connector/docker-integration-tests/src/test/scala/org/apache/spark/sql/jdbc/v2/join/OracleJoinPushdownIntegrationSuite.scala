@@ -70,7 +70,7 @@ class OracleJoinPushdownIntegrationSuite
 
   override val db = new OracleDatabaseOnDocker
 
-  override val url = db.getJdbcUrl(dockerIp, externalPort)
+  override lazy val url = db.getJdbcUrl(dockerIp, externalPort)
 
   override val jdbcDialect: JdbcDialect = OracleDialect()
 

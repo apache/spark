@@ -24,8 +24,9 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CLEANER_PERIODIC_GC_INTERVAL
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.HiveResult.{getBinaryFormatter, getTimeFormatters, toHiveString, BinaryFormatter, TimeFormatters}
@@ -70,6 +71,12 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer with Logging {
 
+  // SPARK-55832: Reduce periodic GC interval to mitigate OOM. This suite runs 800+ SQL golden
+  // file tests sequentially in a single SparkSession, and the default 30-minute interval is
+  // too infrequent for the memory pressure during the ~50-minute run.
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set(CLEANER_PERIODIC_GC_INTERVAL, 60L)
+  }
 
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -166,7 +173,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           val schema = segments(i * 3 + 2).trim
           val originalOut = segments(i * 3 + 3)
           val output =
-            if (schema != emptySchema && isNeedSort(sql)) {
+            if (schema != emptySchema && isNeedSort(sql) && rowCounts(i) > 0) {
               val splits = originalOut.split("\n")
               if (splits.length > rowCounts(i)) {
                 // the result is multiline

@@ -25,25 +25,34 @@ Catalog
 .. autosummary::
     :toctree: api/
 
+    Catalog.analyzeTable
     Catalog.cacheTable
     Catalog.clearCache
+    Catalog.createDatabase
     Catalog.createExternalTable
     Catalog.createTable
     Catalog.currentCatalog
     Catalog.currentDatabase
     Catalog.databaseExists
+    Catalog.dropDatabase
     Catalog.dropGlobalTempView
+    Catalog.dropTable
     Catalog.dropTempView
+    Catalog.dropView
     Catalog.functionExists
+    Catalog.getCreateTableString
     Catalog.getDatabase
     Catalog.getFunction
     Catalog.getTable
+    Catalog.getTableProperties
     Catalog.isCached
     Catalog.listCatalogs
     Catalog.listColumns
     Catalog.listDatabases
     Catalog.listFunctions
+    Catalog.listPartitions
     Catalog.listTables
+    Catalog.listViews
     Catalog.recoverPartitions
     Catalog.refreshByPath
     Catalog.refreshTable
@@ -51,4 +60,5 @@ Catalog
     Catalog.setCurrentCatalog
     Catalog.setCurrentDatabase
     Catalog.tableExists
+    Catalog.truncateTable
     Catalog.uncacheTable

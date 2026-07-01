@@ -18,10 +18,9 @@
 package org.apache.spark.sql.classic
 
 import scala.jdk.CollectionConverters._
-import scala.util.matching.Regex
 
 import org.apache.spark.annotation.{Evolving, Experimental}
-import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, NamedStreamingRelation, RelationChanges, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -31,29 +30,6 @@ import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
-/**
- * Companion object for DataStreamReader with validation utilities.
- */
-private[sql] object DataStreamReader {
-  /**
-   * Pattern for valid source and sink names.
-   * Names must only contain ASCII letters, digits, and underscores.
-   */
-  private val VALID_NAME_PATTERN: Regex = "^[a-zA-Z0-9_]+$".r
-
-  /**
-   * Validates that a streaming source name only contains alphanumeric characters and underscores.
-   *
-   * @param sourceName the source name to validate
-   * @throws AnalysisException if the source name contains invalid characters
-   */
-  def validateSourceName(sourceName: String): Unit = {
-    if (!VALID_NAME_PATTERN.pattern.matcher(sourceName).matches()) {
-      throw QueryCompilationErrors.invalidStreamingSourceNameError(sourceName)
-    }
-  }
-}
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -91,16 +67,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
     this
   }
 
-  /**
-   * Specifies a name for the streaming source. This name is used to identify the source
-   * in checkpoint metadata and enables stable checkpoint locations for source evolution.
-   *
-   * @param sourceName the name to assign to this streaming source
-   * @since 4.2.0
-   */
+  /** @inheritdoc */
   @Experimental
-  private[sql] def name(sourceName: String): this.type = {
-    DataStreamReader.validateSourceName(sourceName)
+  override def name(sourceName: String): this.type = {
+    validateSourceName(sourceName)
     this.userProvidedSourceName = Option(sourceName)
     this
   }
@@ -138,6 +108,20 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
       isStreaming = true)
     val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val changelogContext = ChangelogContextUtils.fromOptions(
+      options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val unresolved = UnresolvedRelation(identifier, options, isStreaming = true)
+    val changes = RelationChanges(unresolved, changelogContext)
+    val plan = NamedStreamingRelation.withUserProvidedName(changes, userProvidedSourceName)
     Dataset.ofRows(sparkSession, plan)
   }
 

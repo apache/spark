@@ -23,7 +23,8 @@ import java.time._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, STUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.execution.command.{DescribeCommandBase, ExecutedCommandExec, ShowTablesCommand, ShowViewsCommand}
@@ -112,10 +113,20 @@ object HiveResult extends SQLConfHelper {
       formatters: TimeFormatters,
       binaryFormatter: BinaryFormatter): String = a match {
     case (null, _) => if (nested) "null" else "NULL"
+    case (value, dt) =>
+      TypeApiOps(dt).flatMap(_.formatExternal(value, nested)).getOrElse {
+        toHiveStringDefault(a, nested, formatters, binaryFormatter)
+      }
+  }
+
+  private def toHiveStringDefault(
+      a: (Any, DataType),
+      nested: Boolean,
+      formatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): String = a match {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
@@ -149,6 +160,14 @@ object HiveResult extends SQLConfHelper {
         startField,
         endField)
     case (v: VariantVal, VariantType) => v.toString
+    case (g: Geometry, dt: GeometryType) =>
+      val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
+      val s = STUtils.stGeomAsEwkt(internalGeom).toString
+      if (nested) "\"" + s + "\"" else s
+    case (g: Geography, dt: GeographyType) =>
+      val internalGeog = STUtils.serializeGeogFromWKB(g, dt)
+      val s = STUtils.stGeogAsEwkt(internalGeog).toString
+      if (nested) "\"" + s + "\"" else s
     case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }
 }

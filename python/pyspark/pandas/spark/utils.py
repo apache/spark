@@ -17,29 +17,26 @@
 """
 Helpers and utilities to deal with PySpark instances
 """
+
 from typing import overload
 
 from pyspark.sql.types import DecimalType, StructType, MapType, ArrayType, StructField, DataType
 
 
 @overload
-def as_nullable_spark_type(dt: StructType) -> StructType:
-    ...
+def as_nullable_spark_type(dt: StructType) -> StructType: ...
 
 
 @overload
-def as_nullable_spark_type(dt: ArrayType) -> ArrayType:
-    ...
+def as_nullable_spark_type(dt: ArrayType) -> ArrayType: ...
 
 
 @overload
-def as_nullable_spark_type(dt: MapType) -> MapType:
-    ...
+def as_nullable_spark_type(dt: MapType) -> MapType: ...
 
 
 @overload
-def as_nullable_spark_type(dt: DataType) -> DataType:
-    ...
+def as_nullable_spark_type(dt: DataType) -> DataType: ...
 
 
 def as_nullable_spark_type(dt: DataType) -> DataType:
@@ -96,29 +93,25 @@ def as_nullable_spark_type(dt: DataType) -> DataType:
 @overload
 def force_decimal_precision_scale(
     dt: StructType, *, precision: int = ..., scale: int = ...
-) -> StructType:
-    ...
+) -> StructType: ...
 
 
 @overload
 def force_decimal_precision_scale(
     dt: ArrayType, *, precision: int = ..., scale: int = ...
-) -> ArrayType:
-    ...
+) -> ArrayType: ...
 
 
 @overload
 def force_decimal_precision_scale(
     dt: MapType, *, precision: int = ..., scale: int = ...
-) -> MapType:
-    ...
+) -> MapType: ...
 
 
 @overload
 def force_decimal_precision_scale(
     dt: DataType, *, precision: int = ..., scale: int = ...
-) -> DataType:
-    ...
+) -> DataType: ...
 
 
 def force_decimal_precision_scale(
@@ -189,7 +182,7 @@ def _test() -> None:
     import pyspark.pandas.spark.utils
 
     globs = pyspark.pandas.spark.utils.__dict__.copy()
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.spark.utils,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

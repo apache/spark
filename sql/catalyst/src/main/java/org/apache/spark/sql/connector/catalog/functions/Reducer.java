@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.DataType;
 
 /**
  * A 'reducer' for output of user-defined functions.
@@ -31,12 +32,28 @@ import org.apache.spark.annotation.Evolving;
  *   <li> More generally, there exists reducer functions r1(x) and r2(x) such that
  *        r1(f_source(x)) = r2(f_target(x)) for all input x. </li>
  * </ul>
+ * where = means both value and data type match.
  *
- * @param <I> reducer input type
- * @param <O> reducer output type
+ * @param <I> the physical Java type of the input
+ * @param <O> the physical Java type of the output
  * @since 4.0.0
  */
 @Evolving
 public interface Reducer<I, O> {
   O reduce(I arg);
+
+  /**
+   * Returns a short string representation for plan display (e.g. explain output).
+   * Defaults to the unqualified class name; implementations may override for a richer description.
+   */
+  default String displayName() {
+    return getClass().getSimpleName();
+  }
+
+  /**
+   * Returns the {@link DataType data type} of values produced by this reducer.
+   *
+   * @return the data type of values produced by this reducer.
+   */
+  DataType resultType();
 }

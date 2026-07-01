@@ -17,12 +17,11 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.{SparkArithmeticException, SparkConf}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class QueryContextSuite extends QueryTest with SharedSparkSession {
+class QueryContextSuite extends SharedSparkSession {
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 
   private val ansiConf = "\"" + SQLConf.ANSI_ENABLED.key + "\""
@@ -35,7 +34,7 @@ class QueryContextSuite extends QueryTest with SharedSparkSession {
       assert(e.getQueryContext.head.summary() ==
         """== DataFrame ==
           |"div" was called from
-          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:33)
+          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:32)
           |org.scalatest.Assertions.intercept(Assertions.scala:749)
           |""".stripMargin)
     }

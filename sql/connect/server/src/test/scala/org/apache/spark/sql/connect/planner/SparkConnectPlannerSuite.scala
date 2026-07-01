@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect.planner
 
 import scala.jdk.CollectionConverters._
 
-import com.google.protobuf.ByteString
+import com.google.protobuf.{Any, ByteString, StringValue}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
@@ -1068,5 +1068,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         "23:59:59.999999999",
         "23:59:59.999999999",
         "23:59:59.999999999").toString)
+  }
+
+  test("No handler found for extension shows extension type URL - Relation extension") {
+    val extension = StringValue
+      .newBuilder()
+      .setValue("unknown-relation")
+      .build()
+    val relation = proto.Relation
+      .newBuilder()
+      .setExtension(Any.pack(extension))
+      .build()
+
+    val intercepted = intercept[InvalidPlanInput] {
+      transform(relation)
+    }
+
+    assert(
+      intercepted.getMessage.contains("No handler found for extension type: " +
+        "type.googleapis.com/google.protobuf.StringValue"))
   }
 }

@@ -18,17 +18,20 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
+
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np
-import pandas as pd  # noqa: F401
+import pandas as pd
 from pandas.tseries.offsets import DateOffset
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 import pyspark.sql.functions as F
 from pyspark.sql.types import DateType, TimestampType, TimestampNTZType, IntegerType
 from pyspark.pandas import DataFrame
 from pyspark.pandas.config import option_context
+from pyspark.pandas._typing import Dtype
 
 
 class DatetimeMethods:
@@ -517,7 +520,7 @@ class DatetimeMethods:
         This method is available on Series with datetime values under
         the ``.dt`` accessor.
 
-        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="Y"))
+        >>> dates_series = ps.Series(pd.date_range("2012-01-01", "2015-01-01", freq="YE"))
         >>> dates_series
         0   2012-12-31
         1   2013-12-31
@@ -603,8 +606,13 @@ class DatetimeMethods:
         2   2012-03-31
         dtype: datetime64[ns]
         """
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.datetime64
+        else:
+            ret_dtype = self._data.dtype
 
-        def pandas_normalize(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
+        def pandas_normalize(s) -> ps.Series[ret_dtype]:  # type: ignore[no-untyped-def, valid-type]
             return s.dt.normalize()
 
         return self._data.pandas_on_spark.transform_batch(pandas_normalize)
@@ -700,14 +708,19 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.round("H")
+        >>> series.dt.round("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
         dtype: datetime64[ns]
         """
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.datetime64
+        else:
+            ret_dtype = self._data.dtype
 
-        def pandas_round(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
+        def pandas_round(s) -> ps.Series[ret_dtype]:  # type: ignore[no-untyped-def, valid-type]
             return s.dt.round(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_round)
@@ -755,14 +768,19 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.floor("H")
+        >>> series.dt.floor("h")
         0   2018-01-01 11:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
         dtype: datetime64[ns]
         """
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.datetime64
+        else:
+            ret_dtype = self._data.dtype
 
-        def pandas_floor(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
+        def pandas_floor(s) -> ps.Series[ret_dtype]:  # type: ignore[no-untyped-def, valid-type]
             return s.dt.floor(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_floor)
@@ -810,14 +828,19 @@ class DatetimeMethods:
         2   2018-01-01 12:01:00
         dtype: datetime64[ns]
 
-        >>> series.dt.ceil("H")
+        >>> series.dt.ceil("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 13:00:00
         dtype: datetime64[ns]
         """
+        ret_dtype: Union[type, Dtype]
+        if LooseVersion(pd.__version__) < "3.0.0":
+            ret_dtype = np.datetime64
+        else:
+            ret_dtype = self._data.dtype
 
-        def pandas_ceil(s) -> ps.Series[np.datetime64]:  # type: ignore[no-untyped-def]
+        def pandas_ceil(s) -> ps.Series[ret_dtype]:  # type: ignore[no-untyped-def, valid-type]
             return s.dt.ceil(freq, *args, **kwargs)
 
         return self._data.pandas_on_spark.transform_batch(pandas_ceil)
@@ -911,7 +934,7 @@ def _test() -> None:
         .appName("pyspark.pandas.datetimes tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.datetimes,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

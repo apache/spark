@@ -163,6 +163,6 @@ def rddToFileName(prefix, suffix, timestamp):
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

@@ -32,6 +32,7 @@ import org.apache.spark.storage.StorageLevel
  *       `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
 trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
+  import testImplicits._
   override val command = "ALTER TABLE .. RENAME"
 
   test("rename a table in a database/namespace") {

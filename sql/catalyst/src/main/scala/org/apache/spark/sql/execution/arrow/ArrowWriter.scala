@@ -24,8 +24,9 @@ import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.STUtils
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 
@@ -52,7 +53,14 @@ object ArrowWriter {
 
   private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
     val field = vector.getField()
-    (ArrowUtils.fromArrowField(field), vector) match {
+    val dt = ArrowUtils.fromArrowField(field)
+    TypeOps(dt).flatMap(_.createArrowFieldWriter(vector))
+      .getOrElse(createFieldWriterDefault(dt, vector))
+  }
+
+  private def createFieldWriterDefault(
+      dt: DataType, vector: ValueVector): ArrowFieldWriter = {
+    (dt, vector) match {
       case (BooleanType, vector: BitVector) => new BooleanWriter(vector)
       case (ByteType, vector: TinyIntVector) => new ByteWriter(vector)
       case (ShortType, vector: SmallIntVector) => new ShortWriter(vector)
@@ -69,7 +77,6 @@ object ArrowWriter {
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
       case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
-      case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -124,9 +131,9 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
     count += 1
   }
 
-  def sizeInBytes(): Int = {
+  def sizeInBytes(): Long = {
     var i = 0
-    var bytes = 0
+    var bytes = 0L
     while (i < fields.size) {
       bytes += fields(i).getSizeInBytes()
       i += 1
@@ -146,7 +153,7 @@ class ArrowWriter(val root: VectorSchemaRoot, fields: Array[ArrowFieldWriter]) {
   }
 }
 
-private[arrow] abstract class ArrowFieldWriter {
+private[sql] abstract class ArrowFieldWriter {
 
   def valueVector: ValueVector
 
@@ -371,7 +378,7 @@ private[arrow] class TimestampNTZWriter(
   }
 }
 
-private[arrow] class TimeWriter(
+private[sql] class TimeWriter(
     val valueVector: TimeNanoVector) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {
@@ -380,6 +387,46 @@ private[arrow] class TimeWriter(
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setSafe(count, input.getLong(ordinal))
+  }
+}
+
+private[sql] class TimestampNTZNanosWriter(
+    val valueVector: TimeStampNanoVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val v = input.getTimestampNTZNanos(ordinal)
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          v, isNtz = true, sink = "Arrow INT64")
+    }
+    valueVector.setSafe(count, nanos)
+  }
+}
+
+private[sql] class TimestampLTZNanosWriter(
+    val valueVector: TimeStampNanoTZVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    val v = input.getTimestampLTZNanos(ordinal)
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+          v, isNtz = false, sink = "Arrow INT64")
+    }
+    valueVector.setSafe(count, nanos)
   }
 }
 
@@ -465,7 +512,7 @@ private[arrow] class GeographyWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeog(input.getGeography(ordinal), dt)
+    val geom = STUtils.deserializeGeog(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
@@ -483,7 +530,7 @@ private[arrow] class GeometryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeom(input.getGeometry(ordinal), dt)
+    val geom = STUtils.deserializeGeom(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 

@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.FieldMetadataUtils
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `SHOW CREATE TABLE` command to check V2 table catalogs.
  */
 class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with CommandSuiteBase {
+
+  override def sparkConf: SparkConf = super.sparkConf
+    .set(InMemoryBaseTable.ASSIGN_COLUMN_IDS, "true")
+
   override def fullName: String = s"$catalog.$ns.$table"
 
   test("SPARK-33898: show create table as serde") {
@@ -52,7 +59,7 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING)",
+        "b STRING COLLATE UTF8_BINARY)",
         defaultUsing,
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
@@ -135,12 +142,29 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(showDDL === Array(
         s"CREATE TABLE $t (",
         "a INT,",
-        "b STRING,",
+        "b STRING COLLATE UTF8_BINARY,",
         "ts TIMESTAMP)",
         defaultUsing,
-        "PARTITIONED BY (a, years(ts), months(ts), days(ts), hours(ts))",
-        "CLUSTERED BY (b)",
-        "INTO 16 BUCKETS"
+        "PARTITIONED BY (a, bucket(16, b), years(ts), months(ts), days(ts), hours(ts))"
+      ))
+    }
+  }
+
+  test("SPARK-56755: show create table[partitioned by multi bucket transforms]") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(
+        s"""
+           |CREATE TABLE $t (a INT, b STRING, ts TIMESTAMP) $defaultUsing
+           |PARTITIONED BY (bucket(4, a), bucket(8, b), years(ts))
+         """.stripMargin)
+      val showDDL = getShowCreateDDL(t, false)
+      assert(showDDL === Array(
+        s"CREATE TABLE $t (",
+        "a INT,",
+        "b STRING COLLATE UTF8_BINARY,",
+        "ts TIMESTAMP)",
+        defaultUsing,
+        "PARTITIONED BY (bucket(4, a), bucket(8, b), years(ts))"
       ))
     }
   }
@@ -174,11 +198,26 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
       assert(
         showDDL === Array(
           s"CREATE TABLE $fullName (",
-          "a STRUCT<b: BIGINT COMMENT 'comment', c: STRUCT<d: STRING NOT NULL, e: STRING>>)",
+          "a STRUCT<b: BIGINT COMMENT 'comment'," +
+            " c: STRUCT<d: STRING COLLATE UTF8_BINARY NOT NULL, e: STRING COLLATE UTF8_BINARY>>)",
           "USING parquet",
           "COMMENT 'This is a comment'"
         )
       )
+    }
+  }
+
+  test("SPARK-57544: show create table does not expose column IDs; schema does") {
+    withNamespaceAndTable(ns, table) { t =>
+      sql(s"CREATE TABLE $t (id INT, salary INT) $defaultUsing")
+
+      // Column IDs assigned by the catalog must NOT appear in SHOW CREATE TABLE output.
+      val showDDL = getShowCreateDDL(t)
+      assert(!showDDL.exists(_.contains(FieldMetadataUtils.FIELD_ID_METADATA_KEY)))
+
+      // Column IDs must be accessible via df.schema.
+      val fields = spark.table(t).schema.fields
+      assert(fields.forall(_.id.isDefined))
     }
   }
 
@@ -210,8 +249,8 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         val expectedDDLPrefix = Array(
           s"CREATE TABLE $nonPartitionCatalog.ns.tbl (",
           "a INT NOT NULL,",
-          "b STRING,",
-          "c STRING,",
+          "b STRING COLLATE UTF8_BINARY,",
+          "c STRING COLLATE UTF8_BINARY,",
           "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
           "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
           s"CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",

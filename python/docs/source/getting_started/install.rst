@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.10 and above.
+Python 3.11 and above.
 
 
 Using PyPI
@@ -143,7 +143,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark  # can also add "python=3.10 some_package [etc.]" here
+    conda install -c conda-forge pyspark  # can also add "python=3.11 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
@@ -155,6 +155,18 @@ because pip does not interoperate with conda.
 
 For a short summary about useful conda commands, see their
 `cheat sheet <https://docs.conda.io/projects/conda/en/latest/user-guide/cheatsheet.html>`_.
+
+
+Using venv
+----------
+
+You can use Python's built-in ``venv`` module to create an isolated environment:
+
+.. code-block:: bash
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install pyspark
 
 
 Manually Downloading
@@ -278,7 +290,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.22            Required for MLlib DataFrame-based API
+`numpy` >=1.23.2          Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -298,7 +310,7 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.22            Required for MLlib
+`numpy` >=1.23.2          Required for MLlib
 ======= ================= ==================
 
 Declarative Pipelines

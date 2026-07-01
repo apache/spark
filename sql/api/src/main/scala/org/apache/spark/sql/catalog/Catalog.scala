@@ -21,6 +21,7 @@ import java.util
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -33,6 +34,12 @@ import org.apache.spark.storage.StorageLevel
  */
 @Stable
 abstract class Catalog {
+
+  private def catalogUnsupported(methodName: String): Nothing = {
+    throw new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.CATALOG_INTERFACE_METHOD",
+      messageParameters = Map("methodName" -> methodName, "catalogClass" -> getClass.getName))
+  }
 
   /**
    * Returns the current database (namespace) in this session.
@@ -565,7 +572,7 @@ abstract class Catalog {
   def dropGlobalTempView(viewName: String): Boolean
 
   /**
-   * Recovers all the partitions in the directory of a table and update the catalog. Only works
+   * Recovers all the partitions in the directory of a table and updates the catalog. Only works
    * with a partitioned table, and not a view.
    *
    * @param tableName
@@ -693,4 +700,194 @@ abstract class Catalog {
    * @since 3.5.0
    */
   def listCatalogs(pattern: String): Dataset[CatalogMetadata]
+
+  /**
+   * Drops a persistent table. This does not remove temp views (use `dropTempView`).
+   *
+   * @param tableName
+   *   name of the table to drop; may be qualified with catalog and database (namespace).
+   * @param ifExists
+   *   if true, do not fail when the table does not exist.
+   * @param purge
+   *   if true, skip moving data to a trash directory when the catalog supports it.
+   * @since 4.2.0
+   */
+  def dropTable(tableName: String, ifExists: Boolean = false, purge: Boolean = false): Unit = {
+    catalogUnsupported("dropTable")
+  }
+
+  /**
+   * Drops a persistent view.
+   *
+   * @param viewName
+   *   name of the view to drop; may be qualified with catalog and database (namespace).
+   * @param ifExists
+   *   if true, do not fail when the view does not exist.
+   * @since 4.2.0
+   */
+  def dropView(viewName: String, ifExists: Boolean = false): Unit = {
+    catalogUnsupported("dropView")
+  }
+
+  /**
+   * Creates a namespace (database/schema). `dbName` may be a multi-part identifier.
+   *
+   * @param dbName
+   *   name of the namespace to create.
+   * @param ifNotExists
+   *   if true, do not fail when the namespace already exists.
+   * @since 4.2.0
+   */
+  def createDatabase(dbName: String, ifNotExists: Boolean = false): Unit = {
+    createDatabase(dbName, ifNotExists, new util.HashMap[String, String]())
+  }
+
+  /**
+   * (Java-specific) Creates a namespace with optional properties (e.g. comment, location keys as
+   * used by `CREATE NAMESPACE`).
+   *
+   * @param dbName
+   *   name of the namespace to create.
+   * @param ifNotExists
+   *   if true, do not fail when the namespace already exists.
+   * @param properties
+   *   string map of namespace properties.
+   * @since 4.2.0
+   */
+  def createDatabase(
+      dbName: String,
+      ifNotExists: Boolean,
+      properties: util.Map[String, String]): Unit = {
+    catalogUnsupported("createDatabase")
+  }
+
+  /**
+   * (Scala-specific) Creates a namespace with optional properties map.
+   *
+   * @param dbName
+   *   name of the namespace to create.
+   * @param ifNotExists
+   *   if true, do not fail when the namespace already exists.
+   * @param properties
+   *   map of namespace property keys to values.
+   * @since 4.2.0
+   */
+  def createDatabase(
+      dbName: String,
+      ifNotExists: Boolean,
+      properties: Map[String, String]): Unit = {
+    createDatabase(dbName, ifNotExists, properties.asJava)
+  }
+
+  /**
+   * Drops a namespace.
+   *
+   * @param dbName
+   *   name of the namespace to drop; may be qualified with catalog name.
+   * @param ifExists
+   *   if true, do not fail when the namespace does not exist.
+   * @param cascade
+   *   if true, also drop tables and functions in the namespace.
+   * @since 4.2.0
+   */
+  def dropDatabase(dbName: String, ifExists: Boolean = false, cascade: Boolean = false): Unit = {
+    catalogUnsupported("dropDatabase")
+  }
+
+  /**
+   * Lists partition value strings for a table (same as `SHOW PARTITIONS`).
+   *
+   * @param tableName
+   *   name of the partitioned table; may be qualified with catalog and database (namespace).
+   * @since 4.2.0
+   */
+  def listPartitions(tableName: String): Dataset[TablePartition] = {
+    catalogUnsupported("listPartitions")
+  }
+
+  /**
+   * Lists views in the current namespace.
+   *
+   * @return
+   *   a dataset of `Table` rows for each view (same shape as `listTables`).
+   * @since 4.2.0
+   */
+  def listViews(): Dataset[Table] = catalogUnsupported("listViews()")
+
+  /**
+   * Lists views in the given namespace (can be catalog-qualified).
+   *
+   * @param dbName
+   *   namespace to list views from.
+   * @return
+   *   a dataset of `Table` rows for each view (same shape as `listTables`).
+   * @since 4.2.0
+   */
+  @throws[AnalysisException]("namespace does not exist")
+  def listViews(dbName: String): Dataset[Table] =
+    catalogUnsupported("listViews(String)")
+
+  /**
+   * Lists views in the given namespace with a name pattern (SQL LIKE string).
+   *
+   * @param dbName
+   *   namespace to list views from.
+   * @param pattern
+   *   SQL LIKE pattern for view names.
+   * @return
+   *   a dataset of `Table` rows for each matching view (same shape as `listTables`).
+   * @since 4.2.0
+   */
+  @throws[AnalysisException]("namespace does not exist")
+  def listViews(dbName: String, pattern: String): Dataset[Table] = {
+    catalogUnsupported("listViews(String, String)")
+  }
+
+  /**
+   * Returns all table properties as a map (same as `SHOW TBLPROPERTIES`).
+   *
+   * @param tableName
+   *   table or view name; may be qualified with catalog and database (namespace).
+   * @since 4.2.0
+   */
+  def getTableProperties(tableName: String): util.Map[String, String] = {
+    catalogUnsupported("getTableProperties")
+  }
+
+  /**
+   * Returns the `SHOW CREATE TABLE` DDL string for a relation.
+   *
+   * @param tableName
+   *   table or view name; may be qualified with catalog and database (namespace).
+   * @param asSerde
+   *   if true, request Hive serde DDL when applicable.
+   * @since 4.2.0
+   */
+  def getCreateTableString(tableName: String, asSerde: Boolean = false): String = {
+    catalogUnsupported("getCreateTableString")
+  }
+
+  /**
+   * Truncates a table (removes all data from the table; not supported for views).
+   *
+   * @param tableName
+   *   name of the table to truncate; may be qualified with catalog and database (namespace).
+   * @since 4.2.0
+   */
+  def truncateTable(tableName: String): Unit = {
+    catalogUnsupported("truncateTable")
+  }
+
+  /**
+   * Computes table statistics (same as `ANALYZE TABLE ... COMPUTE STATISTICS`).
+   *
+   * @param tableName
+   *   table or view name; may be qualified with catalog and database (namespace).
+   * @param noScan
+   *   if true, use `NOSCAN` mode (reuse existing column statistics where possible).
+   * @since 4.2.0
+   */
+  def analyzeTable(tableName: String, noScan: Boolean = false): Unit = {
+    catalogUnsupported("analyzeTable")
+  }
 }

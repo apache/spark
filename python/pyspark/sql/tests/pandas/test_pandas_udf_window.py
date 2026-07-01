@@ -30,14 +30,14 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
 )
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.sql import Row
 from pyspark.util import is_remote_only
 
@@ -605,7 +605,7 @@ class WindowPandasUDFTestsMixin:
                 mean_udf = pandas_udf(lambda v: value, t, PandasUDFType.GROUPED_AGG)
                 result = df.select(mean_udf(df["v"]).over(w)).first()[0]
                 assert result == Decimal("1.0")
-                assert type(result) == Decimal
+                assert isinstance(result, Decimal)
 
     def test_arrow_cast_str_to_numeric(self):
         df = self.data

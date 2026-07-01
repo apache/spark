@@ -17,14 +17,15 @@
 package org.apache.spark.sql.protobuf
 
 import java.sql.Timestamp
-import java.time.Duration
+import java.time.{Duration, LocalTime}
 
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
@@ -34,8 +35,9 @@ import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
+import org.apache.spark.unsafe.types.UTF8String
 
-class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
+class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
   with Serializable {
 
   import testImplicits._
@@ -163,8 +165,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Once") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils
+      .buildDescriptor("RepeatedMessage", Some(testFileDesc))
+      .descriptor
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -200,8 +206,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Repeated Message Twice") {
-    val repeatedMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "RepeatedMessage")
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val repeatedMessageDesc = ProtobufUtils
+      .buildDescriptor("RepeatedMessage", Some(testFileDesc))
+      .descriptor
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage1 = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -251,7 +261,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Map") {
-    val messageMapDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageMap")
+    val messageMapDesc = ProtobufUtils
+      .buildDescriptor("SimpleMessageMap", Some(testFileDesc))
+      .descriptor
 
     val mapStr1 = DynamicMessage
       .newBuilder(messageMapDesc.findNestedTypeByName("StringMapdataEntry"))
@@ -345,8 +357,12 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("roundtrip in from_protobuf and to_protobuf - Enum") {
-    val messageEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "SimpleMessageEnum")
-    val basicEnumDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicEnumMessage")
+    val messageEnumDesc = ProtobufUtils
+      .buildDescriptor("SimpleMessageEnum", Some(testFileDesc))
+      .descriptor
+    val basicEnumDesc = ProtobufUtils
+      .buildDescriptor("BasicEnumMessage", Some(testFileDesc))
+      .descriptor
 
     val dynamicMessage = DynamicMessage
       .newBuilder(messageEnumDesc)
@@ -389,9 +405,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("round trip in from_protobuf and to_protobuf - Multiple Message") {
-    val messageMultiDesc = ProtobufUtils.buildDescriptor(testFileDesc, "MultipleExample")
-    val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
-    val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
+    val messageMultiDesc = ProtobufUtils
+      .buildDescriptor("MultipleExample", Some(testFileDesc))
+      .descriptor
+    val messageIncludeDesc = ProtobufUtils
+      .buildDescriptor("IncludedExample", Some(testFileDesc))
+      .descriptor
+    val messageOtherDesc = ProtobufUtils
+      .buildDescriptor("OtherExample", Some(testFileDesc))
+      .descriptor
 
     val otherMessage = DynamicMessage
       .newBuilder(messageOtherDesc)
@@ -470,8 +492,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
-    val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
-    val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
+    val oldProducer = ProtobufUtils.buildDescriptor("oldProducer", Some(descBytes)).descriptor
+    val newConsumer = ProtobufUtils.buildDescriptor("newConsumer", Some(descBytes)).descriptor
 
     val oldProducerMessage = DynamicMessage
       .newBuilder(oldProducer)
@@ -512,8 +534,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
     val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
-    val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
-    val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
+    val newProducer = ProtobufUtils.buildDescriptor("newProducer", Some(descBytes)).descriptor
+    val oldConsumer = ProtobufUtils.buildDescriptor("oldConsumer", Some(descBytes)).descriptor
 
     val newProducerMessage = DynamicMessage
       .newBuilder(newProducer)
@@ -560,7 +582,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val binary = toProtobuf.first().get(0).asInstanceOf[Array[Byte]]
 
-    val messageDescriptor = ProtobufUtils.buildDescriptor(testFileDesc, "requiredMsg")
+    val messageDescriptor = ProtobufUtils
+      .buildDescriptor("requiredMsg", Some(testFileDesc))
+      .descriptor
     val actualMessage = DynamicMessage.parseFrom(messageDescriptor, binary)
 
     assert(actualMessage.getField(messageDescriptor.findFieldByName("key"))
@@ -582,7 +606,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("from_protobuf filter to_protobuf") {
-    val basicMessageDesc = ProtobufUtils.buildDescriptor(testFileDesc, "BasicMessage")
+    val basicMessageDesc = ProtobufUtils
+      .buildDescriptor("BasicMessage", Some(testFileDesc))
+      .descriptor
 
     val basicMessage = DynamicMessage
       .newBuilder(basicMessageDesc)
@@ -698,6 +724,67 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
+  test("SPARK-57573: Handle TimeType between to_protobuf and from_protobuf") {
+    val schema = StructType(
+      StructField("timeMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("time_val", TimeType(), nullable = true) :: Nil
+        ),
+        nullable = true
+      ) :: Nil
+    )
+
+    val localTime = LocalTime.of(12, 34, 56, 123456000)
+    val inputDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", localTime))
+      )),
+      schema
+    )
+
+    checkWithFileAndClassName("timeMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = inputDf
+          .select(to_protobuf_wrapper($"timeMsg", name,
+            descFilePathOpt) as Symbol("to_proto"))
+
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name,
+            descFilePathOpt) as Symbol("timeMsg"))
+
+        // The int64 field carries no logical-type marker, so from_protobuf infers it as
+        // LongType holding nanoseconds-of-day rather than TimeType.
+        assert(fromProtoDf.schema("timeMsg").dataType.asInstanceOf[StructType]("time_val")
+          .dataType === LongType)
+        assert(fromProtoDf.select("timeMsg.key").first().get(0) === "key1")
+        assert(fromProtoDf.select("timeMsg.time_val").first().get(0) === localTime.toNanoOfDay)
+    }
+  }
+
+  test("SPARK-57573: TimeType roundtrip through ProtobufSerializer and ProtobufDeserializer") {
+    val descriptor = ProtobufUtils.buildDescriptor("timeMsg", Some(testFileDesc)).descriptor
+    Seq(
+      (TimeType(TimeType.MIN_PRECISION), LocalTime.of(0, 0, 0)),
+      (TimeType(TimeType.MICROS_PRECISION), LocalTime.of(23, 59, 59, 999999000)),
+      (TimeType(TimeType.MICROS_PRECISION), LocalTime.of(12, 34, 56, 123456000))
+    ).foreach { case (timeType, localTime) =>
+      val catalyst = StructType(
+        StructField("key", StringType) ::
+          StructField("time_val", timeType) :: Nil)
+      val serializer = new ProtobufSerializer(catalyst, descriptor, nullable = false)
+      val deserializer = new ProtobufDeserializer(descriptor, catalyst)
+      val nanos = localTime.toNanoOfDay
+      val input = InternalRow(UTF8String.fromString("key1"), nanos)
+
+      val message = serializer.serialize(input).asInstanceOf[DynamicMessage]
+      val result = deserializer.deserialize(message).get
+
+      assert(result.getUTF8String(0).toString === "key1")
+      assert(result.getLong(1) === nanos)
+    }
+  }
+
   test("raise protobuf descriptor error") {
     val df = Seq(ByteString.empty().toByteArray).toDF("value")
     val descWithoutImports = descriptorSetWithoutImports(testFileDesc, "BasicMessage")
@@ -714,7 +801,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEvent")
+    val descriptor = ProtobufUtils.buildDescriptor("OneOfEvent", Some(testFileDesc)).descriptor
     val oneOfEvent = OneOfEvent.newBuilder()
       .setKey("key")
       .setCol1(123)
@@ -804,7 +891,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Verify recursion field with complex schema with recursive.fields.max.depth") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
+    val descriptor = ProtobufUtils.buildDescriptor("Employee", Some(testFileDesc)).descriptor
 
     val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
     val em2 = EM2.newBuilder().setTeamsize(100).setEm2Manager(manager).build()
@@ -846,7 +933,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf." +
     "and struct -> from_protobuf") {
-    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
+    val descriptor = ProtobufUtils
+      .buildDescriptor("OneOfEventWithRecursion", Some(testFileDesc))
+      .descriptor
 
     val nestedTwo = OneOfEventWithRecursion.newBuilder()
       .setKey("keyNested2").setValue("valueNested2").build()

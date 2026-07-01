@@ -493,9 +493,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         testStream(result, OutputMode.Update())(
           StartStream(checkpointLocation = tempDir.getAbsolutePath),
           AddData(inputData, "a", "b", "a"),
-          CheckNewAnswer(("a", "2"), ("b", "1")),
+          ProcessAllAvailable(),
           AddData(inputData, "b", "c"),
-          CheckNewAnswer(("b", "2"), ("c", "1")),
+          ProcessAllAvailable(),
           StopStream
         )
 

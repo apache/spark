@@ -136,11 +136,32 @@ private[spark] object UI {
     .stringConf
     .createOptional
 
+  val UI_CONTENT_SECURITY_POLICY_ENABLED =
+    ConfigBuilder("spark.ui.contentSecurityPolicy.enabled")
+      .doc("Whether to set the HTTP Content-Security-Policy (CSP) response header for the " +
+        "Spark UI. When enabled, CSP restricts the sources from which the browser is allowed " +
+        "to load resources, providing defense-in-depth against cross-site scripting (XSS).")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val UI_REQUEST_HEADER_SIZE = ConfigBuilder("spark.ui.requestHeaderSize")
     .doc("Value for HTTP request header size in bytes.")
     .version("2.2.3")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("8k")
+
+  val UI_JETTY_SNI_HOST_CHECK = ConfigBuilder("spark.ui.jetty.sniHostCheckEnabled")
+    .internal()
+    .doc("Whether to enable Jetty's SNI host check on the Spark UI HTTPS connector. " +
+      "Since SPARK-45522 (Jetty 10+), Spark has disabled SNI host check to preserve " +
+      "backward compatibility with standalone deployments. Set to true to enforce " +
+      "SNI host checking for stricter security.")
+    .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
 
   val UI_TIMELINE_ENABLED = ConfigBuilder("spark.ui.timelineEnabled")
     .doc("Whether to display event timeline data on UI pages.")
@@ -265,10 +286,11 @@ private[spark] object UI {
     .booleanConf
     .createWithDefault(true)
 
-  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jettyStopTimeout")
+  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jetty.stopTimeout")
     .internal()
     .doc("Timeout for Jetty servers started in UIs, such as SparkUI, HistoryUI, etc, to stop.")
     .version("4.0.0")
+    .withAlternative("spark.ui.jettyStopTimeout")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("30s")
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.collation
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.test.SharedSparkSession
@@ -25,8 +25,7 @@ import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringTy
 
 // scalastyle:off nonascii
 class CollationSQLRegexpSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with ExpressionEvalHelper {
 
   test("Support Like string expression with collation") {
@@ -431,7 +430,7 @@ class CollationSQLRegexpSuite
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",
       parameters = Map(
-        "explicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
+        "explicitTypes" -> """"STRING COLLATE UTF8_BINARY", "STRING COLLATE UTF8_LCASE""""
       )
     )
     // Unsupported collations

@@ -90,6 +90,9 @@ case class SparkListenerSQLExecutionEnd(
 
   // The exception object that caused this execution to fail. None if the execution doesn't fail.
   @JsonIgnore private[sql] var executionFailure: Option[Throwable] = None
+
+  // The jobs for this execution. Test only.
+  @JsonIgnore private[sql] var jobIds: Set[Int] = Set.empty
 }
 
 /**

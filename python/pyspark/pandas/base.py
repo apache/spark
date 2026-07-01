@@ -18,18 +18,33 @@
 """
 Base and utility classes for pandas-on-Spark objects.
 """
+
 import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, ClassVar, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import LongType, BooleanType, NumericType
+from pyspark.sql.types import (
+    BinaryType,
+    BooleanType,
+    CharType,
+    DataType,
+    DateType,
+    DayTimeIntervalType,
+    LongType,
+    NumericType,
+    StringType,
+    TimestampNTZType,
+    TimestampType,
+    TimeType,
+    VarcharType,
+)
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
@@ -40,7 +55,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_INDEX_NAME,
 )
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import extension_dtypes
+from pyspark.pandas.typedef.typehints import handle_dtype_as_extension_dtype
 from pyspark.pandas.utils import (
     ansi_mode_context,
     combine_frames,
@@ -118,9 +133,11 @@ def align_diff_index_ops(
                     column_op(func)(
                         this_index_ops.to_series().reset_index(drop=True),
                         *[
-                            arg.to_series().reset_index(drop=True)
-                            if isinstance(arg, Index)
-                            else arg
+                            (
+                                arg.to_series().reset_index(drop=True)
+                                if isinstance(arg, Index)
+                                else arg
+                            )
                             for arg in args
                         ],
                     ).sort_index(),
@@ -228,7 +245,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             field = InternalField.from_struct_field(
                 self._internal.spark_frame.select(scol).schema[0],
                 use_extension_dtypes=any(
-                    isinstance(col.dtype, extension_dtypes) for col in [self] + cols
+                    handle_dtype_as_extension_dtype(col.dtype) for col in [self] + cols
                 ),
             )
 
@@ -278,11 +295,46 @@ def _exclude_pd_np_operand(other: Any) -> None:
         )
 
 
+def _is_value_type_compatible(value: Any, spark_type: DataType) -> bool:
+    """Check if a Python value's type is compatible with a Spark column type for isin matching.
+
+    Pandas isin() uses strict type matching: an integer 1 never matches a string "1".
+    However, numeric types (int, float, bool) are cross-compatible, matching Python semantics
+    where bool is a subclass of int and int/float compare equal when values match.
+    """
+    import datetime
+    import decimal
+
+    if isinstance(spark_type, NumericType):
+        return isinstance(value, (int, float, bool, decimal.Decimal, np.number))
+    if isinstance(spark_type, BooleanType):
+        return isinstance(value, (bool, np.bool_, int, float, np.number))
+    if isinstance(spark_type, (StringType, CharType, VarcharType)):
+        return isinstance(value, str)
+    if isinstance(spark_type, BinaryType):
+        return isinstance(value, (bytes, bytearray))
+    if isinstance(spark_type, (TimestampType, TimestampNTZType)):
+        return isinstance(value, (datetime.datetime, pd.Timestamp))
+    if isinstance(spark_type, DateType):
+        return isinstance(value, (datetime.date, pd.Timestamp))
+    if isinstance(spark_type, TimeType):
+        return isinstance(value, datetime.time)
+    if isinstance(spark_type, DayTimeIntervalType):
+        return isinstance(value, datetime.timedelta)
+    # For complex types (ArrayType, MapType, StructType) and other exotic types
+    # (VariantType, spatial types, YearMonthIntervalType, CalendarIntervalType),
+    # skip filtering and let Spark handle type resolution.
+    return True
+
+
 class IndexOpsMixin(object, metaclass=ABCMeta):
     """common ops mixin to support a unified interface / docs for Series / Index
 
     Assuming there are following attributes or properties and functions.
     """
+
+    # Keep pandas-on-Spark above pandas Series and Index for reflected ops.
+    __pandas_priority__: ClassVar[int] = pd.Series.__pandas_priority__ + 500  # type: ignore[attr-defined]
 
     @property
     @abstractmethod
@@ -924,12 +976,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             cast(np.ndarray, values).tolist() if isinstance(values, np.ndarray) else list(values)
         )
 
-        other = [F.lit(v) for v in values]
-        scol = self.spark.column.isin(other)
+        spark_type = self._internal.data_fields[0].spark_type
+        compatible = [
+            F.lit(v).cast(spark_type) for v in values if _is_value_type_compatible(v, spark_type)
+        ]
+        scol = (
+            F.coalesce(self.spark.column.isin(compatible), F.lit(False))
+            if compatible
+            else F.lit(False)
+        )
         field = self._internal.data_fields[0].copy(
             dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
         )
-        return self._with_new_scol(scol=F.coalesce(scol, F.lit(False)), field=field)
+        return self._with_new_scol(scol=scol, field=field)
 
     def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
@@ -1449,7 +1508,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         dropna : bool, default True
-            Don’t include NaN in the count.
+            Don't include NaN in the count.
         approx: bool, default False
             If False, will use the exact algorithm and return the exact number of unique.
             If True, it uses the HyperLogLog approximate algorithm, which is significantly faster
@@ -1745,7 +1804,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

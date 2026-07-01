@@ -18,6 +18,7 @@
 """
 A wrapper for ResampledData to behave like pandas Resampler.
 """
+
 from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import (
@@ -136,7 +137,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
     def _bin_timestamp(self, origin: pd.Timestamp, ts_scol: Column) -> Column:
         key_type = self._resamplekey_type
         origin_scol = F.lit(origin)
-        (rule_code, n) = (self._offset.rule_code, getattr(self._offset, "n"))
+        rule_code, n = (self._offset.rule_code, getattr(self._offset, "n"))
         left_closed, right_closed = (self._closed == "left", self._closed == "right")
         left_labeled, right_labeled = (self._label == "left", self._label == "right")
 
@@ -324,7 +325,7 @@ class Resampler(Generic[FrameLike], metaclass=ABCMeta):
         #   ]
         #   index = pd.DatetimeIndex(dates)
         #   pdf = pd.DataFrame(np.array([1,2,3]), index=index, columns=['A'])
-        #   pdf.resample('3Y').max()
+        #   pdf.resample('3YE').max()
         #                 A
         #   2012-12-31  2.0
         #   2015-12-31  NaN
@@ -780,7 +781,7 @@ def _test() -> None:
         .appName("pyspark.pandas.resample tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.resample,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

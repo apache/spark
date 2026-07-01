@@ -36,6 +36,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -62,6 +63,7 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
    *
    * This method reloads table metadata from the catalog and validates:
    *  - Table identity: Ensures table ID has not changed
+   *  - Column IDs: Verifies column IDs have not changed
    *  - Data columns: Verifies captured columns align with the current schema
    *  - Metadata columns: Checks metadata column consistency
    *
@@ -119,19 +121,14 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
   }
 
   private def validateTableIdentity(currentTable: Table, relation: DataSourceV2Relation): Unit = {
-    if (relation.table.id != null && relation.table.id != currentTable.id) {
-      throw QueryCompilationErrors.tableIdChangedAfterAnalysis(
-        relation.name,
-        capturedTableId = relation.table.id,
-        currentTableId = currentTable.id)
-    }
+    V2TableUtil.validateTableId(relation.name, relation.table.id, currentTable)
   }
 
   private def validateDataColumns(
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedColumns(currentTable, relation, mode, checkIds = true)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.columnsChangedAfterAnalysis(relation.name, errors)
     }
@@ -141,7 +138,11 @@ private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
       currentTable: Table,
       relation: DataSourceV2Relation,
       mode: SchemaValidationMode): Unit = {
-    val errors = V2TableUtil.validateCapturedMetadataColumns(currentTable, relation, mode)
+    val errors = V2TableUtil.validateCapturedMetadataColumns(
+      currentTable,
+      relation,
+      mode,
+      checkIds = true)
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.metadataColumnsChangedAfterAnalysis(relation.name, errors)
     }

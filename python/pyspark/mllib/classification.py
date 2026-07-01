@@ -91,12 +91,10 @@ class LinearClassificationModel(LinearModel):
         self._threshold = None
 
     @overload
-    def predict(self, test: "VectorLike") -> Union[int, float]:
-        ...
+    def predict(self, test: "VectorLike") -> Union[int, float]: ...
 
     @overload
-    def predict(self, test: RDD["VectorLike"]) -> RDD[Union[int, float]]:
-        ...
+    def predict(self, test: RDD["VectorLike"]) -> RDD[Union[int, float]]: ...
 
     def predict(
         self, test: Union["VectorLike", RDD["VectorLike"]]
@@ -111,7 +109,6 @@ class LinearClassificationModel(LinearModel):
 
 
 class LogisticRegressionModel(LinearClassificationModel):
-
     """
     Classification model trained using Multinomial/Binary Logistic
     Regression.
@@ -231,12 +228,10 @@ class LogisticRegressionModel(LinearClassificationModel):
         return self._numClasses
 
     @overload
-    def predict(self, x: "VectorLike") -> Union[int, float]:
-        ...
+    def predict(self, x: "VectorLike") -> Union[int, float]: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[Union[int, float]]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[Union[int, float]]: ...
 
     def predict(
         self, x: Union["VectorLike", RDD["VectorLike"]]
@@ -526,7 +521,6 @@ class LogisticRegressionWithLBFGS:
 
 
 class SVMModel(LinearClassificationModel):
-
     """
     Model for Support Vector Machines (SVMs).
 
@@ -588,12 +582,10 @@ class SVMModel(LinearClassificationModel):
         self._threshold = 0.0
 
     @overload
-    def predict(self, x: "VectorLike") -> Union[int, float]:
-        ...
+    def predict(self, x: "VectorLike") -> Union[int, float]: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[Union[int, float]]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[Union[int, float]]: ...
 
     def predict(
         self, x: Union["VectorLike", RDD["VectorLike"]]
@@ -730,7 +722,6 @@ class SVMWithSGD:
 
 @inherit_doc
 class NaiveBayesModel(Saveable, Loader["NaiveBayesModel"]):
-
     """
     Model for Naive Bayes classifiers.
 
@@ -793,12 +784,10 @@ class NaiveBayesModel(Saveable, Loader["NaiveBayesModel"]):
         self.theta = theta
 
     @overload
-    def predict(self, x: "VectorLike") -> numpy.float64:
-        ...
+    def predict(self, x: "VectorLike") -> numpy.float64: ...
 
     @overload
-    def predict(self, x: RDD["VectorLike"]) -> RDD[numpy.float64]:
-        ...
+    def predict(self, x: RDD["VectorLike"]) -> RDD[numpy.float64]: ...
 
     @since("0.9.0")
     def predict(
@@ -946,7 +935,10 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
         # LogisticRegressionWithSGD does only binary classification.
         self._model = LogisticRegressionModel(
-            initialWeights, 0, initialWeights.size, 2  # type: ignore[attr-defined]
+            initialWeights,
+            0,
+            initialWeights.size,  # type: ignore[attr-defined]
+            2,
         )
         return self
 
@@ -981,7 +973,7 @@ def _test() -> None:
         SparkSession.builder.master("local[4]").appName("mllib.classification tests").getOrCreate()
     )
     globs["sc"] = spark.sparkContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

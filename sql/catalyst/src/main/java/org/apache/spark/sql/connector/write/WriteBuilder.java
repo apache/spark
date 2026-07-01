@@ -62,7 +62,7 @@ public interface WriteBuilder {
   @Deprecated(since = "3.2.0")
   default BatchWrite buildForBatch() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3135", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_BATCH_WRITE_BUILDER_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 
   /**
@@ -73,6 +73,6 @@ public interface WriteBuilder {
   @Deprecated(since = "3.2.0")
   default StreamingWrite buildForStreaming() {
     throw new SparkUnsupportedOperationException(
-      "_LEGACY_ERROR_TEMP_3136", Map.of("class", getClass().getName()));
+      "DATA_SOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED", Map.of("class", getClass().getName()));
   }
 }

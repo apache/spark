@@ -33,7 +33,36 @@ import org.apache.spark.sql.connector.catalog.{
   Identifier
 }
 
-class VariableResolution(tempVariableManager: TempVariableManager) extends SQLConfHelper {
+class VariableResolution(
+    tempVariableManager: TempVariableManager,
+    catalogManager: CatalogManager)
+    extends SQLConfHelper {
+
+  /**
+   * Unqualified session variables resolve only when SYSTEM.SESSION is on the SQL path
+   * (PATH enabled and explicitly set).
+   */
+  private def allowUnqualifiedSessionTempVariableLookup(nameParts: Seq[String]): Boolean = {
+    nameParts.length != 1 || catalogManager.isSystemSessionOnPath
+  }
+
+  /**
+   * Search-path entries to report in `UNRESOLVED_VARIABLE` for DML lookups (`SET VAR`,
+   * `FETCH ... INTO`). The full SQL path is reported regardless of how the name was
+   * qualified, matching the convention used by `TABLE_OR_VIEW_NOT_FOUND` and
+   * `UNRESOLVED_ROUTINE`. Keeping the rendering qualification-independent also avoids
+   * re-shaping the error if Spark ever grows struct-field assignment, where 2-part forms
+   * become genuinely ambiguous.
+   *
+   * DDL paths (`DECLARE` / `DROP` name validation in
+   * [[org.apache.spark.sql.catalyst.analysis.ResolveCatalogs]]) do not consult the SQL path
+   * and report `[system.session]` directly at their throw site.
+   */
+  def searchPathEntriesForError: Seq[Seq[String]] = {
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
+  }
 
   /**
    * Resolves a `multipartName` to an [[Expression]] tree, supporting nested field access.
@@ -108,7 +137,7 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
 
     SqlScriptingContextManager
       .get()
-      .map(_.getVariableManager)
+      .flatMap(_.getVariableManager)
       // If variable name is qualified with session.<varName> treat it as a session variable.
       .filterNot(
         _ =>
@@ -125,7 +154,8 @@ class VariableResolution(tempVariableManager: TempVariableManager) extends SQLCo
         )
       }
       .orElse(
-        if (maybeTempVariableName(nameParts)) {
+        if (maybeTempVariableName(nameParts) &&
+            allowUnqualifiedSessionTempVariableLookup(nameParts)) {
           tempVariableManager
             .get(namePartsCaseAdjusted)
             .map { varDef =>

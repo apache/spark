@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -567,7 +568,62 @@ abstract class UnionBase extends LogicalPlan {
 }
 
 /**
+ * Extractor and helper methods for Union and SequentialStreamingUnion.
+ * Does not match other UnionBase subtypes like UnionLoop.
+ */
+object SequentialOrSimpleUnion {
+  /**
+   * Extractor that matches Union and SequentialStreamingUnion for optimizer rules.
+   */
+  def unapply(plan: LogicalPlan): Option[UnionBase] = plan match {
+    case u: Union => Some(u)
+    case u: SequentialStreamingUnion => Some(u)
+    case _ => None
+  }
+
+  /**
+   * Returns true if both unions are the same concrete type.
+   * Used during flattening to ensure Union and SequentialStreamingUnion are not merged.
+   */
+  def isSameType(u1: UnionBase, u2: UnionBase): Boolean = (u1, u2) match {
+    case (_: Union, _: Union) => true
+    case (_: SequentialStreamingUnion, _: SequentialStreamingUnion) => true
+    case _ => false
+  }
+
+  /**
+   * Extracts byName flag from Union or SequentialStreamingUnion.
+   */
+  def byName(u: UnionBase): Boolean = u match {
+    case union: Union => union.byName
+    case ssu: SequentialStreamingUnion => ssu.byName
+  }
+
+  /**
+   * Extracts allowMissingCol flag from Union or SequentialStreamingUnion.
+   */
+  def allowMissingCol(u: UnionBase): Boolean = u match {
+    case union: Union => union.allowMissingCol
+    case ssu: SequentialStreamingUnion => ssu.allowMissingCol
+  }
+
+  /**
+   * Creates a new union of the same type with the specified children.
+   * This is needed when the number of children may change (e.g., flattening) and we need
+   * to preserve the UnionBase return type rather than getting back LogicalPlan.
+   */
+  def withNewChildren(u: UnionBase, newChildren: Seq[LogicalPlan]): UnionBase = u match {
+    case union: Union => union.copy(children = newChildren)
+    case ssu: SequentialStreamingUnion => ssu.copy(children = newChildren)
+  }
+}
+
+/**
  * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * NOTE: Child ordering is NOT semantically significant. Children are processed in parallel
+ * and their order does not affect the result. This allows Union-specific optimizations to
+ * reorder children (e.g., for performance), unlike SequentialStreamingUnion where order matters.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -691,7 +747,10 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
+  override def output: Seq[Attribute] = {
+    val base = Join.computeOutput(joinType, left.output, right.output)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -772,6 +831,32 @@ case class Join(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
+
+  override def isStateful: Boolean = left.isStreaming && right.isStreaming
+}
+
+/**
+ * A logical plan that combines the columns of two DataFrames that derive from the same
+ * base plan through chains of Project nodes. This node is always unresolved and must be
+ * rewritten by [[ResolveZip]] into a chain of Project nodes over the shared base plan
+ * during analysis. If the two children do not share the same base plan (after stripping
+ * outer Projects), or if either side contains a non-scalar Python UDF, analysis will fail
+ * with ZIP_PLANS_NOT_MERGEABLE.
+ */
+case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def maxRows: Option[Long] = left.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = left.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
+
+  // Always unresolved -- must be rewritten by ResolveZip during analysis.
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -886,8 +971,7 @@ object View {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan,
-    forPipeSQL: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -1169,7 +1253,10 @@ case class Aggregate(
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = {
+    val base = aggregateExpressions.map(_.toAttribute)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
@@ -1188,6 +1275,8 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
@@ -1365,13 +1454,64 @@ object Expand {
       }
     }
 
+    val taggedChildOutput =
+      if (SQLConf.get.getConf(SQLConf.EXPAND_TAG_PASSTHROUGH_DUPLICATES_ENABLED)) {
+        tagPassthroughDuplicates(childOutput, groupByAliases)
+      } else {
+        childOutput
+      }
+
     val output = if (hasDuplicateGroupingSets) {
       val gpos = AttributeReference("_gen_grouping_pos", IntegerType, false)()
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid :+ gpos
     } else {
-      childOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
+      taggedChildOutput ++ groupByAttrs.map(_.newInstance()) :+ gid
     }
     Expand(projections, output, Project(childOutput ++ groupByAliases, child))
+  }
+
+  /**
+   * Tags child output attributes that will be duplicated in the Expand output with
+   * `__is_duplicate` metadata.
+   *
+   * When a `groupByAlias` wraps a simple attribute (e.g., `Alias(c1#0, "c1")`), the
+   * Expand output contains both the pass-through child attribute (`c1#0`) and a new
+   * grouping instance created via `newInstance()` (e.g., `c1#5`). Both share the same
+   * name, which causes `AMBIGUOUS_REFERENCE` errors during name-based resolution.
+   *
+   * By tagging the pass-through copy with `__is_duplicate`,
+   * `AttributeSeq.getCandidatesForResolution` filters it out when multiple candidates
+   * match by name, allowing the produced grouping attribute to be resolved instead.
+   * ExprId-based resolution (used for already-resolved expressions like aggregate
+   * functions) is unaffected by this metadata.
+   *
+   * Only child attributes whose ExprId matches a `groupByAlias` child that is a simple
+   * `Attribute` are tagged. Complex grouping expressions (e.g., `c1 + 1`) produce
+   * aliases with different names than any child column, so no name conflict arises.
+   */
+  private def tagPassthroughDuplicates(
+      childOutput: Seq[Attribute],
+      groupByAliases: Seq[Alias]): Seq[Attribute] = {
+    val duplicatedExprIds = new java.util.HashSet[ExprId](groupByAliases.size)
+    groupByAliases.foreach {
+      case Alias(attr: Attribute, _) => duplicatedExprIds.add(attr.exprId)
+      case _ =>
+    }
+
+    if (!duplicatedExprIds.isEmpty) {
+      childOutput.map { attr =>
+        if (duplicatedExprIds.contains(attr.exprId)) {
+          attr.withMetadata(new MetadataBuilder()
+            .withMetadata(attr.metadata)
+            .putNull("__is_duplicate")
+            .build())
+        } else {
+          attr
+        }
+      }
+    } else {
+      childOutput
+    }
   }
 }
 
@@ -1596,6 +1736,112 @@ case class Unpivot(
 }
 
 /**
+ * Optional user-supplied names for the three columns appended by [[BinBy]]. A `None` falls back
+ * to the default name (`bin_start`, `bin_end`, `bin_distribute_ratio`) when the output schema is
+ * constructed during analysis.
+ */
+case class BinByOutputAliases(
+    binStart: Option[String] = None,
+    binEnd: Option[String] = None,
+    binRatio: Option[String] = None) {
+  def effectiveBinStart: String = binStart.getOrElse("bin_start")
+  def effectiveBinEnd: String = binEnd.getOrElse("bin_end")
+  def effectiveBinRatio: String = binRatio.getOrElse("bin_distribute_ratio")
+}
+
+object BinByOutputAliases {
+  val empty: BinByOutputAliases = BinByOutputAliases()
+}
+
+/**
+ * Unresolved counterpart of [[BinBy]] produced by the parser. `ResolveBinBy` enforces type and
+ * foldability constraints and rewrites this into a resolved [[BinBy]].
+ *
+ * @param binWidthExpr       Bin-width expression (DAY-TIME INTERVAL).
+ * @param rangeStartCol      Reference to the row's measurement-window start column.
+ * @param rangeEndCol        Reference to the row's measurement-window end column.
+ * @param originExpr         Optional alignment anchor expression (`ALIGN TO` clause). `None`
+ *                           when the clause is omitted; `ResolveBinBy` defaults the resolved
+ *                           plan's origin to `1970-01-01 00:00:00`.
+ * @param distributeColumns  Columns whose values are proportionally redistributed across sub-rows.
+ * @param outputAliases      Optional renames for the three appended output columns.
+ * @param child              Input relation.
+ */
+case class UnresolvedBinBy(
+    binWidthExpr: Expression,
+    rangeStartCol: Expression,
+    rangeEndCol: Expression,
+    originExpr: Option[Expression],
+    distributeColumns: Seq[Expression],
+    outputAliases: BinByOutputAliases,
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedBinBy =
+    copy(child = newChild)
+}
+
+/**
+ * Aligns range-typed rows to fixed-width bin boundaries by splitting any row whose
+ * `[range_start, range_end)` crosses a boundary and proportionally redistributing values in
+ * `distributeColumns` across the resulting sub-ranges. Emits one or more output rows per input row
+ * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
+ *
+ * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`.
+ * For `TIMESTAMP` (LTZ) inputs the boundary arithmetic uses civil-time in the session zone for
+ * multi-day bins; sub-day LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
+ *
+ * @param binWidthMicros      Bin width in microseconds: the folded value of the day-time interval
+ *                            `BIN WIDTH` expression. Always positive.
+ * @param rangeStart          Resolved attribute holding each row's window-start timestamp.
+ * @param rangeEnd            Resolved attribute holding each row's window-end timestamp.
+ * @param originMicros        Alignment anchor in microseconds since the epoch: the folded value of
+ *                            `ALIGN TO`, or the type-specific default when the clause is omitted.
+ * @param distributeColumns   Resolved columns to proportionally redistribute.
+ * @param appendedAttributes  The three output attributes appended after `child.output`.
+ * @param child               Input relation.
+ * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
+ *                            Required when `rangeStart.dataType` is `TimestampType`; must be
+ *                            `None` when it is `TimestampNTZType`.
+ */
+case class BinBy(
+    binWidthMicros: Long,
+    rangeStart: Attribute,
+    rangeEnd: Attribute,
+    originMicros: Long,
+    distributeColumns: Seq[Attribute],
+    appendedAttributes: Seq[Attribute],
+    child: LogicalPlan,
+    timeZoneId: Option[String])
+  extends UnaryNode {
+
+  if (timeZoneId.isDefined != rangeStart.dataType.isInstanceOf[TimestampType]) {
+    throw SparkException.internalError(
+      s"timeZoneId must be set iff rangeStart is TIMESTAMP (LTZ); got rangeStart.dataType=" +
+        s"${rangeStart.dataType}, timeZoneId=$timeZoneId")
+  }
+
+  override def output: Seq[Attribute] = child.output ++ appendedAttributes
+
+  override def producedAttributes: AttributeSet = AttributeSet(appendedAttributes)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
+    copy(child = newChild)
+}
+
+object BinBy {
+  def appendedAttributesWithAliases(
+      rangeType: DataType,
+      aliases: BinByOutputAliases): Seq[Attribute] = Seq(
+    AttributeReference(aliases.effectiveBinStart, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinEnd, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinRatio, DoubleType, nullable = true)())
+}
+
+/**
  * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
@@ -1640,7 +1886,10 @@ object Limit {
  * order.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -1652,6 +1901,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -1757,11 +2008,15 @@ case class SubqueryAlias(
   }
 
   override def metadataOutput: Seq[Attribute] = {
-    // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
-    if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
+    val canPropagate = if (conf.getConf(SQLConf.SUBQUERY_ALIAS_ALWAYS_PROPAGATE_METADATA_COLUMNS)) {
+      true
+    } else {
+      // Legacy behavior: only propagate metadata columns if child is a LeafNode or SubqueryAlias.
+      child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]
+    }
+    if (canPropagate) {
       val qualifierList = identifier.qualifier :+ alias
-      val nonHiddenMetadataOutput = child.metadataOutput.filter(!_.qualifiedAccessOnly)
-      nonHiddenMetadataOutput.map(_.withQualifier(qualifierList))
+      child.metadataOutput.filter(!_.qualifiedAccessOnly).map(_.withQualifier(qualifierList))
     } else {
       Nil
     }
@@ -1802,6 +2057,40 @@ object SubqueryAlias {
   }
 }
 
+sealed trait SampleMethod extends Serializable
+object SampleMethod {
+  /** Row-level sampling (BERNOULLI). Each row independently selected. No I/O savings. */
+  case object Bernoulli extends SampleMethod
+  /** System-level sampling (SYSTEM). Entire partitions/splits included or skipped. */
+  case object System extends SampleMethod
+}
+
+object Sample {
+  /**
+   * Convenience constructor that wraps a concrete seed in [[Some]].
+   * Use the case-class constructor directly with [[None]] when no seed
+   * was specified and a random seed should be generated at execution time.
+   */
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child)
+  }
+
+  def apply(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      child: LogicalPlan,
+      sampleMethod: SampleMethod): Sample = {
+    new Sample(lowerBound, upperBound, withReplacement, Some(seed), child, sampleMethod)
+  }
+}
+
 /**
  * Sample the dataset.
  *
@@ -1809,15 +2098,19 @@ object SubqueryAlias {
  * @param upperBound Upper-bound of the sampling probability. The expected fraction sampled
  *                   will be ub - lb.
  * @param withReplacement Whether to sample with replacement.
- * @param seed the random seed
+ * @param seed the random seed. `Some(seed)` when the user explicitly specified a seed
+ *             (SQL `REPEATABLE` clause or programmatic API), `None` when no seed was
+ *             specified and a random seed should be generated at execution time.
  * @param child the LogicalPlan
+ * @param sampleMethod the sampling method (Bernoulli or System)
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
-    seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    seed: Option[Long],
+    child: LogicalPlan,
+    sampleMethod: SampleMethod = SampleMethod.Bernoulli) extends UnaryNode {
 
   val eps = RandomSampler.roundingEpsilon
   val fraction = upperBound - lowerBound
@@ -1851,10 +2144,16 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
+  // Distinct is rewritten to Aggregate by ReplaceDistinctWithAggregate, hence potentially
+  // stateful (same criteria as Aggregate).
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -2013,26 +2312,68 @@ case class OneRowRelation() extends LeafNode {
   }
 }
 
+/**
+ * How the deduplication keys are specified: either an explicit set of column names
+ * ([[DeduplicateKeyColumns]]) or all of the child's columns ([[DeduplicateAllColumnsAsKey]]).
+ */
+sealed trait DeduplicateKeySpec
+case class DeduplicateKeyColumns(colNames: Seq[String]) extends DeduplicateKeySpec
+case object DeduplicateAllColumnsAsKey extends DeduplicateKeySpec
+
+/**
+ * The original recipe behind a [[Deduplicate]] / [[DeduplicateWithinWatermark]] node, set by the
+ * `ResolveDeduplicate` analyzer rule and retained so a streaming query can recompute its key
+ * attributes at query start in the ordering pinned in the offset log (see
+ * `ResolveDeduplicate.computeKeys`). A `None` spec on a node means it was not built from
+ * `dropDuplicates*` (e.g. an internally/test-constructed node) and its keys must NOT be recomputed.
+ *
+ * @param keySpec which columns form the deduplication key.
+ * @param viaSparkClassic whether this was built via Spark Classic (`Dataset.dropDuplicates*`, true)
+ *   or Spark Connect (`transformDeduplicate`, false). Only consulted when recomputing the keys in
+ *   the legacy order, where the two engines historically differed. See SPARK-57489.
+ */
+case class DeduplicateSpec(
+    keySpec: DeduplicateKeySpec,
+    viaSparkClassic: Boolean)
+
 /** A logical plan for `dropDuplicates`. */
 case class Deduplicate(
     keys: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
-case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+case class DeduplicateWithinWatermark(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
   // Ensure that references include event time columns so they are not pruned away.
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
 /**

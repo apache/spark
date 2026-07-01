@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.classic.{RuntimeConfig, SparkSession}
-import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.common.RunState.{COMPLETED, RUNNING}
@@ -39,7 +39,9 @@ class PipelineEventSenderSuite extends SparkDeclarativePipelinesServerTest with 
     val mockObserver = mock[StreamObserver[ExecutePlanResponse]]
     val mockSessionHolder = mock[SessionHolder]
     when(mockSessionHolder.sessionId).thenReturn("test-session-id")
+    when(mockSessionHolder.userId).thenReturn("test-user-id")
     when(mockSessionHolder.serverSessionId).thenReturn("test-server-session-id")
+    when(mockSessionHolder.key).thenReturn(SessionKey("test-user-id", "test-session-id"))
     val mockSession = mock[SparkSession]
     val mockConf = mock[RuntimeConfig]
     when(mockSessionHolder.session).thenReturn(mockSession)

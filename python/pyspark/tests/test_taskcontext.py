@@ -16,6 +16,7 @@
 #
 import os
 import random
+import socketserver
 import stat
 import sys
 import tempfile
@@ -168,8 +169,8 @@ class TaskContextTests(PySparkTestCase):
             .map(lambda x: BarrierTaskContext.get().getTaskInfos())
             .collect()
         )
-        self.assertTrue(len(taskInfos) == 4)
-        self.assertTrue(len(taskInfos[0]) == 4)
+        self.assertEqual(len(taskInfos), 4)
+        self.assertEqual(len(taskInfos[0]), 4)
 
     def test_context_get(self):
         """
@@ -213,6 +214,20 @@ class TaskContextTests(PySparkTestCase):
         # for barrier stage
         result2 = rdd.barrier().mapPartitions(f).collect()
         self.assertTrue(result2 == [0, 1, 2, 3])
+
+
+@unittest.skipUnless(
+    hasattr(socketserver, "UnixStreamServer"),
+    "Unix Domain Socket is not supported on this platform.",
+)
+class TaskContextUDSTests(TaskContextTests):
+    def setUp(self):
+        self._old_sys_path = list(sys.path)
+        class_name = self.__class__.__name__
+        # Enable Unix Domain Socket for the test
+        conf = SparkConf().set("spark.python.unix.domain.socket.enabled", "true")
+        # Allow retries even though they are normally disabled in local mode
+        self.sc = SparkContext("local[4, 2]", class_name, conf=conf)
 
 
 class TaskContextTestsWithWorkerReuse(unittest.TestCase):

@@ -948,10 +948,10 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 DROP VIEW t1
 -- !query analysis
-DropTempViewCommand t1
+DropTempViewCommand t1, false
 
 
 -- !query
 DROP VIEW t2
 -- !query analysis
-DropTempViewCommand t2
+DropTempViewCommand t2, false

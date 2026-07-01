@@ -196,6 +196,9 @@ trait ReadOnlySparkConf {
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)]
 
+  /** Get all parameters as a Java-friendly map */
+  def getAllAsJavaMap: JMap[String, String] = getAll.toMap.asJava
+
   /**
    * Get a parameter as an integer, falling back to a default if not set
    *

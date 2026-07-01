@@ -66,7 +66,7 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
-class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
+class ExpressionsSchemaSuite extends SharedSparkSession {
 
   private val baseResourcePath = {
     // We use a path based on Spark home for 2 reasons:

@@ -19,7 +19,12 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{RelationResolution, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{
+  AnalysisHelper,
+  LogicalPlan,
+  SubqueryAlias,
+  UnresolvedWith
+}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{UNRESOLVED_RELATION, UNRESOLVED_WITH}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -58,22 +63,28 @@ class MetadataResolver(
    * extensions.
    */
   override def resolve(unresolvedPlan: LogicalPlan): Unit = {
+    handleAllUnresolvedRelations(unresolvedPlan)
+  }
+
+  /**
+   * Traverse the `unresolvedPlan` and handle all the [[UnresolvedRelation]]s.
+   *
+   * [[UnresolvedWith]]s are matched explicitly, because they don't expose their CTE definitions
+   * as children.
+   */
+  private def handleAllUnresolvedRelations(unresolvedPlan: LogicalPlan): Unit = {
     AnalysisHelper.allowInvokingTransformsInAnalyzer {
       unresolvedPlan.transformDownWithSubqueriesAndPruning(
         _.containsAnyPattern(UNRESOLVED_RELATION, UNRESOLVED_WITH)
       ) {
         case unresolvedRelation: UnresolvedRelation =>
-          tryResolveRelation(
-            unresolvedRelation = unresolvedRelation
-          )
+          tryResolveRelation(unresolvedRelation)
 
           unresolvedRelation
 
         case unresolvedWith: UnresolvedWith =>
           for (cteRelation <- unresolvedWith.cteRelations) {
-            resolve(
-              unresolvedPlan = cteRelation._2
-            )
+            handleAllUnresolvedRelations(cteRelation._2)
           }
 
           unresolvedWith
@@ -85,33 +96,29 @@ class MetadataResolver(
     val relationId = relationIdFromUnresolvedRelation(unresolvedRelation)
 
     if (!relationsWithResolvedMetadata.containsKey(relationId)) {
-      resolveRelation(unresolvedRelation) match {
-        case relationAfterDefaultResolution =>
-          val relationAfterExtensionResolution = tryDelegateResolutionToExtension(
-            relationAfterDefaultResolution
-          )
+      val relationAfterDefaultResolution = resolveRelation(unresolvedRelation)
 
-          relationAfterExtensionResolution.getOrElse(relationAfterDefaultResolution) match {
-            case _: UnresolvedRelation =>
-            case relationWithResolvedMetadata =>
-              relationsWithResolvedMetadata.put(
-                relationId,
-                relationWithResolvedMetadata
-              )
-          }
+      val relationAfterExtensionResolution = tryDelegateResolutionToExtension(
+        relationAfterDefaultResolution
+      )
+
+      relationAfterExtensionResolution.getOrElse(relationAfterDefaultResolution) match {
+        case _: UnresolvedRelation =>
+        case relationWithResolvedMetadata =>
+          relationsWithResolvedMetadata.put(
+            relationId,
+            relationWithResolvedMetadata
+          )
       }
     }
   }
-
   /**
    * Resolves the metadata for the given unresolved relation and returns a relation with the
    * resolved metadata. This method is blocking.
    */
   private def resolveRelation(unresolvedRelation: UnresolvedRelation): LogicalPlan = {
     relationResolution
-      .resolveRelation(
-        u = unresolvedRelation
-      )
+      .resolveRelation(unresolvedRelation)
       .getOrElse(unresolvedRelation)
   }
 

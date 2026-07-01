@@ -57,7 +57,7 @@ class CustomAccessor:
         return self.item
 
     def check_length(self, col=None):
-        if type(self.obj) == ps.DataFrame or col is not None:
+        if isinstance(self.obj, ps.DataFrame) or col is not None:
             return len(self.obj[col])
         else:
             try:

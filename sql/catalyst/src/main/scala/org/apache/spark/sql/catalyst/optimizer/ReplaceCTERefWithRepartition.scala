@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -66,7 +67,10 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       replaceWithRepartition(child, cteMap)
 
     case ref: CTERelationRef =>
-      val cteDefPlan = cteMap(ref.cteId)
+      val cteDefPlan = cteMap.getOrElse(ref.cteId,
+        throw SparkException.internalError(
+          s"No CTERelationDef found for CTERelationRef(cteId=${ref.cteId})."))
+
       if (ref.outputSet == cteDefPlan.outputSet) {
         cteDefPlan
       } else {

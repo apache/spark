@@ -46,7 +46,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.HiveTestJars
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
@@ -240,6 +240,31 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
           "SELECT CAST('2011-01-01' as date) FROM test_date LIMIT 1")
         resultSet.next()
         resultSet.getDate(1)
+      }
+    }
+  }
+
+  test("SPARK-57463: nanosecond-precision timestamp types over JDBC") {
+    withJdbcStatement() { statement =>
+      statement.execute("SET spark.sql.timestampNanosTypes.enabled=true")
+      // Fix the session zone so the LTZ wall-clock value is deterministic.
+      statement.execute("SET spark.sql.session.timeZone=UTC")
+
+      // The cast truncates the 9-digit fraction to the column precision (SPARK-57256), matching
+      // the cast-to-string / HiveResult rendering.
+      val expectedFractions = Map(7 -> ".1234567", 8 -> ".12345678", 9 -> ".123456789")
+      val base = "2019-07-22 18:14:00"
+      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+        for (p <- 7 to 9) {
+          val resultSet = statement.executeQuery(
+            s"SELECT CAST('$base.123456789' AS $typeName($p))")
+          assert(resultSet.next())
+          assert(resultSet.getString(1) === s"$base${expectedFractions(p)}")
+          val metaData = resultSet.getMetaData
+          // The nanosecond timestamp column is mapped to STRING_TYPE in the Thrift server.
+          assert(metaData.getColumnTypeName(1) === "string")
+          assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
+        }
       }
     }
   }
@@ -564,11 +589,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
   }
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
-    val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-    assume(new File(jarPath).exists)
     withJdbcStatement("test_udtf") { statement =>
       try {
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = TestUDTFJar.jar.toURI.toString
 
         Seq(
           s"ADD JAR $jarURL",
@@ -1001,9 +1024,7 @@ class SingleSessionSuite extends HiveThriftServer2TestBase {
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement("test_udtf")(
       { statement =>
-        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-        assume(new File(jarPath).exists)
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = TestUDTFJar.jar.toURI.toString
 
         // Configurations and temporary functions added in this session should be visible to all
         // the other sessions.

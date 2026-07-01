@@ -20,8 +20,9 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin
+from pyspark.pandas.tests.groupby.test_stat import GroupbyStatTestingFuncMixin, using_pandas3
 
 
 class ProdTestsMixin(GroupbyStatTestingFuncMixin):
@@ -64,6 +65,13 @@ class ProdTestsMixin(GroupbyStatTestingFuncMixin):
                 psdf.groupby("A").prod(min_count=n).sort_index(),
                 almost=True,
             )
+            if LooseVersion(pd.__version__) >= "3.0.0":
+                # pandas < 3 raises an error when numeric_only is False or None
+                self._test_stat_func(
+                    lambda groupby_obj: groupby_obj.prod(numeric_only=None, min_count=n),
+                    check_exact=False,
+                    expected_error=ValueError if using_pandas3 else None,
+                )
 
 
 class ProdTests(

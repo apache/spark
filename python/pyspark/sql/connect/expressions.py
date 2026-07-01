@@ -14,10 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies(__name__)
-
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -108,8 +104,7 @@ class Expression:
 
     def to_plan(  # type: ignore[empty-body]
         self, session: "SparkConnectClient"
-    ) -> "proto.Expression":
-        ...
+    ) -> "proto.Expression": ...
 
     def __repr__(self) -> str:  # type: ignore[empty-body]
         ...
@@ -298,11 +293,8 @@ class LiteralExpression(Expression):
                 assert isinstance(value, (str, np.str_))
                 value = str(value)
             elif isinstance(dataType, DateType):
-                assert isinstance(value, (datetime.date, datetime.datetime))
-                if isinstance(value, datetime.date):
-                    value = DateType().toInternal(value)
-                else:
-                    value = DateType().toInternal(value.date())
+                assert isinstance(value, datetime.date)
+                value = DateType().toInternal(value)
             elif isinstance(dataType, TimeType):
                 assert isinstance(value, datetime.time)
                 value = TimeType().toInternal(value)
@@ -1052,7 +1044,7 @@ class UnresolvedNamedLambdaVariable(Expression):
 
     @staticmethod
     def fresh_var_name(name: str) -> str:
-        assert isinstance(name, str) and str != ""
+        assert isinstance(name, str) and name != ""
 
         _id: Optional[int] = None
 

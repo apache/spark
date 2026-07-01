@@ -27,6 +27,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
 /**
@@ -192,6 +193,11 @@ class JSONOptions(
   val pretty: Boolean = parameters.get(PRETTY).map(_.toBoolean).getOrElse(false)
 
   /**
+   * Sorting JSON object keys alphabetically if the parameter is enabled.
+   */
+  val sortKeys: Boolean = parameters.get(SORT_KEYS).map(_.toBoolean).getOrElse(false)
+
+  /**
    * Enables inferring of TimestampType and TimestampNTZType from strings matched to the
    * corresponding timestamp pattern defined by the timestampFormat and timestampNTZFormat options
    * respectively.
@@ -208,6 +214,27 @@ class JSONOptions(
   // as a single VARIANT type column in the table with the given column name.
   // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
   val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  // This option takes in a field name and specifies that the input JSON files are object
+  // documents with a top-level array-valued field of that name, i.e.
+  // `{..., "<fieldName>": [element1, element2, ...], ...}`. Each element of the array becomes one
+  // row, stored as a single VARIANT type column. Anything outside the array is ignored. The
+  // elements are streamed out of the array one at a time, without ever buffering the whole
+  // document; the option intends to make ingestion of formats like AWS CloudTrail
+  // (`{"Records": [...]}`) more efficient.
+  // The inferred schema names the variant column after the array field; a user-specified schema
+  // may give the column any name. The file is always consumed as a whole document, so its line
+  // layout is irrelevant and line-based options such as `multiLine` and `lineSep` are ignored.
+  // Unlike the other JSON readers, which let Jackson auto-detect the charset of the byte stream,
+  // this reader decodes the file to characters itself and so reads it as UTF-8 unless the
+  // `encoding` option specifies another charset.
+  // Similar to `singleVariantColumn`; the two options are mutually exclusive.
+  val explodeEmbeddedArray: Option[String] = parameters.get(EXPLODE_EMBEDDED_ARRAY)
+
+  if (explodeEmbeddedArray.isDefined && singleVariantColumn.isDefined) {
+    throw QueryCompilationErrors.explodeEmbeddedArrayConflictingOption(
+      DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  }
 
   val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
     SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
@@ -303,11 +330,13 @@ object JSONOptions extends DataSourceOptions {
   val MULTI_LINE = newOption("multiLine")
   val LINE_SEP = newOption("lineSep")
   val PRETTY = newOption("pretty")
+  val SORT_KEYS = newOption("sortKeys")
   val INFER_TIMESTAMP = newOption("inferTimestamp")
   val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+  val EXPLODE_EMBEDDED_ARRAY = newOption(DataSourceOptions.EXPLODE_EMBEDDED_ARRAY)
   val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"

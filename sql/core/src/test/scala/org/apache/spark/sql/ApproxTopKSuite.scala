@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, TimestampNTZType, TimestampType}
 
 
-class ApproxTopKSuite extends QueryTest with SharedSparkSession {
+class ApproxTopKSuite extends SharedSparkSession {
 
   val itemsWithTopK: Seq[(String, Seq[Row])] = Seq(
     ("0, 0, 1, 1, 2, 3, 4, 4",

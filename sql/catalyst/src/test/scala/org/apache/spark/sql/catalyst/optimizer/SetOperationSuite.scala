@@ -413,4 +413,157 @@ class SetOperationSuite extends PlanTest {
         optimizedRelation4, optimizedRelation5))).select($"a").analyze)
 
   }
+
+  // SequentialStreamingUnion optimizer tests verify that CombineUnions correctly flattens
+  // nested SequentialStreamingUnions and applies other union optimizations while preserving
+  // child ordering. Flattening is an optimization, not a strict requirement - these tests
+  // verify the optimizer's expected behavior.
+
+  test("SequentialStreamingUnion: combine nested unions into one") {
+    // Mark relations as streaming for SequentialStreamingUnion
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion1 = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val seqUnion2 = SequentialStreamingUnion(
+      streamRel1, SequentialStreamingUnion(streamRel2, streamRel3))
+    val optimized1 = Optimize.execute(seqUnion1.analyze)
+    val optimized2 = Optimize.execute(seqUnion2.analyze)
+
+    // Both should flatten to the same 3-child SequentialStreamingUnion
+    val expected = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    comparePlans(optimized1, expected.analyze)
+    comparePlans(optimized2, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten nested unions under Distinct") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val distinctSeqUnion = Distinct(seqUnion)
+    val optimized = Optimize.execute(distinctSeqUnion.analyze)
+
+    val expected = Distinct(SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: flatten nested unions under Deduplicate") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation2.copy(isStreaming = true)
+    val streamRel3 = testRelation3.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(
+      SequentialStreamingUnion(streamRel1, streamRel2), streamRel3)
+    val deduped = seqUnion.deduplicate($"a", $"b", $"c")
+    val optimized = Optimize.execute(deduped.analyze)
+
+    val expected = Deduplicate(
+      Seq($"a", $"b", $"c"),
+      SequentialStreamingUnion(
+        Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false))
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: project to each side") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val streamRel3 = testRelation.copy(isStreaming = true)
+
+    // Create union first, then project on top (like Union test at line 73)
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+    val seqUnionQuery = seqUnion.select($"a")
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    // Should push projection down to each child
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select($"a") ::
+        streamRel2.select($"a") ::
+        streamRel3.select($"a") :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: expressions in project list are pushed down") {
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val seqUnionQuery = seqUnion.select(($"a" + $"b").as("ab"))
+    val seqUnionOptimized = Optimize.execute(seqUnionQuery.analyze)
+
+    val seqUnionCorrectAnswer =
+      SequentialStreamingUnion(
+        streamRel1.select(($"a" + $"b").as("ab")) ::
+        streamRel2.select(($"a" + $"b").as("ab")) :: Nil,
+        byName = false, allowMissingCol = false).analyze
+    comparePlans(seqUnionOptimized, seqUnionCorrectAnswer)
+  }
+
+  test("SequentialStreamingUnion: do not merge with regular Union") {
+    // Use the same base relation but mark instances as streaming or non-streaming
+    val streamRel1 = testRelation.copy(isStreaming = true)
+    val streamRel2 = testRelation.copy(isStreaming = true)
+    val batchRel1 = testRelation.copy(isStreaming = false)
+    val batchRel2 = testRelation.copy(isStreaming = false)
+
+    // Ensure SequentialStreamingUnion and regular Union don't flatten into each other
+    val seqUnion = SequentialStreamingUnion(streamRel1, streamRel2)
+    val batchUnion = Union(batchRel1, batchRel2)
+
+    // Create a query with both types of unions - they should remain separate
+    val combined = seqUnion.select($"a").union(batchUnion.select($"a"))
+    val optimized = Optimize.execute(combined.analyze)
+
+    // The SequentialStreamingUnion should push projections to its children
+    // and stay as a SequentialStreamingUnion. The regular Union's children
+    // will be flattened into the outer Union, but importantly, the
+    // SequentialStreamingUnion children should NOT be merged with batch children
+    val expectedSeqUnion = SequentialStreamingUnion(
+      streamRel1.select($"a") :: streamRel2.select($"a") :: Nil,
+      byName = false, allowMissingCol = false)
+    // The batch union gets flattened - its children become direct children of outer Union
+    // The optimizer adds aliases to maintain proper attribute references
+    val expected = Union(
+      expectedSeqUnion ::
+      batchRel1.select($"a".as("a")) ::
+      batchRel2.select($"a".as("a")) :: Nil,
+      byName = false, allowMissingCol = false)
+
+    comparePlans(optimized, expected.analyze)
+  }
+
+  test("SequentialStreamingUnion: optimizer preserves child ordering") {
+    // Create distinct streaming relations with different outputs to verify ordering
+    val streamRel1 = LocalRelation($"a".int, $"b".int).copy(isStreaming = true)
+    val streamRel2 = LocalRelation($"c".int, $"d".int).copy(isStreaming = true)
+    val streamRel3 = LocalRelation($"e".int, $"f".int).copy(isStreaming = true)
+
+    // Create SequentialStreamingUnion with a specific order
+    val seqUnion = SequentialStreamingUnion(
+      Seq(streamRel1, streamRel2, streamRel3), byName = false, allowMissingCol = false)
+
+    // Apply various optimizer rules by running full optimization
+    val optimized = Optimize.execute(seqUnion.analyze)
+
+    // Extract the children from the optimized plan
+    val optimizedUnion = optimized.asInstanceOf[SequentialStreamingUnion]
+
+    // Verify the children are in the exact same order
+    assert(optimizedUnion.children.length == 3, "Should have 3 children")
+    assert(optimizedUnion.children(0).output.map(_.name) == Seq("a", "b"),
+      "First child should be streamRel1 with columns a, b")
+    assert(optimizedUnion.children(1).output.map(_.name) == Seq("c", "d"),
+      "Second child should be streamRel2 with columns c, d")
+    assert(optimizedUnion.children(2).output.map(_.name) == Seq("e", "f"),
+      "Third child should be streamRel3 with columns e, f")
+  }
 }

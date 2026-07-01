@@ -263,6 +263,16 @@ class UnivocityParser(
         timestampNTZFormatter.parseWithoutTimeZone(datum, false)
       }
 
+    case t: TimestampNTZNanosType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZoneNanos(datum, t.precision, false)
+      }
+
+    case t: TimestampLTZNanosType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampFormatter.parseNanos(datum, t.precision)
+      }
+
     case _: TimeType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         timeFormatter.parse(datum)
@@ -314,19 +324,8 @@ class UnivocityParser(
     }
   }
 
-  private def parseLine(line: String): Array[String] = {
-    try {
-      tokenizer.parseLine(line)
-    }
-    catch {
-      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
-        throw new SparkRuntimeException(
-          errorClass = "MALFORMED_CSV_RECORD",
-          messageParameters = Map("badRecord" -> line),
-          cause = e
-        )
-    }
-  }
+  private def parseLine(line: String): Array[String] =
+    UnivocityParser.parseLine(tokenizer, line)
 
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
@@ -496,17 +495,24 @@ class UnivocityParser(
       def parseDecimal(): DataType = {
         try {
           var d = decimalParser(s)
-          if (d.scale() < 0) {
-            d = d.setScale(0)
-          }
-          if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-            d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-            builder.appendDecimal(d)
-            // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
-            // possible decimal type to store the value.
-            DecimalType.USER_DEFAULT
-          } else {
+          if (d.scale() < -VariantUtil.MAX_DECIMAL16_PRECISION) {
+            // Scale is so extremely negative that setScale(0) would require computing
+            // bigTenToThe(|scale|), which is prohibitively expensive. The resulting precision
+            // would also exceed MAX_DECIMAL16_PRECISION, so fall through to string.
             if (options.preferDate) parseDate() else parseTimestampNTZ()
+          } else {
+            if (d.scale() < 0) {
+              d = d.setScale(0)
+            }
+            if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+              d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+              builder.appendDecimal(d)
+              // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
+              // possible decimal type to store the value.
+              DecimalType.USER_DEFAULT
+            } else {
+              if (options.preferDate) parseDate() else parseTimestampNTZ()
+            }
           }
         } catch {
           case NonFatal(_) =>
@@ -627,7 +633,19 @@ private[sql] object UnivocityParser {
     // We can handle header here since here the stream is open.
     handleHeader()
 
-    private var nextRecord = tokenizer.parseNext()
+    // The bad-record text is not available here, so use the bounded parsed content when present.
+    private def parseNextRecord(): Array[String] = {
+      try {
+        tokenizer.parseNext()
+      } catch {
+        case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+          throw malformedCsvRecord(e, Option(e.getParsedContent).getOrElse(""))
+        case e: ArrayIndexOutOfBoundsException =>
+          throw malformedCsvRecord(e, "")
+      }
+    }
+
+    private var nextRecord = parseNextRecord()
 
     override def hasNext: Boolean = nextRecord != null
 
@@ -636,8 +654,42 @@ private[sql] object UnivocityParser {
         throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord)
-      nextRecord = tokenizer.parseNext()
+      nextRecord = parseNextRecord()
       curRecord
+    }
+  }
+
+  /**
+   * Builds a MALFORMED_CSV_RECORD error from a Univocity malformed-record failure. The bad record
+   * is bounded to CSVOptions.MAX_ERROR_CONTENT_LENGTH so an oversized value cannot produce a huge
+   * error message (SPARK-28431).
+   */
+  private[csv] def malformedCsvRecord(
+      cause: Throwable, badRecord: String): SparkRuntimeException = {
+    val boundedRecord = if (badRecord.length > CSVOptions.MAX_ERROR_CONTENT_LENGTH) {
+      badRecord.take(CSVOptions.MAX_ERROR_CONTENT_LENGTH) + "..."
+    } else {
+      badRecord
+    }
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_CSV_RECORD",
+      messageParameters = Map("badRecord" -> boundedRecord),
+      cause = cause)
+  }
+
+  /**
+   * Parses a single CSV line, translating a Univocity malformed-record
+   * ArrayIndexOutOfBoundsException into MALFORMED_CSV_RECORD so the per-line and streaming paths
+   * fail consistently.
+   */
+  def parseLine(tokenizer: CsvParser, line: String): Array[String] = {
+    try {
+      tokenizer.parseLine(line)
+    } catch {
+      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        throw malformedCsvRecord(e, line)
+      case e: ArrayIndexOutOfBoundsException =>
+        throw malformedCsvRecord(e, line)
     }
   }
 

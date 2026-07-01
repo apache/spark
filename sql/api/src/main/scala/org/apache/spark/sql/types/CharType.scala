@@ -39,10 +39,10 @@ case class CharType private[sql] (length: Int, collation: Option[Int])
 
   override def defaultSize: Int = length
   override def typeName: String =
-    if (isUTF8BinaryCollation) s"char($length)"
+    if (collation.isEmpty) s"char($length)"
     else s"char($length) collate $collationName"
   override def toString: String =
-    if (isUTF8BinaryCollation) s"CharType($length)"
+    if (collation.isEmpty) s"CharType($length)"
     else s"CharType($length, $collationName)"
   private[spark] override def asNullable: CharType = this
 

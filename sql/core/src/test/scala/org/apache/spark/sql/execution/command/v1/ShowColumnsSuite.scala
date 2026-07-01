@@ -41,7 +41,7 @@ trait ShowColumnsSuiteBase extends command.ShowColumnsSuiteBase {
         condition = "REQUIRES_SINGLE_PART_NAMESPACE",
         parameters = Map(
           "sessionCatalog" -> catalog,
-          "namespace" -> "`a`.`b`.`c`"
+          "identifier" -> "`a`.`b`.`c`.`tbl`"
         )
       )
     }

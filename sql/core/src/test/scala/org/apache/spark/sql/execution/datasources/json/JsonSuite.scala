@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
@@ -39,6 +39,8 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.GZIP
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.ExternalRDD
@@ -59,8 +61,7 @@ class TestFileFilter extends PathFilter {
 }
 
 abstract class JsonSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestJsonData
   with CommonFileDataSourceSuite {
 
@@ -1252,7 +1253,7 @@ abstract class JsonSuite
         StructField("f4", ArrayType(StringType), nullable = true) ::
         StructField("f5", IntegerType, true) :: Nil)
 
-      val rowRDD1 = unparsedStrings.map { r =>
+      val rowRDD1 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v5 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1275,7 +1276,7 @@ abstract class JsonSuite
           StructField("f12", BooleanType, false) :: Nil), false) ::
         StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-      val rowRDD2 = unparsedStrings.map { r =>
+      val rowRDD2 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -2980,6 +2981,99 @@ abstract class JsonSuite
     }
   }
 
+  test("SPARK-57456: read nanosecond timestamps via DataFrameReader.json(Dataset[String])") {
+    val ds = Seq("""{"ts": "2020-01-01T00:00:00.123456789"}""").toDS()
+    // CORRECTED overrides the LEGACY policy set by the inherited JsonLegacyTimeParserSuite (which
+    // would reject nanos). UTC fixes the LTZ expected value.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
+        Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)).foreach { nanosType =>
+          val readBack = spark.read.schema(new StructType().add("ts", nanosType)).json(ds)
+          val expected = nanosType match {
+            case _: TimestampNTZNanosType =>
+              Row(LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano))
+            case _: TimestampLTZNanosType =>
+              Row(LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC))
+          }
+          checkAnswer(readBack, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: Roundtrip in reading and writing nanosecond timestamps with custom schema") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED") {
+      foreachNanosPrecision { precision =>
+        // Text output needs a pattern carrying `precision` fractional-second digits.
+        val fracPat = "S" * precision
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempPath { path =>
+              val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+              val value: Any = nanosType match {
+                case _: TimestampNTZNanosType => wallClock
+                case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+              }
+              val df = spark.createDataFrame(
+                spark.sparkContext.parallelize(Seq(Row(value))),
+                new StructType().add("ts", nanosType))
+              val (fmtKey, fmtVal) = nanosType match {
+                case _: TimestampNTZNanosType =>
+                  ("timestampNTZFormat", s"yyyy-MM-dd'T'HH:mm:ss.$fracPat")
+                case _: TimestampLTZNanosType =>
+                  ("timestampFormat", s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX")
+              }
+              df.write.option(fmtKey, fmtVal).json(path.getAbsolutePath)
+              val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                .option(fmtKey, fmtVal).json(path.getAbsolutePath)
+              checkAnswer(readBack, df)
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: mixed microsecond and nanosecond timestamps in one schema") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "CORRECTED",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempPath { path =>
+        // One LTZ pair (micros + nanos) shares `timestampFormat`; one NTZ pair shares
+        // `timestampNTZFormat`. A single 9-S pattern per kind serves both precisions: the micros
+        // columns just get trailing-zero fractions.
+        val schema = new StructType()
+          .add("ltz_micros", TimestampType)
+          .add("ltz_nanos", TimestampLTZNanosType(9))
+          .add("ntz_micros", TimestampNTZType)
+          .add("ntz_nanos", TimestampNTZNanosType(9))
+        val row = Row(
+          LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000).toInstant(ZoneOffset.UTC),
+          LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789).toInstant(ZoneOffset.UTC),
+          LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000),
+          LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(Seq(row)), schema)
+        val ltzFmt = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"
+        val ntzFmt = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+        df.write
+          .option("timestampFormat", ltzFmt)
+          .option("timestampNTZFormat", ntzFmt)
+          .json(path.getAbsolutePath)
+        val readBack = spark.read.schema(schema)
+          .option("timestampFormat", ltzFmt)
+          .option("timestampNTZFormat", ntzFmt)
+          .json(path.getAbsolutePath)
+        checkAnswer(readBack, df)
+      }
+    }
+  }
+
   test("SPARK-37360: Timestamp type inference for a column with TIMESTAMP_NTZ values") {
     withTempPath { path =>
       val exp = spark.sql("""
@@ -3813,7 +3907,7 @@ abstract class JsonSuite
   }
 
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 31)
+    assert(JSONOptions.getAllOptions.size == 33)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3838,11 +3932,13 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("multiLine"))
     assert(JSONOptions.isValidOption("lineSep"))
     assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("sortKeys"))
     assert(JSONOptions.isValidOption("inferTimestamp"))
     assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(JSONOptions.isValidOption("timeZone"))
     assert(JSONOptions.isValidOption("writeNonAsciiCharacterAsCodePoint"))
     assert(JSONOptions.isValidOption("singleVariantColumn"))
+    assert(JSONOptions.isValidOption("explodeEmbeddedArray"))
     assert(JSONOptions.isValidOption("useUnsafeRow"))
     assert(JSONOptions.isValidOption("encoding"))
     assert(JSONOptions.isValidOption("charset"))
@@ -3850,6 +3946,21 @@ abstract class JsonSuite
     assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
     assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
     assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
+  }
+
+  test("SPARK-54878: write JSON with sortKeys option via datasource") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = spark.sql(
+          "SELECT named_struct('c', 3, 'a', 1, 'b', 2) as s")
+        df.write.option("sortKeys", "true").json(basePath)
+
+        val written = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(written.contains(""""a":1,"b":2,"c":3"""))
+      }
+    }
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {
@@ -4218,6 +4329,21 @@ abstract class JsonSuite
         val expectedOutput = createTestFiles(dir, fileFormatWriter, multiLine)
         val df = spark.read.options(options).json(dir.getCanonicalPath)
         checkAnswer(df, expectedOutput)
+      }
+    }
+  }
+
+  test("SPARK-57572: infer TimeType from JSON via spark.read.json") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val path = s"${dir.getCanonicalPath}/time_infer.json"
+        Seq("""{"time": "12:13:14"}""", """{"time": "23:59:59.123456"}""")
+          .toDF("value").coalesce(1).write.text(path)
+        val df = spark.read
+          .option("inferTimestamp", "true")
+          .json(path)
+        assert(df.schema("time").dataType === TimeType(TimeType.DEFAULT_PRECISION))
       }
     }
   }

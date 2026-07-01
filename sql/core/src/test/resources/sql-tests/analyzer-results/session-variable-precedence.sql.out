@@ -8,14 +8,14 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
 -- !query
 DECLARE all = 1
 -- !query analysis
-CreateVariable defaultvalueexpression(1, 1), false
+CreateVariable default(1, sql='1'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.all
 
 
 -- !query
 DECLARE a = 1
 -- !query analysis
-CreateVariable defaultvalueexpression(1, 1), false
+CreateVariable default(1, sql='1'), false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.a
 
 

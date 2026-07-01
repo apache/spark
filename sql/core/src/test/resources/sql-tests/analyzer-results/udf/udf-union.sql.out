@@ -185,28 +185,28 @@ Union false, false
 -- !query
 DROP VIEW IF EXISTS t1
 -- !query analysis
-DropTempViewCommand t1
+DropTempViewCommand t1, true
 
 
 -- !query
 DROP VIEW IF EXISTS t2
 -- !query analysis
-DropTempViewCommand t2
+DropTempViewCommand t2, true
 
 
 -- !query
 DROP VIEW IF EXISTS p1
 -- !query analysis
-DropTempViewCommand p1
+DropTempViewCommand p1, true
 
 
 -- !query
 DROP VIEW IF EXISTS p2
 -- !query analysis
-DropTempViewCommand p2
+DropTempViewCommand p2, true
 
 
 -- !query
 DROP VIEW IF EXISTS p3
 -- !query analysis
-DropTempViewCommand p3
+DropTempViewCommand p3, true

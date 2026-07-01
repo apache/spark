@@ -646,6 +646,16 @@ package object config {
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
+  private[spark] val STORAGE_SHUFFLE_MANAGER_INIT_WAITING_TIMEOUT =
+    ConfigBuilder("spark.storage.shuffleManager.initWaitingTimeout")
+      .doc("Maximum time to wait for the ShuffleManager to be initialized when receiving " +
+        "shuffle migration requests. If the ShuffleManager is not initialized within this " +
+        "timeout, the migration request will be rejected and the sender should retry.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Timeout should be positive.")
+      .createWithDefaultString("30s")
+
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
@@ -711,7 +721,11 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val CPUS_PER_TASK =
-    ConfigBuilder("spark.task.cpus").version("0.5.0").intConf.createWithDefault(1)
+    ConfigBuilder("spark.task.cpus")
+      .version("0.5.0")
+      .intConf
+      .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
+      .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
@@ -1767,6 +1781,21 @@ package object config {
       .intConf
       .createWithDefault(8)
 
+  // ---------------------------------------------------------------------------
+  // Streaming shuffle writer configs
+  // ---------------------------------------------------------------------------
+
+  private[spark] val STREAMING_SHUFFLE_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.streaming.checksum.enabled")
+      .doc("Whether to append a CRC32C checksum to each streaming shuffle data buffer. " +
+        "When enabled, the writer computes the checksum and embeds it in the DataMessage header; " +
+        "the reader recomputes and compares. A mismatch fails the task, providing early " +
+        "detection of data corruption in transit.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")
@@ -1936,6 +1965,21 @@ package object config {
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
       .createWithDefault(1024 * 1024)
 
+  private[spark] val UNSAFE_SORTER_SPILL_MERGE_FACTOR =
+    ConfigBuilder("spark.unsafe.sorter.spill.merge.factor")
+      .doc("Maximum number of spill files to merge simultaneously in UnsafeExternalSorter. " +
+        "When the number of spill files exceeds this value, a multi-round merge is performed " +
+        "to limit the number of concurrently open file readers and avoid OOM during sort-merge. " +
+        "A smaller value uses less memory but incurs more intermediate disk I/O. " +
+        "Set to -1 to disable bounded merging (legacy behavior).")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .internal()
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => v == -1 || v >= 2,
+        "The merge factor must be -1 (disabled) or at least 2.")
+      .createWithDefault(-1)
+
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
   private[spark] val PLUGINS =
@@ -2047,7 +2091,20 @@ package object config {
       .doc("If true, Spark master tries to use Java 21 virtual thread for REST API.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
+
+  private[spark] val MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS =
+    ConfigBuilder("spark.master.rest.allowedAppResourcePatterns")
+      .doc("Comma-separated list of regular expressions matched against the application " +
+        "resource (application jar path) in the Spark Master REST API. When non-empty, a " +
+        "driver submission is rejected unless its application resource fully matches at " +
+        "least one of the patterns. When empty (the default), all application resources " +
+        "are allowed. Example: \"file:.*,hdfs://.*\".")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
@@ -2256,7 +2313,7 @@ package object config {
       "Compression will use spark.io.compression.codec")
     .version("0.6.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
@@ -2358,6 +2415,24 @@ package object config {
       .version("0.8.0")
       .enumConf(SchedulingMode)
       .createWithDefault(SchedulingMode.FIFO)
+
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.enabled")
+      .doc("When true, scheduler log messages for streaming tasks include " +
+        "the structured streaming query ID and batch ID.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_QUERY_ID_LENGTH =
+    ConfigBuilder("spark.scheduler.streaming.idAwareLogging.queryIdLength")
+      .doc("Maximum number of characters of the streaming query ID to include " +
+        "in scheduler log messages. Set to -1 to include the full query ID.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(5)
 
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
@@ -2919,4 +2994,22 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
+        "options. Currently, this only takes effect in YARN cluster mode.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EXECUTOR_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
+    ConfigBuilder("spark.executor.limitActiveProcessorCount.enabled")
+      .doc("Whether to add -XX:ActiveProcessorCount=<spark.executor.cores> to executor JVM " +
+        "options. Currently, this only takes effect in YARN mode.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 }

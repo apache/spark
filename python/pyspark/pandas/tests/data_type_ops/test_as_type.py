@@ -24,7 +24,6 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
-    extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
@@ -61,16 +60,18 @@ class AsTypeTestsMixin:
 
     def test_astype_eager_check(self):
         psser = self.psdf["float_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
+        with (
+            ps.option_context("compute.eager_check", True),
+            self.assertRaisesRegex(ValueError, "Cannot convert"),
         ):
             psser.astype(int)
         with ps.option_context("compute.eager_check", False):
             psser.astype(int)
 
         psser = self.psdf["decimal_nan"]
-        with ps.option_context("compute.eager_check", True), self.assertRaisesRegex(
-            ValueError, "Cannot convert"
+        with (
+            ps.option_context("compute.eager_check", True),
+            self.assertRaisesRegex(ValueError, "Cannot convert"),
         ):
             psser.astype(int)
         with ps.option_context("compute.eager_check", False):

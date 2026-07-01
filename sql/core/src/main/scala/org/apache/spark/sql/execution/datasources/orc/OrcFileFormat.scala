@@ -225,8 +225,8 @@ class OrcFileFormat
 
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
-          val orcRecordReader = new OrcInputFormat[OrcStruct]
-            .createRecordReader(fileSplit, taskAttemptContext)
+          val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
+            filePath, taskConf, fileSplit, readerOptions)
           val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
 
@@ -248,6 +248,8 @@ class OrcFileFormat
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => false
+
+    case _: GeometryType | _: GeographyType => false
 
     case _: AtomicType => true
 

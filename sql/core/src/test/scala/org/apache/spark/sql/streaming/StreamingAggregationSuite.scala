@@ -347,7 +347,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     " shifted partition IDs") {
     def constructUnionDf(desiredPartitionsForInput1: Int)
       : (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
-      val input1 = MemoryStream[Int](desiredPartitionsForInput1)
+      val input1 = MemoryStream[Int](spark, desiredPartitionsForInput1)
       val input2 = MemoryStream[Int]
       val df1 = input1.toDF()
         .select($"value", $"value" + 1)

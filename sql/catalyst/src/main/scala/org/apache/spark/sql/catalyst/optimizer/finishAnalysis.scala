@@ -21,6 +21,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
 import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
@@ -119,8 +120,17 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val currentDates = collection.mutable.HashMap.empty[ZoneId, Literal]
     val localTimestamps = collection.mutable.HashMap.empty[ZoneId, Literal]
 
+    // CAST_TO_TIMESTAMP is a dedicated tree-pattern bit set on Cast nodes whose target type is
+    // any timestamp type (NTZ or LTZ family). This lets the rule reach both TIME -> TIMESTAMP_NTZ
+    // and TIME -> TIMESTAMP_LTZ rewrites (which derive date fields from CURRENT_DATE) without the
+    // broad CAST pattern that previously widened traversal to nearly every plan. Node-level
+    // isTimeToTimestamp{NTZ,LTZ} guards keep rewrite semantics unchanged.
+    // We intentionally do NOT tag these casts with CURRENT_LIKE: inline-table validation treats
+    // CURRENT_LIKE as safe to defer, so tagging would let unrelated non-foldable timestamp-target
+    // casts (e.g. CAST(rand() AS TIMESTAMP_NTZ)) bypass validation (see SPARK-57618).
     def transformCondition(treePatternbits: TreePatternBits): Boolean = {
-      treePatternbits.containsPattern(CURRENT_LIKE)
+      treePatternbits.containsPattern(CURRENT_LIKE) ||
+        treePatternbits.containsPattern(CAST_TO_TIMESTAMP)
     }
 
     plan.transformDownWithSubqueriesAndPruning(transformCondition) {
@@ -131,6 +141,46 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               Literal.create(
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
+          // CAST(time AS TIMESTAMP_NTZ(q)) fills the date fields from CURRENT_DATE. Rewrite it to
+          // a date+time builder anchored on the same query-stable current date literal that
+          // current_date() resolves to, so all references agree within the query. The builder's
+          // `replacement` (a StaticInvoke) is emitted directly because ReplaceExpressions has
+          // already run earlier in this batch and will not expand a fresh RuntimeReplaceable.
+          case c: Cast if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) =>
+            val dateLit = currentDates.getOrElseUpdate(c.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, c.zoneId), DateType)
+            })
+            c.dataType match {
+              case n: TimestampNTZNanosType =>
+                MakeTimestampNTZNanos(dateLit, c.child, n.precision).replacement
+              case _: TimestampNTZType =>
+                MakeTimestampNTZ(dateLit, c.child).replacement
+              case other =>
+                // Unreachable: the outer guard `Cast.isTimeToTimestampNTZ` only matches the micro
+                // TimestampNTZType and the nanosecond TimestampNTZNanosType targets.
+                throw SparkException.internalError(
+                  s"Unexpected target type in TIME -> TIMESTAMP_NTZ rewrite: $other")
+            }
+          // CAST(time AS TIMESTAMP_LTZ(q)) likewise fills the date fields from CURRENT_DATE.
+          // Rewrite it to a zone-aware date+time builder anchored on the same query-stable current
+          // date literal, so all references agree within the query.
+          case c: Cast if Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) =>
+            val dateLit = currentDates.getOrElseUpdate(c.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, c.zoneId), DateType)
+            })
+            c.dataType match {
+              case l: TimestampLTZNanosType =>
+                MakeTimestampLTZNanos(dateLit, c.child, l.precision, c.timeZoneId).replacement
+              case _: TimestampType =>
+                MakeTimestampLTZ(dateLit, c.child, c.timeZoneId).replacement
+              case other =>
+                // Unreachable: the outer guard `Cast.isTimeToTimestampLTZ` only matches the micro
+                // TimestampType and the nanosecond TimestampLTZNanosType targets.
+                throw SparkException.internalError(
+                  s"Unexpected target type in TIME -> TIMESTAMP_LTZ rewrite: $other")
+            }
           case currentTimeType : CurrentTime =>
             val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,
               currentTimeType.precision)
@@ -148,7 +198,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces the expression of CurrentDatabase, CurrentCatalog, and CurrentUser
+ * Replaces the expression of CurrentDatabase, CurrentCatalog, CurrentPath, and CurrentUser
  * with the current values.
  */
 case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[LogicalPlan] {
@@ -157,12 +207,15 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
     lazy val currentNamespace = catalogManager.currentNamespace.quoted
     lazy val currentCatalog = catalogManager.currentCatalog.name()
     lazy val currentUser = CurrentUserContext.getCurrentUser
+    lazy val currentPathStr = catalogManager.currentPathString
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
         Literal.create(currentNamespace, StringType)
       case CurrentCatalog() =>
         Literal.create(currentCatalog, StringType)
+      case CurrentPath() =>
+        Literal.create(currentPathStr, StringType)
       case CurrentUser() =>
         Literal.create(currentUser, StringType)
     }

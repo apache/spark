@@ -16,9 +16,8 @@
 #
 
 import inspect
-import os
 from textwrap import dedent
-from typing import Dict, List, IO, Tuple
+from typing import Any, Dict, List, IO, Protocol, Tuple
 
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.logger.worker_io import capture_outputs, context_provider as default_context_provider
@@ -32,15 +31,20 @@ from pyspark.sql.functions import OrderingColumn, PartitioningColumn, SelectedCo
 from pyspark.sql.types import _parse_datatype_json_string, StructType
 from pyspark.sql.udtf import AnalyzeArgument, AnalyzeResult
 from pyspark.sql.worker.utils import worker_run
-from pyspark.util import local_connect_and_auth
 from pyspark.worker_util import (
+    get_sock_file_to_executor,
     read_command,
     pickleSer,
     utf8_deserializer,
 )
 
 
-def read_udtf(infile: IO) -> type:
+class UDTFHandler(Protocol):
+    @staticmethod
+    def analyze(*args: Any, **kwargs: Any) -> AnalyzeResult: ...
+
+
+def read_udtf(infile: IO) -> type[UDTFHandler]:
     """Reads the Python UDTF and checks if its valid or not."""
     # Receive Python UDTF
     handler = read_command(pickleSer, infile)
@@ -112,18 +116,16 @@ def _main(infile: IO, outfile: IO) -> None:
     # Check that the arguments provided to the UDTF call match the expected parameters defined
     # in the static 'analyze' method signature.
     try:
-        inspect.signature(handler.analyze).bind(*args, **kwargs)  # type: ignore[attr-defined]
+        inspect.signature(handler.analyze).bind(*args, **kwargs)
     except TypeError as e:
         # The UDTF call's arguments did not match the expected signature.
         raise PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the function arguments did not match the expected
                 signature of the static 'analyze' method ({e}). Please update the query so that
                 this table function call provides arguments matching the expected signature, or
                 else update the table function so that its static 'analyze' method accepts the
-                provided arguments, and then try the query again."""
-            )
+                provided arguments, and then try the query again.""")
         )
 
     # The default context provider can't detect the class name from static methods.
@@ -134,63 +136,53 @@ def _main(infile: IO, outfile: IO) -> None:
 
     with capture_outputs(context_provider):
         # Invoke the UDTF's 'analyze' method.
-        result = handler.analyze(*args, **kwargs)  # type: ignore[attr-defined]
+        result = handler.analyze(*args, **kwargs)
 
     # Check invariants about the 'analyze' method after running it.
     if not isinstance(result, AnalyzeResult):
         raise PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the static 'analyze' method expects a result of type
                 pyspark.sql.udtf.AnalyzeResult, but instead this method returned a value of
-                type: {type(result)}"""
-            )
+                type: {type(result)}""")
         )
     elif not isinstance(result.schema, StructType):
         raise PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the static 'analyze' method expects a result of type
                 pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType,
-                but the 'schema' field had the wrong type: {type(result.schema)}"""
-            )
+                but the 'schema' field had the wrong type: {type(result.schema)}""")
         )
 
     def invalid_analyze_result_field(field_name: str, expected_field: str) -> PySparkValueError:
         return PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the static 'analyze' method returned an
                 'AnalyzeResult' object with the '{field_name}' field set to a value besides a
                 list or tuple of '{expected_field}' objects. Please update the table function
-                and then try the query again."""
-            )
+                and then try the query again.""")
         )
 
     has_table_arg = any(arg.isTable for arg in args) or any(arg.isTable for arg in kwargs.values())
     if not has_table_arg and result.withSinglePartition:
         raise PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the static 'analyze' method returned an
                 'AnalyzeResult' object with the 'withSinglePartition' field set to 'true', but
                 the function call did not provide any table argument. Please update the query so
                 that it provides a table argument, or else update the table function so that its
                 'analyze' method returns an 'AnalyzeResult' object with the
-                'withSinglePartition' field set to 'false', and then try the query again."""
-            )
+                'withSinglePartition' field set to 'false', and then try the query again.""")
         )
     elif not has_table_arg and len(result.partitionBy) > 0:
         raise PySparkValueError(
-            format_error(
-                f"""
+            format_error(f"""
                 {error_prefix} because the static 'analyze' method returned an
                 'AnalyzeResult' object with the 'partitionBy' list set to non-empty, but the
                 function call did not provide any table argument. Please update the query so
                 that it provides a table argument, or else update the table function so that its
                 'analyze' method returns an 'AnalyzeResult' object with the 'partitionBy' list
-                set to empty, and then try the query again."""
-            )
+                set to empty, and then try the query again.""")
         )
     elif not isinstance(result.partitionBy, (list, tuple)) or not all(
         isinstance(val, PartitioningColumn) for val in result.partitionBy
@@ -238,13 +230,5 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
-    )
-    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
-    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
-    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
-    write_int(os.getpid(), sock_file)
-    sock_file.flush()
-    main(sock_file, sock_file)
+    with get_sock_file_to_executor() as sock_file:
+        main(sock_file, sock_file)

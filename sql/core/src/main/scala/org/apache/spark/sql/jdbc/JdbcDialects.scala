@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
@@ -40,7 +41,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -337,6 +338,15 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Returns the effective fetch size for reading from the JDBC source.
+   * By default, returns the user-specified fetchSize from JDBCOptions.
+   * Dialects can override this to provide a sensible default when the user does not
+   * explicitly set the fetchSize option.
+   */
+  @Since("4.2.0")
+  def getFetchSize(options: JDBCOptions): Int = options.fetchSize
+
+  /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
    * @param connection The connection object
@@ -390,6 +400,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    // SPARK-53454: Produce portable SQL for AlwaysTrue/AlwaysFalse predicates.
+    // Some databases (Oracle, DB2) do not support bare TRUE/FALSE in WHERE clauses.
+    // The result is parenthesized so it stays valid when nested as an operand of a
+    // larger expression (e.g. "a" = (1 = 1) or (1 = 1) IS NOT NULL), not just as a
+    // standalone WHERE predicate.
+    override def build(expr: Expression): String = expr match {
+      case _: AlwaysTrue => "(1 = 1)"
+      case _: AlwaysFalse => "(1 = 0)"
+      case _ => super.build(expr)
+    }
+
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
@@ -695,11 +716,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   def getTableCommentQuery(table: String, comment: String): String = {
-    s"COMMENT ON TABLE $table IS '$comment'"
+    s"COMMENT ON TABLE $table IS '${escapeSql(comment)}'"
   }
 
   def getSchemaCommentQuery(schema: String, comment: String): String = {
-    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '${escapeSql(comment)}'"
   }
 
   def removeSchemaCommentQuery(schema: String): String = {
@@ -788,6 +809,15 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Returns true if the given exception indicates the object exists but cannot be read as a
+   * table or view (e.g. a synonym that resolves to a procedure, or an invalid view), as opposed
+   * to not existing at all (see `isObjectNotFoundException`). Dialects override this to recognize
+   * their own error codes; the default is false.
+   */
+  @Since("4.3.0")
+  def isNotSelectableObjectException(e: SQLException): Boolean = false
+
+  /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
    * @param condition The error condition assigned in the case of an unclassified `e`
@@ -859,10 +889,31 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def supportsOffset: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def supportsTableSample: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
+
+  /**
+   * Compile a [[org.apache.spark.sql.execution.datasources.v2.TableSampleInfo]] into a
+   * SQL `TABLESAMPLE` clause, or return [[scala.None]] if the dialect cannot represent
+   * the requested sampling semantics (e.g. sampling with replacement).
+   *
+   * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]]
+   * is true and the requested sample is BERNOULLI without replacement (the contract
+   * predating this method), and returns [[scala.None]] otherwise.
+   */
+  @Since("4.2.0")
+  def compileTableSample(sample: TableSampleInfo): Option[String] = {
+    if (supportsTableSample && !sample.withReplacement &&
+        sample.sampleMethod == SampleMethod.Bernoulli) {
+      Some(getTableSample(sample))
+    } else {
+      None
+    }
+  }
 
   def supportsHint: Boolean = false
 

@@ -18,19 +18,21 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
+import java.time.{LocalDateTime, ZoneOffset}
 
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.{Column, DataFrame, QueryTest}
+import org.apache.spark.sql.{Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.sql.types.{DataType, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -120,7 +122,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest {
       .where(Column(predicate))
 
     query.queryExecution.optimizedPlan match {
-      case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>
+      case PhysicalOperation(_, filters, ExtractV2Scan(o: OrcScan)) =>
         assert(filters.nonEmpty, "No filter is analyzed from the given query")
         if (noneSupported) {
           assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
@@ -150,6 +152,19 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest {
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false")(code)
     // test the vectorized reader
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "true")(code)
+  }
+
+  // Builds a single-column ("ts") DataFrame from external java.time values, letting the schema
+  // precision truncate the sub-microsecond digits: an NTZ column takes java.time.LocalDateTime
+  // values, an LTZ column takes the same wall clocks as java.time.Instant at UTC.
+  protected def nanosTimestampDf(nanosType: DataType, wallClocks: Seq[LocalDateTime]): DataFrame = {
+    val values: Seq[Any] = nanosType match {
+      case _: TimestampNTZNanosType => wallClocks
+      case _: TimestampLTZNanosType => wallClocks.map(_.toInstant(ZoneOffset.UTC))
+    }
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(Row(_))),
+      new StructType().add("ts", nanosType))
   }
 
   /**

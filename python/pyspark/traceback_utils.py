@@ -19,7 +19,6 @@ from collections import namedtuple
 import os
 import traceback
 
-
 CallSite = namedtuple("CallSite", "function file linenum")
 
 

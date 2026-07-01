@@ -44,6 +44,11 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = getCsvOptions(sparkSession, options)
+    // A tar archive is decompressed/unpacked as a sequential stream, so it must be read as a
+    // single split rather than carved into byte ranges.
+    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+      return false
+    }
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -52,7 +57,10 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    // The v1 file format routes archives to `readArchive` (see `buildReader`), so archive schema
+    // inference is supported here.
+    CSVDataSource(parsedOptions)
+      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
   }
 
   override def prepareWrite(
@@ -99,6 +107,9 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = getCsvOptions(sparkSession, options)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
+    // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries. Reused from the
+    // options' lazily-compiled Pattern (Serializable) instead of re-compiling per file or entry.
+    val ignoredPathSegmentRegex = parsedOptions.ignoredPathSegmentRegexPattern
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
@@ -119,24 +130,26 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
         dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
       val actualRequiredSchema = StructType(
         requiredSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      val parser = new UnivocityParser(
-        actualDataSchema,
-        actualRequiredSchema,
-        parsedOptions,
-        actualFilters)
       // Use column pruning when specified by Catalyst, except when one or more columns have
       // existence default value(s), since in that case we instruct the CSV parser to disable column
       // pruning and instead read each entire row in order to correctly assign the default value(s).
       val schema = if (isColumnPruningEnabled) actualRequiredSchema else actualDataSchema
-      val isStartOfFile = file.start == 0
-      val headerChecker = new CSVHeaderChecker(
-        schema, parsedOptions, source = s"CSV file: ${file.urlEncodedPath}", isStartOfFile)
-      CSVDataSource(parsedOptions).readFile(
-        conf,
-        file,
-        parser,
-        headerChecker,
-        requiredSchema)
+
+      def newParser(): UnivocityParser =
+        new UnivocityParser(actualDataSchema, actualRequiredSchema, parsedOptions, actualFilters)
+      def getHeaderChecker(isStartOfFile: Boolean, source: String): CSVHeaderChecker =
+        new CSVHeaderChecker(schema, parsedOptions, source, isStartOfFile)
+
+      // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
+      // archive reads are enabled; otherwise the file is parsed directly.
+      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+        CSVDataSource(parsedOptions).readArchive(
+          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex)
+      } else {
+        val parser = newParser()
+        val headerChecker = getHeaderChecker(file.start == 0, s"CSV file: ${file.urlEncodedPath}")
+        CSVDataSource(parsedOptions).readFile(conf, file, parser, headerChecker, requiredSchema)
+      }
     }
   }
 
@@ -154,6 +167,8 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
 
   private def supportDataType(dataType: DataType, allowVariant: Boolean): Boolean = dataType match {
     case _: VariantType => allowVariant
+
+    case _: GeometryType | _: GeographyType => false
 
     case _: AtomicType => true
 

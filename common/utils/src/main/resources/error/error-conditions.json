@@ -132,6 +132,18 @@
     ],
     "sqlState" : "22003"
   },
+  "ARROW_SCHEMA_FIELD_COUNT_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder has <encoderFieldCount> fields but Arrow data only has <arrowColumnCount> columns."
+    ],
+    "sqlState" : "42000"
+  },
+  "ARROW_SCHEMA_FIELD_NAME_MISMATCH" : {
+    "message" : [
+      "Arrow schema mismatch: encoder field '<encoderFieldName>' does not match Arrow column '<arrowColumnName>' at the same position."
+    ],
+    "sqlState" : "42000"
+  },
   "ARROW_TYPE_MISMATCH" : {
     "message" : [
       "Invalid schema from <operation>: expected <outputTypes>, got <actualDataTypes>."
@@ -179,6 +191,129 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `column_list` and `except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
+  "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_EMPTY_KEYS" : {
+    "message" : [
+      "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_INVALID_STATE" : {
+    "message" : [
+      "AutoCDC flow <flowName> detected an invalid state:"
+    ],
+    "subClass" : {
+      "AUXILIARY_TABLE_KEY_COLUMN_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MALFORMED" : {
+        "message" : [
+          "The auxiliary table <auxTableName> has a malformed <propertyName> property with raw value '<rawValue>'. The property must be a JSON array of strings (e.g. '[\"id\",\"region\"]'). The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "KEY_SCHEMA_DRIFT" : {
+        "message" : [
+          "The AutoCDC flow's current key columns <expectedKeySchema> do not match the keys recorded in the auxiliary table <auxTableName> (recorded keys <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. To change keys, perform a full refresh of the target table."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MICROBATCH_VALIDATION" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
+    ],
+    "subClass" : {
+      "NON_ORDERABLE_SEQUENCE" : {
+        "message" : [
+          "The sequencing column has non-orderable type <dataType>. The sequencing column must be of a type that supports ordering."
+        ]
+      },
+      "NULL_KEY" : {
+        "message" : [
+          "The microbatch contains rows with null values in the following key column(s): <nullKeyCounts>. All rows must have non-null values for every key column."
+        ]
+      },
+      "NULL_SEQUENCE" : {
+        "message" : [
+          "The microbatch contains <nullCount> row(s) with a null sequencing value. All rows must have a non-null sequencing value."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
+  "AUTOCDC_MISSING_SEQUENCE_BY" : {
+    "message" : [
+      "AutoCDC flow is missing a required `sequence_by` expression. Specify a `sequence_by` column or expression that orders incoming change events."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MISSING_SOURCE" : {
+    "message" : [
+      "AutoCDC flow is missing a required `source` table name. Specify the name of the streaming source table the flow should read from."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
+    "message" : [
+      "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
+    ],
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_NON_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
+    "message" : [
+      "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
+  "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
+    "message" : [
+      "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -206,11 +341,89 @@
     ],
     "sqlState" : "42K03"
   },
+  "BEAN_ENCODER_INTERFACE_NOT_SUPPORTED" : {
+    "message" : [
+      "Bean encoder does not support interface type <className>."
+    ],
+    "sqlState" : "0A000"
+  },
   "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow. Use <functionName> to ignore overflow problem and return NULL."
     ],
     "sqlState" : "22003"
+  },
+  "BIN_BY_ALIGN_TO_TYPE_MISMATCH" : {
+    "message" : [
+      "The ALIGN TO expression type <originType> must match the range column type <rangeType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN" : {
+    "message" : [
+      "Column <columnName> appears multiple times in the BIN BY DISTRIBUTE UNIFORM clause."
+    ],
+    "sqlState" : "42713"
+  },
+  "BIN_BY_INVALID_ALIGN_TO" : {
+    "message" : [
+      "The ALIGN TO expression could not be evaluated to a constant value. Got: <expr>."
+    ],
+    "sqlState" : "42K08"
+  },
+  "BIN_BY_INVALID_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH expression could not be evaluated to a constant value. Got: <expr>."
+    ],
+    "sqlState" : "42K08"
+  },
+  "BIN_BY_INVALID_BIN_WIDTH_TYPE" : {
+    "message" : [
+      "The BIN WIDTH expression must be of type \"INTERVAL DAY TO SECOND\", but got <inputType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_INVALID_DISTRIBUTE_COLUMN_TYPE" : {
+    "message" : [
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_INVALID_RANGE" : {
+    "message" : [
+      "The BIN BY range is invalid: the range start (<rangeStart>) must be less than or equal to the range end (<rangeEnd>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "BIN_BY_MISSING_DISTRIBUTE" : {
+    "message" : [
+      "BIN BY requires at least one column in DISTRIBUTE UNIFORM (...)."
+    ],
+    "sqlState" : "42601"
+  },
+  "BIN_BY_NON_POSITIVE_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH expression must be positive. Got: <expr>."
+    ],
+    "sqlState" : "42816"
+  },
+  "BIN_BY_NULL_ARGUMENT" : {
+    "message" : [
+      "The <clause> expression in BIN BY must not be NULL."
+    ],
+    "sqlState" : "22004"
+  },
+  "BIN_BY_RANGE_TYPE_MISMATCH" : {
+    "message" : [
+      "The range columns in BIN BY must be TIMESTAMP or TIMESTAMP_NTZ. Column <columnName> has type <columnType>. Both range columns must have the same type."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "BIN BY requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before BIN BY."
+    ],
+    "sqlState" : "0A000"
   },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
@@ -284,6 +497,12 @@
       "The provided URL cannot be decoded: <url>. Please ensure that the URL is properly formatted and try again."
     ],
     "sqlState" : "22546"
+  },
+  "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
+    "message" : [
+      "Cannot instantiate the Hive UDF/UDAF/UDTF wrapper class <clazz>. Check that the function arguments and their types are supported."
+    ],
+    "sqlState" : "38000"
   },
   "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
     "message" : [
@@ -541,6 +760,12 @@
     ],
     "sqlState" : "58030"
   },
+  "CANNOT_TRUNCATE_EXTERNAL_TABLE" : {
+    "message" : [
+      "Operation not allowed: TRUNCATE TABLE on external tables: <tableName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "CANNOT_UPDATE_FIELD" : {
     "message" : [
       "Cannot update <table> field <fieldName> type:"
@@ -636,6 +861,29 @@
       "The catalog <catalogName> not found. Consider to set the SQL config <config> to a catalog plugin."
     ],
     "sqlState" : "42P08"
+  },
+  "CHANGELOG_CONTRACT_VIOLATION" : {
+    "message" : [
+      "The Change Data Capture (CDC) connector violated the `Changelog` contract at runtime."
+    ],
+    "subClass" : {
+      "NULL_COMMIT_TIMESTAMP" : {
+        "message" : [
+          "Connector emitted a row with a NULL `_commit_timestamp` on a streaming read engaging post-processing. The `Changelog` contract requires `_commit_timestamp` to be non-NULL for streaming reads, since post-processing uses it as event time to advance the watermark."
+        ]
+      },
+      "UNEXPECTED_CHANGE_TYPE" : {
+        "message" : [
+          "Connector emitted a row with a `_change_type` value that is not one of the four supported types (`insert`, `delete`, `update_preimage`, `update_postimage`). The `Changelog` contract requires every emitted row to carry one of these four values."
+        ]
+      },
+      "UNEXPECTED_MULTIPLE_CHANGES_PER_ROW_VERSION" : {
+        "message" : [
+          "Connector emitted multiple delete or insert rows for the same `(rowId, _commit_version)` partition. The `Changelog` contract requires at most one logical change per row identity per commit when `containsIntermediateChanges() = false`. Either fix the connector to deduplicate intermediate states, or set `containsIntermediateChanges() = true` and use `deduplicationMode = netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "XX000"
   },
   "CHECKPOINT_FILE_CHECKSUM_VERIFICATION_FAILED" : {
     "message" : [
@@ -912,11 +1160,52 @@
     },
     "sqlState" : "56K00"
   },
+  "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE" : {
+    "message" : [
+      "Unidentified Error: <message>"
+    ],
+    "sqlState" : "XXKCM"
+  },
   "CONNECT_INVALID_PLAN" : {
     "message" : [
       "The Spark Connect plan is invalid."
     ],
     "subClass" : {
+      "AGGREGATE_NEEDS_PLAN_INPUT" : {
+        "message" : [
+          "Aggregate needs a plan input"
+        ]
+      },
+      "AGGREGATE_WITH_PIVOT_REQUIRES_PIVOT" : {
+        "message" : [
+          "Aggregate with GROUP_TYPE_PIVOT requires a Pivot"
+        ]
+      },
+      "ALIAS_WITH_MULTIPLE_IDENTIFIERS_AND_METADATA" : {
+        "message" : [
+          "Alias expressions with more than 1 identifier must not use optional metadata."
+        ]
+      },
+      "ARRAY_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the array literal."
+        ]
+      },
+      "ARRAY_LITERAL_NOT_SET" : {
+        "message" : [
+          "Array literal is not set."
+        ]
+      },
+      "ASSERTION_FAILURE" : {
+        "message" : [
+          "<message>"
+        ]
+      },
+      "CANNOT_FIND_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Cannot find a cached local relation for hash: <hash>"
+        ]
+      },
       "CANNOT_PARSE" : {
         "message" : [
           "Cannot decompress or parse the input plan (<errorMsg>)",
@@ -924,11 +1213,301 @@
           "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
+      "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
+        "message" : [
+          "ChunkedCachedLocalRelation should contain data."
+        ]
+      },
+      "DATAFRAME_NOT_FOUND" : {
+        "message" : [
+          "No DataFrame with id <dfId> is found in the session <sessionId>"
+        ]
+      },
+      "DATA_TYPE_UNSUPPORTED_CATALYST_TO_PROTO" : {
+        "message" : [
+          "Does not support convert <typeName> to connect proto types."
+        ]
+      },
+      "DATA_TYPE_UNSUPPORTED_PROTO_TO_CATALYST" : {
+        "message" : [
+          "Does not support convert <kindCase> to catalyst types."
+        ]
+      },
+      "DEDUPLICATE_ALL_COLUMNS_AND_SUBSET" : {
+        "message" : [
+          "Cannot deduplicate on both all columns and a subset of columns"
+        ]
+      },
+      "DEDUPLICATE_NEEDS_INPUT" : {
+        "message" : [
+          "Deduplicate needs a plan input"
+        ]
+      },
+      "DEDUPLICATE_REQUIRES_COLUMNS_OR_ALL" : {
+        "message" : [
+          "Deduplicate requires to either deduplicate on all columns or a subset of columns"
+        ]
+      },
+      "EXCEPT_DOES_NOT_SUPPORT_UNION_BY_NAME" : {
+        "message" : [
+          "Except does not support union_by_name"
+        ]
+      },
+      "EXPECTED_NULL_VALUE" : {
+        "message" : [
+          "Expected null value, but got <literalTypeCase>"
+        ]
+      },
+      "EXPECTING_SCALA_UDF" : {
+        "message" : [
+          "Expecting a Scala UDF, but get <exprType>"
+        ]
+      },
+      "FIELD_CANNOT_BE_EMPTY" : {
+        "message" : [
+          "<fieldName> in <fullName> cannot be empty"
+        ]
+      },
+      "FUNCTION_EVAL_TYPE_NOT_SUPPORTED" : {
+        "message" : [
+          "Function with EvalType: <evalType> is not supported"
+        ]
+      },
+      "GROUPING_EXPRESSION_ABSENT" : {
+        "message" : [
+          "The grouping expression cannot be absent for KeyValueGroupedDataset"
+        ]
+      },
+      "INCOMPATIBLE_LITERAL_DATA_TYPE" : {
+        "message" : [
+          "Incompatible data type <dataTypeKindCase> for literal <literalTypeCase>"
+        ]
+      },
+      "INPUT_DATA_NO_SCHEMA" : {
+        "message" : [
+          "Input data for LocalRelation does not produce a schema."
+        ]
+      },
+      "INTERSECT_DOES_NOT_SUPPORT_UNION_BY_NAME" : {
+        "message" : [
+          "Intersect does not support union_by_name"
+        ]
+      },
+      "INVALID_ENUM" : {
+        "message" : [
+          "This enum value of <fullName> is invalid: <name>(<number>)"
+        ]
+      },
+      "INVALID_JDBC_PARAMS" : {
+        "message" : [
+          "Invalid jdbc params, please specify jdbc url and table."
+        ]
+      },
+      "INVALID_ONE_OF_FIELD_NOT_SET" : {
+        "message" : [
+          "This oneOf field in <fullName> is not set: <name>"
+        ]
+      },
+      "INVALID_ONE_OF_FIELD_NOT_SUPPORTED" : {
+        "message" : [
+          "This oneOf field message in <fullName> is not supported: <name>(<number>)"
+        ]
+      },
+      "INVALID_SCHEMA_NON_STRUCT_TYPE" : {
+        "message" : [
+          "The input schema <inputSchema> is not a struct type, but got <dataType>."
+        ]
+      },
+      "INVALID_SQL_WITH_REFERENCES" : {
+        "message" : [
+          "<query> is not a valid relation for SQL with references"
+        ]
+      },
+      "INVALID_WITH_RELATION_REFERENCE" : {
+        "message" : [
+          "Invalid WithRelation reference"
+        ]
+      },
+      "LAMBDA_FUNCTION_ARGUMENT_COUNT_INVALID" : {
+        "message" : [
+          "LambdaFunction requires 1 ~ 3 arguments, but got <got> ones!"
+        ]
+      },
+      "LOCAL_RELATION_CHUNK_SIZE_LIMIT_EXCEEDED" : {
+        "message" : [
+          "One of cached local relation chunks exceeded the limit of <limit> bytes."
+        ]
+      },
+      "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED" : {
+        "message" : [
+          "Cached local relation size (<actualSize> bytes) exceeds the limit (<limit> bytes)."
+        ]
+      },
+      "LOWER_BOUND_REQUIRED_IN_WINDOW_FRAME" : {
+        "message" : [
+          "LowerBound is required in WindowFrame"
+        ]
+      },
+      "MAP_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the map literal."
+        ]
+      },
+      "MAP_LITERAL_NOT_SET" : {
+        "message" : [
+          "Map literal is not set."
+        ]
+      },
+      "MULTIPLE_PATHS_NOT_SUPPORTED_FOR_STREAMING_SOURCE" : {
+        "message" : [
+          "Multiple paths are not supported for streaming source"
+        ]
+      },
+      "NA_FILL_VALUES_EMPTY" : {
+        "message" : [
+          "values must contains at least 1 item!"
+        ]
+      },
+      "NA_FILL_VALUES_LENGTH_MISMATCH" : {
+        "message" : [
+          "When values contains more than 1 items, values and cols should have the same length!"
+        ]
+      },
+      "NOT_FOUND_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Not found any cached local relation with the hash: <hash> in the session with sessionUUID <sessionUUID>."
+        ]
+      },
+      "NOT_FOUND_CHUNKED_CACHED_LOCAL_RELATION" : {
+        "message" : [
+          "Not found chunked cached local relation block with the hash: <hash> in the session with sessionUUID <sessionUUID>."
+        ]
+      },
+      "NO_HANDLER_FOR_EXTENSION" : {
+        "message" : [
+          "No handler found for extension type: <extensionTypeUrl>"
+        ]
+      },
       "PLAN_SIZE_LARGER_THAN_MAX" : {
         "message" : [
           "The plan size is larger than max (<planSize> vs. <maxPlanSize>)",
           "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
           "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
+        ]
+      },
+      "PREDICATES_NOT_SUPPORTED_FOR_DATA_SOURCE" : {
+        "message" : [
+          "Predicates are not supported for <format> data sources."
+        ]
+      },
+      "PYTHON_UDT_MISSING_FIELDS" : {
+        "message" : [
+          "PythonUserDefinedType requires all the three fields: python_class, serialized_python_class and sql_type."
+        ]
+      },
+      "REDUCE_SHOULD_CARRY_SCALAR_SCALA_UDF" : {
+        "message" : [
+          "reduce should carry a scalar scala udf, but got <got>"
+        ]
+      },
+      "ROW_NOT_SUPPORTED_FOR_UDF" : {
+        "message" : [
+          "Row is not a supported <errorType> type for this UDF."
+        ]
+      },
+      "SCHEMA_REQUIRED_FOR_LOCAL_RELATION" : {
+        "message" : [
+          "Schema for LocalRelation is required when the input data is not provided."
+        ]
+      },
+      "SET_OPERATION_MUST_HAVE_TWO_INPUTS" : {
+        "message" : [
+          "Set operation must have 2 inputs"
+        ]
+      },
+      "SQL_COMMAND_EXPECTS_SQL_OR_WITH_RELATIONS" : {
+        "message" : [
+          "SQL command expects either a SQL or a WithRelations, but got <other>"
+        ]
+      },
+      "STREAMING_QUERY_NOT_FOUND" : {
+        "message" : [
+          "Streaming query <id> is not found"
+        ]
+      },
+      "STREAMING_QUERY_RUN_ID_MISMATCH" : {
+        "message" : [
+          "Run id mismatch for query id <id>. Run id in the request <runId> does not match one on the server <serverRunId>. The query might have restarted."
+        ]
+      },
+      "STRUCT_LITERAL_MISSING_DATA_TYPE" : {
+        "message" : [
+          "Data type information is missing in the struct literal."
+        ]
+      },
+      "STRUCT_LITERAL_NOT_SET" : {
+        "message" : [
+          "Struct literal is not set."
+        ]
+      },
+      "UDT_TYPE_FIELD_INVALID" : {
+        "message" : [
+          "UserDefinedType requires the 'type' field to be 'udt', but got '<udtType>'."
+        ]
+      },
+      "UNION_BY_NAME_ALLOW_MISSING_COL_REQUIRES_BY_NAME" : {
+        "message" : [
+          "UnionByName `allowMissingCol` can be true only if `byName` is true."
+        ]
+      },
+      "UNKNOWN_ANALYZE_METHOD" : {
+        "message" : [
+          "Unknown Analyze Method <other>!"
+        ]
+      },
+      "UNRESOLVED_NAMED_LAMBDA_VARIABLE_REQUIRES_NAME_PART" : {
+        "message" : [
+          "UnresolvedNamedLambdaVariable requires at least one name part!"
+        ]
+      },
+      "UNRESOLVED_STAR_TARGET_INVALID" : {
+        "message" : [
+          "UnresolvedStar requires a unparsed target ending with '.*', but got <target>."
+        ]
+      },
+      "UNRESOLVED_STAR_WITH_BOTH_TARGET_AND_PLAN_ID" : {
+        "message" : [
+          "UnresolvedStar with both target and plan id is not supported."
+        ]
+      },
+      "UNSUPPORTED_LITERAL_TYPE" : {
+        "message" : [
+          "Unsupported Literal Type: <typeInfo>"
+        ]
+      },
+      "UNSUPPORTED_USER_DEFINED_FUNCTION_IMPLEMENTATION" : {
+        "message" : [
+          "Unsupported UserDefinedFunction implementation: <clazz>"
+        ]
+      },
+      "UPPER_BOUND_REQUIRED_IN_WINDOW_FRAME" : {
+        "message" : [
+          "UpperBound is required in WindowFrame"
+        ]
+      },
+      "USING_COLUMNS_OR_JOIN_CONDITION_SET_IN_JOIN" : {
+        "message" : [
+          "Using columns or join conditions cannot be set at the same time in Join"
+        ]
+      },
+      "WINDOW_FUNCTION_REQUIRED" : {
+        "message" : [
+          "WindowFunction is required in WindowExpression"
+        ]
+      },
+      "WITH_COLUMNS_REQUIRE_SINGLE_NAME_PART" : {
+        "message" : [
+          "WithColumns require column name only contains one name part, but got <got>"
         ]
       }
     },
@@ -1003,6 +1582,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "COUNTER_DIFF_NEGATIVE_COUNTER_VALUE" : {
+    "message" : [
+      "A negative counter value <value> was provided to function <function>. Negative counter values are not allowed."
+    ],
+    "sqlState" : "22003"
+  },
+  "COUNTER_DIFF_START_TIME_DECREASED" : {
+    "message" : [
+      "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
+    ],
+    "sqlState" : "22023"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -1037,6 +1628,54 @@
     },
     "sqlState" : "21S01"
   },
+  "CREATE_VIEW_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+    "message" : [
+      "CREATE VIEW <viewName> with both IF NOT EXISTS and REPLACE is not allowed."
+    ],
+    "sqlState" : "42601"
+  },
+  "CURSOR_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot declare cursor <cursorName> because it already exists in the current scope."
+    ],
+    "sqlState" : "42723"
+  },
+  "CURSOR_ALREADY_OPEN" : {
+    "message" : [
+      "Cannot open cursor <cursorName> because it is already open."
+    ],
+    "sqlState" : "24502"
+  },
+  "CURSOR_NOT_FOUND" : {
+    "message" : [
+      "Cursor <cursorName> not found in the current scope."
+    ],
+    "sqlState" : "42883"
+  },
+  "CURSOR_NOT_OPEN" : {
+    "message" : [
+      "Cannot fetch from or close cursor <cursorName> because it is not open."
+    ],
+    "sqlState" : "24501"
+  },
+  "CURSOR_NO_MORE_ROWS" : {
+    "message" : [
+      "No more rows available to fetch from cursor <cursorName>."
+    ],
+    "sqlState" : "02000"
+  },
+  "CURSOR_OUTSIDE_SCRIPT" : {
+    "message" : [
+      "Cursor operations can only be used within SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
+  "CURSOR_REFERENCE_INVALID_QUALIFIER" : {
+    "message" : [
+      "Cursor reference <cursorName> is invalid. Cursor references can only have at most one qualifier (e.g., label.cursor)."
+    ],
+    "sqlState" : "42601"
+  },
   "CYCLIC_FUNCTION_REFERENCE" : {
     "message" : [
       "Cyclic function reference detected: <path>."
@@ -1048,6 +1687,18 @@
       "Dataflow graph with id <graphId> could not be found"
     ],
     "sqlState" : "KD011"
+  },
+  "DATAFRAME_INPUT_NOT_SINGLE_COLUMN" : {
+    "message" : [
+      "Input DataFrame must have exactly one column, but got <numColumns>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "DATAFRAME_INPUT_NOT_STRING_TYPE" : {
+    "message" : [
+      "Input DataFrame column must be StringType, but got <dataType>."
+    ],
+    "sqlState" : "42K09"
   },
   "DATATYPE_CANNOT_ORDER" : {
     "message" : [
@@ -1222,6 +1873,11 @@
           "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
         ]
       },
+      "METHOD_NOT_ALLOWED" : {
+        "message" : [
+          "the method <methodName> of the class <className> does not match the allow list <config>."
+        ]
+      },
       "NON_FOLDABLE_INPUT" : {
         "message" : [
           "the input <inputName> should be a foldable <inputType> expression; however, got <inputExpr>."
@@ -1365,11 +2021,65 @@
     ],
     "sqlState" : "42710"
   },
+  "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_BATCH_WRITE_BUILDER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support batch write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_COLUMNAR_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create columnar reader."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_CONTINUOUS_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Continuous scan is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_DELTA_BATCH_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Delta batch write is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_DELTA_WRITE_BUILD_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement build."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_EXTERNAL_ERROR" : {
     "message" : [
       "Encountered error when saving to external data source."
     ],
     "sqlState" : "KD010"
+  },
+  "DATA_SOURCE_METADATA_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement metadataSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Micro-batch scan is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
@@ -1382,6 +2092,24 @@
       "Failed to find the data source: <provider>. Make sure the provider name is correct and the package is properly registered and compatible with your Spark version."
     ],
     "sqlState" : "42K02"
+  },
+  "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
+    "message" : [
+      "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support streaming write."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED" : {
+    "message" : [
+      "<description>: Streaming write is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "DATA_SOURCE_TABLE_SCHEMA_MISMATCH" : {
     "message" : [
@@ -1399,11 +2127,6 @@
       "WITHOUT_SUGGESTION" : {
         "message" : [
           ""
-        ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "If necessary set <ansiConfig> to \"false\" to bypass this error."
         ]
       }
     },
@@ -1533,6 +2256,12 @@
     ],
     "sqlState" : "42710"
   },
+  "DUPLICATE_GRAPH_ELEMENT" : {
+    "message" : [
+      "Found duplicate <graphElementType> '<graphElementName>'."
+    ],
+    "sqlState" : "42710"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -1569,6 +2298,12 @@
     ],
     "sqlState" : "42711"
   },
+  "DUPLICATE_SQL_PATH_ENTRY" : {
+    "message" : [
+      "Duplicate SQL path entry <pathEntry>. The session SQL path cannot contain the same namespace more than once (including after expanding shortcuts like DEFAULT_PATH or SYSTEM_PATH)."
+    ],
+    "sqlState" : "42732"
+  },
   "DUPLICATE_VARIABLE_NAME_INSIDE_DECLARE" : {
     "message" : [
       "Found duplicate variable <variableName> in the declare variable list. Please, remove one of them."
@@ -1594,6 +2329,18 @@
       "Failed to parse an empty string for data type <dataType>."
     ],
     "sqlState" : "42604"
+  },
+  "EMPTY_PARTITION_COLUMN_NAME" : {
+    "message" : [
+      "Found an empty partition column name in the path segment '<columnSpec>'. Each partition directory must have a non-empty column name before the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
+  },
+  "EMPTY_PARTITION_COLUMN_VALUE" : {
+    "message" : [
+      "Found an empty partition column value in the path segment '<columnSpec>'. Each partition directory must have a non-empty value after the '=' sign (e.g., 'col=value')."
+    ],
+    "sqlState" : "KD009"
   },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
@@ -1627,6 +2374,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "EVENT_TIME_MUST_BE_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "The event time in withWatermark must be a top-level column, but '<eventExpr>' is a nested field. To use it, alias it to a top-level column in a select before withWatermark."
+    ],
+    "sqlState" : "42K09"
+  },
   "EXCEED_LIMIT_LENGTH" : {
     "message" : [
       "Exceeds char/varchar type length limitation: <limit>."
@@ -1654,6 +2407,12 @@
   "EXPECT_PERMANENT_VIEW_NOT_TEMP" : {
     "message" : [
       "'<operation>' expects a permanent view but <viewName> is a temp view."
+    ],
+    "sqlState" : "42809"
+  },
+  "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP" : {
+    "message" : [
+      "<functionName> is a temporary function. '<operation>' expects a persistent function.<alternative>"
     ],
     "sqlState" : "42809"
   },
@@ -1692,6 +2451,19 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' DataFrame API reader option is mutually exclusive with the '<option>' DataFrame API option.",
+      "Please remove one of them and then retry the DataFrame operation again."
+    ],
+    "sqlState" : "4274K"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' option can only be used when reading JSON files. It is not supported in <usage>."
+    ],
+    "sqlState" : "0A000"
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
@@ -1907,6 +2679,16 @@
     ],
     "sqlState" : "54001"
   },
+  "FAILED_UPDATE_VIEW_SCHEMA" : {
+    "message" : [
+      "The schema of view <viewName> is out of sync with its query output. Queries on this view will fail until the schema is updated.",
+      "Because the view is created <schemaMode>, an automatic sync was attempted but the catalog failed to apply the update.",
+      "Stored view schema: <existingSchema>",
+      "Query output schema: <newSchema>",
+      "To resolve this, ALTER the view schema manually or ask an administrator to do so. Alternatively, consider running ALTER VIEW <viewName> WITH SCHEMA COMPENSATION, which casts the query output to match the stored view schema at query time and does not require updating the catalog."
+    ],
+    "sqlState" : "58030"
+  },
   "FEATURE_NOT_ENABLED" : {
     "message" : [
       "The feature <featureName> is not enabled. Consider setting the config <configKey> to <configValue> to enable this capability."
@@ -2079,6 +2861,13 @@
           "<fixedPointOutputSchema>",
           "Single-pass analyzer output schema:",
           "<singlePassOutputSchema>"
+        ]
+      },
+      "SINGLE_PASS_FAILED_FIXED_POINT_SUCCEEDED" : {
+        "message" : [
+          "Single-pass resolution failed, but fixed-point resolution succeeded.",
+          "Fixed-point analyzer output:",
+          "<fixedPointOutput>"
         ]
       }
     },
@@ -2411,6 +3200,37 @@
     ],
     "sqlState" : "21S01"
   },
+  "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOnByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_ON_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE ON is not enabled. Set 'spark.sql.insertIntoReplaceOn.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... BY NAME REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsingByName.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_USING_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... REPLACE USING is not enabled. Set 'spark.sql.insertIntoReplaceUsing.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
+  "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
+    "message" : [
+      "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",
+      "Use INSERT INTO ... REPLACE ON if you need to reference the target table via an alias."
+    ],
+    "sqlState" : "42000"
+  },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
       "Can't find table property:"
@@ -2687,6 +3507,72 @@
     ],
     "sqlState" : "22P03"
   },
+  "INVALID_CDC_OPTION" : {
+    "message" : [
+      "Invalid Change Data Capture (CDC) option."
+    ],
+    "subClass" : {
+      "CONFLICTING_RANGE_TYPES" : {
+        "message" : [
+          "Cannot specify both version and timestamp ranges for CDC queries. Use either `startingVersion`/`endingVersion` or `startingTimestamp`/`endingTimestamp`."
+        ]
+      },
+      "INVALID_DEDUPLICATION_MODE" : {
+        "message" : [
+          "Invalid `deduplicationMode`: '<mode>'. Expected one of: none, dropCarryovers, netChanges."
+        ]
+      },
+      "INVALID_TIMESTAMP" : {
+        "message" : [
+          "The timestamp '<timestamp>' cannot be cast to TIMESTAMP type for CDC queries."
+        ]
+      },
+      "INVALID_TIMESTAMP_EXPR" : {
+        "message" : [
+          "The timestamp expression for CDC queries must not contain subqueries."
+        ]
+      },
+      "MISSING_STARTING_TIMESTAMP" : {
+        "message" : [
+          "`startingTimestamp` is required when `endingTimestamp` is specified for CDC queries."
+        ]
+      },
+      "MISSING_STARTING_VERSION" : {
+        "message" : [
+          "`startingVersion` is required when `endingVersion` is specified for CDC queries."
+        ]
+      },
+      "UPDATE_DETECTION_REQUIRES_CARRY_OVER_REMOVAL" : {
+        "message" : [
+          "`computeUpdates` cannot be used with `deduplicationMode=none` on connector `<changelogName>` because the connector emits copy-on-write carry-over pairs (`containsCarryoverRows()` returns true) that would be silently mislabeled as updates. Set `deduplicationMode` to `dropCarryovers` or `netChanges`."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
+  "INVALID_CHANGELOG_SCHEMA" : {
+    "message" : [
+      "The Change Data Capture (CDC) schema returned by connector <changelogName> is invalid."
+    ],
+    "subClass" : {
+      "INVALID_COLUMN_TYPE" : {
+        "message" : [
+          "Column `<columnName>` has type <actualType>, expected <expectedType>."
+        ]
+      },
+      "MISSING_COLUMN" : {
+        "message" : [
+          "Required column `<columnName>` is missing."
+        ]
+      },
+      "MISSING_ROW_ID" : {
+        "message" : [
+          "Connector advertises one or more post-processing properties (`containsCarryoverRows`, `representsUpdateAsDeleteAndInsert`, `containsIntermediateChanges`) that require row identity, but `Changelog.rowId()` returned an empty array."
+        ]
+      }
+    },
+    "sqlState" : "42K03"
+  },
   "INVALID_CLONE_SESSION_REQUEST" : {
     "message" : [
       "Invalid session clone request."
@@ -2789,6 +3675,12 @@
       }
     },
     "sqlState" : "HY109"
+  },
+  "INVALID_CURSOR_DECLARATION" : {
+    "message" : [
+      "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
@@ -2939,6 +3831,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
+    "message" : [
+      "User specified schema <schema> is invalid when the `explodeEmbeddedArray` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_EXPRESSION_ENCODER" : {
     "message" : [
       "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
@@ -2954,6 +3852,12 @@
   "INVALID_EXTERNAL_TYPE" : {
     "message" : [
       "The external type <externalType> is not valid for the type <type> at the expression <expr>."
+    ],
+    "sqlState" : "42K0N"
+  },
+  "INVALID_EXTERNAL_VALUE" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
     ],
     "sqlState" : "42K0N"
   },
@@ -2986,6 +3890,11 @@
       "Flow <flowIdentifier> returns an invalid relation type."
     ],
     "subClass" : {
+      "AUTOCDC_RELATION_FOR_TEMPORARY_VIEW" : {
+        "message" : [
+          "AutoCDC flows must target a streaming table because their reconciliation semantics require a streaming-table sink, but the flow <flowIdentifier> attempts to write an AutoCDC relation to the temporary view <viewIdentifier>."
+        ]
+      },
       "BATCH_RELATION_FOR_STREAMING_TABLE" : {
         "message" : [
           "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
@@ -3149,7 +4058,7 @@
       },
       "WRONG_PLACE_OF_DECLARATION" : {
         "message" : [
-          "Handlers must be declared after variable/condition declaration, and before other statements."
+          "Handlers must be declared after variable/condition/cursor declarations, and before other statements."
         ]
       }
     },
@@ -3447,6 +4356,29 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LINE_SEPARATOR" : {
+    "message" : [
+      "Invalid line separator configuration."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The 'lineSep' option cannot be an empty string."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The 'lineSep' option cannot be a null value."
+        ]
+      },
+      "TOO_LONG" : {
+        "message" : [
+          "The 'lineSep' option can contain at most 2 characters, but got <length> characters."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_LOG_VERSION" : {
     "message" : [
       "UnsupportedLogVersion."
@@ -3464,6 +4396,12 @@
       }
     },
     "sqlState" : "KD002"
+  },
+  "INVALID_METRIC_VIEW_YAML" : {
+    "message" : [
+      "Failed to parse metric view YAML: <message>"
+    ],
+    "sqlState" : "42K0L"
   },
   "INVALID_NAME_IN_USE_COMMAND" : {
     "message" : [
@@ -3640,6 +4578,11 @@
           "expects a non-NULL value."
         ]
       },
+      "OCCURRENCE" : {
+        "message" : [
+          "expects a positive integer, but got <actual>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -3700,6 +4643,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_SPEC" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ],
     "sqlState" : "42601"
   },
   "INVALID_PARTITION_VALUE" : {
@@ -3880,6 +4829,12 @@
     ],
     "sqlState" : "XXKD0"
   },
+  "INVALID_SQL_PATH_SCHEMA_REFERENCE" : {
+    "message" : [
+      "Invalid schema reference in SET PATH: <qualifiedName>. Use at least two name parts (catalog.schema); multi-level namespaces are allowed."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_SQL_SYNTAX" : {
     "message" : [
       "Invalid SQL syntax:"
@@ -3930,6 +4885,16 @@
           "Partition key <partKey> must set value."
         ]
       },
+      "EMPTY_QUANTIFIED_PATTERN" : {
+        "message" : [
+          "Expected something between '(' and ')'."
+        ]
+      },
+      "EMPTY_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "Resource paths cannot be empty in REFRESH statements. Use / to match everything."
+        ]
+      },
       "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
         "message" : [
           "The function <prettyName> does not support <syntax>."
@@ -3940,14 +4905,29 @@
           "Expected a column reference for transform <transform>: <expr>."
         ]
       },
+      "INVALID_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths."
+        ]
+      },
       "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES" : {
         "message" : [
           "Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument <argumentName>; please surround this with parentheses and try again."
         ]
       },
+      "INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING" : {
+        "message" : [
+          "The table function call includes a table argument with an invalid partitioning/ordering specification: the <clause> clause included multiple expressions without parentheses surrounding them; please add parentheses around these expressions and then retry the query again."
+        ]
+      },
       "INVALID_TABLE_VALUED_FUNC_NAME" : {
         "message" : [
           "Table valued function cannot specify database name: <funcName>."
+        ]
+      },
+      "INVALID_WINDOW_FRAME_BOUND" : {
+        "message" : [
+          "Frame bound value must be a literal."
         ]
       },
       "INVALID_WINDOW_REFERENCE" : {
@@ -4000,6 +4980,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY" : {
+        "message" : [
+          "LINES TERMINATED BY only supports newline '\\n' right now: <value>."
+        ]
+      },
       "UNSUPPORTED_SQL_STATEMENT" : {
         "message" : [
           "Unsupported SQL statement: <sqlText>."
@@ -4050,17 +5035,47 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TABLESAMPLE_FRACTION" : {
+    "message" : [
+      "Sampling fraction (<fraction>) must be on interval [0, 1]."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_TEMP_OBJ_QUALIFIER" : {
+    "message" : [
+      "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_LITERAL_PRECISION" : {
+    "message" : [
+      "The timestamp literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a timestamp literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_TIMESTAMP_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9] for nanosecond precision; use precision 6 or parameterless <type> for the standard microsecond type."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMEZONE" : {
     "message" : [
       "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
     ],
     "sqlState" : "22009"
+  },
+  "INVALID_TIME_LITERAL_PRECISION" : {
+    "message" : [
+      "The time literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a time literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -4117,6 +5132,12 @@
   "INVALID_USAGE_OF_STAR_OR_REGEX" : {
     "message" : [
       "Invalid usage of <elem> in <prettyName>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT" : {
+    "message" : [
+      "count(<tableName>.*) is not allowed. Use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ],
     "sqlState" : "42000"
   },
@@ -4190,9 +5211,22 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_PATH" : {
+    "message" : [
+      "The path '<path>' is not a valid <functionName> target.",
+      "A valid path should start with `$` and is followed by segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_SHREDDING_SCHEMA" : {
     "message" : [
       "The schema `<schema>` is not a valid variant shredding schema."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_VECTOR_NORM_DEGREE" : {
+    "message" : [
+      "For the <functionName> function, degree must be 1.0, 2.0, or float('inf'), but got <degree>."
     ],
     "sqlState" : "22023"
   },
@@ -4222,6 +5256,11 @@
       "MISMATCH_WITH_DISTINCT_INPUT" : {
         "message" : [
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST" : {
+        "message" : [
+          "The function <funcName> with DISTINCT and WITHIN GROUP (ORDER BY) is not supported for <inputType> input. Explicitly cast the input to <castType> before passing it to both the function argument and ORDER BY expression."
         ]
       },
       "WITHIN_GROUP_MISSING" : {
@@ -4282,6 +5321,12 @@
         ]
       }
     },
+    "sqlState" : "42000"
+  },
+  "JDBC_OBJECT_NOT_SELECTABLE" : {
+    "message" : [
+      "The JDBC object <objectName> cannot be read as a table or view."
+    ],
     "sqlState" : "42000"
   },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
@@ -4455,6 +5500,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_INSERT_VALUE_COUNT_MISMATCH" : {
+    "message" : [
+      "The number of provided values (<actualCount>) must match the number of expected columns (<expectedCount>) in the INSERT clause of MERGE."
+    ],
+    "sqlState" : "21S01"
+  },
   "MERGE_WITHOUT_WHEN" : {
     "message" : [
       "There must be at least one WHEN clause in a MERGE statement."
@@ -4540,6 +5591,12 @@
     },
     "sqlState" : "0A000"
   },
+  "MISSING_CLAUSES_FOR_OPERATION" : {
+    "message" : [
+      "Missing required clause(s) <clauses> for operation <operation>."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -4569,6 +5626,12 @@
       "Flow with multipart name '<flowName>' is not supported."
     ],
     "sqlState" : "0A000"
+  },
+  "MULTIPLE_EVENT_TIME_COLUMNS" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ],
+    "sqlState" : "42K09"
   },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
@@ -4626,6 +5689,49 @@
     ],
     "sqlState" : "0A000"
   },
+  "NEAREST_BY_JOIN" : {
+    "message" : [
+      "Invalid nearest-by join."
+    ],
+    "subClass" : {
+      "CROSS_JOIN_NOT_ENABLED" : {
+        "message" : [
+          "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
+        ]
+      },
+      "NON_ORDERABLE_RANKING_EXPRESSION" : {
+        "message" : [
+          "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
+        ]
+      },
+      "NUM_RESULTS_OUT_OF_RANGE" : {
+        "message" : [
+          "The number of results <numResults> must be between <min> and <max>. Update the literal in `APPROX NEAREST <numResults> BY ...` (or `EXACT NEAREST <numResults> BY ...`) to fall within that range."
+        ]
+      },
+      "STREAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Nearest-by join is not supported with streaming DataFrames/Datasets."
+        ]
+      },
+      "UNSUPPORTED_DIRECTION" : {
+        "message" : [
+          "Unsupported nearest-by join direction '<direction>'. Supported nearest-by join directions include: <supported>."
+        ]
+      },
+      "UNSUPPORTED_JOIN_TYPE" : {
+        "message" : [
+          "Unsupported nearest-by join type <joinType>. Supported types: <supported>."
+        ]
+      },
+      "UNSUPPORTED_MODE" : {
+        "message" : [
+          "Unsupported nearest-by join mode '<mode>'. Supported modes include: <supported>."
+        ]
+      }
+    },
+    "sqlState" : "42604"
+  },
   "NEGATIVE_SCALE_DISALLOWED" : {
     "message" : [
       "Negative scale is not allowed: '<scale>'. Set the config <sqlConf> to \"true\" to allow it."
@@ -4644,11 +5750,26 @@
     ],
     "sqlState" : "42607"
   },
+  "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Nested databases are not supported by v1 session catalog: <namespace>."
+    ],
+    "sqlState" : "42K05"
+  },
   "NESTED_EXECUTE_IMMEDIATE" : {
     "message" : [
       "Nested EXECUTE IMMEDIATE commands are not allowed. Please ensure that the SQL query provided (<sqlString>) does not contain another EXECUTE IMMEDIATE command."
     ],
     "sqlState" : "07501"
+  },
+  "NESTED_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Nested SequentialStreamingUnion is not supported. <hint>",
+      "SequentialStreamingUnion can only be used at the top level of a streaming query.",
+      "Each source in followedBy() should be a base streaming source or simple transformations,",
+      "not another followedBy() result wrapped in other operators."
+    ],
+    "sqlState" : "42601"
   },
   "NEW_CHECK_CONSTRAINT_VIOLATION" : {
     "message" : [
@@ -4812,6 +5933,15 @@
     },
     "sqlState" : "42000"
   },
+  "NOT_STREAMING_DATASET" : {
+    "message" : [
+      "All sources in <operator> must be streaming relations.",
+      "Ensure all DataFrames are created using spark.readStream() rather than spark.read().",
+      "Example: df1 = spark.readStream.format(\"delta\").load(...); df2 = spark.readStream.format(\"kafka\").load(...)",
+      "Then use: df1.followedBy(df2)"
+    ],
+    "sqlState" : "42K0A"
+  },
   "NOT_SUPPORTED_CHANGE_COLUMN" : {
     "message" : [
       "ALTER TABLE ALTER/CHANGE COLUMN is not supported for changing <table>'s column <originName> with type <originType> to <newName> with type <newType>."
@@ -4963,11 +6093,35 @@
     ],
     "sqlState" : "HY008"
   },
+  "OPTION_VALUE_EXCEEDS_ONE_CHARACTER" : {
+    "message" : [
+      "The value of <paramName> cannot be more than one character, but got <actualValue>."
+    ],
+    "sqlState" : "22023"
+  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
     ],
     "sqlState" : "42805"
+  },
+  "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED" : {
+    "message" : [
+      "Aggregate push-down is not supported for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ],
+    "subClass" : {
+      "NO_MIN_MAX" : {
+        "message" : [
+          "No min/max value found in the column statistics."
+        ]
+      },
+      "NO_NUM_NULLS" : {
+        "message" : [
+          "The number of nulls is not set in the column statistics."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
   },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
@@ -5043,11 +6197,23 @@
     ],
     "sqlState" : "428FT"
   },
+  "PARTITION_BY_NOT_ALLOWED_WITH_INSERT_INTO" : {
+    "message" : [
+      "partitionBy() cannot be used with insertInto(). Partition columns for table <tableName> are determined by the table definition."
+    ],
+    "sqlState" : "42601"
+  },
   "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Partition column <column> not found in schema <schema>. Please provide the existing column for partitioning."
     ],
     "sqlState" : "42000"
+  },
+  "PARTITION_RENAME_NOT_SUPPORTED" : {
+    "message" : [
+      "Partition renaming is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY" : {
     "message" : [
@@ -5096,6 +6262,12 @@
       "There is a cycle between <flowName> and <inputName>."
     ],
     "sqlState" : "0A000"
+  },
+  "PIPELINE_RUN_FAILED" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "42K0S"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
@@ -5202,11 +6374,29 @@
     ],
     "sqlState" : "38000"
   },
+  "PYTHON_EXCEPTION" : {
+    "message" : [
+      "<msg>: <traceback>"
+    ],
+    "sqlState" : "38000"
+  },
   "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR" : {
     "message" : [
       "Failed when Python streaming data source perform <action>: <msg>"
     ],
     "sqlState" : "38000"
+  },
+  "QUALIFY_AGGREGATE_NOT_ALLOWED" : {
+    "message" : [
+      "Aggregate functions are not supported in QUALIFY: <aggregateExpr>."
+    ],
+    "sqlState" : "42903"
+  },
+  "QUALIFY_REQUIRES_WINDOW_FUNCTION" : {
+    "message" : [
+      "The QUALIFY clause requires at least one window function in the current SELECT list or the QUALIFY condition."
+    ],
+    "sqlState" : "42903"
   },
   "RECURSION_LEVEL_LIMIT_EXCEEDED" : {
     "message" : [
@@ -5231,6 +6421,12 @@
       "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
+  },
+  "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
+    "message" : [
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
+    ],
+    "sqlState" : "0A000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -5262,6 +6458,18 @@
     ],
     "sqlState" : "42K03"
   },
+  "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH" : {
+    "message" : [
+      "RENAME TABLE source and destination databases do not match: <db> != <newDb>."
+    ],
+    "sqlState" : "3F000"
+  },
+  "RENAME_TEMP_VIEW_WITH_DATABASE" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from <oldName> to <newName>: cannot specify database name <db> in the destination table."
+    ],
+    "sqlState" : "42809"
+  },
   "REPEATED_CLAUSE" : {
     "message" : [
       "The <clause> clause may be used at most once per <operation> operation."
@@ -5282,7 +6490,7 @@
   },
   "REQUIRES_SINGLE_PART_NAMESPACE" : {
     "message" : [
-      "<sessionCatalog> requires a single-part namespace, but got <namespace>."
+      "<sessionCatalog> requires a single-part namespace, but got identifier <identifier>."
     ],
     "sqlState" : "42K05"
   },
@@ -5391,11 +6599,95 @@
     ],
     "sqlState" : "42K05"
   },
+  "SKETCH_INVALID_LG_NOM_ENTRIES" : {
+    "message" : [
+      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+    ],
+    "sqlState" : "22003"
+  },
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
     ],
     "sqlState" : "42601"
+  },
+  "SPARK_CONNECT_ILLEGAL_STATE" : {
+    "message" : [
+      "Spark Connect encountered an illegal state condition."
+    ],
+    "subClass" : {
+      "DATA_INTEGRITY_CURSOR_OUT_OF_BOUNDS" : {
+        "message" : [
+          "Cursor out of bounds: <cursor> exceeds batch size <batchSize>."
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS" : {
+        "message" : [
+          "ExecuteHolder with opId=<operationId> already exists!"
+        ]
+      },
+      "EXECUTION_STATE_EXECUTE_HOLDER_ALREADY_EXISTS_GRAPH" : {
+        "message" : [
+          "Pipeline execution for graph ID <graphId> already exists. Stop the existing execution before starting a new one."
+        ]
+      },
+      "EXECUTION_STATE_OPERATION_ORPHANED" : {
+        "message" : [
+          "Operation <key> has been orphaned."
+        ]
+      },
+      "SESSION_MANAGEMENT_SERVICE_NOT_STARTED" : {
+        "message" : [
+          "Attempting to stop the Spark Connect service that has not been started."
+        ]
+      },
+      "SESSION_MANAGEMENT_SESSION_ALREADY_CLOSED" : {
+        "message" : [
+          "Session <key> is already closed."
+        ]
+      },
+      "STATE_CONSISTENCY_CLEANER_ALREADY_SET" : {
+        "message" : [
+          "Cleaner for query <queryKey> has already been set for session <key>."
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_OPERATION_STATUS_MISMATCH" : {
+        "message" : [
+          "operationId: <operationId> with status <currentStatus> is not within statuses <validStatuses> for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_EXECUTION_STATE_TRANSITION_INVALID_SESSION_STATUS_MISMATCH" : {
+        "message" : [
+          "sessionId: <sessionId> with status <sessionStatus> is not within valid statuses <validStatuses> for event <eventStatus>"
+        ]
+      },
+      "STATE_CONSISTENCY_NO_BATCHES_AVAILABLE" : {
+        "message" : [
+          "No batches available. Invalid response: <response>."
+        ]
+      },
+      "STATE_CONSISTENCY_SESSION_STATE_TRANSITION_INVALID" : {
+        "message" : [
+          "sessionId: <sessionId> with status <fromState> is not within statuses <validStates> for event <toState>"
+        ]
+      },
+      "STREAMING_QUERY_UNEXPECTED_RETURN_VALUE" : {
+        "message" : [
+          "Unexpected return value <value> from Python worker in <context> for session <key>."
+        ]
+      },
+      "STREAM_LIFECYCLE_ALREADY_COMPLETED" : {
+        "message" : [
+          "Stream <operation> can't be called after stream completed"
+        ]
+      },
+      "STREAM_LIFECYCLE_EVENT_SEND_AFTER_SHUTDOWN" : {
+        "message" : [
+          "Cannot send event after shutdown for session <key>."
+        ]
+      }
+    },
+    "sqlState" : "XXSC0"
   },
   "SPARK_JOB_CANCELLED" : {
     "message" : [
@@ -5460,6 +6752,15 @@
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
     ],
     "sqlState" : "0A000"
+  },
+  "STATEFUL_CHILDREN_NOT_SUPPORTED_IN_SEQUENTIAL_STREAMING_UNION" : {
+    "message" : [
+      "Stateful operations are not supported as direct children of SequentialStreamingUnion. Please apply stateful operations (aggregations, joins, deduplication, etc.) after the SequentialStreamingUnion.",
+      "Incorrect: historical.groupBy(\"key\").count().followedBy(live.groupBy(\"key\").count())",
+      "Correct: historical.followedBy(live).groupBy(\"key\").count()",
+      "This ensures state is preserved across source transitions from historical to live data."
+    ],
+    "sqlState" : "42601"
   },
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE" : {
     "message" : [
@@ -5624,6 +6925,14 @@
       }
     },
     "sqlState" : "55019"
+  },
+  "STATE_STORE_BASE_CHECKPOINT_ID_MISMATCH" : {
+    "message" : [
+      "State store checkpoint validation failed for batch <batchVersion>.",
+      "The base checkpoint ID reported by partition <partitionId> of operator <operatorId> does not match the expected checkpoint ID.",
+      "Expected: <expectedBaseId>. Actual: <actualBaseId>."
+    ],
+    "sqlState" : "XXKST"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -5942,6 +7251,20 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
+    "message" : [
+      "Storage-partition join partition transforms produced incompatible reduced types,",
+      "left reducers: <leftReducers> returned: <leftReducedDataTypes>,",
+      "right reducers: <rightReducers> returned: <rightReducedDataTypes>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
+    "message" : [
+      "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
@@ -5988,9 +7311,19 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
+        "message" : [
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
+        ]
+      },
+      "INVALID_SINK_NAME" : {
+        "message" : [
+          "Invalid streaming sink name: '<sinkName>'. Sink names must only contain ASCII letters ('a'-'z', 'A'-'Z'), digits ('0'-'9'), and underscores ('_')."
         ]
       },
       "INVALID_SOURCE_NAME" : {
@@ -6001,6 +7334,11 @@
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+        ]
+      },
+      "UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT" : {
+        "message" : [
+          "Streaming sink must be named when spark.sql.streaming.queryEvolution.enableSinkEvolution is enabled. Use the name() method on DataStreamWriter to assign a name to the streaming sink."
         ]
       },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
@@ -6049,6 +7387,18 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SHUFFLE_INCORRECT_SEQUENCE_NUMBER" : {
+    "message" : [
+      "Streaming shuffle <messageType> between writer <writerId> and reader <readerId> expected to have sequence number <expSeqNum>, but the actual sequence number is <actSeqNum>. Please verify that the messages are sent in order."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE" : {
+    "message" : [
+      "Unexpected message type <messageType> encountered during streaming shuffle."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -6065,10 +7415,37 @@
     ],
     "sqlState" : "42K03"
   },
+  "STREAMING_UNFINISHED_REPARTITION_DETECTED" : {
+    "message" : [
+      "The latest batch <batchId> is for an unfinished state repartitioning i.e. last committed batch is: <lastCommittedBatchId>).",
+      "Please retry the repartitioning operation and let it finish successfully before starting the streaming query."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ],
+    "sqlState" : "XXKST"
+  },
+  "STREAM_STREAM_JOIN_INCONSISTENT_STATE" : {
+    "message" : [
+      "Detected inconsistency in stream-stream join state."
+    ],
+    "subClass" : {
+      "NULL_VALUE" : {
+        "message" : [
+          "Value at index <valueIndex> is null while numValues is <numValues>.",
+          "joinSide=<joinSide>, storeVersion=<storeVersion>, partitionId=<partitionId>.",
+          "Enable <configKey> as a workaround to skip null values."
+        ]
+      },
+      "RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE" : {
+        "message" : [
+          "Range scan returned a row with timestamp <timestamp> outside the expected range [<minTimestamp>, <maxTimestamp>]."
+        ]
+      }
+    },
     "sqlState" : "XXKST"
   },
   "STRUCT_ARRAY_LENGTH_MISMATCH" : {
@@ -6086,6 +7463,12 @@
   "ST_INVALID_CRS_VALUE" : {
     "message" : [
       "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
     ],
     "sqlState" : "22023"
   },
@@ -6126,6 +7509,7 @@
   "TABLE_OR_VIEW_NOT_FOUND" : {
     "message" : [
       "The table or view <relationName> cannot be found. Verify the spelling and correctness of the schema and catalog.",
+      "Search path: <searchPath>.",
       "If you did not qualify the name with a schema, verify the current_schema() output, or qualify the name with the correct schema and catalog.",
       "To tolerate the error on drop use DROP VIEW IF EXISTS or DROP TABLE IF EXISTS."
     ],
@@ -6186,13 +7570,13 @@
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
-  "THETA_INVALID_LG_NOM_ENTRIES" : {
+  "THETA_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
     "message" : [
-      "Invalid call to <function>; the `lgNomEntries` value must be between <min> and <max>, inclusive: <value>."
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Theta sketch buffers (produced by `theta_sketch_agg`) are supported as inputs."
     ],
-    "sqlState" : "22546"
+    "sqlState" : "22000"
   },
   "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT" : {
     "message" : [
@@ -6237,6 +7621,36 @@
       "Transpose requires non-index columns to share a least common type, but <dt1> and <dt2> do not."
     ],
     "sqlState" : "42K09"
+  },
+  "TRUNCATE_PARTITIONS_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncating partitions is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "TRUNCATE_PARTITION_NOT_SUPPORTED" : {
+    "message" : [
+      "Truncating partition is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
+    "message" : [
+      "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_INPUT_SKETCH_BUFFER_FAMILY" : {
+    "message" : [
+      "Invalid call to <function>: expected <expectedFamily> sketch family but received <actualFamily>. Only valid Tuple sketch buffers (produced by `tuple_sketch_agg_*` functions) are supported as inputs."
+    ],
+    "sqlState" : "22000"
+  },
+  "TUPLE_INVALID_SKETCH_MODE" : {
+    "message" : [
+      "Invalid call to <function>: mode '<mode>' is not supported. Valid modes are: <validModes>."
+    ],
+    "sqlState" : "22023"
   },
   "TUPLE_IS_EMPTY" : {
     "message" : [
@@ -6325,6 +7739,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "UNEXPECTED_OPERATOR_IN_CORRELATED_SUBQUERY" : {
+    "message" : [
+      "Unexpected operator <operator> in correlated subquery<positionHint>."
+    ],
+    "sqlState" : "XX000"
+  },
   "UNEXPECTED_POSITIONAL_ARGUMENT" : {
     "message" : [
       "Cannot invoke routine <routineName> because it contains positional argument(s) following the named argument assigned to <parameterName>; please rearrange them so the positional arguments come first and then retry the query again."
@@ -6341,6 +7761,12 @@
     "message" : [
       "Internal error: Unexpected parameter marker <parameterMarker> found during AST building.",
       "This should have been blocked at the grammar level. Report this as a bug."
+    ],
+    "sqlState" : "XX000"
+  },
+  "UNEXPECTED_V2_EXPRESSION" : {
+    "message" : [
+      "Unexpected V2 expression: <expr>."
     ],
     "sqlState" : "XX000"
   },
@@ -6526,6 +7952,29 @@
       "Unsupported arrow type <typeName>."
     ],
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_AUTO_SCHEMA_EVOLUTION_CHANGES" : {
+    "message" : [
+      "Automatic schema evolution failed for table <tableName>."
+    ],
+    "subClass" : {
+      "FAILED_EVOLUTION" : {
+        "message" : [
+          "The catalog returned the error: <detail>"
+        ]
+      },
+      "PARTIAL_EVOLUTION" : {
+        "message" : [
+          "The catalog did not support or only partially applied the following changes: <changes>."
+        ]
+      },
+      "TABLE_NOT_SUPPORTED" : {
+        "message" : [
+          "The write target does not support automatic schema evolution."
+        ]
+      }
+    },
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_CALL" : {
     "message" : [
@@ -6753,9 +8202,29 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
+      "BIN_BY" : {
+        "message" : [
+          "The BIN BY relation operator is not yet supported."
+        ]
+      },
+      "CATALOG_INTERFACE_METHOD" : {
+        "message" : [
+          "Catalog API <methodName> is not supported by <catalogClass>."
+        ]
+      },
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE" : {
+        "message" : [
+          "Catalog <catalogName> does not support Change Data Capture (CDC)."
+        ]
+      },
+      "CHANGE_DATA_CAPTURE_ON_RELATION" : {
+        "message" : [
+          "Relation <relationId> does not support Change Data Capture (CDC)."
         ]
       },
       "CLAUSE_WITH_PIPE_OPERATORS" : {
@@ -6871,6 +8340,11 @@
       "LATERAL_COLUMN_ALIAS_IN_WINDOW" : {
         "message" : [
           "Referencing a lateral column alias <lca> in window expression <windowExpr>."
+        ]
+      },
+      "LATERAL_JOIN_NEAREST_BY" : {
+        "message" : [
+          "LATERAL correlation with NEAREST BY clause."
         ]
       },
       "LATERAL_JOIN_USING" : {
@@ -6992,12 +8466,17 @@
       },
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
-          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have MAP type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
-          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have VARIANT type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
+      "SET_PATH_WHEN_DISABLED" : {
+        "message" : [
+          "SET PATH is disabled. Set <config> to true to enable it."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
@@ -7013,6 +8492,16 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION" : {
+        "message" : [
+          "SHOW TABLE EXTENDED with PARTITION does not support AS JSON output."
+        ]
+      },
+      "SQL_CURSOR" : {
+        "message" : [
+          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
         ]
       },
       "SQL_SCRIPTING" : {
@@ -7050,6 +8539,26 @@
           "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
+      "TABLESAMPLE_SYSTEM" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM is only supported by data sources that implement block-level sampling."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_NO_SCAN" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM requires a direct reference to a data source table that supports block-level sampling. It cannot be applied to subqueries, views, or tables with intervening operations."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_REPEATABLE" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support the REPEATABLE clause. Use TABLESAMPLE BERNOULLI for repeatable sampling with a seed."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_SAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support <sampleMethod> sampling. Only PERCENT sampling is supported."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
@@ -7058,6 +8567,11 @@
       "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
         "message" : [
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
+        ]
+      },
+      "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
+        "message" : [
+          "Parsing or formatting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) under the LEGACY time parser policy. Set <config> to CORRECTED."
         ]
       },
       "TIME_TRAVEL" : {
@@ -7131,6 +8645,41 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ],
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_HIVE_FUNCTION_TYPE" : {
+    "message" : [
+      "Unsupported Hive UDF/UDAF/UDTF Java type:"
+    ],
+    "subClass" : {
+      "RAW_LIST" : {
+        "message" : [
+          "raw java.util.List. Spark cannot infer the element type."
+        ]
+      },
+      "RAW_MAP" : {
+        "message" : [
+          "raw java.util.Map. Spark cannot infer the key and value types."
+        ]
+      },
+      "WILDCARD" : {
+        "message" : [
+          "wildcard type parameter. Spark cannot infer a concrete data type for wildcard type parameters, such as List<?> or Map<?, ?>."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
+    "message" : [
+      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_HIVE_TYPE" : {
+    "message" : [
+      "Cannot read the Hive type <fieldType> of the column <fieldName> because Spark SQL does not support this data type."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_INSERT" : {
     "message" : [
@@ -7248,6 +8797,29 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "Schema evolution is not supported for this write."
+    ],
+    "subClass" : {
+      "CREATE_TABLE" : {
+        "message" : [
+          "Creating a new table does not support schema evolution."
+        ]
+      },
+      "REPLACE_TABLE" : {
+        "message" : [
+          "Replacing a table does not support schema evolution."
+        ]
+      },
+      "V1_TABLE" : {
+        "message" : [
+          "Writes to V1 tables or V1 data sources do not support schema evolution."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SHOW_CREATE_TABLE" : {
     "message" : [
       "Unsupported a SHOW CREATE TABLE command."
@@ -7256,6 +8828,11 @@
       "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
           "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_METRIC_VIEW" : {
+        "message" : [
+          "The command is not supported on a metric view <tableName>."
         ]
       },
       "ON_TEMPORARY_VIEW" : {
@@ -7398,11 +8975,11 @@
     },
     "sqlState" : "0A000"
   },
-  "UNSUPPORTED_TABLE_CHANGE_IN_AUTO_SCHEMA_EVOLUTION" : {
+  "UNSUPPORTED_TABLE_CHANGE" : {
     "message" : [
-      "The table changes <changes> are not supported by the catalog on table <tableName>."
+      "Unsupported table change: <message>"
     ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TABLE_CHANGE_IN_JDBC_CATALOG" : {
     "message" : [
@@ -7412,7 +8989,7 @@
   },
   "UNSUPPORTED_TIME_PRECISION" : {
     "message" : [
-      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
+      "The seconds precision <precision> of the TIME data type is out of the supported range [0, 9]."
     ],
     "sqlState" : "0A001"
   },
@@ -7533,6 +9110,18 @@
     ],
     "sqlState" : "42000"
   },
+  "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support user defined aggregate function: <funcName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "V2_EXPRESSION_SQL_BUILDER_UDF_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> does not support user defined function: <funcName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "VARIABLE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the variable <variableName> because it already exists.",
@@ -7607,11 +9196,29 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_FRAME_NOT_ORDERED" : {
+    "message" : [
+      "Window function <wf_name> requires the window to be ordered. You need to add an ORDER BY clause. For example: SELECT <wf_expr> OVER (PARTITION BY window_partition ORDER BY window_ordering) FROM table."
+    ],
+    "sqlState" : "42601"
+  },
+  "WINDOW_FUNCTION_NOT_ALLOWED_IN_CLAUSE" : {
+    "message" : [
+      "It is not allowed to use window functions inside <clauseName> clause."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
     ],
     "sqlState" : "42601"
+  },
+  "WKB_PARSE_ERROR" : {
+    "message" : [
+      "Error parsing WKB: <parseError> at position <pos>"
+    ],
+    "sqlState" : "22023"
   },
   "WRITE_STREAM_NOT_ALLOWED" : {
     "message" : [
@@ -7649,6 +9256,12 @@
     ],
     "sqlState" : "42KDF"
   },
+  "ZIP_PLANS_NOT_MERGEABLE" : {
+    "message" : [
+      "The two DataFrames in zip() cannot be merged. They must produce the same canonicalized plan after stripping outer Project chains, and must not contain non-scalar Python UDFs."
+    ],
+    "sqlState" : "42K03"
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
@@ -7657,11 +9270,6 @@
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0006" : {
-    "message" : [
-      "The number of inserted values cannot match the fields."
     ]
   },
   "_LEGACY_ERROR_TEMP_0012" : {
@@ -7769,11 +9377,6 @@
       "Empty set in <element> grouping sets is not supported."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0052" : {
-    "message" : [
-      "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0053" : {
     "message" : [
       "It is not allowed to define a TEMPORARY view with IF NOT EXISTS."
@@ -7795,11 +9398,6 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_0063" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0064" : {
     "message" : [
       "<msg>."
     ]
@@ -7835,11 +9433,6 @@
       "Cannot write into v1 table: <identifier>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1017" : {
-    "message" : [
-      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
@@ -7848,11 +9441,6 @@
   "_LEGACY_ERROR_TEMP_1021" : {
     "message" : [
       "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1030" : {
-    "message" : [
-      "Window aggregate function with filter predicate is not supported yet."
     ]
   },
   "_LEGACY_ERROR_TEMP_1031" : {
@@ -7871,11 +9459,6 @@
       "Please file a bug report with this error message, stack trace, and the query."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1034" : {
-    "message" : [
-      "It is not allowed to use window functions inside <clauseName> clause."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1035" : {
     "message" : [
       "Cannot specify window frame for <prettyName> function."
@@ -7884,11 +9467,6 @@
   "_LEGACY_ERROR_TEMP_1036" : {
     "message" : [
       "Window Frame <wf> must match the required frame <required>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1039" : {
@@ -7971,21 +9549,6 @@
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1073" : {
-    "message" : [
-      "RENAME TABLE source and destination databases do not match: '<db>' != '<newDb>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1074" : {
-    "message" : [
-      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1076" : {
-    "message" : [
-      "Partition spec is invalid. <details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1079" : {
     "message" : [
       "Resource Type '<resourceType>' is not supported."
@@ -8051,11 +9614,6 @@
       "Cannot delete from table <table> where <filters>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1111" : {
-    "message" : [
-      "DESCRIBE does not support partition for v2 tables."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1114" : {
     "message" : [
       "The streaming sources in a query do not have a common supported execution mode.",
@@ -8083,11 +9641,6 @@
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1126" : {
-    "message" : [
-      "Nested databases are not supported by v1 session catalog: <catalog>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1127" : {
     "message" : [
       "Invalid partitionExprs specified: <sortOrders> For range partitioning use REPARTITION_BY_RANGE instead."
@@ -8101,11 +9654,6 @@
   "_LEGACY_ERROR_TEMP_1132" : {
     "message" : [
       "A schema needs to be specified when using <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1134" : {
-    "message" : [
-      "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
     ]
   },
   "_LEGACY_ERROR_TEMP_1135" : {
@@ -8497,11 +10045,6 @@
       "LOAD DATA target table <tableIdentWithDB> is not partitioned, but a partition spec was provided."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1266" : {
-    "message" : [
-      "Operation not allowed: TRUNCATE TABLE on external tables: <tableIdentWithDB>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1267" : {
     "message" : [
       "Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned: <tableIdentWithDB>."
@@ -8602,11 +10145,6 @@
       "There is a 'path' option set and save() is called with a path parameter. Either remove the path option, or call save() without the parameter. To ignore this check, set '<config>' to 'true'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1309" : {
-    "message" : [
-      "insertInto() can't be used together with partitionBy(). Partition columns have already been defined for the table. It is not necessary to use partitionBy()."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1310" : {
     "message" : [
       "Couldn't find a catalog to handle the identifier <quote>."
@@ -8682,11 +10220,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2003" : {
-    "message" : [
-      "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
@@ -8695,11 +10228,6 @@
   "_LEGACY_ERROR_TEMP_2026" : {
     "message" : [
       "Failed to convert value <value> (class of <cls>) with the type of <dataType> to JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2027" : {
-    "message" : [
-      "Unexpected operator <op> in correlated subquery<pos>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2028" : {
@@ -8765,11 +10293,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2045" : {
-    "message" : [
-      "Unsupported table change: <message>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2046" : {
@@ -9067,11 +10590,6 @@
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2145" : {
-    "message" : [
-      "<paramName> cannot be more than one character."
     ]
   },
   "_LEGACY_ERROR_TEMP_2146" : {
@@ -9854,11 +11372,6 @@
       "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3077" : {
-    "message" : [
-      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3079" : {
     "message" : [
       "Dynamic partition cannot be the parent of a static partition."
@@ -9884,11 +11397,6 @@
       "Unable to infer the schema. The schema specification is required to create the table <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3084" : {
-    "message" : [
-      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -9907,21 +11415,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3090" : {
-    "message" : [
-      "Raw list type in java is unsupported because Spark cannot infer the element type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3091" : {
-    "message" : [
-      "Raw map type in java is unsupported because Spark cannot infer key and value types."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3092" : {
-    "message" : [
-      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
     ]
   },
   "_LEGACY_ERROR_TEMP_3093" : {
@@ -10044,91 +11537,6 @@
       "CaseInsensitiveStringMap is read-only."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3133" : {
-    "message" : [
-      "<class> does not implement rowIdSchema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3134" : {
-    "message" : [
-      "<class> does not implement metadataSchema"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3135" : {
-    "message" : [
-      "<class> does not support batch write"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3136" : {
-    "message" : [
-      "<class> does not support streaming write"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3137" : {
-    "message" : [
-      "<description>: Batch write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3138" : {
-    "message" : [
-      "<description>: Streaming write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3139" : {
-    "message" : [
-      "<description>: Delta batch write is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3140" : {
-    "message" : [
-      "<class> does not implement build"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3141" : {
-    "message" : [
-      "<class> does not support user defined function: <funcName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3142" : {
-    "message" : [
-      "<class> does not support user defined aggregate function: <funcName>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3143" : {
-    "message" : [
-      "Partition renaming is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3144" : {
-    "message" : [
-      "Partition truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3145" : {
-    "message" : [
-      "Partitions truncate is not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3147" : {
-    "message" : [
-      "<description>: Batch scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3148" : {
-    "message" : [
-      "<description>: Micro-batch scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3149" : {
-    "message" : [
-      "<description>: Continuous scan are not supported"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3150" : {
-    "message" : [
-      "Cannot create columnar reader."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3152" : {
     "message" : [
       "Datatype not supported <dataType>"
@@ -10182,16 +11590,6 @@
   "_LEGACY_ERROR_TEMP_3170" : {
     "message" : [
       "SortAggregate code-gen does not support grouping keys"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
     ]
   },
   "_LEGACY_ERROR_TEMP_3173" : {
@@ -10284,11 +11682,6 @@
       "Dictionary encoding does not support String"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3192" : {
-    "message" : [
-      "Datatype not supported <dt>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3198" : {
     "message" : [
       "Cannot grow BufferHolder by size <neededSize> because the size is negative"
@@ -10334,11 +11727,6 @@
       "<value> is not a boolean string."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3207" : {
-    "message" : [
-      "Unexpected V2 expression: <expr>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3208" : {
     "message" : [
       "The number of fields (<numFields>) in the partition identifier is not equal to the partition schema length (<schemaLen>). The identifier might not refer to one partition."
@@ -10352,11 +11740,6 @@
   "_LEGACY_ERROR_TEMP_3218" : {
     "message" : [
       "Must be 2 children: <others>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3219" : {
-    "message" : [
-      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_3220" : {

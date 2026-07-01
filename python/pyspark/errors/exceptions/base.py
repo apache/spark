@@ -49,7 +49,7 @@ class PySparkException(Exception):
 
         if message is None:
             self._message = self._error_reader.get_error_message(
-                cast(str, errorClass), cast(Dict[str, str], messageParameters)
+                cast(str, errorClass), messageParameters or {}
             )
         else:
             self._message = message

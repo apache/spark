@@ -81,6 +81,11 @@ public interface NamespaceChange {
     public String value() {
       return value;
     }
+
+    @Override
+    public String toString() {
+      return "SET PROPERTY " + property + " = " + value;
+    }
   }
 
   /**
@@ -97,6 +102,11 @@ public interface NamespaceChange {
 
     public String property() {
       return property;
+    }
+
+    @Override
+    public String toString() {
+      return "REMOVE PROPERTY " + property;
     }
   }
 }

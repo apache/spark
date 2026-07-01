@@ -1,6 +1,8 @@
 {
   "attempts" : [ {
     "appSparkVersion" : "",
+    "logSourceFullPath" : "",
+    "logSourceName" : "",
     "completed" : true,
     "duration" : 9011,
     "endTime" : "2015-02-03T16:43:08.731GMT",

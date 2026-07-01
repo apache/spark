@@ -180,6 +180,7 @@ String Functions
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length
@@ -298,8 +299,16 @@ Date and Timestamp Functions
     timestamp_diff
     timestamp_micros
     timestamp_millis
+    timestamp_nanos
     timestamp_seconds
+    time_bucket
     time_diff
+    time_from_micros
+    time_from_millis
+    time_from_seconds
+    time_to_micros
+    time_to_millis
+    time_to_seconds
     time_trunc
     to_date
     to_time
@@ -319,6 +328,7 @@ Date and Timestamp Functions
     unix_date
     unix_micros
     unix_millis
+    unix_nanos
     unix_seconds
     unix_timestamp
     weekday
@@ -501,6 +511,12 @@ Aggregate Functions
     theta_intersection_agg
     theta_sketch_agg
     theta_union_agg
+    tuple_intersection_agg_double
+    tuple_intersection_agg_integer
+    tuple_sketch_agg_double
+    tuple_sketch_agg_integer
+    tuple_union_agg_double
+    tuple_union_agg_integer
     try_avg
     try_sum
     var_pop
@@ -513,6 +529,7 @@ Window Functions
 .. autosummary::
     :toctree: api/
 
+    counter_diff
     cume_dist
     dense_rank
     lag
@@ -579,11 +596,13 @@ VARIANT Functions
 .. autosummary::
     :toctree: api/
 
+    is_valid_variant
     is_variant_null
     parse_json
     schema_of_variant
     schema_of_variant_agg
     try_variant_get
+    variant_delete
     variant_get
     try_parse_json
     to_variant_object
@@ -633,8 +652,30 @@ Misc Functions
     bitmap_count
     current_catalog
     current_database
+    current_path
     current_schema
     current_user
+    input_file_block_length
+    input_file_block_start
+    input_file_name
+    java_method
+    monotonically_increasing_id
+    raise_error
+    reflect
+    session_user
+    spark_partition_id
+    try_aes_decrypt
+    try_reflect
+    typeof
+    user
+    uuid
+    version
+
+Datasketch Functions
+--------------------
+.. autosummary::
+    :toctree: api/
+
     hll_sketch_estimate
     hll_union
     kll_sketch_get_n_bigint
@@ -652,25 +693,28 @@ Misc Functions
     kll_sketch_to_string_bigint
     kll_sketch_to_string_double
     kll_sketch_to_string_float
-    input_file_block_length
-    input_file_block_start
-    input_file_name
-    java_method
-    monotonically_increasing_id
-    raise_error
-    reflect
-    session_user
-    spark_partition_id
     theta_difference
     theta_intersection
     theta_sketch_estimate
     theta_union
-    try_aes_decrypt
-    try_reflect
-    typeof
-    user
-    uuid
-    version
+    tuple_difference_double
+    tuple_difference_integer
+    tuple_difference_theta_double
+    tuple_difference_theta_integer
+    tuple_intersection_double
+    tuple_intersection_integer
+    tuple_intersection_theta_double
+    tuple_intersection_theta_integer
+    tuple_sketch_estimate_double
+    tuple_sketch_estimate_integer
+    tuple_sketch_summary_double
+    tuple_sketch_summary_integer
+    tuple_sketch_theta_double
+    tuple_sketch_theta_integer
+    tuple_union_double
+    tuple_union_integer
+    tuple_union_theta_double
+    tuple_union_theta_integer
 
 
 Geospatial ST Functions
@@ -683,6 +727,20 @@ Geospatial ST Functions
     st_geomfromwkb
     st_setsrid
     st_srid
+
+
+Vector Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    vector_cosine_similarity
+    vector_inner_product
+    vector_l2_distance
+    vector_norm
+    vector_normalize
+    vector_avg
+    vector_sum
 
 
 UDF, UDTF and UDT

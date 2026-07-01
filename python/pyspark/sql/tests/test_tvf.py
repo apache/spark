@@ -145,11 +145,9 @@ class TVFTestsMixin:
                 .lateralJoin(
                     self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM EXPLODE_OUTER(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1 AS v2)
-                    """
-                ),
+                    """),
             )
 
     def test_inline(self):
@@ -170,24 +168,20 @@ class TVFTestsMixin:
                 sf.named_struct(sf.lit("a"), sf.lit(3), sf.lit("b"), sf.lit(4)),
             )
         )
-        expected = self.spark.sql(
-            """
+        expected = self.spark.sql("""
             SELECT * FROM
               inline(array(named_struct('a', 1, 'b', 2), null, named_struct('a', 3, 'b', 4)))
-            """
-        )
+            """)
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_inline_with_lateral_join(self):
         with self.temp_view("array_struct"):
-            array_struct = self.spark.sql(
-                """
+            array_struct = self.spark.sql("""
                 VALUES
                 (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
                 (2, ARRAY()),
                 (3, ARRAY(STRUCT(3, 'c'))) AS array_struct(id, arr)
-                """
-            )
+                """)
             array_struct.createOrReplaceTempView("array_struct")
 
             assertDataFrameEqual(
@@ -200,11 +194,9 @@ class TVFTestsMixin:
                     sf.col("id") == sf.col("k"),
                     "left",
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k
-                    """
-                ),
+                    """),
             )
 
     def test_inline_outer(self):
@@ -229,24 +221,20 @@ class TVFTestsMixin:
                 sf.named_struct(sf.lit("a"), sf.lit(3), sf.lit("b"), sf.lit(4)),
             )
         )
-        expected = self.spark.sql(
-            """
+        expected = self.spark.sql("""
             SELECT * FROM
               inline_outer(array(named_struct('a', 1, 'b', 2), null, named_struct('a', 3, 'b', 4)))
-            """
-        )
+            """)
         assertDataFrameEqual(actual=actual, expected=expected)
 
     def test_inline_outer_with_lateral_join(self):
         with self.temp_view("array_struct"):
-            array_struct = self.spark.sql(
-                """
+            array_struct = self.spark.sql("""
                 VALUES
                 (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
                 (2, ARRAY()),
                 (3, ARRAY(STRUCT(3, 'c'))) AS array_struct(id, arr)
-                """
-            )
+                """)
             array_struct.createOrReplaceTempView("array_struct")
 
             assertDataFrameEqual(
@@ -259,11 +247,9 @@ class TVFTestsMixin:
                     sf.col("id") == sf.col("k"),
                     "left",
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM array_struct LEFT JOIN LATERAL INLINE_OUTER(arr) t(k, v) ON id = k
-                    """
-                ),
+                    """),
             )
 
     def test_json_tuple(self):
@@ -282,8 +268,7 @@ class TVFTestsMixin:
 
     def test_json_tuple_with_lateral_join(self):
         with self.temp_view("json_table"):
-            json_table = self.spark.sql(
-                """
+            json_table = self.spark.sql("""
                 VALUES
                 ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
                 ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
@@ -291,8 +276,7 @@ class TVFTestsMixin:
                 ('4', cast(null as string)),
                 ('5', '{"f1": null, "f5": ""}'),
                 ('6', '[invalid JSON string]') AS json_table(key, jstring)
-                """
-            )
+                """)
             json_table.createOrReplaceTempView("json_table")
 
             assertDataFrameEqual(
@@ -308,12 +292,10 @@ class TVFTestsMixin:
                     ).alias("t2")
                 )
                 .select("t1.key", "t2.*"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT t1.key, t2.* FROM json_table t1,
                     LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
-                    """
-                ),
+                    """),
             )
             assertDataFrameEqual(
                 json_table.alias("t1")
@@ -329,13 +311,11 @@ class TVFTestsMixin:
                 )
                 .where(sf.col("t2.c0").isNotNull())
                 .select("t1.key", "t2.*"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT t1.key, t2.* FROM json_table t1,
                     LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
                     WHERE t2.c0 IS NOT NULL
-                    """
-                ),
+                    """),
             )
 
     def test_posexplode(self):
@@ -393,11 +373,9 @@ class TVFTestsMixin:
                 .lateralJoin(
                     self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM POSEXPLODE(ARRAY(1, 2)) t(p, v), LATERAL (SELECT v + 1 AS v2)
-                    """
-                ),
+                    """),
             )
 
     def test_posexplode_outer(self):
@@ -457,12 +435,10 @@ class TVFTestsMixin:
                 .lateralJoin(
                     self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
                 ),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT * FROM POSEXPLODE_OUTER(ARRAY(1, 2)) t(p, v),
                         LATERAL (SELECT v + 1 AS v2)
-                    """
-                ),
+                    """),
             )
 
     def test_stack(self):
@@ -510,12 +486,10 @@ class TVFTestsMixin:
                     ).alias("t")
                 )
                 .select("t.*"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1
                         JOIN LATERAL stack(1, t1.c2, t3.c2) t
-                    """
-                ),
+                    """),
             )
 
     def test_collations(self):
@@ -562,27 +536,23 @@ class TVFTestsMixin:
 
     def test_variant_explode_with_lateral_join(self):
         with self.temp_view("variant_table"):
-            variant_table = self.spark.sql(
-                """
+            variant_table = self.spark.sql("""
                 SELECT id, parse_json(v) AS v FROM VALUES
                     (0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
                     (2, '[]'), (3, '{}'),
                     (4, NULL), (5, '1')
                     AS t(id, v)
-                """
-            )
+                """)
             variant_table.createOrReplaceTempView("variant_table")
 
             assertDataFrameEqual(
                 variant_table.alias("t1")
                 .lateralJoin(self.spark.tvf.variant_explode(sf.col("v").outer()).alias("t"))
                 .select("t1.id", "t.*"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT t1.id, t.* FROM variant_table AS t1,
                         LATERAL variant_explode(v) AS t
-                    """
-                ),
+                    """),
             )
 
     def test_variant_explode_outer(self):
@@ -621,27 +591,23 @@ class TVFTestsMixin:
 
     def test_variant_explode_outer_with_lateral_join(self):
         with self.temp_view("variant_table"):
-            variant_table = self.spark.sql(
-                """
+            variant_table = self.spark.sql("""
                 SELECT id, parse_json(v) AS v FROM VALUES
                     (0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
                     (2, '[]'), (3, '{}'),
                     (4, NULL), (5, '1')
                     AS t(id, v)
-                """
-            )
+                """)
             variant_table.createOrReplaceTempView("variant_table")
 
             assertDataFrameEqual(
                 variant_table.alias("t1")
                 .lateralJoin(self.spark.tvf.variant_explode_outer(sf.col("v").outer()).alias("t"))
                 .select("t1.id", "t.*"),
-                self.spark.sql(
-                    """
+                self.spark.sql("""
                     SELECT t1.id, t.* FROM variant_table AS t1,
                         LATERAL variant_explode_outer(v) AS t
-                    """
-                ),
+                    """),
             )
 
 

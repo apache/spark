@@ -55,6 +55,16 @@ message Catalog {
     CurrentCatalog current_catalog = 24;
     SetCurrentCatalog set_current_catalog = 25;
     ListCatalogs list_catalogs = 26;
+    DropTable drop_table = 27;
+    DropView drop_view = 28;
+    CreateDatabase create_database = 29;
+    DropDatabase drop_database = 30;
+    ListPartitions list_partitions = 31;
+    ListViews list_views = 32;
+    GetTableProperties get_table_properties = 33;
+    GetCreateTableString get_create_table_string = 34;
+    TruncateTable truncate_table = 35;
+    AnalyzeTable analyze_table = 36;
   }
 }
 
@@ -240,4 +250,75 @@ message SetCurrentCatalog {
 message ListCatalogs {
   // (Optional) The pattern that the catalog name needs to match
   optional string pattern = 1;
+}
+
+// See `spark.catalog.dropTable`
+message DropTable {
+  // (Required)
+  string table_name = 1;
+  bool if_exists = 2;
+  bool purge = 3;
+}
+
+// See `spark.catalog.dropView`
+message DropView {
+  // (Required)
+  string view_name = 1;
+  bool if_exists = 2;
+}
+
+// See `spark.catalog.createDatabase`
+message CreateDatabase {
+  // (Required)
+  string db_name = 1;
+  bool if_not_exists = 2;
+  map<string, string> properties = 3;
+}
+
+// See `spark.catalog.dropDatabase`
+message DropDatabase {
+  // (Required)
+  string db_name = 1;
+  bool if_exists = 2;
+  bool cascade = 3;
+}
+
+// See `spark.catalog.listPartitions`
+message ListPartitions {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.listViews`
+message ListViews {
+  // (Optional)
+  optional string db_name = 1;
+  // (Optional) The pattern that the view name needs to match
+  optional string pattern = 2;
+}
+
+// See `spark.catalog.getTableProperties`
+message GetTableProperties {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.getCreateTableString`
+message GetCreateTableString {
+  // (Required)
+  string table_name = 1;
+  bool as_serde = 2;
+}
+
+// See `spark.catalog.truncateTable`
+message TruncateTable {
+  // (Required)
+  string table_name = 1;
+}
+
+// See `spark.catalog.analyzeTable`
+message AnalyzeTable {
+  // (Required)
+  string table_name = 1;
+  bool no_scan = 2;
 }

@@ -1,0 +1,12 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "relationChanges": {
+    "unparsedIdentifier": "myTable",
+    "options": {
+      "startingVersion": "1",
+      "endingVersion": "5"
+    }
+  }
+}

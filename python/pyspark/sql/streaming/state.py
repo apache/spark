@@ -178,8 +178,9 @@ class GroupState:
         if isinstance(durationMs, str):
             # TODO(SPARK-40437): Support string representation of durationMs.
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "durationMs",
                     "arg_type": type(durationMs).__name__,
                 },

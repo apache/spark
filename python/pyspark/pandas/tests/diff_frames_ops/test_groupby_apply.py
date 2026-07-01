@@ -20,7 +20,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupByApplyMixin:
@@ -60,11 +59,14 @@ class GroupByApplyMixin:
             pdf.groupby(["a", pkey]).apply(lambda x: x + x.min()).sort_index(),
         )
 
+    def test_apply_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 0):
+            self.test_apply()
+
 
 class GroupByApplyTests(
     GroupByApplyMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

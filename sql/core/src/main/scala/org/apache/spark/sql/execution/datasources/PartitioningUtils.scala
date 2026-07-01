@@ -308,10 +308,14 @@ object PartitioningUtils extends SQLConfHelper {
       None
     } else {
       val columnName = unescapePathName(columnSpec.take(equalSignIndex))
-      assert(columnName.nonEmpty, s"Empty partition column name in '$columnSpec'")
+      if (columnName.isEmpty) {
+        throw QueryExecutionErrors.emptyPartitionColumnNameError(columnSpec)
+      }
 
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
-      assert(rawColumnValue.nonEmpty, s"Empty partition column value in '$columnSpec'")
+      if (rawColumnValue.isEmpty) {
+        throw QueryExecutionErrors.emptyPartitionColumnValueError(columnSpec)
+      }
 
       val dataType = if (userSpecifiedDataTypes.contains(columnName)) {
         // SPARK-26188: if user provides corresponding column schema, get the column value without

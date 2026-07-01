@@ -21,7 +21,6 @@ from pyspark.sql import DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.window import Window
 from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled
 
-
 CORRELATION_VALUE_1_COLUMN = "__correlation_value_1_input__"
 CORRELATION_VALUE_2_COLUMN = "__correlation_value_2_input__"
 CORRELATION_CORR_OUTPUT_COLUMN = "__correlation_corr_output__"
@@ -245,18 +244,14 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                 F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN)
             ) / F.sqrt(
                 (
-                    (
-                        F.col(CORRELATION_KENDALL_P_COLUMN)
-                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                        + (F.col(CORRELATION_KENDALL_T_COLUMN))
-                    )
+                    F.col(CORRELATION_KENDALL_P_COLUMN)
+                    + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                    + (F.col(CORRELATION_KENDALL_T_COLUMN))
                 )
                 * (
-                    (
-                        F.col(CORRELATION_KENDALL_P_COLUMN)
-                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                        + (F.col(CORRELATION_KENDALL_U_COLUMN))
-                    )
+                    F.col(CORRELATION_KENDALL_P_COLUMN)
+                    + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                    + (F.col(CORRELATION_KENDALL_U_COLUMN))
                 )
             )
 

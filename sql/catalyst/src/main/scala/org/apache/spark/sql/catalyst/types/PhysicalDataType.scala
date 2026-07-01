@@ -21,10 +21,11 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{BinaryView, ByteArray, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -34,7 +35,10 @@ sealed abstract class PhysicalDataType {
 }
 
 object PhysicalDataType {
-  def apply(dt: DataType): PhysicalDataType = dt match {
+  def apply(dt: DataType): PhysicalDataType =
+    TypeOps(dt).map(_.getPhysicalType).getOrElse(applyDefault(dt))
+
+  private def applyDefault(dt: DataType): PhysicalDataType = dt match {
     case NullType => PhysicalNullType
     case ByteType => PhysicalByteType
     case ShortType => PhysicalShortType
@@ -54,13 +58,13 @@ object PhysicalDataType {
     case DayTimeIntervalType(_, _) => PhysicalLongType
     case YearMonthIntervalType(_, _) => PhysicalIntegerType
     case DateType => PhysicalIntegerType
-    case _: TimeType => PhysicalLongType
     case ArrayType(elementType, containsNull) => PhysicalArrayType(elementType, containsNull)
     case StructType(fields) => PhysicalStructType(fields)
     case MapType(keyType, valueType, valueContainsNull) =>
       PhysicalMapType(keyType, valueType, valueContainsNull)
-    case _: GeometryType => PhysicalGeometryType
-    case _: GeographyType => PhysicalGeographyType
+    // GEOMETRY and GEOGRAPHY are physically just an opaque chunk of bytes; they differ only
+    // at the logical-type level, so they share a single physical type.
+    case _: GeometryType | _: GeographyType => PhysicalBinaryViewType
     case VariantType => PhysicalVariantType
     case _ => UninitializedPhysicalType
   }
@@ -161,6 +165,42 @@ class PhysicalCalendarIntervalType() extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampNTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Hash is not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
+  override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
+case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampLTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Hash is not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
+  override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
+case object PhysicalTimestampLTZNanosType extends PhysicalTimestampLTZNanosType
 
 case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalFractionalType {
   private[sql] type InternalType = Decimal
@@ -414,18 +454,19 @@ object UninitializedPhysicalType extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
-case class PhysicalGeographyType() extends PhysicalDataType {
-  private[sql] type InternalType = GeographyVal
+// Physical type for opaque, variable-length byte payloads that are addressed as a zero-copy
+// BinaryView into the row backing buffer. Today GEOMETRY and GEOGRAPHY share this physical
+// type; future opaque-bytes logical types can plug into it as well.
+//
+// The physical type defines the natural ordering of its storage: BinaryView has a meaningful
+// unsigned lexicographic compareTo, so we expose it here. Whether a logical type backed by this
+// physical type can actually be ordered is a separate, logical-level decision made by
+// `OrderUtils.isOrderable`, which rejects GEOMETRY / GEOGRAPHY so `ORDER BY <geo_col>` fails at
+// analysis time rather than silently producing a byte-order result.
+class PhysicalBinaryViewType extends PhysicalDataType {
+  private[sql] val ordering = (x: BinaryView, y: BinaryView) => x.compareTo(y)
+  private[sql] type InternalType = BinaryView
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
 }
 
-object PhysicalGeographyType extends PhysicalGeographyType
-
-case class PhysicalGeometryType() extends PhysicalDataType {
-  private[sql] type InternalType = GeometryVal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-}
-
-object PhysicalGeometryType extends PhysicalGeometryType
+case object PhysicalBinaryViewType extends PhysicalBinaryViewType

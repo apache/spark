@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder, DYN_ALLOCATION_ENABLED}
 
 private[spark] object Config extends Logging {
 
@@ -120,12 +120,44 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver and executor " +
+        "containers' security context. When false (default), a container cannot gain " +
+        "more privileges than its parent process. Set to true to opt out of this " +
+        "restriction. Driver and executor can be configured individually via the " +
+        "container type-specific config.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.driver.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
+  val KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.executor.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the executor container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
   val KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP =
     ConfigBuilder("spark.kubernetes.executor.useDriverPodIP")
       .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -237,6 +269,57 @@ private[spark] object Config extends Logging {
       .intConf
       .checkValue(_ >= 0, "The minimum number of tasks should be non-negative.")
       .createWithDefault(0)
+
+  val EXECUTOR_RESIZE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.resizeInterval")
+      .doc("Interval between executor resize operations. To disable, set 0 (default)")
+      .version("4.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0, "Interval should be non-negative")
+      .createWithDefault(0)
+
+  val EXECUTOR_RESIZE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
+      .doc("The threshold to resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
+      .createWithDefault(0.9)
+
+  val EXECUTOR_RESIZE_FACTOR =
+    ConfigBuilder("spark.kubernetes.executor.resizeFactor")
+      .doc("The factor to resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
+      .createWithDefault(0.1)
+
+  val PVC_RESIZE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
+      .doc("Interval between executor PVC resize operations, in minutes. " +
+        "Defaults to 5 minutes. Set to 0 to disable. " +
+        "Must be 0 or a positive multiple of 5 minutes.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MINUTES)
+      .checkValue(v => v >= 0 && v % 5 == 0,
+        "Interval must be 0 or a positive multiple of 5 minutes")
+      .createWithDefault(5)
+
+  val PVC_RESIZE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeThreshold")
+      .doc("The PVC usage ratio (used / capacity) above which the driver triggers a resize.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
+      .createWithDefault(0.5)
+
+  val PVC_RESIZE_FACTOR =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeFactor")
+      .doc("The factor to grow PVC storage by, relative to the current request.")
+      .version("4.2.0")
+      .doubleConf
+      .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
+      .createWithDefault(1.0)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
@@ -475,8 +558,8 @@ private[spark] object Config extends Logging {
       .doc("Value to set for the controller.kubernetes.io/pod-deletion-cost" +
         " annotation when Spark asks a deployment-based allocator to remove executor pods. This " +
         "helps Kubernetes pick the same pods Spark selected when the deployment scales down." +
-        s" This should only be enabled when both $KUBERNETES_ALLOCATION_PODS_ALLOCATOR is set to " +
-        s"deployment, and $DYN_ALLOCATION_ENABLED is enabled.")
+        s" This should only be enabled when both ${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} is " +
+        s"set to deployment, and ${DYN_ALLOCATION_ENABLED.key} is enabled.")
       .version("4.2.0")
       .intConf
       .createOptional
@@ -496,6 +579,17 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 100, "Allocation batch delay must be greater than 0.1s.")
       .createWithDefaultString("1s")
+
+  val KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.recoveryMode.enabled")
+      .doc("When Spark driver detects an executor termination due to OOM, Spark starts to " +
+        "allocate the recovery-mode executors which accept only a single task per executor JVM. " +
+        "In other words, the recovery-mode executors replace the OOM-terminated executors to " +
+        "survive from the resource-hungry tasks for the remaining tasks and stages. " +
+        "If set to `false`, Spark will not use the recovery-mode executors.")
+      .version("4.2.0")
+      .booleanConf
+      .createOptional
 
   val KUBERNETES_ALLOCATION_MAXIMUM =
     ConfigBuilder("spark.kubernetes.allocation.maximum")

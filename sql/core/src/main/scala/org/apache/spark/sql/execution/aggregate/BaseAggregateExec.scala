@@ -87,7 +87,7 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
     // it's not empty when the inputAggBufferAttributes is not equal to the aggregate buffer
     // attributes of the child Aggregate, when the child Aggregate contains the subquery in
     // AggregateFunction. See SPARK-31620 for more details.
-    AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
+    AttributeSet(inputAggBufferAttributes) -- child.outputSet
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 

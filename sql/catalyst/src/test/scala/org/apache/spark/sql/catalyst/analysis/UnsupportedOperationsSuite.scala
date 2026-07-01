@@ -370,9 +370,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
   testBinaryOperationInStreamingPlan(
     "inner join in update mode",
     _.join(_, joinType = Inner),
-    outputMode = Update,
-    streamStreamSupported = false,
-    expectedMsg = "is not supported in Update output mode")
+    outputMode = Update)
 
   // Full outer joins: stream-batch/batch-stream join are not allowed,
   // and stream-stream join is allowed 'conditionally' - see below check
@@ -403,24 +401,42 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamStreamSupported = false,
     expectedMsg = "RightOuter join")
 
-  // Left outer, right outer, full outer, left semi joins
-  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
-    // Update mode not allowed
+  // Left outer, right outer, full outer joins: Update mode not allowed
+  Seq(LeftOuter, RightOuter, FullOuter).foreach { joinType =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and update mode",
       streamRelation.join(streamRelation, joinType = joinType,
         condition = Some(attribute === attribute)),
       OutputMode.Update(),
       Seq("is not supported in Update output mode"))
+  }
 
-    // Complete mode not allowed
+  // LeftSemi join: Update mode allowed (equivalent to Append mode for non-outer joins)
+  assertSupportedInStreamingPlan(
+    s"LeftSemi join with stream-stream relations and update mode",
+    streamRelation.join(streamRelation, joinType = LeftSemi,
+      condition = Some(attributeWithWatermark === attribute)),
+    OutputMode.Update())
+
+  // Complete mode not allowed for stream-stream joins. The error message also indicates
+  // which output modes are actually supported for the given join type.
+  Seq(
+    (Inner, "only in Append and Update output modes"),
+    (LeftSemi, "only in Append and Update output modes"),
+    (LeftOuter, "only in Append output mode"),
+    (RightOuter, "only in Append output mode"),
+    (FullOuter, "only in Append output mode")
+  ).foreach { case (joinType, allowedModesMsg) =>
     assertNotSupportedInStreamingPlan(
       s"$joinType join with stream-stream relations and complete mode",
       Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = joinType,
-        condition = Some(attribute === attribute))),
+        condition = Some(attributeWithWatermark === attribute))),
       OutputMode.Complete(),
-      Seq("is not supported in Complete output mode"))
+      Seq("is not supported in Complete output mode", allowedModesMsg))
+  }
 
+  // Left outer, right outer, full outer, left semi joins
+  Seq(LeftOuter, RightOuter, FullOuter, LeftSemi).foreach { joinType =>
     // Stream-stream allowed with join on watermark attribute
     // Note that the attribute need not be watermarked on both sides.
     assertSupportedInStreamingPlan(
@@ -671,6 +687,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         outputMode = Append)
   }
 
+  assertPassOnGlobalWatermarkLimit(
+    "streaming aggregation after stream-stream inner join in Update mode",
+    streamRelation.join(streamRelation, joinType = Inner,
+      condition = Some(attributeWithWatermark === attribute))
+      .groupBy("a")(count("*")),
+    outputMode = Update)
+
+  assertFailOnGlobalWatermarkLimit(
+    "streaming aggregation on both sides followed by stream-stream inner join in Update mode",
+    streamRelation.groupBy("a")(count("*")).join(
+      streamRelation.groupBy("a")(count("*")),
+      joinType = Inner,
+      condition = Some(attributeWithWatermark === attribute)),
+    outputMode = Update)
+
   // Cogroup: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
     "cogroup",
@@ -851,6 +882,26 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         null, att, att, Seq(att), Seq(att), att, null, Append,
         isMapGroupsWithState = false, null,
         Deduplicate(Seq(attribute), streamRelation)), outputMode = Append)
+
+    Seq(Append, Update).foreach { outputMode =>
+      assertPassOnGlobalWatermarkLimit(
+        s"stream-stream inner join with deduplicate on both sides " +
+          s"(with event-time) in ${outputMode} mode",
+        Deduplicate(Seq(attributeWithWatermark), streamRelation).join(
+          Deduplicate(Seq(attributeWithWatermark), streamRelation),
+          joinType = Inner,
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = outputMode)
+
+      assertPassOnGlobalWatermarkLimit(
+        s"stream-stream inner join with deduplicate on both sides " +
+          s"(without event-time) in ${outputMode} mode",
+        Deduplicate(Seq(attribute), streamRelation).join(
+          Deduplicate(Seq(attribute), streamRelation),
+          joinType = Inner,
+          condition = Some(attributeWithWatermark === attribute)),
+        outputMode = outputMode)
+    }
   }
 
   /*

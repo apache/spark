@@ -88,7 +88,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
+      case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(paramName, value)
     }
   }
 
@@ -144,7 +144,8 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ => throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING)
+    case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(
+      CHAR_TO_ESCAPE_QUOTE_ESCAPING, value)
   }
   val comment = getChar(COMMENT, '\u0000')
 
@@ -249,7 +250,7 @@ class CSVOptions(
   /**
    * The max error content length in CSV parser/writer exception message.
    */
-  val maxErrorContentLength = 1000
+  val maxErrorContentLength = CSVOptions.MAX_ERROR_CONTENT_LENGTH
 
   val isCommentSet = parameters.get(COMMENT) match {
     case Some(value) if value.length == 1 => true
@@ -283,11 +284,15 @@ class CSVOptions(
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
-    require(sep != null, "'lineSep' cannot be a null value.")
-    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    // Intentionally allow it up to 2 for Window's CRLF although multiple
-    // characters have an issue with quotes. This is intentionally undocumented.
-    require(sep.length <= 2, "'lineSep' can contain only 1 character.")
+    if (sep == null) {
+      throw QueryExecutionErrors.lineSepCannotBeNullError()
+    }
+    if (sep.isEmpty) {
+      throw QueryExecutionErrors.lineSepCannotBeEmptyError()
+    }
+    if (sep.length > 2) {
+      throw QueryExecutionErrors.lineSepTooLongError(sep.length)
+    }
     if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
       "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
     sep
@@ -438,4 +443,8 @@ object CSVOptions extends DataSourceOptions {
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
   val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
+
+  // Max error content length in CSV parser/writer exception messages, and the bound on the bad
+  // record embedded in MALFORMED_CSV_RECORD errors.
+  val MAX_ERROR_CONTENT_LENGTH = 1000
 }

@@ -208,6 +208,7 @@ private[spark] class Client(
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       this.appId = newAppResponse.getApplicationId()
+      logInfo(log"Application ID is assigned: ${MDC(LogKeys.APP_ID, appId)}")
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
@@ -1046,6 +1047,16 @@ private[spark] class Client(
     amContainer.setEnvironment(launchEnv.asJava)
 
     val javaOpts = ListBuffer[String]()
+
+    // Set Active Processor Count
+    val limitAPC = if (isClusterMode) {
+      sparkConf.get(DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)
+    } else {
+      sparkConf.get(YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED)
+    }
+    if (limitAPC) {
+      javaOpts += s"-XX:ActiveProcessorCount=${amCores}"
+    }
 
     javaOpts += s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
 

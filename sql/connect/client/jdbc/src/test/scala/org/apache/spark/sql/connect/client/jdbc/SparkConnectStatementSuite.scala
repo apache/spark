@@ -116,4 +116,61 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
       }
     }
   }
+
+  test("fetch size, fetch direction, result set type and query timeout accessors") {
+    withStatement { stmt =>
+      // fetch size: validated then silently dropped, always reads back as 0
+      assert(stmt.getFetchSize === 0)
+      stmt.setFetchSize(42)
+      assert(stmt.getFetchSize === 0)
+      val se1 = intercept[SQLException] {
+        stmt.setFetchSize(-1)
+      }
+      assert(se1.getMessage === "Fetch size must be zero or a positive integer.")
+
+      // fetch direction: only FETCH_FORWARD is supported
+      stmt.setFetchDirection(ResultSet.FETCH_FORWARD)
+      assert(stmt.getFetchDirection === ResultSet.FETCH_FORWARD)
+      intercept[SQLException] {
+        stmt.setFetchDirection(ResultSet.FETCH_REVERSE)
+      }
+
+      // result set type is forward-only
+      assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
+
+      // query timeout: validated then silently dropped, always reads back as 0
+      assert(stmt.getQueryTimeout === 0)
+      stmt.setQueryTimeout(30)
+      assert(stmt.getQueryTimeout === 0)
+      val se2 = intercept[SQLException] {
+        stmt.setQueryTimeout(-1)
+      }
+      assert(se2.getMessage === "Query timeout must be zero or a positive integer.")
+    }
+  }
+
+  test("getMoreResults terminates JDBC drain loops") {
+    // A typical JDBC result-draining loop. With getMoreResults throwing (or not
+    // flipping getUpdateCount to -1) this would spin forever; assert it returns.
+    def drain(stmt: Statement): Unit = {
+      while (stmt.getMoreResults || stmt.getUpdateCount != -1) {}
+    }
+
+    withTable("t_drain") {
+      withStatement { stmt =>
+        // result-bearing command
+        assert(stmt.execute("SELECT id FROM range(3)"))
+        assert(stmt.getUpdateCount === -1)
+        drain(stmt)
+        assert(stmt.getResultSet === null)
+        assert(stmt.getUpdateCount === -1)
+
+        // result-less command
+        assert(!stmt.execute("CREATE TABLE t_drain (id INT) USING Parquet"))
+        assert(stmt.getUpdateCount === 0)
+        drain(stmt)
+        assert(stmt.getUpdateCount === -1)
+      }
+    }
+  }
 }

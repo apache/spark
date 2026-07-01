@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkIllegalStateException, SparkThrowable, TaskContext}
+import org.apache.spark.{SparkIllegalStateException, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -156,8 +156,6 @@ class StateRewriter(
       // Use the same conf in the offset log to create the store conf,
       // to make sure the state is written with the right conf.
       val (storeConf, sqlConf) = createConfsFromOffsetLog()
-      // SQLConf doesn't serialize properly (reader becomes null), so extract as Map
-      val sqlConfEntries: Map[String, String] = sqlConf.getAllConfs
 
       // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
       val hadoopConfBroadcast =
@@ -181,8 +179,7 @@ class StateRewriter(
             storeConf,
             hadoopConfBroadcast,
             storeToSchemaFilesMap(stateStoreMetadata.storeName),
-            stateVarsIfTws,
-            sqlConfEntries
+            stateVarsIfTws
           )
         }.toArray
         opMetadata.operatorInfo.operatorId -> checkpointInfo
@@ -204,8 +201,7 @@ class StateRewriter(
       storeConf: StateStoreConf,
       hadoopConfBroadcast: Broadcast[SerializableConfiguration],
       storeSchemaFiles: List[Path],
-      stateVarsIfTws: Map[String, TransformWithStateVariableInfo],
-      sqlConfEntries: Map[String, String]
+      stateVarsIfTws: Map[String, TransformWithStateVariableInfo]
   ): Array[StateStoreCheckpointInfo] = {
     // Read state
     val stateDf = sparkSession.read
@@ -250,10 +246,6 @@ class StateRewriter(
     val targetCheckpointLocation = resolvedCheckpointLocation
     val currentBatchId = writeBatchId
     updatedStateDf.queryExecution.toRdd.mapPartitions { partitionIter: Iterator[InternalRow] =>
-      // Recreate SQLConf on executor from serialized entries
-      val executorSqlConf = new SQLConf()
-      sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
-
       val partitionWriter = new StatePartitionAllColumnFamiliesWriter(
         storeConf,
         hadoopConfBroadcast.value.value,
@@ -263,9 +255,7 @@ class StateRewriter(
         stateStoreMetadata.storeName,
         currentBatchId,
         writerColFamilyInfoMap,
-        opMetadata.operatorInfo.operatorName,
-        schemaProvider,
-        executorSqlConf
+        schemaProvider
       )
       Iterator(partitionWriter.write(partitionIter))
     }.collect()
@@ -386,27 +376,19 @@ class StateRewriter(
   }
 
   private def verifyCheckpointFormatVersion(): Unit = {
-    // Verify checkpoint version in sqlConf based on commitLog for readCheckpoint
-    // in case user forgot to set STATE_STORE_CHECKPOINT_FORMAT_VERSION.
-    // Using read batch commit since the latest commit could be a skipped batch.
-    // If SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION is wrong, readCheckpoint.commitLog
-    // will throw an exception, and we will propagate this exception upstream.
-    // This prevents the StateRewriter from failing to write the correct state files
-    try {
-      readCheckpoint.commitLog.get(readBatchId)
-    } catch {
-        case e: IllegalStateException if e.getCause != null &&
-            e.getCause.isInstanceOf[SparkThrowable] =>
-          val sparkThrowable = e.getCause.asInstanceOf[SparkThrowable]
-          if (sparkThrowable.getCondition == "INVALID_LOG_VERSION.EXACT_MATCH_VERSION") {
-            val params = sparkThrowable.getMessageParameters
-            val expectedVersion = params.get("version")
-            val actualVersion = params.get("matchVersion")
-            throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
-              checkpointLocationForRead, expectedVersion, actualVersion)
-          }
-          throw e
+    // Verify checkpoint version in sqlConf matches the version recorded in the read commit log,
+    // in case the user forgot to set STATE_STORE_CHECKPOINT_FORMAT_VERSION. This prevents the
+    // StateRewriter from writing state files in a format that disagrees with the source
+    // checkpoint. Using the read batch commit since the latest commit could be a skipped batch.
+    readCheckpoint.commitLog.get(readBatchId).foreach { metadata =>
+      val configuredVersion = readCheckpoint.commitLog.defaultVersion
+      if (metadata.version != configuredVersion) {
+        throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
+          checkpointLocationForRead,
+          expectedVersion = metadata.version.toString,
+          actualVersion = configuredVersion.toString)
       }
+    }
   }
 }
 

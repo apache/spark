@@ -22,7 +22,7 @@ import scala.xml.{Node, Unparsed}
 import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, SparkUI, SparkUITab, UIUtils, WebUIPage}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
 
@@ -67,10 +67,22 @@ private[ui] class ExecutorsPage(
     val content =
       {
         <div id="active-executors"></div> ++
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="executor-detail-offcanvas"
+             aria-labelledby="executor-detail-offcanvas-label"
+             style="width: 60vw; max-width: 900px;">
+          <div class="offcanvas-resize-handle" id="offcanvas-resize-handle"></div>
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="executor-detail-offcanvas-label"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                    aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body" id="executor-detail-offcanvas-body">
+          </div>
+        </div> ++
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script type="module"
                 src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
-        <script type="module">{Unparsed(js)}</script>
+        <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

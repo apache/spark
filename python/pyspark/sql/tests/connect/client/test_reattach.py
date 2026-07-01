@@ -72,7 +72,7 @@ class SparkConnectReattachTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
         def check_error(q):
             try:
                 list(q)  # Iterate all.
-            except Exception as e:  # noqa: F841
+            except Exception as e:
                 return e
 
         e = check_error(query1)

@@ -273,7 +273,7 @@ SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a'), if(c2 < 1, null, 'a')) FRO
 -- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
-DropTempViewCommand jsonTable
+DropTempViewCommand jsonTable, true
 
 
 -- !query
@@ -442,6 +442,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 27,
     "fragment" : "schema_of_json(null)"
+  } ]
+}
+
+
+-- !query
+select schema_of_json(42)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"42\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"schema_of_json(42)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "schema_of_json(42)"
   } ]
 }
 
@@ -721,7 +745,7 @@ Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
 -- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
-DropTempViewCommand jsonTable
+DropTempViewCommand jsonTable, true
 
 
 -- !query

@@ -20,7 +20,8 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogUtils}
+import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
 
 case class HiveSerDe(
   inputFormat: Option[String] = None,
@@ -103,6 +104,44 @@ object HiveSerDe {
    * @return Spark data source name associated with the specified Hive Serde.
    */
   def serdeToSource(serde: HiveSerDe): Option[String] = serdeInverseMap.get(serde)
+
+  /**
+   * Builds a [[CatalogStorageFormat]] from a user-specified location and optional serde info.
+   * Uses [[CatalogStorageFormat.empty]] as the base (no Hive defaults).
+   *
+   * @param location            optional LOCATION URI string
+   * @param maybeSerdeInfo      optional serde/format info from ROW FORMAT / STORED AS clauses
+   * @param invalidStoredAsError callback returning a [[Throwable]] when STORED AS names an
+   *                            unrecognized file format; the caller controls the error message
+   */
+  def buildStorageFormat(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo],
+      invalidStoredAsError: SerdeInfo => Throwable): CatalogStorageFormat = {
+    val locationUri = location.map(CatalogUtils.stringToURI)
+    maybeSerdeInfo match {
+      case None =>
+        CatalogStorageFormat.empty.copy(locationUri = locationUri)
+      case Some(si) if si.storedAs.isDefined =>
+        sourceToSerDe(si.storedAs.get) match {
+          case Some(hiveSerde) =>
+            CatalogStorageFormat.empty.copy(
+              locationUri = locationUri,
+              inputFormat = hiveSerde.inputFormat,
+              outputFormat = hiveSerde.outputFormat,
+              serde = si.serde.orElse(hiveSerde.serde),
+              properties = si.serdeProperties)
+          case _ => throw invalidStoredAsError(si)
+        }
+      case Some(si) =>
+        CatalogStorageFormat.empty.copy(
+          locationUri = locationUri,
+          inputFormat = si.formatClasses.map(_.input),
+          outputFormat = si.formatClasses.map(_.output),
+          serde = si.serde,
+          properties = si.serdeProperties)
+    }
+  }
 
   def getDefaultStorage(conf: SQLConf): CatalogStorageFormat = {
     // To respect hive-site.xml, it peeks Hadoop configuration from existing Spark session,

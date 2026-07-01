@@ -31,8 +31,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -136,6 +138,9 @@ trait StatefulOperatorCustomMetric {
   def name: String
   def desc: String
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
+  // True if the metric reflects current state rather than per-batch work; snapshot
+  // metrics are preserved on no-data trigger events. Mirrors StateStoreCustomMetric.
+  def isSnapshot: Boolean = false
 }
 
 /** Custom stateful operator metric for simple "count" gauge */
@@ -401,7 +406,8 @@ trait StateStoreWriter
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
       numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
-      javaConvertedCustomMetrics
+      javaConvertedCustomMetrics,
+      snapshotCustomMetricNames
     )
   }
 
@@ -474,17 +480,43 @@ trait StateStoreWriter
     }.toMap
   }
 
-  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
+  // All instance metrics with their (partitionId, storeName) bindings; consumed by
+  // both `stateStoreInstanceMetrics` (for SQLMetric registration) and
+  // `snapshotCustomMetricNames` (for the snapshot-name set). The result is a
+  // serializable Seq so storing it as a lazy val on this trait is safe even when
+  // the enclosing SparkPlan is shipped to executors. The provider itself is NOT
+  // stored as a field (it is non-serializable), so each consumer below recreates
+  // it locally.
+  private lazy val stateStoreInstanceMetricsWithIds: Seq[StateStoreInstanceMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
-
+    val maxPartitions =
+      stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedInstanceMetrics.flatMap { metric =>
-        stateStoreNames.map { storeName =>
-          val metricWithPartition = metric.withNewId(partitionId, storeName)
-          (metricWithPartition, metricWithPartition.createSQLMetric(sparkContext))
-        }
+        stateStoreNames.map(metric.withNewId(partitionId, _))
       }
+    }
+  }
+
+  // Names of customMetrics entries treated as snapshots; preserved by
+  // StateOperatorProgress.copyForNoExecution() on no-data trigger events. Includes
+  // provider- and operator-level metrics with isSnapshot = true, and all instance
+  // metric names (instance metrics use sentinel inits like -1 with monotonic
+  // combine, so they are always snapshot-style).
+  private lazy val snapshotCustomMetricNames: Set[String] = {
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
+    val customSnapshots = provider.supportedCustomMetrics.collect {
+      case m if m.isSnapshot => m.name
+    }.toSet
+    val operatorSnapshots = customStatefulOperatorMetrics.collect {
+      case m if m.isSnapshot => m.name
+    }.toSet
+    customSnapshots ++ operatorSnapshots ++ stateStoreInstanceMetricsWithIds.map(_.name).toSet
+  }
+
+  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
+    stateStoreInstanceMetricsWithIds.map { metric =>
+      (metric, metric.createSQLMetric(sparkContext))
     }.toMap
   }
 
@@ -669,7 +701,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
@@ -683,6 +715,42 @@ object WatermarkSupport {
     }
     // pick the first element if exists
     eventTimeCols.headOption
+  }
+
+  /**
+   * Find the index of the column which is marked as "event time" column.
+   *
+   * If there are multiple event time columns in given column list, the behavior depends on the
+   * parameter `allowMultipleEventTimeColumns`. If it's set to true, the first occurred column will
+   * be returned. If not, this method will throw an AnalysisException as it is not allowed to have
+   * multiple event time columns.
+   */
+  def findEventTimeColumnIndex(
+      attrs: Seq[Attribute],
+      allowMultipleEventTimeColumns: Boolean): Option[Int] = {
+    val eventTimeCols = attrs.zipWithIndex
+      .filter(_._1.metadata.contains(EventTimeWatermark.delayKey))
+    if (!allowMultipleEventTimeColumns) {
+      // There is a case projection leads the same column (same exprId) to appear more than one
+      // time. Allowing them does not hurt the correctness of state row eviction, hence let's start
+      // with allowing them.
+      val eventTimeColsSet = eventTimeCols.map(_._1.exprId).toSet
+      if (eventTimeColsSet.size > 1) {
+        throw new AnalysisException(
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
+          messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
+      }
+
+      // With above check, even there are multiple columns in eventTimeCols, all columns must be
+      // the same.
+    } else {
+      // This is for compatibility with previous behavior - we allow multiple distinct event time
+      // columns and pick up the first occurrence. This is incorrect if non-first occurrence is
+      // not smaller than the first one, but allow this as "escape hatch" in case we break the
+      // existing query.
+    }
+    // pick the first element if exists
+    eventTimeCols.headOption.map(_._2)
   }
 }
 
@@ -700,11 +768,16 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      0, keyExpressions.toStructType, 0, stateManager.getStateValueSchema))
+      0, stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -714,9 +787,9 @@ case class StateStoreRestoreExec(
 
     child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateManager.getStateValueSchema,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
       val hasInput = iter.hasNext
@@ -738,7 +811,8 @@ case class StateStoreRestoreExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -771,13 +845,18 @@ case class StateStoreSaveExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchemaId = 0, keyExpressions.toStructType, valueSchemaId = 0,
-      stateManager.getStateValueSchema))
+      keySchemaId = 0, stateKeySchema, valueSchemaId = 0,
+      stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -789,9 +868,9 @@ case class StateStoreSaveExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateManager.getStateValueSchema,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
@@ -933,7 +1012,8 @@ case class StateStoreSaveExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -987,12 +1067,17 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateKeySchema)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchemaId = 0, stateManager.getStateKeySchema, valueSchemaId = 0,
-      stateManager.getStateValueSchema))
+      keySchemaId = 0, stateKeySchema, valueSchemaId = 0,
+      stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -1002,9 +1087,9 @@ case class SessionWindowStateStoreRestoreExec(
 
     child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
-      stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema,
-      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+      stateKeySchema,
+      stateValueSchema,
+      PrefixKeyScanStateEncoderSpec(stateKeySchema,
         stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
@@ -1032,7 +1117,8 @@ case class SessionWindowStateStoreRestoreExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1080,11 +1166,16 @@ case class SessionWindowStateStoreSaveExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateKeySchema)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      stateManager.getStateKeySchema, 0, stateManager.getStateValueSchema))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -1098,9 +1189,9 @@ case class SessionWindowStateStoreSaveExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema,
-      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+      stateKeySchema,
+      stateValueSchema,
+      PrefixKeyScanStateEncoderSpec(stateKeySchema,
         stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
@@ -1184,7 +1275,8 @@ case class SessionWindowStateStoreSaveExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1265,7 +1357,8 @@ case class SessionWindowStateStoreSaveExec(
 
     stateOpProgress.copy(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
-      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark,
+      newNumRowsRemoved = stateOpProgress.numRowsRemoved)
   }
 }
 
@@ -1287,18 +1380,26 @@ abstract class BaseStreamingDeduplicateExec
   protected val schemaForValueRow: StructType
   protected val extraOptionOnStateStore: Map[String, String]
 
+  protected lazy val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  protected lazy val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(schemaForValueRow)
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      schemaForValueRow,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       extraOptions = extraOptionOnStateStore) { (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      // Normalize NaN and -0.0 in floating-point key values so that semantically equal
+      // values produce identical UnsafeRow bytes.
+      val getKey = GenerateUnsafeProjection.generate(
+        keyExpressions.map(NormalizeFloatingNumbers.normalize), child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
@@ -1351,7 +1452,8 @@ abstract class BaseStreamingDeduplicateExec
 
   protected def evictDupInfoFromState(store: StateStore): Unit
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1405,7 +1507,7 @@ case class StreamingDeduplicateExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      keyExpressions.toStructType, 0, schemaForValueRow))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))
@@ -1491,7 +1593,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      keyExpressions.toStructType, 0, schemaForValueRow))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))

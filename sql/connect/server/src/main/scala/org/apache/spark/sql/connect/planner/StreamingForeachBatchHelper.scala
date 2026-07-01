@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, QUERY_ID, RUN_ID_STRING, SESSION_ID, USER_ID}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders}
+import org.apache.spark.sql.connect.IllegalStateErrors
 import org.apache.spark.sql.connect.common.ForeachWriterPacket
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -176,16 +177,18 @@ object StreamingForeachBatchHelper extends Logging {
                 log"Python foreach batch for dfId ${MDC(DATAFRAME_ID, args.dfId)} " +
                 log"completed (ret: 0)")
           case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
-            val msg = PythonWorkerUtils.readUTF(dataIn)
+            val traceback = PythonWorkerUtils.readUTF(dataIn)
+            val msg =
+              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
+                s"Found error inside foreachBatch Python process"
             throw new PythonException(
-              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Found error inside foreachBatch Python process: $msg",
-              null)
+              errorClass = "PYTHON_EXCEPTION",
+              messageParameters = Map("msg" -> msg, "traceback" -> traceback))
           case otherValue =>
-            throw new IllegalStateException(
-              s"[session: ${sessionHolder.sessionId}] [userId: ${sessionHolder.userId}] " +
-                s"Unexpected return value $otherValue from the " +
-                s"Python worker.")
+            throw IllegalStateErrors.streamingQueryUnexpectedReturnValue(
+              sessionHolder.key.toString,
+              otherValue,
+              "foreachBatch function")
         }
       } catch {
         // TODO: Better handling (e.g. retries) on exceptions like EOFException to avoid
@@ -212,27 +215,68 @@ object StreamingForeachBatchHelper extends Logging {
     // Mapping from streaming (queryId, runId) to runner cleaner. Used for Python foreachBatch.
     private val cleanerCache: ConcurrentMap[CacheKey, AutoCloseable] = new ConcurrentHashMap()
 
-    private lazy val streamingListener = { // Initialized on first registered query
-      val listener = new StreamingRunnerCleanerListener
-      sessionHolder.session.streams.addListener(listener)
-      logInfo(
-        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-          log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
-          log"Registered runner clean up listener.")
-      listener
+    // The runner clean-up listener, registered on first use and removed on cleanup. Both
+    // operations are guarded by `this`, and the field is recoverable: after removal a later
+    // registration re-adds a fresh listener, so cleanUpAll() does not permanently disable the cache
+    // if it is reused. (Today cleanUpAll() is only called on the close path, after which
+    // registration fast-paths on isClosing -- but correctness no longer depends on that.)
+    private var streamingListener: StreamingRunnerCleanerListener = _
+
+    private def ensureListenerRegistered(): Unit = synchronized {
+      if (streamingListener == null) {
+        val listener = new StreamingRunnerCleanerListener
+        sessionHolder.session.streams.addListener(listener)
+        streamingListener = listener
+        logInfo(
+          log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+            log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
+            log"Registered runner clean up listener.")
+      }
+    }
+
+    // Removes the listener from session.streams if it is currently registered.
+    // SessionHolder.close() does not remove this listener (it is not tracked in the session's
+    // listenerCache), so the cache must drop it on cleanup; otherwise the listener keeps this
+    // CleanerCache / SessionHolder reachable after the session is closed.
+    private def removeListenerIfRegistered(): Unit = synchronized {
+      if (streamingListener != null) {
+        sessionHolder.session.streams.removeListener(streamingListener)
+        streamingListener = null
+      }
     }
 
     private[connect] def registerCleanerForQuery(
         query: StreamingQuery,
         cleaner: AutoCloseable): Unit = {
 
-      streamingListener // Access to initialize
+      // Fast path: if the session is already closing, do not even register the listener (it is
+      // added to session.streams and is not removed by SessionHolder.close(), so it would leak and
+      // keep the closed session reachable). Just close the runner and return.
+      if (sessionHolder.isClosing) {
+        cleaner.close()
+        return
+      }
+
+      ensureListenerRegistered() // Register the runner clean-up listener if not already.
       val key = CacheKey(query.id.toString, query.runId.toString)
 
       Option(cleanerCache.putIfAbsent(key, cleaner)) match {
         case Some(_) =>
-          throw new IllegalStateException(s"Unexpected: a cleaner for query $key is already set")
+          throw IllegalStateErrors.cleanerAlreadySet(sessionHolder.key.toString, key.toString)
         case None => // Inserted. Normal.
+      }
+
+      // Guard against the same shutdown race that SparkConnectStreamingQueryCache handles for
+      // queries: SessionHolder.close() reaps runners via cleanUpAll(), and a cleaner registered
+      // after that pass (for a query started concurrently with close()) would be missed by it. The
+      // onQueryTerminated listener is the other reaper, but it too can miss a cleaner whose query
+      // already terminated before this registration. So after inserting we re-check isClosing; if
+      // the session started closing in the meantime we clean the runner up here to avoid stranding
+      // a Python worker. We also drop the listener: it was just added above (possibly after close()
+      // ran cleanUpAll()), and close() does not remove it, so it would otherwise leak.
+      if (sessionHolder.isClosing) {
+        cleanupStreamingRunner(key)
+        removeListenerIfRegistered()
       }
     }
 
@@ -240,6 +284,8 @@ object StreamingForeachBatchHelper extends Logging {
     private[connect] def cleanUpAll(): Unit = {
       // Clean up all remaining registered runners.
       cleanerCache.keySet().asScala.foreach(cleanupStreamingRunner(_))
+      // Drop the listener as well; close() does not remove it otherwise.
+      removeListenerIfRegistered()
     }
 
     private def cleanupStreamingRunner(key: CacheKey): Unit = {
@@ -276,6 +322,10 @@ object StreamingForeachBatchHelper extends Logging {
         .toMap
     }
 
-    private[connect] def listenerForTesting: StreamingQueryListener = streamingListener
+    // Reads the listener under the same lock that guards registration/removal so concurrent tests
+    // see a consistent value rather than a stale/torn read of the field.
+    private[connect] def listenerForTesting: StreamingQueryListener = synchronized {
+      streamingListener
+    }
   }
 }

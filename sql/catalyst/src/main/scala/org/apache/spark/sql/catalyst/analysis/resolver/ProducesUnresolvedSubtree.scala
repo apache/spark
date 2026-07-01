@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 
 /**
  * A mixin trait for expression resolvers that as part of their resolution, replace single node
@@ -26,9 +26,15 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * resolver is called recursively. This callback must ensure that no node is resolved twice in
  * order to not break the single-pass invariant. This is done by tagging the limits of this
  * traversal with [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tag. This tag is applied to the
- * original expression's children, which are guaranteed to be resolved at the time of given
- * expression's resolution. When callback resolver encounters the node that is tagged, it should
- * return identity instead of trying to resolve it.
+ * original expression's non-literal children, which are guaranteed to be resolved at the time of
+ * given expression's resolution. When callback resolver encounters the node that is tagged, it
+ * should return identity instead of trying to resolve it.
+ *
+ * Note: [[Literal]] children are excluded from tagging to drastically reduce the chance of a data
+ * race (see ES-1725904). Unlike other expression nodes, literals are not reallocated during
+ * resolution (resolved and unresolved literals are physically the same object), so mutating their
+ * tags can cause a data race when the same literal is used concurrently across threads. Since
+ * literals are leaf nodes, the boundary tag is unnecessary for them anyway.
  */
 trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
 
@@ -45,8 +51,9 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
   protected def withResolvedSubtree(
       expression: Expression,
       expressionResolver: Expression => Expression)(body: => Expression): Expression = {
-    expression.children.foreach { child =>
-      child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    expression.children.foreach {
+      case _: Literal =>
+      case child => child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
     }
 
     val resultExpression = body
@@ -62,6 +69,32 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
   }
 
   /**
+   * Variant of [[withResolvedSubtree]] where transformation with [[expressionResolver]] starts
+   * from parent expression rather than its children and where boundary tag cleanup is performed
+   * manually.
+   *
+   * In general, tag cleanup is performed by [[ExpressionResolver]] when an already resolved node
+   * is encountered. However, in case of function resolution, [[handlePartiallyResolvedFunction]]
+   * will not always invoke [[ExpressionResolver]], so boundary tags will need to be cleaned up
+   * manually.
+   */
+  protected def withResolvedSubtreeWithManualTagCleanup(
+      expression: Expression,
+      expressionResolver: Expression => Expression)(body: => Expression): Expression = {
+    expression.children.foreach {
+      case _: Literal =>
+      case child => child.setTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY, ())
+    }
+
+    val withBodyApplied = body
+
+    val resolvedExpression = expressionResolver(withBodyApplied)
+    val resolvedExpressionWithTagCleanup = unsetBoundaryTagsWithPruning(resolvedExpression)
+
+    resolvedExpressionWithTagCleanup
+  }
+
+  /**
    * Try to pop the tag that marks the boundary of the single-pass subtree resolution.
    * [[ExpressionResolver]] calls this method to check if the subtree traversal needs to be stopped
    * because lower subtree is already resolved.
@@ -74,6 +107,20 @@ trait ProducesUnresolvedSubtree extends ResolvesExpressionChildren {
       true
     } else {
       false
+    }
+  }
+
+  /**
+   * Recursively unsets [[ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY]] tags from the expression tree.
+   * Stops recursion once a tagged node is found (after unsetting its tag), since children of
+   * tagged nodes are already resolved and don't need further traversal.
+   */
+  private def unsetBoundaryTagsWithPruning(expression: Expression): Expression = {
+    if (expression.getTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY).isDefined) {
+      expression.unsetTagValue(ResolverTag.SINGLE_PASS_SUBTREE_BOUNDARY)
+      expression
+    } else {
+      expression.mapChildren(child => unsetBoundaryTagsWithPruning(child.asInstanceOf[Expression]))
     }
   }
 }

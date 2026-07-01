@@ -1188,3 +1188,45 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 SET spark.sql.legacy.percentileDiscCalculation = false
 -- !query analysis
 SetCommand (spark.sql.legacy.percentileDiscCalculation,Some(false))
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW aggr_time AS SELECT * FROM VALUES
+  (TIME '00:00:00'), (TIME '06:00:00'), (TIME '12:00:00'), (TIME '18:00:00')
+AS aggr_time(t)
+-- !query analysis
+CreateViewCommand `aggr_time`, SELECT * FROM VALUES
+  (TIME '00:00:00'), (TIME '06:00:00'), (TIME '12:00:00'), (TIME '18:00:00')
+AS aggr_time(t), false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [t#x]
+      +- SubqueryAlias aggr_time
+         +- LocalRelation [t#x]
+
+
+-- !query
+SELECT
+  median(t),
+  percentile(t, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY t),
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY t)
+FROM aggr_time
+-- !query analysis
+Aggregate [median(t#x) AS median(t)#x, percentile(t#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(t, 0.5, 1)#x, percentile_cont(t#x, cast(0.5 as double), false) AS percentile_cont(0.5) WITHIN GROUP (ORDER BY t)#x, percentile_disc(t#x, cast(0.5 as double), false, 0, 0, false) AS percentile_disc(0.5) WITHIN GROUP (ORDER BY t)#x]
++- SubqueryAlias aggr_time
+   +- View (`aggr_time`, [t#x])
+      +- Project [cast(t#x as time(6)) AS t#x]
+         +- Project [t#x]
+            +- SubqueryAlias aggr_time
+               +- LocalRelation [t#x]
+
+
+-- !query
+SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time
+-- !query analysis
+Aggregate [percentile_approx(t#x, cast(array(0.25, cast(0.5 as decimal(2,2)), 0.75) as array<double>), 10000, 0, 0) AS percentile_approx(t, array(0.25, 0.5, 0.75), 10000)#x]
++- SubqueryAlias aggr_time
+   +- View (`aggr_time`, [t#x])
+      +- Project [cast(t#x as time(6)) AS t#x]
+         +- Project [t#x]
+            +- SubqueryAlias aggr_time
+               +- LocalRelation [t#x]

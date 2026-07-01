@@ -32,6 +32,10 @@ class BooleanType private () extends AtomicType {
    */
   override def defaultSize: Int = 1
 
+  override def equals(obj: Any): Boolean = obj.isInstanceOf[BooleanType]
+
+  override def hashCode(): Int = classOf[BooleanType].getSimpleName.hashCode
+
   private[spark] override def asNullable: BooleanType = this
 }
 

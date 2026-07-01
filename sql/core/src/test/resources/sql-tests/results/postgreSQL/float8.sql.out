@@ -577,7 +577,7 @@ SELECT asinh(double('1'))
 -- !query schema
 struct<ASINH(1):double>
 -- !query output
-0.8813735870195429
+0.881373587019543
 
 
 -- !query

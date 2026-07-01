@@ -22,9 +22,17 @@ Upgrading PySpark
 Upgrading from PySpark 4.1 to 4.2
 ---------------------------------
 * In Spark 4.2, the minimum supported version for PyArrow has been raised from 15.0.0 to 18.0.0 in PySpark.
+* In Spark 4.2, ``DataFrame.__getattr__`` on Spark Connect Python Client no longer eagerly validate the column name. To restore the legacy behavior, set ``PYSPARK_VALIDATE_COLUMN_NAME_LEGACY`` environment variable to ``1``.
+* In Spark 4.2, ``DataFrame[Stream]Reader/Writer.option`` and ``.options`` now filter out ``None`` values (treating them as "unset") instead of forwarding ``None`` to the JVM as Java ``null``, matching the Spark Connect Python client (SPARK-49263) and ``OptionUtils._set_opts``. To set an option to its default, omit it or pass ``None``; to set it to an empty string, pass ``""`` explicitly.
 * In Spark 4.2, columnar data exchange between PySpark and the JVM uses Apache Arrow by default. The configuration ``spark.sql.execution.arrow.pyspark.enabled`` now defaults to true. To restore the legacy (non-Arrow) row-based data exchange, set ``spark.sql.execution.arrow.pyspark.enabled`` to ``false``.
 * In Spark 4.2, regular Python UDFs are Arrow-optimized by default. The configuration ``spark.sql.execution.pythonUDF.arrow.enabled`` now defaults to true. To restore the legacy behavior for Python UDF execution, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to ``false``.
 * In Spark 4.2, regular Python UDTFs are Arrow-optimized by default. The configuration ``spark.sql.execution.pythonUDTF.arrow.enabled`` now defaults to true. To restore the legacy behavior for Python UDTF execution, set ``spark.sql.execution.pythonUDTF.arrow.enabled`` to ``false``.
+* In Spark 4.2, PyPy is no longer officially supported. Run PySpark on CPython instead.
+* In Spark 4.2, ``SparkSession.createDataFrame`` from a NumPy ``ndarray`` requires PyArrow (instead of pandas) and converts the array directly to Arrow rather than through pandas. Install PyArrow; if you previously ran with Arrow disabled and relied on NumPy-dtype-based schema inference, review the inferred schema, as it now follows Arrow's type mapping.
+* In Spark 4.2, when a pandas UDF receives a nullable integer column whose batch contains nulls, the column is delivered as a pandas nullable integer extension dtype (``Int8``/``Int16``/``Int32``/``Int64``) instead of ``float64``. Update UDF code that assumed ``float64`` input for nullable integer columns.
+* In Spark 4.2, ``DataFrame.drop`` and ``Series.drop`` in pandas API on Spark raise a ``KeyError`` when any of the specified labels is missing, instead of only when all of them are missing, matching pandas. Make sure all labels exist before dropping, filter to existing labels, or pass ``errors="ignore"``.
+* In Spark 4.2, a Python Data Source whose returned Arrow data has column types that do not match its declared schema fails with ``DATA_SOURCE_RETURN_SCHEMA_MISMATCH`` (column count and name mismatches already raised this error in earlier versions). Make the data source return data whose types match its declared schema.
+* In Spark 4.2, a ``SimpleDataSourceStreamReader`` whose ``read()`` returns a non-empty batch without advancing the end offset past the start offset fails with ``SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE``, instead of reprocessing the same batch and growing the prefetch cache without bound. Ensure the returned end offset advances past the last record.
 
 Upgrading from PySpark 4.0 to 4.1
 ---------------------------------
@@ -32,7 +40,7 @@ Upgrading from PySpark 4.0 to 4.1
 * In Spark 4.1, Python 3.9 support was dropped in PySpark.
 * In Spark 4.1, the minimum supported version for PyArrow has been raised from 11.0.0 to 15.0.0 in PySpark.
 * In Spark 4.1, the minimum supported version for Pandas has been raised from 2.0.0 to 2.2.0 in PySpark.
-* In Spark 4.1, ``DataFrame['name']`` on Spark Connect Python Client no longer eagerly validate the column name. To restore the legacy behavior, set ``PYSPARK_VALIDATE_COLUMN_NAME_LEGACY`` environment variable to ``1``.
+* In Spark 4.1, ``DataFrame.__getitem__`` on Spark Connect Python Client no longer eagerly validate the column name. To restore the legacy behavior, set ``PYSPARK_VALIDATE_COLUMN_NAME_LEGACY`` environment variable to ``1``.
 * In Spark 4.1, Arrow-optimized Python UDF supports UDT input / output instead of falling back to the regular UDF. To restore the legacy behavior, set ``spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT`` to ``true``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``.
 * In Spark 4.1, unnecessary conversion to pandas instances is removed when ``spark.sql.execution.pythonUDTF.arrow.enabled`` is enabled. As a result, the type coercion changes when the produced output has a schema different from the specified schema. To restore the previous behavior, enable ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``.

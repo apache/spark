@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnresolvedDataSource}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
@@ -84,10 +84,11 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
-        options = optionsWithPath.originalMap)
+        options = optionsWithPath.originalMap,
+        userSpecifiedStreamingSourceName = sourceIdentifyingName.toUserProvided)
       val v1Relation = ds match {
         case _: StreamSourceProvider =>
-          Some(StreamingRelation(v1DataSource, sourceIdentifyingName))
+          Some(StreamingRelation(v1DataSource))
         case _ => None
       }
       ds match {
@@ -112,16 +113,16 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
                   toAttributes(table.columns.asSchema), None, None, v1Relation,
-                  sourceIdentifyingName)
+                  v1DataSource.streamingSourceIdentifyingName)
 
             // fallback to v1
             // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
-            case _ => StreamingRelation(v1DataSource, sourceIdentifyingName)
+            case _ => StreamingRelation(v1DataSource)
           }
 
         case _ =>
           // Code path for data source v1.
-          StreamingRelation(v1DataSource, sourceIdentifyingName)
+          StreamingRelation(v1DataSource)
       }
 
     case UnresolvedDataSource(source, userSpecifiedSchema, extraOptions, true, paths) =>
@@ -148,7 +149,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         options = optionsWithPath.originalMap)
       val v1Relation = ds match {
         case _: StreamSourceProvider =>
-          Some(StreamingRelation(v1DataSource, Unassigned))
+          Some(StreamingRelation(v1DataSource))
         case _ => None
       }
       ds match {
@@ -173,7 +174,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
               StreamingRelationV2(
                   Some(provider), source, table, dsOptions,
                   toAttributes(table.columns.asSchema), None, None, v1Relation,
-                  Unassigned)
+                  v1DataSource.streamingSourceIdentifyingName)
 
             // fallback to v1
             // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.

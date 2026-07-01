@@ -32,8 +32,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class BroadcastExchangeSuite extends SparkPlanTest
-  with SharedSparkSession
+class BroadcastExchangeSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
@@ -112,6 +111,17 @@ class BroadcastExchangeSuite extends SparkPlanTest
     assert(metrics("numOutputRows").value == 1)
     broadcastExchangeNode.resetMetrics()
     assert(metrics("numOutputRows").value == 1)
+  }
+
+  test("SPARK-56455: broadcast should fail when table size exceeds maxBroadcastTableSize") {
+    withSQLConf(SQLConf.MAX_BROADCAST_TABLE_SIZE.key -> "100") {
+      val df = spark.range(1000).toDF()
+      val joinDF = df.join(broadcast(df), "id")
+      val ex = intercept[SparkException] {
+        joinDF.collect()
+      }
+      assert(ex.getCondition == "_LEGACY_ERROR_TEMP_2249")
+    }
   }
 }
 

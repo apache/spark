@@ -25,16 +25,23 @@ import org.apache.hadoop.yarn.api.records.{ContainerLaunchContext, LocalResource
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 import org.mockito.Mockito.{mock, when}
+import org.scalatest.PrivateMethodTester
+import org.scalatest.matchers.must.Matchers.{contain, not}
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_OOM_KILL_ENABLED
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 
-class ExecutorRunnableSuite extends SparkFunSuite {
+class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
+
+  private val _prepareCommand = PrivateMethod[List[String]](Symbol("prepareCommand"))
 
   private def createExecutorRunnable(
       sparkConf: SparkConf = new SparkConf(),
       securityManager: SecurityManager = mock(classOf[SecurityManager])): ExecutorRunnable = {
+    val executorCores = sparkConf.get(EXECUTOR_CORES)
     new ExecutorRunnable(
       None,
       new YarnConfiguration(),
@@ -43,7 +50,7 @@ class ExecutorRunnableSuite extends SparkFunSuite {
       "exec-1",
       "localhost",
       1,
-      1,
+      executorCores,
       "application_123_1",
       securityManager,
       Map.empty[String, LocalResource],
@@ -102,5 +109,60 @@ class ExecutorRunnableSuite extends SparkFunSuite {
     assert(!metaInfo.containsKey(ExecutorRunnable.SECRET_KEY))
     val metadataStorageVal: Any = metaInfo.get(SHUFFLE_SERVER_RECOVERY_DISABLED.key)
     assert(metadataStorageVal != null && metadataStorageVal.asInstanceOf[Boolean])
+  }
+
+  test("SPARK-53209: ActiveProcessorCount not set by default") {
+    val sparkConf = new SparkConf()
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    commands should not contain ("-XX:ActiveProcessorCount=")
+  }
+
+  test("SPARK-53209: ActiveProcessorCount should default to 1 when executor cores not configured") {
+    val sparkConf = new SparkConf()
+      .set("spark.executor.limitActiveProcessorCount.enabled", "true")
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    commands should contain ("-XX:ActiveProcessorCount=1")
+    commands should contain inOrderElementsOf List("--cores", "1")
+  }
+
+  test("SPARK-53209: ActiveProcessorCount should respect custom executor core count") {
+    val sparkConf = new SparkConf()
+      .set("spark.executor.limitActiveProcessorCount.enabled", "true")
+      .set(EXECUTOR_CORES, 7)
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    commands should contain ("-XX:ActiveProcessorCount=7")
+    commands should contain inOrderElementsOf List("--cores", "7")
+  }
+
+  test("test executor OnOutOfMemoryError JVM options") {
+    Seq(true, false).foreach { oomKill =>
+      val sparkConf = new SparkConf()
+        .set(YARN_EXECUTOR_OOM_KILL_ENABLED, oomKill)
+      val execRunnable = createExecutorRunnable(sparkConf)
+
+      val commands = execRunnable invokePrivate _prepareCommand()
+      if (oomKill) {
+        assert(commands.exists(_.contains("-XX:OnOutOfMemoryError")))
+      } else {
+        assert(!commands.exists(_.contains("-XX:OnOutOfMemoryError")))
+      }
+    }
+  }
+
+  test("user provided OnOutOfMemoryError option takes precedence over default") {
+    val sparkConf = new SparkConf()
+      .set(YARN_EXECUTOR_OOM_KILL_ENABLED, true)
+      .set(EXECUTOR_JAVA_OPTIONS, "-XX:OnOutOfMemoryError='kill -9 %p'")
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    assert(commands.count(_.contains("-XX:OnOutOfMemoryError")) === 1)
+    assert(commands.exists(_.contains("-XX:OnOutOfMemoryError=kill -9 %p")))
   }
 }

@@ -171,7 +171,7 @@ abstract class HiveComparisonTest extends SparkFunSuite {
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeCommandBase | ShowColumnsCommand(_, _, _) =>
+      case _: DescribeCommandBase | _: ShowColumnsCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -375,6 +375,7 @@ abstract class HiveComparisonTest extends SparkFunSuite {
                 (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTablePartition]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumn]) &&
                 preparedHive != catalyst) {
 

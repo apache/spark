@@ -19,18 +19,18 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 import java.nio.channels.Channels
 
-import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
+import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.vector.compression.CompressionCodec
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
-import org.apache.spark.sql.execution.arrow.{ArrowWriter, ArrowWriterWrapper}
+import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter, ArrowWriterWrapper}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -42,13 +42,11 @@ import org.apache.spark.util.Utils
  * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
-  protected val schema: StructType
+  protected def schema: StructType
 
-  protected val timeZoneId: String
+  protected def timeZoneId: String
 
-  protected val errorOnDuplicatedFieldNames: Boolean
-
-  protected val largeVarTypes: Boolean
+  protected def largeVarTypes: Boolean
 
   protected def pythonMetrics: Map[String, SQLMetric]
 
@@ -60,32 +58,18 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
-  protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
-
-  private val arrowSchema = ArrowUtils.toArrowSchema(
-    schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
-  protected val allocator =
+  protected lazy val allocator: BufferAllocator =
     ArrowUtils.rootAllocator.newChildAllocator(s"stdout writer for $pythonExec", 0, Long.MaxValue)
-  protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+  protected lazy val root: VectorSchemaRoot = {
+    ArrowUtils.failDuplicatedFieldNames(schema)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, largeVarTypes)
+    VectorSchemaRoot.create(arrowSchema, allocator)
+  }
 
   // Create compression codec based on config
-  private val compressionCodecName = SQLConf.get.arrowCompressionCodec
-  private val codec = compressionCodecName match {
-    case "none" => NoCompressionCodec.INSTANCE
-    case "zstd" =>
-      val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-      factory.createCodec(codecType)
-    case "lz4" =>
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new Lz4CompressionCodec().getCodecType()
-      factory.createCodec(codecType)
-    case other =>
-      throw SparkException.internalError(
-        s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-  }
-  protected val unloader = new VectorUnloader(root, true, codec, true)
+  protected def codec: CompressionCodec = ArrowCompressionUtils.createCompressionCodec(
+    SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
 
   protected var writer: ArrowStreamWriter = _
 
@@ -110,7 +94,6 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        handleMetadataBeforeExec(dataOut)
         writeUDF(dataOut)
       }
 
@@ -130,7 +113,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
 private[python] trait BasicPythonArrowInput extends PythonArrowInput[Iterator[InternalRow]] {
   self: BasePythonRunner[Iterator[InternalRow], _] =>
-  protected val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+  protected lazy val arrowWriter: arrow.ArrowWriter = ArrowWriter.create(root)
+  protected lazy val unloader = new VectorUnloader(root, true, codec, true)
 
   protected val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
@@ -266,25 +250,6 @@ private[python] object BatchedPythonArrowInput {
  */
 private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner =>
 
-  // Helper method to create VectorUnloader with compression for grouped operations
-  private def createUnloaderForGroup(root: VectorSchemaRoot): VectorUnloader = {
-    val codec = SQLConf.get.arrowCompressionCodec match {
-      case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-    }
-    new VectorUnloader(root, true, codec, true)
-  }
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
@@ -307,9 +272,9 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
             assert(writer == null || writer.isClosed)
             writer = ArrowWriterWrapper.createAndStartArrowWriter(
               schema, timeZoneId, pythonExec,
-              errorOnDuplicatedFieldNames, largeVarTypes, dataOut, context)
+              largeVarTypes, dataOut, context)
             // Set the unloader with compression after creating the writer
-            writer.unloader = createUnloaderForGroup(writer.root)
+            writer.unloader = new VectorUnloader(writer.root, true, self.codec, true)
             nextBatchStart = inputIterator.next()
           }
         }

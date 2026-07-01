@@ -65,13 +65,12 @@ case class ParquetScan(
   }
 
   private def rewriteVariantPushdownSchema(schema: StructType): StructType = {
-    // Group extractions by column name and build extracted schemas
+    // Field names follow the defer-cast-error contract: companion metadata refers to
+    // the paired data field by its group-local name.
     val variantSchemaMap: Map[Seq[String], StructType] = pushedVariantExtractions
       .groupBy(e => e.columnName().toSeq)
       .map { case (colName, extractions) =>
-        // Build struct schema with ordinal-named fields for each extraction
         var fields = extractions.zipWithIndex.map { case (extraction, idx) =>
-          // Attach VariantMetadata so Parquet reader knows this is a variant extraction
           StructField(idx.toString, extraction.expectedDataType(), nullable = true,
             extraction.metadata())
         }
@@ -161,6 +160,12 @@ case class ParquetScan(
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       conf.legacyParquetNanosAsLong)
+    hadoopConf.setBoolean(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+      conf.timestampNanosTypesEnabled)
+    hadoopConf.setBoolean(
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
+      conf.parquetReaderRespectUnknownTypeAnnotation)
 
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)

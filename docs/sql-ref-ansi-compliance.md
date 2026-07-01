@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -63,7 +63,7 @@ By default, `spark.sql.storeAssignmentPolicy` is `ANSI` and Spark SQL complies w
 </tr>
 </table>
 
-The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion. 
+The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion.
 
 ### Arithmetic Operations
 
@@ -129,7 +129,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Timestamp_NTZ/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
-* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
@@ -257,6 +257,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
 
+The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
+
 Special rules apply for untyped NULL. A NULL can be promoted to any other type.
 
 This is a graphical depiction of the precedence list as a directed tree:
@@ -290,9 +292,9 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 
 The truncation rule is also different for arithmetic operations: they retain at least 6 digits in the fractional part, which means we can only reduce `scale` to 6. Overflow may happen in this case.
-  
+
 ```sql
--- The coalesce function accepts any set of argument types as long as they share a least common type. 
+-- The coalesce function accepts any set of argument types as long as they share a least common type.
 -- The result type is the least common type of the arguments.
 > SET spark.sql.ansi.enabled=true;
 > SELECT typeof(coalesce(1Y, 1L, NULL));
@@ -412,6 +414,7 @@ Below is a list of all the keywords in Spark SQL.
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |AGGREGATE|non-reserved|non-reserved|non-reserved|
+|ALIGN|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
 |ALTER|non-reserved|non-reserved|reserved|
 |ALWAYS|non-reserved|non-reserved|non-reserved|
@@ -420,18 +423,25 @@ Below is a list of all the keywords in Spark SQL.
 |ANTI|non-reserved|strict-non-reserved|non-reserved|
 |ANY|reserved|non-reserved|reserved|
 |ANY_VALUE|non-reserved|non-reserved|non-reserved|
+|APPROX|non-reserved|non-reserved|non-reserved|
 |ARCHIVE|non-reserved|non-reserved|non-reserved|
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
 |ASC|non-reserved|non-reserved|non-reserved|
+|ASENSITIVE|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
 |BEGIN|non-reserved|non-reserved|non-reserved|
+|BERNOULLI|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
 |BIGINT|non-reserved|non-reserved|reserved|
+|BIN|non-reserved|non-reserved|non-reserved|
 |BINARY|non-reserved|non-reserved|reserved|
 |BINDING|non-reserved|non-reserved|non-reserved|
+|BIN_DISTRIBUTE_RATIO|non-reserved|non-reserved|non-reserved|
+|BIN_END|non-reserved|non-reserved|non-reserved|
+|BIN_START|non-reserved|non-reserved|non-reserved|
 |BOOLEAN|non-reserved|non-reserved|reserved|
 |BOTH|reserved|non-reserved|reserved|
 |BUCKET|non-reserved|non-reserved|non-reserved|
@@ -447,15 +457,18 @@ Below is a list of all the keywords in Spark SQL.
 |CATALOG|non-reserved|non-reserved|non-reserved|
 |CATALOGS|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
+|CHANGES|non-reserved|non-reserved|non-reserved|
 |CHAR|non-reserved|non-reserved|reserved|
 |CHARACTER|non-reserved|non-reserved|reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
+|CLOSE|non-reserved|non-reserved|non-reserved|
 |CLUSTER|non-reserved|non-reserved|non-reserved|
 |CLUSTERED|non-reserved|non-reserved|non-reserved|
 |CODEGEN|non-reserved|non-reserved|non-reserved|
 |COLLATE|reserved|non-reserved|reserved|
 |COLLATION|reserved|non-reserved|reserved|
+|COLLATIONS|reserved|non-reserved|non-reserved|
 |COLLECTION|non-reserved|non-reserved|non-reserved|
 |COLUMN|reserved|non-reserved|reserved|
 |COLUMNS|non-reserved|non-reserved|non-reserved|
@@ -475,10 +488,14 @@ Below is a list of all the keywords in Spark SQL.
 |CROSS|reserved|strict-non-reserved|reserved|
 |CUBE|non-reserved|non-reserved|reserved|
 |CURRENT|non-reserved|non-reserved|reserved|
+|CURRENT_DATABASE|non-reserved|non-reserved|non-reserved|
 |CURRENT_DATE|reserved|non-reserved|reserved|
+|CURRENT_PATH|reserved|non-reserved|reserved|
+|CURRENT_SCHEMA|reserved|non-reserved|reserved|
 |CURRENT_TIME|reserved|non-reserved|reserved|
 |CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
 |CURRENT_USER|reserved|non-reserved|reserved|
+|CURSOR|non-reserved|non-reserved|non-reserved|
 |DATA|non-reserved|non-reserved|non-reserved|
 |DATE|non-reserved|non-reserved|reserved|
 |DATABASE|non-reserved|non-reserved|non-reserved|
@@ -497,6 +514,7 @@ Below is a list of all the keywords in Spark SQL.
 |DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DEFINER|non-reserved|non-reserved|non-reserved|
+|DEFAULT_PATH|non-reserved|non-reserved|not a keyword|
 |DELAY|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
 |DELIMITED|non-reserved|non-reserved|non-reserved|
@@ -506,6 +524,7 @@ Below is a list of all the keywords in Spark SQL.
 |DFS|non-reserved|non-reserved|non-reserved|
 |DIRECTORIES|non-reserved|non-reserved|non-reserved|
 |DIRECTORY|non-reserved|non-reserved|non-reserved|
+|DISTANCE|non-reserved|non-reserved|non-reserved|
 |DISTINCT|reserved|non-reserved|reserved|
 |DISTRIBUTE|non-reserved|non-reserved|non-reserved|
 |DIV|non-reserved|non-reserved|not a keyword|
@@ -519,9 +538,11 @@ Below is a list of all the keywords in Spark SQL.
 |ESCAPE|reserved|non-reserved|reserved|
 |ESCAPED|non-reserved|non-reserved|non-reserved|
 |EVOLUTION|non-reserved|non-reserved|non-reserved|
+|EXACT|non-reserved|non-reserved|non-reserved|
 |EXCEPT|reserved|strict-non-reserved|reserved|
 |EXCHANGE|non-reserved|non-reserved|non-reserved|
 |EXCLUDE|non-reserved|non-reserved|non-reserved|
+|EXCLUSIVE|non-reserved|non-reserved|non-reserved|
 |EXECUTE|reserved|non-reserved|reserved|
 |EXISTS|non-reserved|non-reserved|reserved|
 |EXIT|non-reserved|non-reserved|non-reserved|
@@ -569,6 +590,7 @@ Below is a list of all the keywords in Spark SQL.
 |IMPORT|non-reserved|non-reserved|non-reserved|
 |IN|reserved|non-reserved|reserved|
 |INCLUDE|non-reserved|non-reserved|non-reserved|
+|INCLUSIVE|non-reserved|non-reserved|non-reserved|
 |INCREMENT|non-reserved|non-reserved|non-reserved|
 |INDEX|non-reserved|non-reserved|non-reserved|
 |INDEXES|non-reserved|non-reserved|non-reserved|
@@ -577,6 +599,7 @@ Below is a list of all the keywords in Spark SQL.
 |INPUT|non-reserved|non-reserved|non-reserved|
 |INPUTFORMAT|non-reserved|non-reserved|non-reserved|
 |INSERT|non-reserved|non-reserved|reserved|
+|INSENSITIVE|non-reserved|non-reserved|non-reserved|
 |INT|non-reserved|non-reserved|reserved|
 |INTEGER|non-reserved|non-reserved|reserved|
 |INTERSECT|reserved|strict-non-reserved|reserved|
@@ -605,6 +628,7 @@ Below is a list of all the keywords in Spark SQL.
 |LIST|non-reserved|non-reserved|non-reserved|
 |LOAD|non-reserved|non-reserved|non-reserved|
 |LOCAL|non-reserved|non-reserved|reserved|
+|LOCALTIME|reserved|non-reserved|reserved|
 |LOCATION|non-reserved|non-reserved|non-reserved|
 |LOCK|non-reserved|non-reserved|non-reserved|
 |LOCKS|non-reserved|non-reserved|non-reserved|
@@ -636,6 +660,8 @@ Below is a list of all the keywords in Spark SQL.
 |NANOSECOND|non-reserved|non-reserved|non-reserved|
 |NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
+|NEAREST|non-reserved|non-reserved|non-reserved|
+|NEXT|non-reserved|non-reserved|non-reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NONE|non-reserved|non-reserved|reserved|
 |NORELY|non-reserved|non-reserved|not a keyword|
@@ -647,6 +673,7 @@ Below is a list of all the keywords in Spark SQL.
 |OFFSET|reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
+|OPEN|non-reserved|non-reserved|reserved|
 |OPTION|non-reserved|non-reserved|non-reserved|
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
@@ -661,6 +688,7 @@ Below is a list of all the keywords in Spark SQL.
 |PARTITION|non-reserved|non-reserved|reserved|
 |PARTITIONED|non-reserved|non-reserved|non-reserved|
 |PARTITIONS|non-reserved|non-reserved|non-reserved|
+|PATH|non-reserved|non-reserved|not a keyword|
 |PERCENT|non-reserved|non-reserved|non-reserved|
 |PIVOT|non-reserved|non-reserved|non-reserved|
 |PLACING|non-reserved|non-reserved|non-reserved|
@@ -672,9 +700,11 @@ Below is a list of all the keywords in Spark SQL.
 |PROCEDURES|non-reserved|non-reserved|non-reserved|
 |PROPERTIES|non-reserved|non-reserved|non-reserved|
 |PURGE|non-reserved|non-reserved|non-reserved|
+|QUALIFY|non-reserved|non-reserved|non-reserved|
 |QUARTER|non-reserved|non-reserved|non-reserved|
 |QUERY|non-reserved|non-reserved|non-reserved|
 |RANGE|non-reserved|non-reserved|reserved|
+|READ|non-reserved|non-reserved|non-reserved|
 |READS|non-reserved|non-reserved|non-reserved|
 |REAL|non-reserved|non-reserved|reserved|
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
@@ -721,6 +751,7 @@ Below is a list of all the keywords in Spark SQL.
 |SETS|non-reserved|non-reserved|non-reserved|
 |SHORT|non-reserved|non-reserved|non-reserved|
 |SHOW|non-reserved|non-reserved|non-reserved|
+|SIMILARITY|non-reserved|non-reserved|non-reserved|
 |SINGLE|non-reserved|non-reserved|non-reserved|
 |SKEWED|non-reserved|non-reserved|non-reserved|
 |SMALLINT|non-reserved|non-reserved|reserved|
@@ -743,6 +774,8 @@ Below is a list of all the keywords in Spark SQL.
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
 |SYNC|non-reserved|non-reserved|non-reserved|
+|SYSTEM|non-reserved|non-reserved|reserved|
+|SYSTEM_PATH|non-reserved|non-reserved|not a keyword|
 |SYSTEM_TIME|non-reserved|non-reserved|non-reserved|
 |SYSTEM_VERSION|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|
@@ -776,6 +809,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNARCHIVE|non-reserved|non-reserved|non-reserved|
 |UNBOUNDED|non-reserved|non-reserved|non-reserved|
 |UNCACHE|non-reserved|non-reserved|non-reserved|
+|UNIFORM|non-reserved|non-reserved|non-reserved|
 |UNION|reserved|strict-non-reserved|reserved|
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
@@ -803,6 +837,7 @@ Below is a list of all the keywords in Spark SQL.
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
 |WHILE|non-reserved|non-reserved|non-reserved|
+|WIDTH|non-reserved|non-reserved|non-reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|

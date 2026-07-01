@@ -16,12 +16,13 @@
 # limitations under the License.
 #
 
+import contextlib
 import copy
 import functools
 import faulthandler
+import gc
 import itertools
 import os
-import platform
 import re
 import sys
 import threading
@@ -31,7 +32,19 @@ import socket
 import warnings
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    IO,
+    Iterator,
+    List,
+    Optional,
+    TextIO,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.serializers import (
@@ -95,6 +108,8 @@ JVM_INT_MIN: int = -(1 << 31)
 JVM_INT_MAX: int = (1 << 31) - 1
 JVM_LONG_MIN: int = -(1 << 63)
 JVM_LONG_MAX: int = (1 << 63) - 1
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def print_exec(stream: TextIO) -> None:
@@ -258,10 +273,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     >>> exc_info_b.count("pyspark/util.py")
     1
     """
-    if "pypy" in platform.python_implementation().lower():
-        # Traceback modification is not supported with PyPy in PySpark.
-        return None
-
     import pyspark
 
     root = os.path.dirname(pyspark.__file__)
@@ -336,7 +347,7 @@ def _parse_memory(s: str) -> int:
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
-def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = None) -> Callable:
+def inheritable_thread_target(f: Union[Callable, "SparkSession"]) -> Callable:
     """
     Return thread target wrapper which is recommended to be used in PySpark when the
     pinned thread mode is enabled. The wrapper function, before calling original
@@ -344,7 +355,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
     to JVM thread such as ``InheritableThreadLocal``, or thread local such as tags
     with Spark Connect.
 
-    When the pinned thread mode is off, it return the original ``f``.
+    When the pinned thread mode is off, the target wrapper is a no-op.
 
     .. versionadded:: 3.2.0
 
@@ -398,9 +409,9 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         session = f
 
         def outer(ff: Callable) -> Callable:
-            assert isinstance(
-                session, RemoteSparkSession
-            ), "f is expected to be SparkSession for spark connect"
+            assert isinstance(session, RemoteSparkSession), (
+                "f is expected to be SparkSession for spark connect"
+            )
             thread_local = session.client.thread_local
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
@@ -413,9 +424,9 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Propagates the active remote spark session to the current thread.
-                assert isinstance(
-                    session, RemoteSparkSession
-                ), "f is expected to be SparkSession for spark connect"
+                assert isinstance(session, RemoteSparkSession), (
+                    "f is expected to be SparkSession for spark connect"
+                )
 
                 RemoteSparkSession._set_default_and_active_session(session)
                 # Set thread locals in child thread.
@@ -453,7 +464,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
                     for tag in tags:
-                        session.addTag(tag)  # type: ignore[union-attr]
+                        session.addTag(tag)
                     return ff(*args, **kwargs)
 
                 return wrapped
@@ -477,11 +488,18 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             # Set local properties in child thread.
             assert SparkContext._active_spark_context is not None
             SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            return f(*args, **kwargs)  # type: ignore[misc, operator]
+            return f(*args, **kwargs)
 
         return wrapped
     else:
-        return f  # type: ignore[return-value]
+        if isinstance(f, SparkSession):
+
+            def outer(ff: Callable) -> Callable:
+                return ff
+
+            return outer
+        else:
+            return f
 
 
 def handle_worker_exception(
@@ -509,12 +527,19 @@ def handle_worker_exception(
     def format_exception() -> str:
         if hide_traceback:
             return "".join(traceback.format_exception_only(type(e), e))
+        tb = sys.exc_info()[-1]
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-            tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
-            if tb is not None:
+            simplified_tb = try_simplify_traceback(tb)  # type: ignore[arg-type]
+            if simplified_tb is not None:
+                tb = simplified_tb
                 e.__cause__ = None
-                return "".join(traceback.format_exception(type(e), e, tb))
-        return traceback.format_exc()
+        # We only set SPARK_TRACEBACK_WITH_LOCALS=1 for now. This equivalent to a
+        # check for the existence of the environment variable.
+        capture_locals = bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False))
+        te = traceback.TracebackException(
+            type(e), e, tb, compact=True, capture_locals=capture_locals
+        )
+        return "".join(te.format())
 
     try:
         exc_info = format_exception()
@@ -566,7 +591,7 @@ class InheritableThread(threading.Thread):
                 assert hasattr(self, "_tags")
                 assert session is not None
                 thread_local = session.client.thread_local
-                thread_local.tags = self._tags  # type: ignore[has-type]
+                thread_local.tags = self._tags
                 return target(*a, **k)
 
             super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
@@ -582,14 +607,16 @@ class InheritableThread(threading.Thread):
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
                     if hasattr(self, "_tags"):
-                        for tag in self._tags:  # type: ignore[has-type]
+                        for tag in self._tags:
                             self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                     return target(*a, **k)
 
                 super().__init__(
-                    target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
+                    target=copy_local_properties,
+                    *args,
+                    **kwargs,  # type: ignore[misc]
                 )
             else:
                 super().__init__(target=target, *args, **kwargs)  # type: ignore[misc]
@@ -649,13 +676,9 @@ class PythonEvalType:
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
     SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
-    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
-        212
-    )
+    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = 212
     SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF: "GroupedMapUDFTransformWithStateType" = 213
-    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
-        214
-    )
+    SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF: "GroupedMapUDFTransformWithStateInitStateType" = 214
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
     SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
     SQL_GROUPED_AGG_PANDAS_ITER_UDF: "PandasGroupedAggIterUDFType" = 217
@@ -857,6 +880,18 @@ def _do_server_auth(conn: "io.IOBase", auth_secret: str) -> None:
         )
 
 
+@contextlib.contextmanager
+def disable_gc() -> Generator[None, None, None]:
+    gc_enabled_originally = gc.isenabled()
+    if gc_enabled_originally:
+        gc.disable()
+    try:
+        yield
+    finally:
+        if gc_enabled_originally:
+            gc.enable()
+
+
 _is_remote_only = None
 
 
@@ -934,10 +969,13 @@ class _FaulthandlerHelper:
         self._log_path: Optional[str] = None
         self._log_file: Optional[TextIO] = None
         self._periodic_traceback = False
+        self._reentry_depth = 0
 
     def start(self) -> None:
+        self._reentry_depth += 1
         if self._log_path:
-            raise Exception("Fault handler is already registered. No second registration allowed")
+            # faulthandler is already enabled
+            return
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
@@ -946,6 +984,9 @@ class _FaulthandlerHelper:
             faulthandler.enable(file=self._log_file)
 
     def stop(self) -> None:
+        self._reentry_depth -= 1
+        if self._reentry_depth > 0:
+            return
         if self._log_path:
             faulthandler.disable()
             if self._log_file:
@@ -988,22 +1029,32 @@ class _FaulthandlerHelper:
 
         return wrapper
 
+    @contextmanager
+    def enable_faulthandler(self, start_periodic_traceback: bool = True) -> Iterator[None]:
+        try:
+            self.start()
+            if start_periodic_traceback:
+                self.start_periodic_traceback()
+            yield
+        finally:
+            self.stop()
+
 
 _faulthandler_helper = _FaulthandlerHelper()
 with_faulthandler = _faulthandler_helper.with_faulthandler
 start_faulthandler_periodic_traceback = _faulthandler_helper.start_periodic_traceback
+enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower():
-        import doctest
-        import pyspark.util
-        from pyspark.core.context import SparkContext
+    import doctest
+    import pyspark.util
+    from pyspark.core.context import SparkContext
 
-        globs = pyspark.util.__dict__.copy()
-        globs["sc"] = SparkContext("local[4]", "PythonTest")
-        (failure_count, test_count) = doctest.testmod(pyspark.util, globs=globs)
-        globs["sc"].stop()
+    globs = pyspark.util.__dict__.copy()
+    globs["sc"] = SparkContext("local[4]", "PythonTest")
+    failure_count, test_count = doctest.testmod(pyspark.util, globs=globs)
+    globs["sc"].stop()
 
-        if failure_count:
-            sys.exit(-1)
+    if failure_count:
+        sys.exit(-1)

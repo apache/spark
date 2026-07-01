@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDateTime}
 
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
@@ -71,8 +72,7 @@ object TestForTypeAlias {
   def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
-class DatasetSuite extends QueryTest
-  with SharedSparkSession
+class DatasetSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -1159,6 +1159,24 @@ class DatasetSuite extends QueryTest
     assert(namedObservation2.get === expected2)
   }
 
+  test("SPARK-55150: observation errors are thrown in Observation.get in classic mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark.range(10).observe(
+      observation,
+      sum($"id").as("sum_id"),
+      raise_error(lit("test error")).as("raise_error")
+    )
+
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
+
+    val exception = intercept[SparkRuntimeException] {
+      observation.get
+    }
+
+    assert(exception.getMessage.contains("test error"))
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
@@ -1890,6 +1908,7 @@ class DatasetSuite extends QueryTest
             val treeString = cp.logicalPlan.treeString(verbose = true)
             fail(s"Expecting a LogicalRDD, but got\n$treeString")
         }
+        assert(logicalRDD.isCheckpointedInput === eager)
 
         val dsPhysicalPlan = ds.queryExecution.executedPlan
         val cpPhysicalPlan = cp.queryExecution.executedPlan
@@ -1910,6 +1929,7 @@ class DatasetSuite extends QueryTest
 
         // For a lazy checkpoint() call, the first check also materializes the checkpoint.
         checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
+        assert(logicalRDD.isCheckpointedInput)
 
         // Reads back from checkpointed data and check again.
         checkDataset(cp, (9L to 6L by -1L).map(java.lang.Long.valueOf): _*)
@@ -2614,6 +2634,49 @@ class DatasetSuite extends QueryTest
     assert(Seq(localDateTime).toDS().head() === localDateTime)
   }
 
+  test("SPARK-57033: Dataset[Row] roundtrip preserves nanosecond precision") {
+    val schema = new StructType()
+      .add("ntz", TimestampNTZNanosType(9), nullable = true)
+      .add("ltz", TimestampLTZNanosType(9), nullable = true)
+    val rows = Seq(
+      Row(
+        LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+        Instant.parse("2019-02-26T16:56:00.987654321Z")),
+      Row(
+        LocalDateTime.parse("9999-12-31T23:59:59.999999999"),
+        Instant.parse("9999-12-31T23:59:59.999999999Z")),
+      Row(null, null))
+    val df = spark.createDataFrame(rows.asJava, schema)
+    assert(df.schema === schema)
+    checkAnswer(df, rows)
+  }
+
+  test("SPARK-57033: Dataset[Row] roundtrip truncates sub-micro to declared precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val negativeEpochLdt = LocalDateTime.parse("1969-12-31T23:59:59.123456789")
+    val negativeEpochInstant = Instant.parse("1969-12-31T23:59:59.123456789Z")
+    // At p=7 the last two sub-micro digits are dropped (789 -> 700);
+    // at p=8 only the last one is dropped (789 -> 780).
+    val expectedSubMicro = Map(7 -> 700, 8 -> 780)
+
+    for (p <- 7 to 8) {
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p), nullable = true)
+        .add("ltz", TimestampLTZNanosType(p), nullable = true)
+      val rows = Seq(
+        Row(ldt, instant),
+        Row(negativeEpochLdt, negativeEpochInstant))
+      val df = spark.createDataFrame(rows.asJava, schema)
+      assert(df.schema === schema)
+      val drop = 789 - expectedSubMicro(p)
+      val expected = Seq(
+        Row(ldt.minusNanos(drop), instant.minusNanos(drop)),
+        Row(negativeEpochLdt.minusNanos(drop), negativeEpochInstant.minusNanos(drop)))
+      checkAnswer(df, expected)
+    }
+  }
+
   test("SPARK-34605: implicit encoder for java.time.Duration") {
     val duration = java.time.Duration.ofMinutes(10)
     assert(spark.range(1).map { _ => duration }.head() === duration)
@@ -2980,6 +3043,48 @@ class DatasetSuite extends QueryTest
     val metrics = observation.get
     assert(metrics.isEmpty)
   }
+
+  test("zipWithIndex should append consecutive 0-based indices") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5)).toDS().repartition(3)
+    val result = ds.zipWithIndex()
+
+    // Index column should be the last column
+    assert(result.columns === Array("_1", "_2", "index"))
+    assert(result.schema.last.dataType === LongType)
+
+    // Indices should be consecutive 0-based
+    val indices = result.collect().map(_.getLong(2)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex with custom column name") {
+    val ds = Seq(1, 2, 3, 4, 5).toDS()
+    val result = ds.zipWithIndex("row_num")
+
+    assert(result.columns === Array("value", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val ds = Seq(("a", 1), ("b", 2)).toDF("_1", "index")
+    val result = ds.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
 }
 
 /**
@@ -3014,8 +3119,7 @@ object CustomPathEncoder {
   )
 }
 
-class DatasetLargeResultCollectingSuite extends QueryTest
-  with SharedSparkSession {
+class DatasetLargeResultCollectingSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
   // SPARK-41193: Ignore this suite because it cannot run successfully with Spark

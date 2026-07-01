@@ -33,8 +33,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DatasetCacheSuite extends QueryTest
-  with SharedSparkSession
+class DatasetCacheSuite extends SharedSparkSession
   with TimeLimits
   with AdaptiveSparkPlanHelper {
   import testImplicits._
@@ -336,5 +335,34 @@ class DatasetCacheSuite extends QueryTest
     val plan = spark.sql("SELECT TIME '13:33:33'").cache().queryExecution.sparkPlan
     val value = ColumnarToRowExec(plan).executeCollectPublic().head.get(0)
     assert(value == LocalTime.of(13, 33, 33))
+  }
+
+  test("SPARK-54812: SHOW TABLES should be a no-op.") {
+    val t1 = "show_tables_test_t1"
+    val t2 = "show_tables_test_t2"
+    withTable(t1, t2) {
+      // Create initial table
+      sql(s"CREATE TABLE $t1 (c1 int) USING parquet")
+
+      // Run SHOW TABLES and save to a DataFrame
+      val showTablesDf = sql("SHOW TABLES")
+
+      // Add another table after creating the DataFrame
+      sql(s"CREATE TABLE $t2 (c1 int) USING parquet")
+
+      // Cache the DataFrame - this should reflect the latest state
+      showTablesDf.cache()
+
+      // Verify cached result reflects the latest state (includes t2)
+      val cachedTables = showTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(cachedTables.contains(t1))
+      assert(!cachedTables.contains(t2))
+
+      // A fresh SHOW TABLES call should also show both tables
+      val freshShowTablesDf = sql("SHOW TABLES")
+      val freshTables = freshShowTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(freshTables.contains(t1))
+      assert(freshTables.contains(t2))
+    }
   }
 }

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 // DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
 /**
- * A catalog in Spark, as returned by the `listCatalogs` method defined in [[Catalog]].
+ * A catalog in Spark, as returned by the `listCatalogs` method defined in `Catalog`.
  *
  * @param name
  *   name of the catalog
@@ -42,7 +42,32 @@ class CatalogMetadata(val name: String, @Nullable val description: String)
 }
 
 /**
- * A database in Spark, as returned by the `listDatabases` method defined in [[Catalog]].
+ * A partition string as returned by `Catalog.listPartitions` (same form as `SHOW PARTITIONS`).
+ *
+ * @param partition
+ *   partition description string.
+ * @since 4.2.0
+ */
+@Stable
+class TablePartition(val partition: String) extends DefinedByConstructorParams {
+
+  override def toString: String = s"TablePartition[partition='$partition']"
+}
+
+/**
+ * A table property key and value, as returned by `Catalog.getTableProperties` rows.
+ *
+ * @since 4.2.0
+ */
+@Stable
+class CatalogTableProperty(val key: String, val value: String)
+    extends DefinedByConstructorParams {
+
+  override def toString: String = s"CatalogTableProperty[key='$key', value='$value']"
+}
+
+/**
+ * A database in Spark, as returned by the `listDatabases` method defined in `Catalog`.
  *
  * @param name
  *   name of the database.
@@ -77,7 +102,7 @@ class Database(
 }
 
 /**
- * A table in Spark, as returned by the `listTables` method in [[Catalog]].
+ * A table in Spark, as returned by the `listTables` method in `Catalog`.
  *
  * @param name
  *   name of the table.
@@ -139,7 +164,7 @@ class Table(
 }
 
 /**
- * A column in Spark, as returned by `listColumns` method in [[Catalog]].
+ * A column in Spark, as returned by `listColumns` method in `Catalog`.
  *
  * @param name
  *   name of the column.
@@ -192,7 +217,7 @@ class Column(
 }
 
 /**
- * A user-defined function in Spark, as returned by `listFunctions` method in [[Catalog]].
+ * A user-defined function in Spark, as returned by `listFunctions` method in `Catalog`.
  *
  * @param name
  *   name of the function.

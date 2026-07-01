@@ -42,6 +42,19 @@ case class JavaMainAppResource(primaryResource: Option[String])
 
 @Stable
 @DeveloperApi
+@Since("4.2.0")
+object JavaMainAppResource {
+  /** Java-friendly factory: creates with a specific resource path. */
+  def of(primaryResource: String): JavaMainAppResource =
+    JavaMainAppResource(Some(primaryResource))
+
+  /** Java-friendly factory: creates with no resource (uses spark-internal). */
+  def create(): JavaMainAppResource =
+    JavaMainAppResource(None)
+}
+
+@Stable
+@DeveloperApi
 @Since("2.4.0")
 case class PythonMainAppResource(primaryResource: String)
   extends MainAppResource with NonJVMResource

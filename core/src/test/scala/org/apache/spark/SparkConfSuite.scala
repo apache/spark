@@ -112,6 +112,18 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getOption("k4") === None)
   }
 
+  test("getAllAsJavaMap") {
+    val conf = new SparkConf(false)
+    assert(conf.getAllAsJavaMap.isEmpty)
+    conf.set("k1", "v1")
+    conf.setAll(Seq(("k2", "v2"), ("k3", "v3")))
+    val javaMap = conf.getAllAsJavaMap
+    assert(javaMap.size() === 3)
+    assert(javaMap.get("k1") === "v1")
+    assert(javaMap.get("k2") === "v2")
+    assert(javaMap.get("k3") === "v3")
+  }
+
   test("basic getAllWithPrefix") {
     val prefix = "spark.prefix."
     val conf = new SparkConf(false)

@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.UI.UI_FLAMEGRAPH_ENABLED
 import org.apache.spark.status.api.v1.ThreadStackTrace
-import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
+import org.apache.spark.ui.{CspNonce, SparkUITab, UIUtils, WebUIPage}
 import org.apache.spark.ui.UIUtils.{formatImportJavaScript, prependBaseUri}
 import org.apache.spark.ui.flamegraph.FlamegraphNode
 
@@ -59,9 +59,7 @@ private[ui] class ExecutorThreadDumpPage(
         val heldLocks = (synchronizers ++ monitors).mkString(", ")
 
         <tr id={s"thread_${threadId}_tr"} class="accordion-heading"
-            onclick={s"toggleThreadStackTrace($threadId, false)"}
-            onmouseover={s"onMouseOverAndOut($threadId)"}
-            onmouseout={s"onMouseOverAndOut($threadId)"}>
+            data-thread-id={threadId.toString}>
           <td id={s"${threadId}_td_id"}>{threadId}</td>
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
@@ -83,43 +81,49 @@ private[ui] class ExecutorThreadDumpPage(
         {
           // scalastyle:off
           <p></p>
-          <span class="collapse-thead-stack-trace-table collapse-table" onClick="collapseTableAndButton('collapse-thead-stack-trace-table', 'thead-stack-trace-table')">
+          <span class="collapse-table" data-bs-toggle="collapse"
+                data-bs-target="#thead-stack-trace-table"
+                aria-expanded="true" aria-controls="thead-stack-trace-table"
+                data-collapse-name="collapse-thead-stack-trace-table">
             <h4>
               <span class="collapse-table-arrow arrow-open"></span>
               <a>Thread Stack Trace</a>
             </h4>
           </span>
-          <div class="thead-stack-trace-table-button" style="display: flex; align-items: center;">
-            <a class="expandbutton" onClick="expandAllThreadStackTrace(true)">Expand All</a>
-            <a class="expandbutton d-none" onClick="collapseAllThreadStackTrace(true)">Collapse All</a>
+        }
+        <div class="collapsible-table collapse show" id="thead-stack-trace-table">
+          {
+          // scalastyle:off
+          <div class="thead-stack-trace-table-button d-flex align-items-center">
+            <a class="expandbutton" data-action="expandAllThreadStackTrace">Expand All</a>
+            <a class="expandbutton d-none" data-action="collapseAllThreadStackTrace">Collapse All</a>
             <a class="downloadbutton" href={"data:text/plain;charset=utf-8," + threadDump.map(_.toString).mkString} download={"threaddump_" + executorId + ".txt"}>Download</a>
-            <div class="form-inline">
-              <div class="bs-example" data-example-id="simple-form-inline">
-                <div class="form-group">
+            <div class="d-flex">
+              <div class="bs-example" data-example-id="simple-d-flex">
+                <div class="mb-3">
                   <div class="input-group">
-                    <label class="mr-2" for="search">Search:</label>
-                    <input type="text" class="form-control" id="search" oninput="onSearchStringChange()"></input>
+                    <label class="me-2" for="search">Search:</label>
+                    <input type="text" class="form-control" id="search" data-search-input="true"></input>
                   </div>
                 </div>
               </div>
             </div>
           </div>
           <p></p>
-        }
-        <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thead-stack-trace-table collapsible-table"}>
-          <thead>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread ID</th>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread Name</th>
-            <th onClick="collapseAllThreadStackTrace(false)">Thread State</th>
-            <th onClick="collapseAllThreadStackTrace(false)">
-              <span data-toggle="tooltip" data-placement="top"
-                    title="Objects whose lock the thread currently holds">
-                Thread Locks
-              </span>
-            </th>
-          </thead>
-          <tbody>{dumpRows}</tbody>
-        </table>
+          }
+          <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
+            <thead>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread ID</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread Name</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">Thread State</th>
+              <th data-action="collapseAllThreadStackTrace" data-toggle-button="false">
+                {UIUtils.tooltipSpan(<xml:group>Thread Locks</xml:group>,
+                  "Objects whose lock the thread currently holds")}
+              </th>
+            </thead>
+            <tbody>{dumpRows}</tbody>
+          </table>
+        </div>
       </div>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
@@ -136,7 +140,7 @@ private[ui] class ExecutorThreadDumpPage(
          |""".stripMargin
     <div>
       <div>
-        <span id="executor-flamegraph-header" style="cursor: pointer;">
+        <span id="executor-flamegraph-header" class="cursor-pointer">
           <h4>
             <span id="executor-flamegraph-arrow" class="arrow-open"></span>
             <a>Flame Graph</a>
@@ -149,7 +153,7 @@ private[ui] class ExecutorThreadDumpPage(
         <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
         <script src={UIUtils.prependBaseUri(request, "/static/d3-flamegraph.min.js")}></script>
         <script type="module" src={UIUtils.prependBaseUri(request, "/static/flamegraph.js")}></script>
-        <script type="module">{Unparsed(js)}</script>
+        <script type="module" nonce={CspNonce.get}>{Unparsed(js)}</script>
       </div>
     </div>
   }
@@ -158,13 +162,17 @@ private[ui] class ExecutorThreadDumpPage(
   private def threadDumpSummary(threadDump: Array[ThreadStackTrace]): Seq[Node] = {
     val totalCount = threadDump.length
     <div>
-      <span class="thead-dump-summary collapse-table" onClick="collapseTable('thead-dump-summary', 'thread-dump-summary-table')">
+      <span class="collapse-table" data-bs-toggle="collapse"
+            data-bs-target="#thread-dump-summary-table"
+            aria-expanded="true" aria-controls="thread-dump-summary-table"
+            data-collapse-name="thead-dump-summary">
         <h4>
           <span class="collapse-table-arrow arrow-open"></span>
           <a>Thread Dump Summary: { totalCount }</a>
         </h4>
       </span>
-      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thread-dump-summary-table collapsible-table"}>
+      <div class="collapsible-table collapse show" id="thread-dump-summary-table">
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable"}>
         <thead><th>Thread State</th><th>Count</th><th>Percentage</th></thead>
         <tbody>
           {
@@ -178,6 +186,7 @@ private[ui] class ExecutorThreadDumpPage(
           }
         </tbody>
       </table>
+      </div>
     </div>
   }
   // scalastyle:on

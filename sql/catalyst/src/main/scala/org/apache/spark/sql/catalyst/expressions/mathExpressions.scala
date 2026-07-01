@@ -418,10 +418,11 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  // fdlibm e_acosh.c algorithm, shared with codegen via ExpressionImplUtils.acosh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.acosh(x), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev,
-      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.acosh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
@@ -847,13 +848,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   since = "3.0.0",
   group = "math_funcs")
 case class Asinh(child: Expression)
-  extends UnaryMathExpression((x: Double) => x match {
-    case Double.NegativeInfinity => Double.NegativeInfinity
-    case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+  // fdlibm s_asinh.c algorithm, shared with codegen via ExpressionImplUtils.asinh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.asinh(x), "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c =>
-      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.asinh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
@@ -1759,6 +1758,7 @@ case class BRound(
 }
 
 object WidthBucket {
+  /** Shared by interpreted eval and generated Java code; must stay public for codegen. */
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     if (isNull(value, min, max, numBucket)) {
       null
@@ -1767,8 +1767,7 @@ object WidthBucket {
     }
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+  private def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
     numBucket <= 0 ||
       numBucket == Long.MaxValue ||
       jl.Double.isNaN(value) ||
@@ -1777,8 +1776,7 @@ object WidthBucket {
       jl.Double.isNaN(max) || jl.Double.isInfinite(max)
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def computeBucketNumberNotNull(
+  private def computeBucketNumberNotNull(
       value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
@@ -1893,11 +1891,13 @@ case class WidthBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
-      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |  .isNull($input, $min, $max, $numBucket);
+      val bucket = ctx.freshName("bucket")
+      val boxedLong = CodeGenerator.boxedType(dataType)
+      s"""$boxedLong $bucket = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .computeBucketNumber($input, $min, $max, $numBucket);
+         |${ev.isNull} = $bucket == null;
          |if (!${ev.isNull}) {
-         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |  ${ev.value} = $bucket;
          |}""".stripMargin
     })
   }

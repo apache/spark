@@ -56,7 +56,106 @@ public interface VectorizedValuesReader {
       String timeZone);
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
+
+  /**
+   * Reads {@code total} INT32 values, sign-extends each to a long, and writes them into
+   * {@code c} starting at {@code c[rowId]}. Used by type-converting updaters that read
+   * parquet INT32 columns into Spark {@code LongType} (or wider decimal) targets.
+   *
+   * <p>The default implementation falls back to a per-row read+widen+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readInteger()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, readInteger());
+    }
+  }
+
+  /**
+   * Reads {@code total} INT32 values, widens each to a double, and writes them into
+   * {@code c} starting at {@code c[rowId]}. The widening is lossless because every
+   * INT32 fits exactly in a double's 53-bit mantissa. Used by the type-converting
+   * updater that reads parquet INT32 columns into Spark {@code DoubleType} targets.
+   *
+   * <p>The default implementation falls back to a per-row read+widen+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readInteger()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putDouble(rowId + i, readInteger());
+    }
+  }
+
+  /**
+   * Reads {@code total} FLOAT values, widens each to a double, and writes them into
+   * {@code c} starting at {@code c[rowId]}. The widening is Java's primitive
+   * float-to-double conversion: exact for every finite and infinite float; a NaN
+   * float widens to a double NaN (the payload may be canonicalized by the JVM).
+   * Used by the type-converting updater that reads parquet FLOAT columns into
+   * Spark {@code DoubleType} targets.
+   *
+   * <p>The default implementation falls back to a per-row read+widen+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readFloat()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readFloatsAsDoubles(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putDouble(rowId + i, readFloat());
+    }
+  }
+
+  /**
+   * Reads {@code total} INT64 values, narrows each to an int via Java's primitive
+   * long-to-int cast (the high 32 bits are discarded), and writes them into {@code c}
+   * starting at {@code c[rowId]}. Used by the type-converting updater that reads parquet
+   * INT64 DECIMAL columns whose Spark target is a 32-bit decimal (precision <= 9); such
+   * values are guaranteed by Parquet's decimal encoding to fit in int32, so the
+   * narrowing is non-lossy in practice.
+   *
+   * <p>The default implementation falls back to a per-row read+narrow+write loop and is
+   * therefore equivalent in cost to the legacy per-row Updater path. Subclasses backed
+   * by contiguous bulk storage (e.g. PLAIN encoding via {@link VectorizedPlainValuesReader})
+   * should override to read source bytes once and run a tight in-method conversion loop,
+   * avoiding {@code total} virtual dispatches on {@link #readLong()}. Readers without
+   * an override preserve correctness but gain no speedup.
+   */
+  default void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putInt(rowId + i, (int) readLong());
+    }
+  }
+
   void readBinary(int total, WritableColumnVector c, int rowId);
+
+  /**
+   * Reads {@code total} fixed-length byte arrays of exactly {@code len} bytes each into
+   * {@code c} starting at {@code c[rowId]}. Unlike {@link #readBinary(int, WritableColumnVector,
+   * int)} which reads length-prefixed variable-length BYTE_ARRAY values, this method reads
+   * FIXED_LEN_BYTE_ARRAY data where each value is exactly {@code len} raw bytes with no
+   * length prefix in the encoded stream.
+   *
+   * <p>The default implementation falls back to a per-row loop calling
+   * {@link #readBinary(int)} for each value; subclasses may override for better performance.
+   */
+  default void readFixedLenByteArray(int total, int len, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i++) {
+      c.putByteArray(rowId + i, readBinary(len).getBytesUnsafe());
+    }
+  }
+
+  void readGeometry(int total, WritableColumnVector c, int rowId);
+  void readGeography(int total, WritableColumnVector c, int rowId);
 
    /*
     * Skips `total` values

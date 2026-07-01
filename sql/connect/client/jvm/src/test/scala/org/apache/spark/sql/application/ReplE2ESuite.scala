@@ -16,17 +16,14 @@
  */
 package org.apache.spark.sql.application
 
-import java.io.{PipedInputStream, PipedOutputStream}
-import java.nio.file.Paths
+import java.io.{File, PipedInputStream, PipedOutputStream, PrintWriter}
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
-
-import scala.util.Properties
 
 import org.apache.commons.io.output.ByteArrayOutputStream
 
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.tags.AmmoniteTest
-import org.apache.spark.util.IvyTestUtils
+import org.apache.spark.util.{IvyTestUtils, SparkTestUtils}
 import org.apache.spark.util.MavenUtils.MavenCoordinate
 
 @AmmoniteTest
@@ -40,11 +37,6 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession {
   private var errorStream: ByteArrayOutputStream = _
   private var ammoniteIn: PipedInputStream = _
   private val semaphore: Semaphore = new Semaphore(0)
-
-  private val scalaVersion = Properties.versionNumberString
-    .split("\\.")
-    .take(2)
-    .mkString(".")
 
   private def getCleanString(out: ByteArrayOutputStream): String = {
     // Remove ANSI colour codes
@@ -170,12 +162,26 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("Client-side JAR") {
     // scalastyle:off classforname line.size.limit
-    val sparkHome = IntegrationTestUtils.sparkHome
-    val testJar = Paths
-      .get(s"$sparkHome/sql/connect/client/jvm/src/test/resources/TestHelloV2_$scalaVersion.jar")
-      .toFile
-
-    assume(testJar.exists(), "Missing TestHelloV2 jar!")
+    val testJar = {
+      val source =
+        """package com.example
+          |object Hello { def test(): Int = 2 }
+          |""".stripMargin
+      val srcFile = File.createTempFile("Hello", ".scala")
+      srcFile.deleteOnExit()
+      val pw = new PrintWriter(srcFile)
+      try { pw.write(source) }
+      finally { pw.close() }
+      val jar = File.createTempFile("TestHelloV2", ".jar")
+      jar.deleteOnExit()
+      val cp = System
+        .getProperty("java.class.path")
+        .split(File.pathSeparator)
+        .map(p => new File(p).toURI.toURL)
+        .toSeq
+      SparkTestUtils.createJarWithScalaSources(Seq(srcFile), jar, cp)
+      jar
+    }
     val input = s"""
         |import java.nio.file.Paths
         |def classLoadingTest(x: Int): Int = {

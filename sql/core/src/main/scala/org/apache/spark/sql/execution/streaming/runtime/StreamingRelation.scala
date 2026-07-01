@@ -35,21 +35,10 @@ import org.apache.spark.sql.sources.SupportsStreamSourceMetadataColumns
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
-    // Extract source identifying name from CatalogTable for stable checkpoints
-    val sourceIdentifyingName = dataSource.catalogTable
-      .flatMap(_.streamingSourceIdentifyingName)
-      .getOrElse(Unassigned)
+    // Extract source identifying name from DataSource for stable checkpoints
     StreamingRelation(
       dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
-      sourceIdentifyingName)
-  }
-
-  def apply(
-      dataSource: DataSource,
-      sourceIdentifyingName: StreamingSourceIdentifyingName): StreamingRelation = {
-    StreamingRelation(
-      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
-      sourceIdentifyingName)
+      dataSource.streamingSourceIdentifyingName)
   }
 }
 

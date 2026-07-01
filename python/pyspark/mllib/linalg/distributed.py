@@ -636,8 +636,7 @@ class IndexedRowMatrix(DistributedMatrix):
             java_matrix = rows
         else:
             raise TypeError(
-                "rows should be an RDD of IndexedRows or (int, vector) tuples, "
-                "got %s" % type(rows)
+                "rows should be an RDD of IndexedRows or (int, vector) tuples, got %s" % type(rows)
             )
 
         self._java_matrix_wrapper = JavaModelWrapper(java_matrix)
@@ -1652,7 +1651,7 @@ def _test() -> None:
     )
     globs["sc"] = spark.sparkContext
     globs["Matrices"] = Matrices
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

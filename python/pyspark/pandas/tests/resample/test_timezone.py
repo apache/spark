@@ -57,8 +57,8 @@ class ResampleTimezoneMixin:
                 "spark.sql.timestampType": "TIMESTAMP_NTZ",
             }
         ):
-            p_resample = self.pdf.resample(rule="1001H", closed="right", label="right")
-            ps_resample = self.psdf.resample(rule="1001H", closed="right", label="right")
+            p_resample = self.pdf.resample(rule="1001h", closed="right", label="right")
+            ps_resample = self.psdf.resample(rule="1001h", closed="right", label="right")
             self.assert_eq(
                 p_resample.sum().sort_index(),
                 ps_resample.sum().sort_index(),

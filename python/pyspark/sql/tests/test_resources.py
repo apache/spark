@@ -19,20 +19,20 @@ import unittest
 from pyspark import TaskContext
 from pyspark.resource import TaskResourceRequests, ResourceProfileBuilder
 from pyspark.sql import SparkSession
-from pyspark.testing.sqlutils import (
+from pyspark.testing.utils import (
+    ReusedPySparkTestCase,
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import ReusedPySparkTestCase
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     pandas_requirement_message or pyarrow_requirement_message,
 )
-class ResourceProfileTestsMixin(object):
+class ResourceProfileTestsMixin:
     def test_map_in_arrow_without_profile(self):
         def func(iterator):
             tc = TaskContext.get()

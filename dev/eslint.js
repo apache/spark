@@ -21,6 +21,9 @@ module.exports = {
     "es6": true,
     "jest": true
   },
+  "globals": {
+    "bootstrap": "readonly"
+  },
   "extends": "eslint:recommended",
   "rules": {
     "indent": [
@@ -36,7 +39,6 @@ module.exports = {
   "ignorePatterns": [
     "*.min.js",
     "sorttable.js",
-    "jquery.mustache.js",
     "dataTables.rowsGroup.js"
   ],
   "parserOptions": {

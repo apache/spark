@@ -73,14 +73,6 @@ cd spark
 git config user.name "$GIT_NAME"
 git config user.email "$GIT_EMAIL"
 
-# Remove test jars and classes that do not belong to source releases.
-rm $(<dev/test-jars.txt)
-:> dev/test-jars.txt
-rm $(<dev/test-classes.txt)
-:> dev/test-classes.txt
-git commit -a -m "Removing test jars and class files"
-JAR_RM_REF=$(git rev-parse HEAD)
-
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
 if [[ $RELEASE_VERSION != *"preview"* ]]; then
@@ -92,15 +84,11 @@ fi
 # Set the release version in docs
 sed -i".tmp1" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$RELEASE_VERSION"'/g' docs/_config.yml
 sed -i".tmp2" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$RELEASE_VERSION"'/g' docs/_config.yml
-sed -i".tmp3" "s/'facetFilters':.*$/'facetFilters': [\"version:$RELEASE_VERSION\"]/g" docs/_config.yml
 sed -i".tmp4" 's/__version__: str = .*$/__version__: str = "'"$RELEASE_VERSION"'"/' python/pyspark/version.py
 
 git commit -a -m "Preparing Spark release $RELEASE_TAG"
 echo "Creating tag $RELEASE_TAG at the head of $GIT_BRANCH"
 git tag $RELEASE_TAG
-
-# Restore test jars for dev.
-git revert --no-edit $JAR_RM_REF
 
 # Create next version
 $MVN versions:set -DnewVersion=$NEXT_VERSION | grep -v "no value" # silence logs
@@ -115,8 +103,6 @@ sed -i".tmp6" 's/__version__: str = .*$/__version__: str = "'"$R_NEXT_VERSION.de
 sed -i".tmp7" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_config.yml
 # Use R version for short version
 sed -i".tmp8" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
-# Update the version index of DocSearch as the short version
-sed -i".tmp9" "s/'facetFilters':.*$/'facetFilters': [\"version:$R_NEXT_VERSION\"]/g" docs/_config.yml
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 
