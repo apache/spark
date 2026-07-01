@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,7 +44,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\"" +
-              " or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"),
+              " or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
@@ -92,7 +92,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> ordinalNumber(1),
-          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"ANSI INTERVAL\")",
+          "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"ANSI INTERVAL\" or \"TIME\")",
           "inputSql" -> "\"array(foobar)\"",
           "inputType" -> "\"ARRAY<STRING>\"")))
     // scalastyle:on line.size.limit
@@ -230,7 +230,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       (intRecords.map(DateTimeUtils.toJavaTimestamp(_)),
           intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType),
       (intRecords.map(DateTimeUtils.microsToLocalDateTime(_)),
-        intEndpoints.map(DateTimeUtils.microsToLocalDateTime(_)), TimestampNTZType)
+        intEndpoints.map(DateTimeUtils.microsToLocalDateTime(_)), TimestampNTZType),
+      (intRecords.map(i => LocalTime.ofNanoOfDay(i.toLong)),
+        intEndpoints.map(i => LocalTime.ofNanoOfDay(i.toLong)), TimeType())
     )
 
     inputs.foreach { case (records, endpoints, dataType) =>
@@ -241,6 +243,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
           case d: Date => DateTimeUtils.fromJavaDate(d)
           case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
           case ldt: LocalDateTime => DateTimeUtils.localDateTimeToMicros(ldt)
+          case lt: LocalTime => DateTimeUtils.localTimeToNanos(lt)
           case _ => r
         }
         input.update(0, value)
