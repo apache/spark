@@ -1434,8 +1434,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {

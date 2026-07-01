@@ -542,6 +542,15 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
         timestampType == TimestampNTZType) &&
         timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+        if (SQLConf.get.timestampNanosTypesEnabled) {
+          // Prefer nanosecond type when the fractional seconds part has more than 6 digits,
+          // indicating sub-microsecond precision that cannot be represented by TimestampNTZType.
+          val nanosOpt =
+            timestampNTZFormatter.parseWithoutTimeZoneNanosOptional(field, 9, false)
+          nanosOpt.filter(_.nanosWithinMicro != 0).foreach { _ =>
+            return Some(TimestampNTZNanosType(9))
+          }
+        }
         return Some(timestampType)
       }
     } catch {
@@ -641,8 +650,45 @@ object XmlInferSchema {
     (t1: DataType, t2: DataType): DataType = {
 
     // TODO: Optimise this logic.
+    // AnyTimestampNanoType extends DatetimeType but is not covered by findWiderDateTimeType;
+    // handle it first to avoid a MatchError inside TypeCoercion.findTightestCommonType.
+    // StructType and ArrayType are also handled here so that compatibleType is used recursively
+    // for nested field types, preserving the nano-timestamp downgrade logic at all nesting levels.
+    // (TypeCoercion.findTightestCommonType handles same-structure StructType/ArrayType via
+    // findTypeForComplex, which calls findWiderDateTimeType and would bypass the custom logic.)
+    (t1, t2) match {
+      case (n1: TimestampNTZNanosType, n2: TimestampNTZNanosType) =>
+        return TimestampNTZNanosType(math.max(n1.precision, n2.precision))
+      case (n1: TimestampLTZNanosType, n2: TimestampLTZNanosType) =>
+        return TimestampLTZNanosType(math.max(n1.precision, n2.precision))
+      case (_: TimestampNTZNanosType, TimestampNTZType) |
+          (TimestampNTZType, _: TimestampNTZNanosType) =>
+        return TimestampNTZType
+      case (_: AnyTimestampNanoType, _: DatetimeType) |
+          (_: DatetimeType, _: AnyTimestampNanoType) =>
+        return TimestampType
+      case (StructType(fields1), StructType(fields2)) =>
+        val newFields = (fields1 ++ fields2)
+         // normalize field name and pair it with original field
+         .map(field => (normalize(field.name, caseSensitive), field))
+         .groupBy(_._1) // group by normalized field name
+         .map { case (_: String, fields: Array[(String, StructField)]) =>
+           val fieldTypes = fields.map(_._2)
+           val dataType = fieldTypes.map(_.dataType)
+             .reduce(compatibleType(caseSensitive, valueTag))
+           // we pick up the first field name that we've encountered for the field
+           StructField(fields.head._2.name, dataType)
+         }
+        return StructType(newFields.toArray.sortBy(_.name))
+      case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
+        return ArrayType(
+          compatibleType(caseSensitive, valueTag)(elementType1, elementType2),
+          containsNull1 || containsNull2)
+      case _ =>
+    }
+
     TypeCoercion.findTightestCommonType(t1, t2).getOrElse {
-      // t1 or t2 is a StructType, ArrayType, or an unexpected type.
+      // t1 or t2 is an unexpected type combination (DecimalType variants, valueTag structs, etc.)
       (t1, t2) match {
         // Double support larger range than fixed decimal, DecimalType.Maximum should be enough
         // in most case, also have better precision.
@@ -660,25 +706,6 @@ object XmlInferSchema {
           }
         case (TimestampNTZType, TimestampType) | (TimestampType, TimestampNTZType) =>
           TimestampType
-
-        case (StructType(fields1), StructType(fields2)) =>
-          val newFields = (fields1 ++ fields2)
-           // normalize field name and pair it with original field
-           .map(field => (normalize(field.name, caseSensitive), field))
-           .groupBy(_._1) // group by normalized field name
-           .map { case (_: String, fields: Array[(String, StructField)]) =>
-             val fieldTypes = fields.map(_._2)
-             val dataType = fieldTypes.map(_.dataType)
-               .reduce(compatibleType(caseSensitive, valueTag))
-             // we pick up the first field name that we've encountered for the field
-             StructField(fields.head._2.name, dataType)
-           }
-           StructType(newFields.toArray.sortBy(_.name))
-
-        case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
-          ArrayType(
-            compatibleType(caseSensitive, valueTag)(
-              elementType1, elementType2), containsNull1 || containsNull2)
 
         // In XML datasource, since StructType can be compared with ArrayType.
         // In this case, ArrayType wraps the StructType.

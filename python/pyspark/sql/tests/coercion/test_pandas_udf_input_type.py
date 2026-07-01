@@ -79,6 +79,18 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_pandas_udf_input_type_coercion"
 
     @property
+    def pandas_dir(self):
+        # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
+        # whereas earlier versions report 'object', which changes the recorded
+        # Python types. Use a dedicated golden file per major pandas version,
+        # kept in a versioned subdirectory, instead of patching one golden
+        # in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "pandas_3"
+        else:
+            return "pandas_2"
+
+    @property
     def test_cases(self):
         def df(args):
             def create_df(data_type):
@@ -235,7 +247,7 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
 
     def test_pandas_input_type_coercion_vanilla(self):
         self._run_pandas_udf_input_type_coercion(
-            golden_file=f"{self.prefix}_base",
+            golden_file=os.path.join(self.pandas_dir, f"{self.prefix}_base"),
             test_name="Pandas UDF",
         )
 
@@ -251,14 +263,6 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         golden = None
         if not generating:
             golden = self.load_golden_csv(golden_csv)
-            # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
-            # whereas earlier versions report 'object'. Patch the in-memory golden
-            # so the same file works under both versions.
-            if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-                str_rows = golden["Spark Type"] == "string"
-                golden.loc[str_rows, "Python Type"] = golden.loc[
-                    str_rows, "Python Type"
-                ].str.replace("'object'", "'str'")
 
         results = []
         for idx, (case_name, spark_type, data_func) in enumerate(self.test_cases):
@@ -296,6 +300,9 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             except Exception as e:
                 print("error_msg", e)
                 result.append(f"✗ {str(e)}")
+                # Pad to the full column count so the row roundtrips through
+                # the golden CSV (short rows come back with a trailing "").
+                result.append("")
 
             # Clean up exception message to remove newlines and extra whitespace
             result = [self.clean_result(r) for r in result]

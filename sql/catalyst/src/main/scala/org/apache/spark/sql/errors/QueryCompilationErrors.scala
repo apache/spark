@@ -744,13 +744,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def expectPersistentFuncError(
       name: String, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
-    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    val alternative = mismatchHint.map(" " + _).getOrElse("")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1017",
+      errorClass = "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP",
       messageParameters = Map(
-        "name" -> name,
-        "cmd" -> cmd,
-        "hintStr" -> hintStr),
+        "functionName" -> toSQLId(name),
+        "operation" -> toSQLStmt(cmd),
+        "alternative" -> alternative),
       origin = t.origin)
   }
 
@@ -1375,18 +1375,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def renameTableSourceAndDestinationMismatchError(db: String, newDb: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1073",
-      messageParameters = Map("db" -> db, "newDb" -> newDb))
+      errorClass = "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH",
+      messageParameters = Map("db" -> toSQLId(db), "newDb" -> toSQLId(newDb)))
   }
 
   def cannotRenameTempViewWithDatabaseSpecifiedError(
       oldName: TableIdentifier, newName: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1074",
+      errorClass = "RENAME_TEMP_VIEW_WITH_DATABASE",
       messageParameters = Map(
-        "oldName" -> oldName.toString,
-        "newName" -> newName.toString,
-        "db" -> newName.database.get))
+        "oldName" -> toSQLId(oldName.nameParts),
+        "newName" -> toSQLId(newName.nameParts),
+        "db" -> toSQLId(newName.database.get)))
   }
 
   def cannotRenameTempViewToExistingTableError(newName: TableIdentifier): Throwable = {
@@ -1395,7 +1395,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidPartitionSpecError(details: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1076",
+      errorClass = "INVALID_PARTITION_SPEC",
       messageParameters = Map("details" -> details))
   }
 
@@ -1703,6 +1703,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
+  def objectNotSelectableError(
+      catalogName: String,
+      ident: Identifier,
+      cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "JDBC_OBJECT_NOT_SELECTABLE",
+      messageParameters = Map(
+        "objectName" -> toSQLId(catalogName +: ident.asMultipartIdentifier)),
+      cause = Some(cause))
+  }
+
   /**
    * Table or view not found (TABLE_OR_VIEW_NOT_FOUND). The `searchPath` segment uses
    * `nameParts.dropRight(1)` when `nameParts` has more than one part (catalog plus namespace);
@@ -1867,10 +1878,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(namespace: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1126",
-      messageParameters = Map("catalog" -> catalog))
+      errorClass = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      messageParameters = Map("namespace" -> toSQLId(namespace)))
   }
 
   def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
@@ -3779,6 +3790,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("schema" -> toSQLType(schema)))
   }
 
+  def invalidExplodeEmbeddedArraySchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA",
+      messageParameters = Map("schema" -> toSQLType(schema)))
+  }
+
+  def explodeEmbeddedArrayConflictingOption(option: String): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION",
+      messageParameters = Map("option" -> option))
+  }
+
+  def explodeEmbeddedArrayUnsupportedUsage(usage: String): Throwable = {
+    new AnalysisException(
+      errorClass = "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE",
+      messageParameters = Map("usage" -> usage))
+  }
+
   def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
@@ -4600,6 +4629,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new InvalidUDFClassException(
       errorClass = "_LEGACY_ERROR_TEMP_2450",
       messageParameters = Map("invalidClass" -> invalidClass))
+  }
+
+  def cannotInstantiateHiveFunctionError(clazz: String, e: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_INSTANTIATE_HIVE_FUNCTION",
+      messageParameters = Map("clazz" -> clazz),
+      cause = Some(e))
   }
 
   def unsupportedParameterExpression(expr: Expression): Throwable = {

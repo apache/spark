@@ -88,8 +88,9 @@ This README file only contains basic setup instructions.
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml/badge.svg?branch=branch-4.0)](https://github.com/apache/spark/actions/workflows/build_maven_java21.yml?query=branch%3Abranch-4.0)       |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml/badge.svg?branch=branch-4.0)](https://github.com/apache/spark/actions/workflows/build_python_3.11.yml?query=branch%3Abranch-4.0)                   |
 |            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_pypy3.10.yml/badge.svg?branch=branch-4.0)](https://github.com/apache/spark/actions/workflows/build_python_pypy3.10.yml?query=branch%3Abranch-4.0) |
-| branch-3.5 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35.yml)                                 |
-|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml/badge.svg)](https://github.com/apache/spark/actions/workflows/build_branch35_python.yml)                   |
+| branch-3.5 | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_main.yml/badge.svg?branch=branch-3.5)](https://github.com/apache/spark/actions/workflows/build_main.yml?query=branch%3Abranch-3.5)                                 |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_scala213.yml/badge.svg?branch=branch-3.5)](https://github.com/apache/spark/actions/workflows/build_scala213.yml?query=branch%3Abranch-3.5)                   |
+|            | [![GitHub Actions Build](https://github.com/apache/spark/actions/workflows/build_python_3.9.yml/badge.svg?branch=branch-3.5)](https://github.com/apache/spark/actions/workflows/build_python_3.9.yml?query=branch%3Abranch-3.5)                   |
 
 
 ## Building Spark

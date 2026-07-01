@@ -1882,12 +1882,6 @@ Project [cast(cast(null as timestamp_ntz(9)) as time(6)) AS CAST(CAST(NULL AS TI
 
 
 -- !query
-SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_NTZ)) t(x)
--- !query analysis
-[Analyzer test output redacted due to nondeterminism]
-
-
--- !query
 SELECT CAST(x AS TIME(6)) FROM VALUES (CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ)) t(x)
 -- !query analysis
 Project [cast(x#x as time(6)) AS x#x]
@@ -2126,12 +2120,6 @@ SELECT CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6))
 -- !query analysis
 Project [cast(cast(null as timestamp_ltz(9)) as time(6)) AS CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS TIME(6))#x]
 +- OneRowRelation
-
-
--- !query
-SELECT CAST(x AS DATE) = current_date() FROM VALUES (CAST(TIME'12:34:56' AS TIMESTAMP_LTZ)) t(x)
--- !query analysis
-[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

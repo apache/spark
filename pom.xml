@@ -1118,6 +1118,13 @@
         <scope>import</scope>
       </dependency>
       <dependency>
+        <groupId>io.fabric8</groupId>
+        <artifactId>kubernetes-client-bom</artifactId>
+        <version>${kubernetes-client.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.ws.xmlschema</groupId>
         <artifactId>xmlschema-core</artifactId>
         <version>${ws.xmlschema.version}</version>
@@ -1992,6 +1999,11 @@
           <exclusion>
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <!-- javax.xml.stream is provided by the JDK (java.xml module) -->
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

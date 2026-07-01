@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
@@ -166,6 +167,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
+    // Each element of the input dataset is already one JSON document, so the embedded array
+    // splitting can never apply.
+    if (parsedOptions.explodeEmbeddedArray.isDefined) {
+      throw QueryCompilationErrors.explodeEmbeddedArrayUnsupportedUsage(
+        "the json(Dataset[String]) API")
+    }
     userSpecifiedSchema.foreach(checkJsonSchema)
     val schema = userSpecifiedSchema.map {
       case s if !SQLConf.get.getConf(
@@ -349,8 +356,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   override def textFile(paths: String*): Dataset[String] = super.textFile(paths: _*)
 
   /** @inheritdoc */
-  override protected def validateSingleVariantColumn(): Unit =
+  override protected def validateSingleVariantColumn(): Unit = {
     DataSourceOptions.validateSingleVariantColumn(extraOptions, userSpecifiedSchema)
+    DataSourceOptions.validateExplodeEmbeddedArray(extraOptions, userSpecifiedSchema)
+  }
 
   override protected def validateJsonSchema(): Unit =
     userSpecifiedSchema.foreach(checkJsonSchema)

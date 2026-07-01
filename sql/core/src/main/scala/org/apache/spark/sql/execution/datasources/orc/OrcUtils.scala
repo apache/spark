@@ -506,6 +506,10 @@ object OrcUtils extends Logging {
             case ShortType => new ShortWritable(value.toShort)
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
+            // ORC stores TIME as LONG (nanos-of-day), so its stats are
+            // IntegerColumnStatistics. OrcDeserializer converts the LongWritable
+            // back to the Spark TimeType.
+            case _: TimeType => new LongWritable(value)
             case _ => throw new IllegalArgumentException(
               s"getMinMaxFromColumnStatistics should not take type $dataType " +
               "for IntegerColumnStatistics")
