@@ -406,8 +406,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * (String, Binary), uses actual value size; for fixed-width types, uses defaultSize.
    * Null fields contribute 0 bytes.
    *
-   * Used on the read path: strings measured via UTF8String.numBytes() (actual UTF-8 bytes).
-   * The write-side counterpart (measureRowSize) also uses UTF8String.numBytes().
+   * NOTE: This method builds a fresh sizers array on every call and is NOT intended for
+   * hot-path use. The read path uses pre-computed `columnSizers` for efficiency.
+   * This standalone variant exists primarily for unit testing.
    */
   private[jdbc] def measureInternalRowSize(row: InternalRow, schema: StructType): Long = {
     val sizers = buildInternalRowSizers(schema)
@@ -801,7 +802,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.addBatch()
           rowCount += 1
           totalRowCount += 1
-          bytesAccumulator.foreach(_.add(measureRowSize(row, rddSchema)))
+          bytesAccumulator.foreach { acc =>
+            try {
+              acc.add(measureRowSize(row, rddSchema))
+            } catch {
+              case NonFatal(_) => // measurement error must never abort a write
+            }
+          }
           if (rowCount % batchSize == 0) {
             // Hot spot for native blocking reads; TaskInterruptListener (registered after
             // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
