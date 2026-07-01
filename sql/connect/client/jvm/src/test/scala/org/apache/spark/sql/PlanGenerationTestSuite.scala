@@ -198,7 +198,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /**
    * Normalize proto messages for stable comparison:
    *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
-   *   - Populate default StringType collation when missing (UTF8_BINARY)
    */
   private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
@@ -221,17 +220,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = message.toBuilder
 
     builder match {
-      // For comparison only, we add UTF8_BINARY when StringType collation is missing
-      // to ensure deterministic plan equality across environments.
-      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
-        val sb = dt.getStringBuilder
-        if (sb.getCollation.isEmpty) {
-          val defaultCollationName =
-            CollationFactory
-              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
-              .collationName
-          sb.setCollation(defaultCollationName)
-        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
