@@ -891,6 +891,23 @@ object functions {
   }
 
   /**
+   * Try to create time from hour, minute and second fields. The function returns NULL on invalid
+   * inputs.
+   *
+   * @param hour
+   *   the hour to represent, from 0 to 23
+   * @param minute
+   *   the minute to represent, from 0 to 59
+   * @param second
+   *   the second to represent, from 0 to 59.999999
+   * @group datetime_funcs
+   * @since 4.1.0
+   */
+  def try_make_time(hour: Column, minute: Column, second: Column): Column = {
+    Column.fn("try_make_time", hour, minute, second)
+  }
+
+  /**
    * Aggregate function: returns the most frequent value in a group.
    *
    * @group agg_funcs

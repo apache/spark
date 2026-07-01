@@ -277,6 +277,102 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+select try_make_time(6, 30, 45.887)
+-- !query schema
+struct<tryeval(make_time(6, 30, 45.887)):time(6)>
+-- !query output
+06:30:45.887
+
+
+-- !query
+select try_make_time(0, 0, 0.0)
+-- !query schema
+struct<tryeval(make_time(0, 0, 0.0)):time(6)>
+-- !query output
+00:00:00
+
+
+-- !query
+select try_make_time(23, 59, 59.999999)
+-- !query schema
+struct<tryeval(make_time(23, 59, 59.999999)):time(6)>
+-- !query output
+23:59:59.999999
+
+
+-- !query
+select try_make_time(null, 30, 0)
+-- !query schema
+struct<tryeval(make_time(NULL, 30, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, null, 0)
+-- !query schema
+struct<tryeval(make_time(1, NULL, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 30, null)
+-- !query schema
+struct<tryeval(make_time(1, 30, NULL)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(25, 30, 0)
+-- !query schema
+struct<tryeval(make_time(25, 30, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(-1, 30, 0)
+-- !query schema
+struct<tryeval(make_time(-1, 30, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 60, 0)
+-- !query schema
+struct<tryeval(make_time(1, 60, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, -1, 0)
+-- !query schema
+struct<tryeval(make_time(1, -1, 0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 18, 60.0)
+-- !query schema
+struct<tryeval(make_time(1, 18, 60.0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+select try_make_time(1, 18, -1.0)
+-- !query schema
+struct<tryeval(make_time(1, 18, -1.0)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
 select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
 -- !query schema
 struct<second(to_time(23-59-58.987654, HH-mm-ss.SSSSSS)):int>

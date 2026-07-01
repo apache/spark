@@ -208,6 +208,90 @@ Project [make_time(1, 18, 4294967297.999999) AS make_time(1, 18, 4294967297.9999
 
 
 -- !query
+select try_make_time(6, 30, 45.887)
+-- !query analysis
+Project [tryeval(make_time(6, 30, cast(45.887 as decimal(16,6)))) AS tryeval(make_time(6, 30, 45.887))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(0, 0, 0.0)
+-- !query analysis
+Project [tryeval(make_time(0, 0, cast(0.0 as decimal(16,6)))) AS tryeval(make_time(0, 0, 0.0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(23, 59, 59.999999)
+-- !query analysis
+Project [tryeval(make_time(23, 59, cast(59.999999 as decimal(16,6)))) AS tryeval(make_time(23, 59, 59.999999))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(null, 30, 0)
+-- !query analysis
+Project [tryeval(make_time(cast(null as int), 30, cast(0 as decimal(16,6)))) AS tryeval(make_time(NULL, 30, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, null, 0)
+-- !query analysis
+Project [tryeval(make_time(1, cast(null as int), cast(0 as decimal(16,6)))) AS tryeval(make_time(1, NULL, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, 30, null)
+-- !query analysis
+Project [tryeval(make_time(1, 30, cast(null as decimal(16,6)))) AS tryeval(make_time(1, 30, NULL))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(25, 30, 0)
+-- !query analysis
+Project [tryeval(make_time(25, 30, cast(0 as decimal(16,6)))) AS tryeval(make_time(25, 30, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(-1, 30, 0)
+-- !query analysis
+Project [tryeval(make_time(-1, 30, cast(0 as decimal(16,6)))) AS tryeval(make_time(-1, 30, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, 60, 0)
+-- !query analysis
+Project [tryeval(make_time(1, 60, cast(0 as decimal(16,6)))) AS tryeval(make_time(1, 60, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, -1, 0)
+-- !query analysis
+Project [tryeval(make_time(1, -1, cast(0 as decimal(16,6)))) AS tryeval(make_time(1, -1, 0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, 18, 60.0)
+-- !query analysis
+Project [tryeval(make_time(1, 18, cast(60.0 as decimal(16,6)))) AS tryeval(make_time(1, 18, 60.0))#x]
++- OneRowRelation
+
+
+-- !query
+select try_make_time(1, 18, -1.0)
+-- !query analysis
+Project [tryeval(make_time(1, 18, cast(-1.0 as decimal(16,6)))) AS tryeval(make_time(1, 18, -1.0))#x]
++- OneRowRelation
+
+
+-- !query
 select second(to_time('23-59-58.987654', 'HH-mm-ss.SSSSSS'))
 -- !query analysis
 Project [second(to_time(23-59-58.987654, Some(HH-mm-ss.SSSSSS))) AS second(to_time(23-59-58.987654, HH-mm-ss.SSSSSS))#x]

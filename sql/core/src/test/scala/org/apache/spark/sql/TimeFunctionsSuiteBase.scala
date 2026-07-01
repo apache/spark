@@ -164,6 +164,49 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(result2, expected)
   }
 
+  test("SPARK-57846: try_make_time function") {
+    // Valid input data.
+    val schema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = false),
+      StructField("minute", IntegerType, nullable = false),
+      StructField("second", DecimalType(16, 6), nullable = false)
+    ))
+    val data = Seq(
+      Row(0, 0, BigDecimal(0.0)),
+      Row(1, 2, BigDecimal(3.4)),
+      Row(23, 59, BigDecimal(59.999999))
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+
+    // Test valid inputs using both selectExpr and select.
+    val result1 = df.selectExpr("try_make_time(hour, minute, second)")
+    val result2 = df.select(try_make_time(col("hour"), col("minute"), col("second")))
+    checkAnswer(result1, result2)
+
+    val expected = Seq(
+      "00:00:00",
+      "01:02:03.4",
+      "23:59:59.999999"
+    ).toDF("timeString").select(col("timeString").cast("time"))
+    checkAnswer(result1, expected)
+
+    // Test invalid inputs return null instead of throwing.
+    val invalidSchema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = false),
+      StructField("minute", IntegerType, nullable = false),
+      StructField("second", DecimalType(16, 6), nullable = false)
+    ))
+    val invalidData = Seq(
+      Row(25, 0, BigDecimal(0.0)),
+      Row(1, 60, BigDecimal(0.0)),
+      Row(1, 2, BigDecimal(60.0))
+    )
+    val invalidDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(invalidData), invalidSchema)
+    val invalidResult = invalidDf.selectExpr("try_make_time(hour, minute, second)")
+    checkAnswer(invalidResult, Seq(Row(null), Row(null), Row(null)))
+  }
+
   test("SPARK-53929: make_timestamp function") {
     // Input data for the function.
     val schema = StructType(Seq(

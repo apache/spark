@@ -1,0 +1,2 @@
+Project [tryeval(static_invoke(DateTimeUtils.makeTime(12, 13, cast(14 as decimal(16,6))))) AS tryeval(make_time(12, 13, 14))#0]
++- LocalRelation <empty>, [d#0, t#0, s#0, x#0L, wt#0]
