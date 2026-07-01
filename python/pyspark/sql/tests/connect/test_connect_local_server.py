@@ -18,7 +18,9 @@
 import json
 import os
 import shutil
+import signal
 import socket
+import sys
 import tempfile
 import time
 import unittest
@@ -55,7 +57,11 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             # discovery files that point at this very process, which must never be signalled.
             disc = RemoteSparkSession._read_local_connect_discovery()
             if disc is not None and disc.get("pid") != os.getpid():
+                port = int(disc["port"])
                 RemoteSparkSession._stop_local_connect_server()
+                # _stop_local_connect_server only signals the daemon and returns; wait for the JVM
+                # to actually release the port so the next test starts from a clean slate.
+                self._wait_port_closed(disc["host"], port)
         finally:
             for k, v in self._saved_env.items():
                 if v is None:
@@ -189,6 +195,17 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         except Exception:
             pass
 
+    def _wait_port_closed(self, host, port, timeout=30) -> bool:
+        """Wait for ``host:port`` to stop accepting connections; return True if it closed."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)
+                if sock.connect_ex((host, int(port))) != 0:
+                    return True
+            time.sleep(0.5)
+        return False
+
     def test_start_reuse_and_session_isolation(self) -> None:
         # First call starts a detached persistent server and records it in the discovery file.
         endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", {})
@@ -231,16 +248,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         # exits it lingers as an unreaped zombie for which os.kill(pid, 0) still succeeds.)
         _, _, hostport = endpoint.partition("sc://")
         host, _, port = hostport.partition(":")
-        deadline = time.time() + 30
-        closed = False
-        while time.time() < deadline:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                if sock.connect_ex((host, int(port))) != 0:
-                    closed = True
-                    break
-            time.sleep(0.5)
-        self.assertTrue(closed, "server port {} still open after stop".format(port))
+        self.assertTrue(
+            self._wait_port_closed(host, port), "server port {} still open after stop".format(port)
+        )
 
     def test_start_seeds_static_conf_on_the_server(self) -> None:
         """A start-up conf passed by the first caller reaches the daemon's SparkConf.
@@ -261,7 +271,80 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         finally:
             if spark is not None:
                 self._release(spark)
-            RemoteSparkSession._stop_local_connect_server()
+            # tearDown stops the server and waits for the port to close.
+
+    @unittest.skipUnless(os.name == "posix", "process-group reaping is POSIX-only")
+    def test_terminate_reaps_daemon_and_jvm(self) -> None:
+        """_terminate_local_connect_server kills the daemon *and* its child JVM.
+
+        Reproduces the start-up-timeout orphan case: terminating only the daemon leader would leak
+        the JVM it spawned. The helper signals the whole process group, so nothing in the group
+        survives -- checked here after the daemon has actually launched its JVM.
+        """
+        import subprocess
+
+        if shutil.which("pgrep") is None:
+            self.skipTest("pgrep is needed to detect the child JVM")
+
+        import pyspark.sql.connect.session as session_mod
+
+        daemon = os.path.join(os.path.dirname(session_mod.__file__), "local_server.py")
+        cmd = [
+            sys.executable, daemon,
+            "--master", "local[2]",
+            "--port", "0",  # ephemeral, so a stray server elsewhere cannot interfere
+            "--token", "reap-test",
+            "--discovery", self._discovery,
+            "--idle-timeout", "3600",
+        ]
+        env = dict(os.environ)
+        for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
+            env.pop(var, None)
+        proc = subprocess.Popen(
+            cmd, env=env,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,  # session/group leader, matching the production launch
+        )
+
+        def child_pids():
+            try:
+                out = subprocess.check_output(["pgrep", "-P", str(proc.pid)])
+            except subprocess.CalledProcessError:
+                return []
+            return [int(p) for p in out.split()]
+
+        pgid = os.getpgid(proc.pid)
+        try:
+            # Wait until the daemon has spawned its child JVM -- the process the fix must also reap.
+            deadline = time.time() + 90
+            kids = []
+            while time.time() < deadline:
+                kids = child_pids()
+                if kids:
+                    break
+                if proc.poll() is not None:
+                    self.fail("daemon exited (code {}) before launching a JVM".format(proc.poll()))
+                time.sleep(0.5)
+            self.assertTrue(kids, "daemon never launched a JVM; cannot exercise the orphan case")
+
+            RemoteSparkSession._terminate_local_connect_server(proc)
+
+            # killpg(sig 0) raises ProcessLookupError once no process in the group remains.
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                try:
+                    os.killpg(pgid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.5)
+            with self.assertRaises(ProcessLookupError):
+                os.killpg(pgid, 0)
+        finally:
+            # Belt and suspenders: never leak the group if an assertion above failed early.
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":
