@@ -17,6 +17,7 @@
 __all__ = [
     "ChannelBuilder",
     "DefaultChannelBuilder",
+    "PathAwareChannelBuilder",
     "RpcDeadlines",
     "SparkConnectClient",
 ]
@@ -32,6 +33,7 @@ import logging
 import threading
 import os
 import copy
+import collections
 import platform
 import urllib.parse
 import uuid
@@ -513,6 +515,220 @@ class DefaultChannelBuilder(ChannelBuilder):
     @property
     def endpoint(self) -> str:
         return f"{self._host}:{self._port}"
+
+    def toChannel(self) -> grpc.Channel:
+        """
+        Applies the parameters of the connection string and creates a new
+        GRPC channel according to the configuration. Passes optional channel options to
+        construct the channel.
+
+        Returns
+        -------
+        GRPC Channel instance.
+        """
+
+        if not self.secure:
+            return self._insecure_channel(self.endpoint)
+        elif not self.use_ssl and self._host == "localhost":
+            creds = grpc.local_channel_credentials()
+
+            if self.token is not None:
+                creds = grpc.composite_channel_credentials(
+                    creds, grpc.access_token_call_credentials(self.token)
+                )
+            return self._secure_channel(self.endpoint, creds)
+        else:
+            creds = grpc.ssl_channel_credentials()
+
+            if self.token is not None:
+                creds = grpc.composite_channel_credentials(
+                    creds, grpc.access_token_call_credentials(self.token)
+                )
+
+            return self._secure_channel(self.endpoint, creds)
+
+
+class _ClientCallDetails(
+    collections.namedtuple(
+        "_ClientCallDetails",
+        ("method", "timeout", "metadata", "credentials", "wait_for_ready", "compression"),
+    ),
+    grpc.ClientCallDetails,
+):
+    pass
+
+
+class _PathPrefixInterceptor(
+    grpc.UnaryUnaryClientInterceptor,
+    grpc.UnaryStreamClientInterceptor,
+    grpc.StreamUnaryClientInterceptor,
+    grpc.StreamStreamClientInterceptor,
+):
+    """Prepends a fixed path prefix to every gRPC method, so an ingress doing
+    path-based routing can dispatch to the right Spark Connect driver."""
+
+    def __init__(self, prefix: str) -> None:
+        self._prefix = prefix
+
+    def _rewrite(self, details: grpc.ClientCallDetails) -> grpc.ClientCallDetails:
+        return _ClientCallDetails(
+            method=self._prefix + details.method,
+            timeout=details.timeout,
+            metadata=details.metadata,
+            credentials=details.credentials,
+            wait_for_ready=getattr(details, "wait_for_ready", None),
+            compression=getattr(details, "compression", None),
+        )
+
+    def intercept_unary_unary(self, continuation, client_call_details, request):
+        return continuation(self._rewrite(client_call_details), request)
+
+    def intercept_unary_stream(self, continuation, client_call_details, request):
+        return continuation(self._rewrite(client_call_details), request)
+
+    def intercept_stream_unary(self, continuation, client_call_details, request_iterator):
+        return continuation(self._rewrite(client_call_details), request_iterator)
+
+    def intercept_stream_stream(self, continuation, client_call_details, request_iterator):
+        return continuation(self._rewrite(client_call_details), request_iterator)
+
+
+class PathAwareChannelBuilder(ChannelBuilder):
+    """
+    Channel builder that parses Spark Connect URLs, with support for ingress
+    path-based routing.
+
+    Accepts the standard form (`sc://host[:port][/;params]`) and the path-routed
+    form `sc://gateway/<prefix>:<port>`, where the trailing `:<port>` on the
+    final path segment is treated as the connection port. When a path prefix is
+    present it is prepended to every gRPC method via an interceptor, so an
+    HTTPS ingress can dispatch by URL to the right Spark Connect driver. TLS is
+    enabled implicitly when the resolved port is 443 and `;use_ssl=` was not
+    specified.
+
+    Examples
+    --------
+    >>> cb = PathAwareChannelBuilder("sc://host1/path1:443")
+    ... (cb.endpoint, cb.path_prefix, cb.secure)
+    ("host1:443", "/path1", True)
+    """
+
+    @staticmethod
+    def default_port() -> int:
+        return 15002
+
+    def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
+        """
+        Constructs a new channel builder. This is used to create the proper GRPC channel from
+        the connection string.
+
+        Parameters
+        ----------
+        url : str
+            Spark Connect connection string
+        channelOptions: list of tuple, optional
+            Additional options that can be passed to the GRPC channel construction.
+        """
+
+        super().__init__(channelOptions=channelOptions)
+
+        # Explicitly check the scheme of the URL.
+        if url[:5] != "sc://":
+            raise PySparkValueError(
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
+                    "detail": "The URL must start with 'sc://'. Please update the URL to "
+                    "follow the correct format, e.g., 'sc://hostname:port'.",
+                },
+            )
+        # Rewrite the URL to use http as the scheme so that we can leverage
+        # Python's built-in parser.
+        tmp_url = "http" + url[2:]
+        self.url = urllib.parse.urlparse(tmp_url)
+        self._path_prefix = ""
+        self._extract_attributes()
+
+    def _extract_attributes(self) -> None:
+        if len(self.url.params) > 0:
+            parts = self.url.params.split(";")
+            for p in parts:
+                kv = p.split("=")
+                if len(kv) != 2:
+                    raise PySparkValueError(
+                        errorClass="INVALID_CONNECT_URL",
+                        messageParameters={
+                            "detail": f"Parameter '{p}' should be provided as a "
+                            f"key-value pair separated by an equal sign (=). Please update "
+                            f"the parameter to follow the correct format, e.g., 'key=value'.",
+                        },
+                    )
+                self.set(kv[0], urllib.parse.unquote(kv[1]))
+
+        netloc = self.url.netloc.split(":")
+        netloc_has_port = len(netloc) == 2
+        if len(netloc) == 1:
+            self._host = netloc[0]
+            self._port = self.default_port()
+        elif netloc_has_port:
+            self._host = netloc[0]
+            self._port = int(netloc[1])
+        else:
+            raise PySparkValueError(
+                errorClass="INVALID_CONNECT_URL",
+                messageParameters={
+                    "detail": f"Target destination '{self.url.netloc}' should match the "
+                    f"'<host>:<port>' pattern. Please update the destination to follow "
+                    f"the correct format, e.g., 'hostname:port'.",
+                },
+            )
+
+        # Path component is treated as an ingress route prefix for path-based routing
+        # (e.g. `sc://host1/path1:443`). A trailing `:PORT` on the
+        # final path segment is parsed as the connection port when the netloc has none.
+        path = self.url.path
+        if path and path != "/":
+            prefix = path
+            last_segment = prefix.rsplit("/", 1)[-1]
+            if ":" in last_segment:
+                head, _, port_str = prefix.rpartition(":")
+                try:
+                    parsed_port = int(port_str)
+                    prefix = head
+                    if not netloc_has_port:
+                        self._port = parsed_port
+                except ValueError:
+                    pass
+            prefix = "/" + prefix.strip("/")
+            if prefix != "/":
+                self._path_prefix = prefix
+                # Standard HTTPS ingresses imply TLS; honor any explicit ;use_ssl= override.
+                if self._port == 443 and ChannelBuilder.PARAM_USE_SSL not in self._params:
+                    self.set(ChannelBuilder.PARAM_USE_SSL, "true")
+                self.add_interceptor(_PathPrefixInterceptor(self._path_prefix))
+
+    @property
+    def secure(self) -> bool:
+        return self.use_ssl or self.token is not None
+
+    @property
+    def use_ssl(self) -> bool:
+        return self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
+
+    @property
+    def host(self) -> str:
+        """
+        The hostname where this client intends to connect.
+        """
+        return self._host
+
+    @property
+    def endpoint(self) -> str:
+        return f"{self._host}:{self._port}"
+
+    @property
+    def path_prefix(self) -> str:
+        """The ingress path prefix prepended to every gRPC method, or '' if unset."""
+        return self._path_prefix
 
     def toChannel(self) -> grpc.Channel:
         """
