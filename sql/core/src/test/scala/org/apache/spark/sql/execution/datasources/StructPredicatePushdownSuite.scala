@@ -20,7 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, GetStructField, Literal}
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.{EqualTo => SourcesEqualTo, Filter => SourcesFilter}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -45,6 +48,18 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
   private def hasPostScanFilter(df: DataFrame): Boolean = {
     val plan = df.queryExecution.executedPlan
     plan.collect { case f: FilterExec => f }.nonEmpty
+  }
+
+  // Pushed filters on the DSv2 parquet scan (BatchScanExec -> ParquetScan).
+  private def getV2ParquetPushedFilters(df: DataFrame): Seq[SourcesFilter] = {
+    val plan = df.queryExecution.executedPlan
+    plan.collect {
+      case scan: BatchScanExec =>
+        scan.scan match {
+          case p: ParquetScan => p.pushedFilters.toSeq
+          case _ => Seq.empty[SourcesFilter]
+        }
+    }.flatten
   }
 
   test("field-level predicates are pushed for struct equality") {
@@ -349,6 +364,70 @@ class StructPredicatePushdownSuite extends QueryTest with SharedSparkSession {
         s"Expected field predicates for literal-on-left but got: $dataFilters")
 
       checkAnswer(df, Row(Row(5, 6)))
+    }
+  }
+
+  test("field-level predicates are pushed on the DSv2 file-source path") {
+    // Force parquet to resolve to the DSv2 reader (FileScanBuilder /
+    // SupportsPushDownCatalystFilters) rather than the V1 FileSourceStrategy.
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(10).selectExpr(
+          "named_struct('a', cast(id as int), 'b', cast(id + 1 as int)) as s"
+        ).write.parquet(path.getAbsolutePath)
+
+        val df = spark.read.parquet(path.getAbsolutePath)
+          .where("s = named_struct('a', 5, 'b', 6)")
+
+        // Sanity: this must actually be the V2 path.
+        assert(df.queryExecution.executedPlan.collect {
+          case b: BatchScanExec => b
+        }.nonEmpty, "Expected a DSv2 BatchScanExec in the plan")
+
+        // The decomposed field predicates (s.a = 5, s.b = 6) must reach the V2 scan.
+        val pushed = getV2ParquetPushedFilters(df)
+        val fieldPredicates = pushed.collect {
+          case eq @ SourcesEqualTo(attr, _) if attr.contains(".") => eq
+        }
+        assert(fieldPredicates.nonEmpty,
+          s"Expected decomposed field predicates in V2 pushed filters but got: $pushed")
+
+        checkAnswer(df, Row(Row(5, 6)))
+      }
+    }
+  }
+
+  test("DSv2 parity: results identical with decomposition on vs off") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        val data = Seq(
+          Row(Row(1, "a")), Row(Row(2, "b")), Row(Row(1, null)), Row(null), Row(Row(3, "a")))
+        val schema = StructType(Seq(
+          StructField("s", StructType(Seq(
+            StructField("a", IntegerType, nullable = false),
+            StructField("b", StringType, nullable = true)
+          )), nullable = true)))
+        spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+          .write.parquet(path.getAbsolutePath)
+
+        val queries = Seq(
+          "s = named_struct('a', 1, 'b', 'a')",
+          "s = named_struct('a', 1, 'b', cast(null as string))",
+          "s <=> named_struct('a', 1, 'b', 'a')")
+
+        for (query <- queries) {
+          val resultOn = withSQLConf(
+            SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "true") {
+            spark.read.parquet(path.getAbsolutePath).where(query).collect()
+          }
+          val resultOff = withSQLConf(
+            SQLConf.STRUCT_PREDICATE_DECOMPOSE_ENABLED.key -> "false") {
+            spark.read.parquet(path.getAbsolutePath).where(query).collect()
+          }
+          assert(resultOn.toSeq.sortBy(_.toString) == resultOff.toSeq.sortBy(_.toString),
+            s"DSv2 results differ for query '$query': on=$resultOn, off=$resultOff")
+        }
+      }
     }
   }
 }
