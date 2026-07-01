@@ -1495,4 +1495,136 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
   }
+
+  test("variant_set") {
+    def checkSet(
+        input: String,
+        path: String,
+        value: Expression,
+        expected: String,
+        createIfMissing: Boolean = true): Unit = {
+      val expr = VariantSet(
+        Literal(parseJson(input)),
+        Literal.create(path, StringType),
+        value,
+        Literal(createIfMissing))
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Object sets: replace an existing key, or add a missing one.
+    checkSet("""{"a": 1}""", "$.a", Literal(2), """{"a":2}""")
+    checkSet("""{"a": 1}""", "$.b", Literal(3), """{"a":1,"b":3}""")
+    checkSet("""{"a": {"b": 1}}""", "$.a.b", Literal(9), """{"a":{"b":9}}""")
+
+    // Missing intermediate keys are created when create_if_missing is true.
+    checkSet("{}", "$.a.b", Literal(1), """{"a":{"b":1}}""")
+    checkSet("{}", "$.a[0]", Literal(1), """{"a":[1]}""")
+
+    // Array sets replace the element at the index (no shifting).
+    checkSet("""["a","b","c"]""", "$[1]", Literal("z"), """["a","z","c"]""")
+    // N == length appends; N > length pads with variant nulls.
+    checkSet("""["a","b","c"]""", "$[3]", Literal("z"), """["a","b","c","z"]""")
+    checkSet("""["a","b"]""", "$[5]", Literal("z"), """["a","b",null,null,null,"z"]""")
+    checkSet("""{"a": [1, 2, 3]}""", "$.a[1]", Literal(9), """{"a":[1,9,3]}""")
+
+    // Array index as an intermediate segment.
+    checkSet("""[{"a": 1}]""", "$[0].b", Literal(2), """[{"a":1,"b":2}]""")
+    checkSet("""[{"a": 1}]""", "$[0].a", Literal(9), """[{"a":9}]""")
+    checkSet("""{"a": [1, 2]}""", "$.a[3].b", Literal(9), """{"a":[1,2,null,{"b":9}]}""")
+    // A missing intermediate array is created and padded with variant nulls up to the index.
+    checkSet("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
+
+    // create_if_missing = false.
+    checkSet("""{"a": 1, "b": 2}""", "$.a", Literal(99), """{"a":99,"b":2}""", false)
+    checkSet("""{"a": 1}""", "$.b", Literal(2), """{"a":1}""", false)
+    checkSet("""{"a": {"b": 1}}""", "$.a.c", Literal(2), """{"a":{"b":1}}""", false)
+    checkSet("""["a","b"]""", "$[1]", Literal("z"), """["a","z"]""", false)
+    checkSet("""{"a": [1, 2]}""", "$.a[5]", Literal(9), """{"a":[1,2]}""", false)
+
+    // Set a variant null vs. a verbatim string vs. structured JSON.
+    checkSet("""{"a": 1}""", "$.a", Literal(parseJson("null")), """{"a":null}""")
+    checkSet("{}", "$.a", Literal("""{"x":1}"""), """{"a":"{\"x\":1}"}""")
+    checkSet("{}", "$.a", Literal(parseJson("""{"x":1}""")), """{"a":{"x":1}}""")
+    checkSet(
+      "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
+
+    // NULL-intolerant: any NULL argument yields NULL.
+    checkEvaluation(
+      VariantSet(Literal.create(null, VariantType), Literal("$.a"), Literal(1), Literal(true)),
+      null)
+    checkSet("""{"a": 1}""", null, Literal(1), null)
+    checkSet("""{"a": 1}""", "$.a", Literal.create(null, VariantType), null)
+    checkSet("""{"a": 1}""", "$.a", Literal.create(null, NullType), null)
+    checkEvaluation(
+      VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2),
+        Literal.create(null, BooleanType)),
+      null)
+
+    // Dynamic (non-foldable) path and create_if_missing.
+    val dynamic = VariantSet(
+      Literal(parseJson("""{"a": 1}""")),
+      BoundReference(0, StringType, nullable = true),
+      Literal(2),
+      BoundReference(1, BooleanType, nullable = true))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+      """{"a":1,"b":2}""",
+      InternalRow(UTF8String.fromString("$.b"), true))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+      """{"a":1}""",
+      InternalRow(UTF8String.fromString("$.b"), false))
+
+    // Type mismatch throws regardless of create_if_missing.
+    Seq(true, false).foreach { create =>
+      checkErrorInExpression[SparkRuntimeException](
+        VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2),
+          Literal(create)),
+        "VARIANT_PATH_TYPE_MISMATCH",
+        Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_set`"))
+    }
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("5")), Literal("$.a"), Literal(2), Literal(true)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_set`"))
+
+    // Segment kind not matching the container: array index on an object, object key on an array.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2), Literal(true)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_set`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("[1, 2]")), Literal("$.a"), Literal(2), Literal(true)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_set`"))
+    // A key that needs bracket notation is rendered with brackets in `failedAt`.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2),
+        Literal(true)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_set`"))
+
+    // Structs and maps are rejected at analysis; arrays of scalars remain allowed.
+    Seq(
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
+    ).foreach { v =>
+      assert(
+        VariantSet(Literal(parseJson("{}")), Literal("$.a"), v, Literal(true))
+          .checkInputDataTypes().isFailure)
+    }
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("{}")), Literal("$"), Literal(1), Literal(true)),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_set`"))
+
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig), Literal(true)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_set`"))
+  }
 }

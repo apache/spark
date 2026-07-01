@@ -439,6 +439,88 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("variant_set with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    // A basic invocation, exercising the SQL parse/registration path end to end.
+    checkAnswer(
+      sql("SELECT to_json(variant_set(parse_json('{\"a\": 1}'), '$.a', 2))"),
+      rows("""{"a":2}"""))
+
+    // The optional create_if_missing arg, positionally and via named-argument syntax.
+    checkAnswer(
+      sql("SELECT to_json(variant_set(parse_json('{\"a\": 1}'), '$.b', 2, false))"),
+      rows("""{"a":1}"""))
+    checkAnswer(
+      sql("SELECT to_json(variant_set(parse_json('{\"a\": 1}'), '$.a', 2, " +
+        "create_if_missing => false))"),
+      rows("""{"a":2}"""))
+
+    // NULL-intolerant.
+    checkAnswer(
+      sql("SELECT to_json(variant_set(CAST(NULL AS VARIANT), '$.a', 1))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(variant_set(parse_json('{\"a\": 1}'), '$.b', NULL))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(variant_set(parse_json('{\"a\": 1}'), NULL, 1))"),
+      rows(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_set(parse_json('{\"a\": 1}'), '$.a.b', 2)").collect()
+      },
+      condition = "VARIANT_PATH_TYPE_MISMATCH",
+      parameters = Map(
+        "path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> toSQLId("variant_set")))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_set(parse_json('{}'), '$', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("variant_set")))
+
+    // A raw struct/map value is not castable to variant and is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_set(parse_json('{}'), '$.a', named_struct('x', 1))")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+  }
+
+  test("variant_set with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1}""", "$.a", 2),
+          ("""["a","b"]""", "$[0]", 9),
+          (null, "$.a", 2)
+        ).toDF("json", "path", "val")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(variant_set(v, col("path"), col("val"))).alias("r"))
+        checkAnswer(out, rows("""{"a":2}""", """[9,"b"]""", null))
+
+        // create_if_missing = false leaves a missing target unchanged (Column-path overload).
+        val flagDf = Seq("""{"a": 1}""").toDF("json")
+        val flagV = parse_json(flagDf("json"))
+        checkAnswer(
+          flagDf.select(to_json(variant_set(flagV, lit("$.b"), lit(2), false)).alias("r")),
+          rows("""{"a":1}"""))
+
+        // String-path overloads, with and without the boolean flag.
+        val objDf = Seq(("""{"a": 1}""", 2), (null, 2)).toDF("json", "val")
+        val objV = parse_json(objDf("json"))
+        checkAnswer(
+          objDf.select(to_json(variant_set(objV, "$.a", col("val"))).alias("r")),
+          rows("""{"a":2}""", null))
+        checkAnswer(
+          objDf.select(to_json(variant_set(objV, "$.b", col("val"), false)).alias("r")),
+          rows("""{"a":1}""", null))
+      }
+    }
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)

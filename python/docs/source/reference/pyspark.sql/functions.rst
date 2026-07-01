@@ -606,6 +606,7 @@ VARIANT Functions
     variant_get
     variant_insert
     try_variant_insert
+    variant_set
     try_parse_json
     to_variant_object
 
