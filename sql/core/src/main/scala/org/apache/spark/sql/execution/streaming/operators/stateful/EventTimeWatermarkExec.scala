@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToMillis
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.AccumulatorV2
 
@@ -105,8 +106,16 @@ case class EventTimeWatermarkExec(
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions { iter =>
       val getEventTime = UnsafeProjection.create(eventTime :: Nil, child.output)
+      val toMs: InternalRow => Long = eventTime.dataType match {
+        case _: TimestampLTZNanosType =>
+          row => microsToMillis(getEventTime(row).getTimestampLTZNanos(0).epochMicros)
+        case _: TimestampNTZNanosType =>
+          row => microsToMillis(getEventTime(row).getTimestampNTZNanos(0).epochMicros)
+        case _ =>
+          row => microsToMillis(getEventTime(row).getLong(0))
+      }
       iter.map { row =>
-        eventTimeStats.add(microsToMillis(getEventTime(row).getLong(0)))
+        eventTimeStats.add(toMs(row))
         row
       }
     }
@@ -160,8 +169,16 @@ case class UpdateEventTimeColumnExec(
             val boundEventTimeExpression = bindReference[Expression](eventTime, child.output)
             val eventTimeProjection = UnsafeProjection.create(boundEventTimeExpression)
             val rowEventTime = eventTimeProjection(row)
+            val eventTimeMicros = eventTime.dataType match {
+              case _: TimestampLTZNanosType =>
+                rowEventTime.getTimestampLTZNanos(0).epochMicros
+              case _: TimestampNTZNanosType =>
+                rowEventTime.getTimestampNTZNanos(0).epochMicros
+              case _ =>
+                rowEventTime.getLong(0)
+            }
             throw QueryExecutionErrors.emittedRowsAreOlderThanWatermark(
-              eventTimeWatermarkForLateEvents.get, rowEventTime.getLong(0))
+              eventTimeWatermarkForLateEvents.get, eventTimeMicros)
           }
           row
         }
