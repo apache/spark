@@ -1611,6 +1611,7 @@ sparkr = Module(
     dependencies=[hive, mllib],
     source_file_regexes=[
         "R/",
+        "dev/spark-test-image/sparkr/",
     ],
     should_run_r_tests=True,
 )
