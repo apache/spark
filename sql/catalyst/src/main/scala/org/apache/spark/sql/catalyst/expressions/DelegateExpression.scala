@@ -113,8 +113,8 @@ case class DelegateExpression(
  */
 // A pure self-typed trait (not extending `UnaryExpression`/`ExpectsInputTypes` itself) so it can be
 // mixed in LAST in the linearization -- that is what makes its `checkInputDataTypes` override win
-// over `ExpectsInputTypes`'. If it extended those directly, the concrete-type mix-in order needed
-// to win the override would violate the superclass constraint.
+// over the `ExpectsInputTypes` one. If it extended those directly, the concrete-type mix-in order
+// needed to win the override would violate the superclass constraint.
 trait InputTypeMarker extends Unevaluable {
   self: UnaryExpression with ExpectsInputTypes =>
   def expectedType: AbstractDataType
