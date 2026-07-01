@@ -13100,7 +13100,7 @@ def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
+def time_of_day_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
     """
     Returns the start of the time bucket containing the input time value.
     Buckets are aligned to midnight (00:00:00).
@@ -13136,7 +13136,9 @@ def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
     ...     (3, '10:05:30')
     ... ], ['id', 't'])
     >>> df = df.withColumn("t", sf.to_time(df.t))
-    >>> df.select(sf.time_bucket(sf.expr("INTERVAL '15' MINUTE"), df.t).alias("bucket")).show()
+    >>> df.select(
+    ...     sf.time_of_day_bucket(sf.expr("INTERVAL '15' MINUTE"), df.t).alias("bucket")
+    ... ).show()
     +--------+
     |  bucket|
     +--------+
@@ -13147,7 +13149,7 @@ def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
 
     Example 2: Hourly bucketing
 
-    >>> df.select(sf.time_bucket(sf.expr("INTERVAL '1' HOUR"), df.t).alias("bucket")).show()
+    >>> df.select(sf.time_of_day_bucket(sf.expr("INTERVAL '1' HOUR"), df.t).alias("bucket")).show()
     +--------+
     |  bucket|
     +--------+
@@ -13159,7 +13161,7 @@ def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
     Example 3: Aggregation with time buckets
 
     >>> df.groupBy(
-    ...     sf.time_bucket(sf.expr("INTERVAL '30' MINUTE"), df.t).alias("time_slot")
+    ...     sf.time_of_day_bucket(sf.expr("INTERVAL '30' MINUTE"), df.t).alias("time_slot")
     ... ).count().orderBy("time_slot").show()
     +---------+-----+
     |time_slot|count|
@@ -13169,7 +13171,7 @@ def time_bucket(bucket_width: "ColumnOrName", time: "ColumnOrName") -> Column:
     | 14:30:00|    1|
     +---------+-----+
     """
-    return _invoke_function_over_columns("time_bucket", bucket_width, time)
+    return _invoke_function_over_columns("time_of_day_bucket", bucket_width, time)
 
 
 @_try_remote_functions

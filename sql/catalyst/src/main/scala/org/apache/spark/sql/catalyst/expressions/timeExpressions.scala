@@ -836,13 +836,13 @@ case class TimeTrunc(unit: Expression, time: Expression)
   note = """
     Notes:
       * Buckets are aligned to midnight (00:00:00) and cannot span across midnight.
-      * The bucket width must be a positive day-time interval.
+      * The bucket width must be a positive day-time interval no greater than 24 hours.
       * The function returns the start time of the bucket (inclusive lower bound).
   """,
   group = "datetime_funcs",
   since = "4.2.0")
 // scalastyle:on line.size.limit
-case class TimeBucket(
+case class TimeOfDayBucket(
     bucketWidth: Expression,
     time: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -875,12 +875,12 @@ case class TimeBucket(
           val widthValue = bucketWidth.eval()
           if (widthValue != null) {
             val widthMicros = widthValue.asInstanceOf[Long]
-            if (widthMicros <= 0) {
+            if (widthMicros <= 0 || widthMicros > MICROS_PER_DAY) {
               DataTypeMismatch(
                 errorSubClass = "VALUE_OUT_OF_RANGE",
                 messageParameters = Map(
                   "exprName" -> "bucket_width",
-                  "valueRange" -> s"(0, ${Long.MaxValue}]",
+                  "valueRange" -> s"(0, $MICROS_PER_DAY]",
                   "currentValue" -> toSQLValue(widthMicros, LongType)
                 )
               )
@@ -898,21 +898,21 @@ case class TimeBucket(
   override def nullSafeEval(bucketWidthValue: Any, timeValue: Any): Any = {
     val bucketMicros = bucketWidthValue.asInstanceOf[Long]
     val timeNanos = timeValue.asInstanceOf[Long]
-    val bucketNanos = bucketMicros * NANOS_PER_MICROS
+    val bucketNanos = DateTimeUtils.microsToNanos(bucketMicros)
     (timeNanos / bucketNanos) * bucketNanos
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (bucket, time) => {
-      val scaleFactor = s"${NANOS_PER_MICROS}L"
-      s"($time / ($bucket * $scaleFactor)) * ($bucket * $scaleFactor)"
+      val bucketNanos = s"java.lang.Math.multiplyExact($bucket, ${NANOS_PER_MICROS}L)"
+      s"($time / ($bucketNanos)) * ($bucketNanos)"
     })
   }
 
-  override def prettyName: String = "time_bucket"
+  override def prettyName: String = "time_of_day_bucket"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): TimeBucket =
+      newLeft: Expression, newRight: Expression): TimeOfDayBucket =
     copy(bucketWidth = newLeft, time = newRight)
 }
 
