@@ -172,6 +172,11 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO test_bit_array VALUES (ARRAY[B'1', B'0'], " +
       "ARRAY[B'00001', B'00010'])").executeUpdate()
 
+    conn.prepareStatement("CREATE TABLE time_array_table (id integer, times time[])").
+      executeUpdate()
+    conn.prepareStatement("INSERT INTO time_array_table VALUES " +
+      "(1, ARRAY[TIME '08:30:00', TIME '17:22:31.123456'])").executeUpdate()
+
     conn.prepareStatement(
       """
         |CREATE TYPE complex AS (
@@ -649,6 +654,74 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
       assert(result.schema("t").dataType.isInstanceOf[TimeType])
       val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
       assert(collected.toSeq == times.sorted)
+    }
+  }
+
+  test("SPARK-57555: Read time[] array column as ArrayType(TimeType)") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "time_array_table", new Properties)
+      val schema = df.schema("times")
+      assert(schema.dataType == ArrayType(TimeType(TimeType.DEFAULT_PRECISION), true))
+      val row = df.collect()(0)
+      val times = row.getSeq[java.time.LocalTime](df.schema.fieldIndex("times"))
+      assert(times == Seq(
+        java.time.LocalTime.of(8, 30, 0),
+        java.time.LocalTime.of(17, 22, 31, 123456000)))
+    }
+  }
+
+  test("SPARK-57555: Write TIME preserves precision for p<=6") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(StructField("t", TimeType(3))))
+      val data = Seq(
+        Row(java.time.LocalTime.of(10, 30, 45, 123000000)),
+        Row(java.time.LocalTime.of(22, 15, 0, 456000000))
+      )
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      assert(result.schema("t").dataType == TimeType(3))
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected(0) == java.time.LocalTime.of(10, 30, 45, 123000000))
+      assert(collected(1) == java.time.LocalTime.of(22, 15, 0, 456000000))
+    }
+  }
+
+  test("SPARK-57555: End-to-end TIME type with PostgreSQL") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // 1. Create and populate a TIME table directly via JDBC
+      val conn = java.sql.DriverManager.getConnection(jdbcUrl)
+      try {
+        conn.prepareStatement(
+          "CREATE TABLE time_e2e (id integer, wake_up time, lunch time(3))").executeUpdate()
+        conn.prepareStatement(
+          "INSERT INTO time_e2e VALUES " +
+            "(1, TIME '06:30:00', TIME '12:00:00.000'), " +
+            "(2, TIME '07:45:30.123456', TIME '13:15:30.500')").executeUpdate()
+      } finally {
+        conn.close()
+      }
+
+      // 2. Read with Spark - verify schema inference
+      val df = spark.read.jdbc(jdbcUrl, "time_e2e", new Properties)
+      assert(df.schema("wake_up").dataType == TimeType(6))
+      assert(df.schema("lunch").dataType == TimeType(3))
+
+      // 3. Verify values
+      val rows = df.collect().sortBy(_.getInt(0))
+      assert(rows(0).getAs[java.time.LocalTime](1) == java.time.LocalTime.of(6, 30, 0))
+      assert(rows(0).getAs[java.time.LocalTime](2) == java.time.LocalTime.of(12, 0, 0))
+      assert(rows(1).getAs[java.time.LocalTime](1) ==
+        java.time.LocalTime.of(7, 45, 30, 123456000))
+      assert(rows(1).getAs[java.time.LocalTime](2) ==
+        java.time.LocalTime.of(13, 15, 30, 500000000))
+
+      // 4. Write back to a new table and read again
+      df.write.jdbc(jdbcUrl, "time_e2e_copy", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_e2e_copy", new Properties)
+      assert(result.schema("wake_up").dataType == TimeType(6))
+      assert(result.schema("lunch").dataType == TimeType(3))
+      checkAnswer(result.orderBy("id"), df.orderBy("id"))
     }
   }
 }
