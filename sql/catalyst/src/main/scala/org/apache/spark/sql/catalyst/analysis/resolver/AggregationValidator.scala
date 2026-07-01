@@ -33,17 +33,12 @@ object AggregationValidator {
 
   /**
    * Applies [[ExprUtils.assertValidAggregation]] on a given [[Aggregate]].
-   *
-   * @param skipGroupingExprChecks When true, skips grouping-expression checks (type-is-orderable,
-   *   no nested aggregates). Only set to true when unexpanded BaseGroupingSets are present and
-   *   validation will be performed post-expansion.
    */
-  def apply(aggregate: Aggregate, skipGroupingExprChecks: Boolean = false): Unit = {
+  def apply(aggregate: Aggregate): Unit = {
     ExprUtils.assertValidAggregation(
       aggregate,
       (groupingExpression, checkedExpression) =>
-        groupingExpression.canonicalized == checkedExpression.canonicalized,
-      skipGroupingExprChecks
+        groupingExpression.canonicalized == checkedExpression.canonicalized
     )
   }
 }

@@ -157,7 +157,6 @@ class AggregateResolver(
         val aggregateWithLcaResolutionResult =
           lcaResolver.handleLcaInAggregate(finalAggregate)
         val lcaBaseAggregate = aggregateWithLcaResolutionResult.baseAggregate
-        AggregationValidator(lcaBaseAggregate)
         AggregateResolutionResult(
           operator = aggregateWithLcaResolutionResult.resolvedOperator,
           outputList = aggregateWithLcaResolutionResult.outputList,
@@ -167,17 +166,10 @@ class AggregateResolver(
           baseAggregate = lcaBaseAggregate
         )
       } else {
-        // Validation contract: grouping analytics are expanded first, then the expanded
-        // Aggregate is validated by AggregationValidator (post-expansion).
-        val expandedAggregate =
-          if (finalAggregate.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])) {
-            val expanded = groupingAnalyticsResolver.resolve(finalAggregate)
-            AggregationValidator(expanded)
-            expanded
-          } else {
-            AggregationValidator(finalAggregate)
-            finalAggregate
-          }
+        // Grouping analytics (CUBE/ROLLUP/GROUPING SETS) are expanded unconditionally.
+        // groupingAnalyticsResolver.resolve no-ops when no BaseGroupingSets are present.
+        val expandedAggregate = groupingAnalyticsResolver.resolve(finalAggregate)
+        AggregationValidator(expandedAggregate)
 
         AggregateResolutionResult(
           operator = expandedAggregate,

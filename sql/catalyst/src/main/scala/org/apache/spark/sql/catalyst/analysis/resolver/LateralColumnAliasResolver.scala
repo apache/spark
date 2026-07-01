@@ -26,7 +26,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.AnalysisErrorAt
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
-  BaseGroupingSets,
   Expression,
   ExprId,
   NamedExpression,
@@ -71,14 +70,10 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver, operato
       case _ @Project(projectList: Seq[_], aggregate: Aggregate) =>
         operatorResolutionContextStack.current.baseOperator = Some(aggregate)
 
-        // Note: LCA + BaseGroupingSets is intercepted in AggregateResolver which throws
-        // ExplicitlyUnsupportedResolverFeature before reaching here. This guard is
-        // retained as defense-in-depth in case the call path changes.
-        AggregationValidator(
-          aggregate,
-          skipGroupingExprChecks =
-            aggregate.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])
-        )
+        // Note: LCA + grouping analytics (CUBE/ROLLUP/GROUPING SETS) is intercepted in
+        // AggregateResolver which throws ExplicitlyUnsupportedResolverFeature before reaching
+        // here. This validation is retained as defense-in-depth in case the call path changes.
+        AggregationValidator(aggregate)
 
         val remappedAliases = new HashMap[ExprId, Alias](projectList.size)
         projectList.foreach {
