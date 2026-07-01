@@ -1534,7 +1534,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -1625,7 +1625,7 @@ jobs:
         id: download-precompiled
         if: needs.precompile.result == 'success'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
       - name: Extract precompiled artifact
