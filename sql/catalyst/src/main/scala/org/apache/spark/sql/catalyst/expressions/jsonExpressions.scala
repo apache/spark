@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -384,14 +385,22 @@ case class JsonToStructs(
       child = child,
       timeZoneId = None)
 
-  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
-      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
-      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
-    case _ =>
-      DataTypeMismatch(
-        errorSubClass = "INVALID_JSON_SCHEMA",
-        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // `from_json` parses each input string as one JSON document, so the embedded array
+    // splitting can never apply.
+    if (CaseInsensitiveMap(options).contains(JSONOptions.EXPLODE_EMBEDDED_ARRAY)) {
+      throw QueryCompilationErrors.explodeEmbeddedArrayUnsupportedUsage(
+        "the from_json function")
+    }
+    nullableSchema match {
+      case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+        val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+        if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "INVALID_JSON_SCHEMA",
+          messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+    }
   }
 
   override def dataType: DataType = nullableSchema
