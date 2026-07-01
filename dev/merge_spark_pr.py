@@ -450,7 +450,7 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "MERGE SUMMARY BY MERGE_SPARK_PR:\n" + "\n".join(lines)
+    body = "**Merge summary** (posted by `merge_spark_pr.py`):\n" + "\n".join(lines)
     print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
@@ -568,7 +568,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
 
 def _do_cherry_pick(pr_num, merge_hash, pick_ref):
-    """Cherry-pick `merge_hash` onto `pick_ref` and push. Returns the pushed ref."""
+    """Cherry-pick `merge_hash` onto `pick_ref` and push.
+
+    Returns the (pushed ref, pushed commit hash) pair.
+    """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
