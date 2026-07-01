@@ -297,14 +297,19 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     def test_array_string_output_requires_coercion(self):
         # When the array<string> UDF returns non-string elements, the output must
         # still be coerced to string (fast path must fall back to the converter).
-        df = self.spark.range(0, 3)
+        # Scoped to the non-legacy conversion path, which this fast path targets;
+        # the legacy pandas path does not coerce non-string array elements.
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.range(0, 3)
 
-        @udf(returnType=ArrayType(StringType()))
-        def ints_as_strings(i):
-            return [int(i), int(i) + 1]
+            @udf(returnType=ArrayType(StringType()))
+            def ints_as_strings(i):
+                return [int(i), int(i) + 1]
 
-        result = [r.res for r in df.select(ints_as_strings("id").alias("res")).collect()]
-        self.assertEqual(result, [["0", "1"], ["1", "2"], ["2", "3"]])
+            result = [r.res for r in df.select(ints_as_strings("id").alias("res")).collect()]
+            self.assertEqual(result, [["0", "1"], ["1", "2"], ["2", "3"]])
 
     def test_array_timestamp_output_timezone(self):
         # array<timestamp> is excluded from the fast path because the converter
