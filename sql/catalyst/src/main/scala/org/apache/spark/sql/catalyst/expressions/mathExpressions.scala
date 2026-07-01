@@ -252,7 +252,18 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+private object CeilFloor {
+  def doubleToLong(value: Double, context: QueryContext): Long = {
+    if (!value.isNaN &&
+        (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      throw QueryExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+    value.toLong
+  }
+}
+
+case class Ceil(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.ceil, "CEIL") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -260,11 +271,17 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      CeilFloor.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
@@ -275,6 +292,21 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        nullSafeCodeGen(ctx, ev, c => {
+          val roundedValue = ctx.freshName("roundedValue")
+          val errorContext = getContextOrNullCode(ctx)
+          s"""
+             |double $roundedValue = java.lang.Math.${funcName}($c);
+             |if (!java.lang.Double.isNaN($roundedValue) &&
+             |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
+             |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
+             |  throw QueryExecutionErrors.arithmeticOverflowError(
+             |    "long overflow", "", $errorContext);
+             |}
+             |${ev.value} = (long) $roundedValue;
+             |""".stripMargin
+        })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -531,7 +563,8 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
+case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.floor, "FLOOR") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -539,11 +572,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      CeilFloor.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
@@ -554,11 +593,26 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        nullSafeCodeGen(ctx, ev, c => {
+          val roundedValue = ctx.freshName("roundedValue")
+          val errorContext = getContextOrNullCode(ctx)
+          s"""
+             |double $roundedValue = java.lang.Math.${funcName}($c);
+             |if (!java.lang.Double.isNaN($roundedValue) &&
+             |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
+             |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
+             |  throw QueryExecutionErrors.arithmeticOverflowError(
+             |    "long overflow", "", $errorContext);
+             |}
+             |${ev.value} = (long) $roundedValue;
+             |""".stripMargin
+        })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
- }
- override protected def withNewChildInternal(newChild: Expression): Floor =
-  copy(child = newChild)
+  }
+  override protected def withNewChildInternal(newChild: Expression): Floor =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
