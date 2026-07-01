@@ -642,7 +642,7 @@ object ParquetFileFormat extends Logging {
   /**
    * Builds the Parquet footer-reading function, shared by the distributed merge
    * ([[mergeSchemasInParallel]]) and the sequential archive-entry merge
-   * ([[mergeArchiveEntrySchemas]]). `SQLConf` is read here so the returned closure stays
+   * ([[ArchiveReader.inferArchiveSchema]]). `SQLConf` is read here so the returned closure stays
    * serializable.
    */
   private[parquet] def buildSchemaReader(

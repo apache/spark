@@ -305,7 +305,8 @@ object ArchiveReader extends Logging {
     val entries = ArchiveReader(file.toPath).localizeEntries(conf, tempDir, entryFilter)
 
     // Element type is `Object`, not `InternalRow`: a batch scan yields `ColumnarBatch`, so
-    // per-element casts would fail;
+    // per-element casts would fail. The whole iterator is cast back to `Iterator[InternalRow]`
+    // at the end, matching how the plain reader's columnar output is typed.
     val rows = new Iterator[Object] with Closeable {
       private var current: Iterator[Object] = Iterator.empty
       private var currentFile: File = _
