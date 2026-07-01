@@ -2732,7 +2732,7 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  private def collectJdbcEstimatedReadBytes(table: String): Long = {
+  private def collectJdbcReadBytes(table: String): Long = {
     val props = new Properties()
     props.setProperty("user", "testUser")
     props.setProperty("password", "testPass")
@@ -2742,10 +2742,10 @@ class JDBCSuite extends SharedSparkSession {
     val scanExec = qes.head.executedPlan.collectFirst {
       case s: RowDataSourceScanExec => s
     }.get
-    scanExec.metrics("estimatedDataSizeBytes").value
+    scanExec.metrics("dataSizeBytes").value
   }
 
-  test("SPARK-57471: estimated data size metric scales with data size") {
+  test("SPARK-57471: data size metric scales with data size") {
     val props = new Properties()
     props.setProperty("user", "testUser")
     props.setProperty("password", "testPass")
@@ -2759,15 +2759,15 @@ class JDBCSuite extends SharedSparkSession {
     spark.createDataFrame(sparkContext.makeRDD(longStrings), schema)
       .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BYTES_LONG", props)
 
-    val shortBytes = collectJdbcEstimatedReadBytes("TEST.BYTES_SHORT")
-    val longBytes = collectJdbcEstimatedReadBytes("TEST.BYTES_LONG")
+    val shortBytes = collectJdbcReadBytes("TEST.BYTES_SHORT")
+    val longBytes = collectJdbcReadBytes("TEST.BYTES_LONG")
 
-    assert(shortBytes > 0, "estimated data size should be > 0 for short strings")
+    assert(shortBytes > 0, "data size should be > 0 for short strings")
     assert(longBytes > shortBytes,
       s"longer strings ($longBytes) should yield more bytes than short ($shortBytes)")
   }
 
-  test("SPARK-57471: estimated data size metric scales with binary data size") {
+  test("SPARK-57471: data size metric scales with binary data size") {
     val props = new Properties()
     props.setProperty("user", "testUser")
     props.setProperty("password", "testPass")
@@ -2781,15 +2781,15 @@ class JDBCSuite extends SharedSparkSession {
     spark.createDataFrame(sparkContext.makeRDD(longBinary), schema)
       .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.BIN_LONG", props)
 
-    val shortBytes = collectJdbcEstimatedReadBytes("TEST.BIN_SHORT")
-    val longBytes = collectJdbcEstimatedReadBytes("TEST.BIN_LONG")
+    val shortBytes = collectJdbcReadBytes("TEST.BIN_SHORT")
+    val longBytes = collectJdbcReadBytes("TEST.BIN_LONG")
 
-    assert(shortBytes > 0, "estimated data size should be > 0 for short binary")
+    assert(shortBytes > 0, "data size should be > 0 for short binary")
     assert(longBytes > shortBytes,
       s"longer binary ($longBytes) should yield more bytes than short ($shortBytes)")
   }
 
-  test("SPARK-57471: estimated data size with nulls does not NPE and yields fewer bytes") {
+  test("SPARK-57471: data size with nulls does not NPE and yields fewer bytes") {
     val props = new Properties()
     props.setProperty("user", "testUser")
     props.setProperty("password", "testPass")
@@ -2803,8 +2803,8 @@ class JDBCSuite extends SharedSparkSession {
     spark.createDataFrame(sparkContext.makeRDD(withValues), schema)
       .write.mode(SaveMode.Overwrite).jdbc(urlWithUserAndPass, "TEST.NONNULL_DATA", props)
 
-    val nullBytes = collectJdbcEstimatedReadBytes("TEST.NULL_DATA")
-    val valueBytes = collectJdbcEstimatedReadBytes("TEST.NONNULL_DATA")
+    val nullBytes = collectJdbcReadBytes("TEST.NULL_DATA")
+    val valueBytes = collectJdbcReadBytes("TEST.NONNULL_DATA")
 
     assert(valueBytes > nullBytes,
       s"non-null data ($valueBytes) should yield more bytes than nulls ($nullBytes)")

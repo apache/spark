@@ -721,10 +721,10 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     }
   }
 
-  test("SPARK-57471: estimated write data size via accumulator") {
+  test("SPARK-57471: write data size via accumulator") {
     // The dedicated SQL metric is only exposed on the v2/catalog write path
     // (see JDBCV2Suite for plan-level metric tests). This test validates the
-    // accumulator-based estimation logic works in savePartition.
+    // accumulator-based size measurement logic works in savePartition.
     val rows = (1 to 10).map(i => Row(i, "hello"))
     val schema = new StructType().add("id", IntegerType).add("data", StringType)
 
@@ -743,6 +743,6 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         "TEST.ACC_TEST", iter, schema, insertStmt, 1000, dialect,
         java.sql.Connection.TRANSACTION_READ_UNCOMMITTED, opts, Some(acc))
     }
-    assert(acc.value > 0, "accumulator should collect estimated bytes")
+    assert(acc.value > 0, "accumulator should collect actual bytes written")
   }
 }

@@ -3176,7 +3176,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
   }
 
-  test("SPARK-57471: estimated data size metric on catalog write") {
+  test("SPARK-57471: data size metric on catalog write") {
     withTable("h2.test.write_metric") {
       sql("CREATE TABLE h2.test.write_metric AS SELECT * FROM h2.test.people")
       val qes = withQueryExecutionsCaptured(spark) {
@@ -3187,8 +3187,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         case _ => false
       }
       assert(writePlans.size === 1, s"Expected 1 AppendDataExecV1, got: ${qes.map(_.executedPlan)}")
-      val estimatedBytes = writePlans.head.metrics("estimatedDataSizeBytes").value
-      assert(estimatedBytes > 0, "estimated write data size should be > 0")
+      val dataBytes = writePlans.head.metrics("dataSizeBytes").value
+      assert(dataBytes > 0, "write data size should be > 0")
     }
   }
 }

@@ -36,7 +36,7 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
   }
 
   override def build(): V1Write = new V1Write {
-    // Accumulator to collect estimated bytes written across all partitions.
+    // Accumulator to collect actual bytes written across all partitions.
     @transient private lazy val bytesAccumulator = SparkSession.active.sparkContext.longAccumulator
 
     override def toInsertableRelation: InsertableRelation = (data: DataFrame, _: Boolean) => {
@@ -51,25 +51,25 @@ case class JDBCWriteBuilder(schema: StructType, options: JdbcOptionsInWrite) ext
     }
 
     override def supportedCustomMetrics(): Array[CustomMetric] = {
-      Array(new JDBCEstimatedDataSizeMetric)
+      Array(new JDBCDataSizeMetric)
     }
 
     override def reportDriverMetrics(): Array[CustomTaskMetric] = {
       Array(new CustomTaskMetric {
-        override def name(): String = JDBCEstimatedDataSizeMetric.NAME
+        override def name(): String = JDBCDataSizeMetric.NAME
         override def value(): Long = bytesAccumulator.value
       })
     }
   }
 }
 
-/** CustomMetric declaration for JDBC estimated write data size. */
-class JDBCEstimatedDataSizeMetric extends CustomSumMetric {
-  override def name(): String = JDBCEstimatedDataSizeMetric.NAME
+/** CustomMetric declaration for JDBC write data size. */
+class JDBCDataSizeMetric extends CustomSumMetric {
+  override def name(): String = JDBCDataSizeMetric.NAME
   override def description(): String =
-    "Estimated decoded row size written (strings measured by char count, not UTF-8 bytes)"
+    "Actual decoded row size written (strings measured by UTF-8 byte length)"
 }
 
-object JDBCEstimatedDataSizeMetric {
-  val NAME = "estimatedDataSizeBytes"
+object JDBCDataSizeMetric {
+  val NAME = "dataSizeBytes"
 }
