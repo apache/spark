@@ -1413,10 +1413,12 @@ class ZoneOffsetCache(val zoneId: ZoneId) {
           hi = Long.MaxValue
         } else {
           hi = nextT.toEpochSecond
-          // `hi - 1` lies strictly inside the constant-offset window ending at `hi` (zone
-          // transitions are always more than a second apart), so its previous transition is
-          // exactly that window's start. Anchoring on an interior point avoids an off-by-one
-          // when `epochSec` sits exactly on a transition instant.
+          // Transition instants in `ZoneRules` are a strictly-increasing sequence of epoch
+          // *seconds* (`savingsInstantTransitions`, as TZif/RFC 8536 encodes them), so any two
+          // consecutive transitions are >= 1s apart by construction. So `hi - 1` is strictly
+          // inside the constant-offset window ending at `hi`, and its previous transition is that
+          // window's start -- anchoring on an interior point avoids an off-by-one when `epochSec`
+          // sits exactly on a transition instant.
           val prevT = rules.previousTransition(Instant.ofEpochSecond(hi - 1))
           lo = if (prevT == null) Long.MinValue else prevT.toEpochSecond
         }
