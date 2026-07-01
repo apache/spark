@@ -347,6 +347,11 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       },
       condition = "INVALID_VARIANT_PATH",
       parameters = Map("path" -> "$", "functionName" -> toSQLId("variant_insert")))
+
+    // A raw struct/map value is not castable to variant and is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_insert(parse_json('{}'), '$.a', named_struct('x', 1))")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
   }
 
   test("variant_insert with dynamic arguments") {

@@ -860,7 +860,7 @@ case class VariantInsert(input: Expression, path: Expression, value: Expression)
       result
     } else if (value.dataType == NullType) {
       TypeCheckResult.TypeCheckSuccess
-    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = true)) {
+    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
       DataTypeMismatch(
         errorSubClass = "CAST_WITHOUT_SUGGESTION",
         messageParameters =

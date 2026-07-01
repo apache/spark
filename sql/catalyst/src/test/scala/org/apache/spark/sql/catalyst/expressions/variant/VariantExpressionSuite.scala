@@ -1369,9 +1369,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsert("{}", "$.a", Literal(2.5), """{"a":2.5}""")
     checkInsert(
       "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
-    checkInsert(
-      "{}", "$.a", Literal.create(Map("x" -> 1), MapType(StringType, IntegerType)),
-      """{"a":{"x":1}}""")
 
     // NULL-intolerant: any NULL argument yields NULL.
     checkEvaluation(
@@ -1425,11 +1422,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
 
-    val uncastableValue = VariantInsert(
-      Literal(parseJson("{}")),
-      Literal("$.a"),
-      Literal.create(null, MapType(IntegerType, IntegerType)))
-    assert(uncastableValue.checkInputDataTypes().isFailure)
+    // Structs and maps are rejected at analysis.
+    Seq(
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
+    ).foreach { v =>
+      assert(
+        VariantInsert(Literal(parseJson("{}")), Literal("$.a"), v).checkInputDataTypes().isFailure)
+    }
 
     checkErrorInExpression[SparkRuntimeException](
       VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1)),
