@@ -38,6 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 
@@ -203,6 +204,37 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(roundtrip == Some(v))
       }
     }
+  }
+
+  test("SPARK-57839: nanosecond-precision timestamp column stats lossless round trip") {
+    // Use a sub-microsecond value (nanosWithinMicro != 0) to prove nanos survive serialization.
+    val ntzNanosType = TimestampNTZNanosType(9)
+    val ltzNanosType = TimestampLTZNanosType(9)
+    val subMicroVal = TimestampNanosVal.fromParts(1640995201123456L, 789.toShort)
+
+    // NTZ nanos round-trip
+    val ntzStr = CatalogColumnStat.toExternalString(subMicroVal, "col", ntzNanosType)
+    val ntzParsed = CatalogColumnStat.fromExternalString(ntzStr, "col", ntzNanosType, 2)
+    assert(ntzParsed === subMicroVal,
+      s"NTZ nanos round-trip failed: formatted='$ntzStr', parsed=$ntzParsed, expected=$subMicroVal")
+
+    // LTZ nanos round-trip
+    val ltzStr = CatalogColumnStat.toExternalString(subMicroVal, "col", ltzNanosType)
+    val ltzParsed = CatalogColumnStat.fromExternalString(ltzStr, "col", ltzNanosType, 2)
+    assert(ltzParsed === subMicroVal,
+      s"LTZ nanos round-trip failed: formatted='$ltzStr', parsed=$ltzParsed, expected=$subMicroVal")
+
+    // Full CatalogColumnStat map round-trip
+    val catalogStat = CatalogColumnStat(
+      distinctCount = Some(1),
+      min = Some(ntzStr),
+      max = Some(ntzStr),
+      nullCount = Some(0),
+      avgLen = Some(10),
+      maxLen = Some(10))
+    val map = catalogStat.toMap("ctsnanos")
+    val roundtrip = CatalogColumnStat.fromMap("t", "ctsnanos", map)
+    assert(roundtrip === Some(catalogStat))
   }
 
   test("analyze column command - result verification") {

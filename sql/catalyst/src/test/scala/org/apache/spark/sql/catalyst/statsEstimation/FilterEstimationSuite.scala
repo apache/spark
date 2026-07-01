@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ColumnStatsMa
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * In this test suite, we test predicates containing the following operators:
@@ -114,6 +115,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val colStatIntSkewHgm = ColumnStat(distinctCount = Some(5), min = Some(1), max = Some(10),
     nullCount = Some(0), avgLen = Some(4), maxLen = Some(4), histogram = Some(hgmIntSkew))
 
+  // column ctsnanos has 10 nanosecond-precision timestamp values.
+  // Values span from epochMicros=1000 nanosWithinMicro=0 to epochMicros=1009 nanosWithinMicro=0
+  // i.e. total epoch nanos 1000000..1009000 (range = 9000 nanos)
+  val tsNanosMin = TimestampNanosVal.fromParts(1000L, 0.toShort)
+  val tsNanosMax = TimestampNanosVal.fromParts(1009L, 0.toShort)
+  val attrTsNanos = AttributeReference("ctsnanos", TimestampNTZNanosType(9))()
+  val colStatTsNanos = ColumnStat(distinctCount = Some(10),
+    min = Some(tsNanosMin), max = Some(tsNanosMax),
+    nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+
   val attributeMap = AttributeMap(Seq(
     attrInt -> colStatInt,
     attrBool -> colStatBool,
@@ -125,7 +136,8 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     attrInt3 -> colStatInt3,
     attrInt4 -> colStatInt4,
     attrIntHgm -> colStatIntHgm,
-    attrIntSkewHgm -> colStatIntSkewHgm
+    attrIntSkewHgm -> colStatIntSkewHgm,
+    attrTsNanos -> colStatTsNanos
   ))
 
   test("true") {
@@ -1018,6 +1030,45 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         }
       }
     }
+  }
+
+  // Tests for nanosecond-precision timestamp types (SPARK-57839)
+  test("ctsnanos = TimestampNanosVal(1003, 0)") {
+    val tsVal = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    validateEstimatedStats(
+      Filter(EqualTo(attrTsNanos, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(1),
+        min = Some(tsVal), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 1)
+  }
+
+  test("ctsnanos < TimestampNanosVal(1003, 0)") {
+    // Range [1000000, 1009000], value = 1003000, fraction = 3000/9000 = 1/3
+    // Rows = ceil(10 * 3/9) = 4 (3.33 rounds up), ndv = ceil(10 * 3/9) = 4
+    val tsVal = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    validateEstimatedStats(
+      Filter(LessThan(attrTsNanos, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(4),
+        min = Some(tsNanosMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("ctsnanos IN (TimestampNanosVal(1003, 0), TimestampNanosVal(1005, 0))") {
+    val ts3 = TimestampNanosVal.fromParts(1003L, 0.toShort)
+    val ts5 = TimestampNanosVal.fromParts(1005L, 0.toShort)
+    validateEstimatedStats(
+      Filter(In(attrTsNanos, Seq(
+        Literal(ts3, TimestampNTZNanosType(9)),
+        Literal(ts5, TimestampNTZNanosType(9)))),
+        childStatsTestPlan(Seq(attrTsNanos), 10L)),
+      Seq(attrTsNanos -> ColumnStat(distinctCount = Some(2),
+        min = Some(ts3), max = Some(ts5),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 2)
   }
 
 }

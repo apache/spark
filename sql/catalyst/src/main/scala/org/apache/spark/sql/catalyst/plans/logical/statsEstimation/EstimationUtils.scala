@@ -23,6 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, EmptyRow, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.{DecimalType, _}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 object EstimationUtils {
 
@@ -136,6 +137,9 @@ object EstimationUtils {
   def toDouble(value: Any, dataType: DataType): Double = {
     dataType match {
       case _: NumericType | DateType | TimestampType => value.toString.toDouble
+      case _: AnyTimestampNanoType =>
+        val v = value.asInstanceOf[TimestampNanosVal]
+        v.epochMicros * 1000.0 + v.nanosWithinMicro
       case BooleanType => if (value.asInstanceOf[Boolean]) 1 else 0
     }
   }
@@ -145,6 +149,9 @@ object EstimationUtils {
       case BooleanType => double.toInt == 1
       case DateType => double.toInt
       case TimestampType => double.toLong
+      case _: AnyTimestampNanoType =>
+        val nanos = double.toLong
+        TimestampNanosVal.fromParts(Math.floorDiv(nanos, 1000L), Math.floorMod(nanos, 1000).toShort)
       case ByteType => double.toByte
       case ShortType => double.toShort
       case IntegerType => double.toInt
