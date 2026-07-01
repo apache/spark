@@ -369,9 +369,9 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
   test("Normalize DelegateExpression display inputs (random seed and common-expr id)") {
     // A DelegateExpression's `inputs` are display-only metadata, not children, so
     // `transformAllExpressions` never reaches them. They still carry run-dependent state (a `Rand`
-    // seed, a `CommonExpressionId`) that must be normalized, or two structurally-identical delegates
-    // (e.g. the fixed-point vs single-pass renderings of `right(rand(), 1)`) compare unequal and
-    // trip a false HYBRID_ANALYZER_LOGICAL_PLAN_COMPARISON_MISMATCH.
+    // seed, a `CommonExpressionId`) that must be normalized, or two structurally-identical
+    // delegates (e.g. the fixed-point vs single-pass renderings of `right(rand(), 1)`) compare
+    // unequal and trip a false HYBRID_ANALYZER_LOGICAL_PLAN_COMPARISON_MISMATCH.
     def delegateWith(seed: Long, id: CommonExpressionId): DelegateExpression =
       DelegateExpression(
         "f",

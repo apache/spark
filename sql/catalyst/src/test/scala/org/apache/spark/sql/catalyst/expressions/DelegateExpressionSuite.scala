@@ -141,7 +141,8 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       case other => fail(s"expected a DataTypeMismatch, got $other")
     }
     // With no supplied context (direct construction), `sql` falls back to the plain node rendering.
-    assert(ImplicitCastInput(Literal(1L), StringType).sql == s"implicitcastinput(${Literal(1L).sql})")
+    assert(
+      ImplicitCastInput(Literal(1L), StringType).sql == s"implicitcastinput(${Literal(1L).sql})")
   }
 
   test("RemoveInputTypeMarkers keeps a failed type-check marker for CheckAnalysis to report") {
