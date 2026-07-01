@@ -17,16 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{IntegerType, TimeType}
 
 /**
- * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
+ * Unit tests for [[TimeTypeParquetOps]]'s Parquet read guards - both the row-based
+ * [[TimeTypeParquetOps.requireCompatibleParquetType]] and the vectorized-read
+ * getVectorUpdater / getVectorUpdaterOrNull dispatch, which share the same
+ * compatible-encoding check so the two readers accept and reject the same set.
  *
  * TimeType is stored in Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false) for precision
  * 0..6 and INT64 TIME(NANOS, isAdjustedToUTC=false) for precision 7..9. The read-path guard
@@ -128,6 +132,40 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
   // wrong-primitive branch of requireCompatibleParquetType is unreachable for
   // the TIME annotation; the raw-INT64 / TIMESTAMP / DECIMAL / group tests
   // above already exercise the !isPrimitive and "non-TIME annotation" branches.
+
+  // ---------- vectorized read updater ----------
+
+  private def timeColumn(unit: TimeUnit): ColumnDescriptor =
+    new ColumnDescriptor(
+      Array("c"),
+      Types.primitive(INT64, REQUIRED).as(LogicalTypeAnnotation.timeType(false, unit)).named("c"),
+      0, 0)
+
+  test("getVectorUpdater returns a framework updater for TimeType (micros and nanos)") {
+    assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(timeColumn(TimeUnit.MICROS)).isDefined)
+    assert(TimeTypeParquetOps(timeNanos).getVectorUpdater(timeColumn(TimeUnit.NANOS)).isDefined)
+    // Java-friendly companion entry point used by ParquetVectorUpdaterFactory.
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(timeMicros, timeColumn(TimeUnit.MICROS)) != null)
+  }
+
+  test("getVectorUpdater returns None for incompatible encodings (clean reject, vectorized path)") {
+    val int32Millis = Types.primitive(INT32, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MILLIS)).named("c")
+    val rawInt64 = Types.primitive(INT64, REQUIRED).named("c")
+    val int64Timestamp = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named("c")
+    // None -> the factory falls through to a clean SchemaColumnConvertNotSupportedException,
+    // matching the row-path reject set (requireCompatibleParquetType), instead of silently
+    // mis-decoding (e.g. readLongs over an INT32 column).
+    Seq(int32Millis, rawInt64, int64Timestamp).foreach { field =>
+      val descriptor = new ColumnDescriptor(Array("c"), field, 0, 0)
+      assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(descriptor).isEmpty)
+    }
+  }
+
+  test("getVectorUpdaterOrNull returns null for non-framework types") {
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(IntegerType, null) == null)
+  }
 
   // ---------- helper ----------
 

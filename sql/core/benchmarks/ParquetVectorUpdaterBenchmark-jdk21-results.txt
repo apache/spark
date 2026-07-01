@@ -28,6 +28,7 @@ IntegerToLongUpdater                                     0              0       
 IntegerToDoubleUpdater                                   0              0           0       6120.9           0.2       1.0X
 FloatToDoubleUpdater                                     0              0           0       2527.0           0.4       0.4X
 DateToTimestampNTZUpdater                                1              1           0        935.1           1.1       0.2X
+TimeVectorUpdater (TimeType)                             1              1           0       1228.5           0.8       0.2X
 DowncastLongUpdater (INT64 -> Decimal(9,2))              0              0           0       5823.3           0.2       0.9X
 
 
