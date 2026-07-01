@@ -162,4 +162,40 @@ class DelegateExpressionQuerySuite extends QueryTest with SharedSparkSession {
         s"unexpected error condition for `$q`: ${e.getCondition}")
     }
   }
+
+  test("a delegate over a HAVING aggregate gets a clean generated name (TempResolvedColumn " +
+    "trimmed)") {
+    // SPARK-52385-style: in an aggregate/HAVING, `v` is wrapped in a `TempResolvedColumn` while it
+    // resolves against the grouping input. That wrapper rides in the delegate's display-only
+    // `inputs`, which the pretty-printer's `transform` never rewrites; without an explicit trim the
+    // generated column name would leak `right(tempresolvedcolumn(v), 1)` instead of `right(v, 1)`.
+    import testImplicits._
+    withTempView("hav") {
+      Seq((1, 3), (1, 5)).toDF("k", "v").createOrReplaceTempView("hav")
+      val df = spark.sql("SELECT max(right(v, 1)) FROM hav HAVING max(right(v, 1)) IS NOT NULL")
+      val name = df.schema.fields.head.name
+      assert(!name.contains("tempresolvedcolumn"),
+        s"generated name should not leak the temp-resolution marker, got: $name")
+      assert(name == "max(right(v, 1))", s"unexpected generated name: $name")
+    }
+  }
+
+  test("an un-castable argument is reported against the delegate call, not the internal marker") {
+    // A failed implicit cast leaves the `ImplicitCastInput` marker in the tree so `CheckAnalysis`
+    // (walking bottom-up) can reject it. The marker is an analysis-only detail, so it reports as if
+    // the check ran on the high-level `right(...)` call: the `sqlExpr` stays `right('abc', ...)`
+    // (not `implicitcastinput(...)`) and `paramIndex` is the real argument position (`second`),
+    // matching the pre-delegate `right` -- no user-facing change.
+    checkError(
+      exception = intercept[AnalysisException](spark.sql("SELECT right('abc', array(1))")),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"right(abc, array(1))\"",
+        "paramIndex" -> "second",
+        "requiredType" -> "\"INT\"",
+        "inputSql" -> "\"array(1)\"",
+        "inputType" -> "\"ARRAY<INT>\""),
+      queryContext = Array(ExpectedContext(
+        fragment = "right('abc', array(1))", start = 7, stop = 28)))
+  }
 }

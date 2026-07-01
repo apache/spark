@@ -50,7 +50,7 @@ object NormalizePlan extends PredicateHelper {
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
-    withNormalizedRuntimeReplaceable.transformAllExpressions {
+    lazy val rule: PartialFunction[Expression, Expression] = {
       case subqueryExpression: SubqueryExpression =>
         val normalizedPlan = normalizeExpressions(subqueryExpression.plan)
         subqueryExpression.withNewPlan(normalizedPlan)
@@ -60,7 +60,16 @@ object NormalizePlan extends PredicateHelper {
         commonExpressionRef.copy(id = new CommonExpressionId(id = 0))
       case expressionWithRandomSeed: ExpressionWithRandomSeed =>
         expressionWithRandomSeed.withNewSeed(0)
+      case d: DelegateExpression =>
+        // `inputs` are display-only metadata, not children, so `transformAllExpressions` never
+        // reaches them -- yet a `Rand` seed or `CommonExpressionId` there is just as
+        // run-dependent as in the `definition` child. Normalize them explicitly with the same
+        // rule (e.g. `right(rand(), 1)` under the Hybrid Analyzer, whose fixed-point and
+        // single-pass runs pick different seeds, would otherwise fail structural comparison).
+        // `definition` is reached by the surrounding traversal.
+        d.copy(inputs = d.inputs.map(_.transform(rule)))
     }
+    withNormalizedRuntimeReplaceable.transformAllExpressions(rule)
   }
 
   /**

@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{DELEGATE_EXPRESSION, INPUT_TYPE_MARKER, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 
@@ -49,6 +51,16 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
  * acceptable -- like any other expression the system does not recognize, it simply falls back, and
  * `eval`/`doGenCode` keep it correct within Spark. Analysis- and optimizer-inserted nodes (the
  * common case) are always stripped, so physical-rule insertion is the only uncovered path.
+ *
+ * By the same token, a *logical* consumer that pattern-matches a specific shape does not see
+ * through the wrapper to its `definition`: e.g. `ExtractEquiJoinKeys`, `PartitionPruning`,
+ * `InjectRuntimeFilter` and `StreamingJoinHelper` all run before `createSparkPlan` and match a bare
+ * `EqualTo`/`And`/..., so a delegate whose `definition` is a join equality would not be recognized
+ * as an equi-join key (losing DPP / runtime filters / equi-key stats) until it is lowered. Today no
+ * delegate produces a boolean/predicate `definition` used as a join condition (`right` returns a
+ * string; `multi_get_json_object` returns a struct), so this is latent, not an active gap; a future
+ * predicate-shaped delegate meant to participate in such rewrites must either lower earlier or
+ * teach those consumers to look through the wrapper.
  */
 case class DelegateExpression(
     name: String,
@@ -83,19 +95,66 @@ case class DelegateExpression(
 }
 
 /**
- * Analysis-only marker that requests an implicit cast of `child` to `expectedType`: it declares the
- * expected type so the standard `TypeCoercion` rule casts the child, then is removed at the end of
- * analysis by [[org.apache.spark.sql.catalyst.analysis.RemoveInputTypeMarkers]]. It never reaches
- * execution, hence [[Unevaluable]]. Modeled on
- * [[org.apache.spark.sql.catalyst.analysis.TempResolvedColumn]].
+ * Common behavior of the two analysis-only input-type markers. A marker is removed at the end of
+ * analysis by [[org.apache.spark.sql.catalyst.analysis.RemoveInputTypeMarkers]]; it survives only
+ * when its type check failed, in which case `CheckAnalysis` -- walking bottom-up -- reports the
+ * marker (the deepest failing node) before it reaches the enclosing [[DelegateExpression]].
+ *
+ * A marker is an analysis-only implementation detail, so it must not surface in the user-facing
+ * error. It therefore reports as if the check ran on the high-level delegate call itself, matching
+ * what the pre-delegate function produced:
+ *   - `checkInputDataTypes` reports the true argument position (`argIndex`) rather than the
+ *     marker's only child (which `ExpectsInputTypes` would always label the "first" parameter), and
+ *   - `sql` renders the delegate call (`callSql`) rather than the internal `implicitcastinput(...)`
+ *     / `typecheckinput(...)` name, so `sqlExpr`/`toSQLExpr` stay attributed to e.g. `right(...)`.
+ *
+ * `funcName`/`argIndex`/`callSql` are supplied by [[DelegateFunction.build]]. They default to empty
+ * for direct construction (e.g. tests), where the marker never reaches error reporting.
  */
-case class ImplicitCastInput(child: Expression, expectedType: AbstractDataType)
-  extends UnaryExpression with Unevaluable with ImplicitCastInputTypes {
+// A pure self-typed trait (not extending `UnaryExpression`/`ExpectsInputTypes` itself) so it can be
+// mixed in LAST in the linearization -- that is what makes its `checkInputDataTypes` override win
+// over `ExpectsInputTypes`'. If it extended those directly, the concrete-type mix-in order needed
+// to win the override would violate the superclass constraint.
+trait InputTypeMarker extends Unevaluable {
+  self: UnaryExpression with ExpectsInputTypes =>
+  def expectedType: AbstractDataType
+  def funcName: String
+  def argIndex: Int
+  def callSql: String
+
   override def inputTypes: Seq[AbstractDataType] = Seq(expectedType)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
   override lazy val canonicalized: Expression = child.canonicalized
   final override val nodePatterns: Seq[TreePattern] = Seq(INPUT_TYPE_MARKER)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    ExpectsInputTypes.checkInputDataTypes(children, inputTypes) match {
+      // The base check labels the marker's only child index 0 ("first"); relabel it with the real
+      // argument position within the delegate call.
+      case m: DataTypeMismatch if m.messageParameters.contains("paramIndex") =>
+        m.copy(messageParameters =
+          m.messageParameters + ("paramIndex" -> ExpectsInputTypes.ordinalNumber(argIndex)))
+      case other => other
+    }
+  }
+
+  override def sql: String = if (callSql.nonEmpty) callSql else s"$prettyName(${child.sql})"
+}
+
+/**
+ * Analysis-only marker that requests an implicit cast of `child` to `expectedType`: it declares the
+ * expected type so the standard `TypeCoercion` rule casts the child, then is removed at the end of
+ * analysis. It never reaches execution, hence [[Unevaluable]]. Modeled on
+ * [[org.apache.spark.sql.catalyst.analysis.TempResolvedColumn]].
+ */
+case class ImplicitCastInput(
+    child: Expression,
+    expectedType: AbstractDataType,
+    funcName: String = "",
+    argIndex: Int = 0,
+    callSql: String = "")
+  extends UnaryExpression with ImplicitCastInputTypes with InputTypeMarker {
   override protected def withNewChildInternal(newChild: Expression): ImplicitCastInput =
     copy(child = newChild)
 }
@@ -104,13 +163,13 @@ case class ImplicitCastInput(child: Expression, expectedType: AbstractDataType)
  * Analysis-only marker that requires `child` to already match `expectedType` (no cast is inserted),
  * failing analysis otherwise. Removed at the end of analysis like [[ImplicitCastInput]].
  */
-case class TypeCheckInput(child: Expression, expectedType: AbstractDataType)
-  extends UnaryExpression with Unevaluable with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(expectedType)
-  override def dataType: DataType = child.dataType
-  override def nullable: Boolean = child.nullable
-  override lazy val canonicalized: Expression = child.canonicalized
-  final override val nodePatterns: Seq[TreePattern] = Seq(INPUT_TYPE_MARKER)
+case class TypeCheckInput(
+    child: Expression,
+    expectedType: AbstractDataType,
+    funcName: String = "",
+    argIndex: Int = 0,
+    callSql: String = "")
+  extends UnaryExpression with ExpectsInputTypes with InputTypeMarker {
   override protected def withNewChildInternal(newChild: Expression): TypeCheckInput =
     copy(child = newChild)
 }
@@ -150,12 +209,17 @@ trait DelegateFunction extends ExpressionBuilder {
       throw QueryCompilationErrors.wrongNumArgsError(
         funcName, Seq(inputTypes.length), expressions.length)
     }
+    // The pretty rendering of the high-level call (e.g. `right('abcd', array(1))`), so a marker
+    // that survives a failed type check reports the error against the delegate call -- exactly as
+    // the pre-delegate function did -- rather than leaking the internal marker name. Matches the
+    // `toPrettySQL`-based `sqlExpr` the fixed-point analyzer produced before this migration.
+    val callSql = s"$name(${expressions.map(toPrettySQL(_)).mkString(", ")})"
     val args = expressions.zipWithIndex.map { case (e, i) =>
       val expected = if (i < inputTypes.length) inputTypes(i) else AnyDataType
       expected match {
         case AnyDataType => e
-        case t if implicitCast => ImplicitCastInput(e, t)
-        case t => TypeCheckInput(e, t)
+        case t if implicitCast => ImplicitCastInput(e, t, name, i, callSql)
+        case t => TypeCheckInput(e, t, name, i, callSql)
       }
     }
     DelegateExpression(name, expressions, lower(args))

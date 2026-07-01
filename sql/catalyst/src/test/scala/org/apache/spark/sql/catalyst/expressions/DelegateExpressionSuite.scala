@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{RemoveInputTypeMarkers, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -123,6 +124,24 @@ class DelegateExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // AnyFn has no inputTypes -> it is variadic and `lower` owns the arg handling, so no arity
     // check.
     assert(AnyFn.build(AnyFn.name, Seq(Literal(1), Literal(2))).isInstanceOf[DelegateExpression])
+  }
+
+  test("a surviving marker reports transparently: delegate-call sql and the real argument index") {
+    // A marker only survives when its type check failed, and `CheckAnalysis` (bottom-up) reports it
+    // before the enclosing delegate. It must therefore look like the high-level call, not an
+    // internal shim: its `sql` is the delegate call, and its type-check error carries the true
+    // argument position rather than the marker's only-child index 0 ("first").
+    val marker = ImplicitCastInput(
+      Literal(1L), StringType, funcName = "castfn", argIndex = 1, callSql = "castfn(x, 1)")
+    assert(marker.sql == "castfn(x, 1)")
+    marker.checkInputDataTypes() match {
+      case m: DataTypeMismatch =>
+        assert(m.messageParameters("paramIndex") == "second",
+          s"expected the real argument index, got ${m.messageParameters("paramIndex")}")
+      case other => fail(s"expected a DataTypeMismatch, got $other")
+    }
+    // With no supplied context (direct construction), `sql` falls back to the plain node rendering.
+    assert(ImplicitCastInput(Literal(1L), StringType).sql == s"implicitcastinput(${Literal(1L).sql})")
   }
 
   test("RemoveInputTypeMarkers keeps a failed type-check marker for CheckAnalysis to report") {
