@@ -5119,83 +5119,90 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
-  test("SPARK-57353: CUBE with ORDER BY - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: CUBE with ORDER BY - single pass resolver (tentative fallback)") {
+    // ORDER BY + grouping analytics throws ExplicitlyUnsupportedResolverFeature in pure
+    // single-pass (SPARK-57346). In tentative mode, the HybridAnalyzer falls back to legacy.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
             |GROUP BY CUBE(a) ORDER BY s""".stripMargin),
-        Row(1, 30) :: Row(2, 30) :: Row(null, 60) :: Nil,
-        checkToRDD = false)
+        Row(1, 30) :: Row(2, 30) :: Row(null, 60) :: Nil)
     }
   }
 
-  test("SPARK-57353: ROLLUP with HAVING - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: ROLLUP with HAVING - single pass resolver (tentative fallback)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
             |GROUP BY ROLLUP(a) HAVING SUM(b) > 30""".stripMargin),
-        Row(null, 60) :: Nil,
-        checkToRDD = false)
+        Row(null, 60) :: Nil)
     }
   }
 
-  test("SPARK-57353: GROUPING SETS with ORDER BY - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: GROUPING SETS with ORDER BY - single pass resolver (tentative fallback)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, b, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
             |GROUP BY a, b GROUPING SETS ((a, b), (a)) ORDER BY s""".stripMargin),
         Row(1, 10, 10) :: Row(1, 20, 20) :: Row(1, null, 30) ::
-          Row(2, 30, 30) :: Row(2, null, 30) :: Nil,
-        checkToRDD = false)
+          Row(2, 30, 30) :: Row(2, null, 30) :: Nil)
     }
   }
 
-  test("SPARK-57353: CUBE with NULL grouping columns - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: CUBE with NULL grouping columns - single pass resolver (tentative fallback)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, SUM(b) as s FROM VALUES (1,10),(null,20),(2,30) AS t(a,b)
             |GROUP BY CUBE(a) ORDER BY s""".stripMargin),
-        Row(1, 10) :: Row(null, 20) :: Row(2, 30) :: Row(null, 60) :: Nil,
-        checkToRDD = false)
+        Row(1, 10) :: Row(null, 20) :: Row(2, 30) :: Row(null, 60) :: Nil)
     }
   }
 
-  test("SPARK-57353: ROLLUP with HAVING filtering all rows - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: ROLLUP with HAVING filtering all rows - single pass resolver" +
+      " (tentative fallback)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
             |GROUP BY ROLLUP(a) HAVING SUM(b) > 100""".stripMargin),
-        Nil,
-        checkToRDD = false)
+        Nil)
     }
   }
 
-  test("SPARK-57353: CUBE with multiple aggregates in ORDER BY - single pass resolver") {
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
-      QueryTest.checkAnswer(
+  test("SPARK-57353: CUBE with multiple aggregates in ORDER BY - single pass resolver" +
+      " (tentative fallback)") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
         sql(
           """SELECT a, SUM(b) as s, COUNT(b) as c
             |FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
             |GROUP BY CUBE(a) ORDER BY COUNT(b), SUM(b)""".stripMargin),
-        Row(2, 30, 1) :: Row(1, 30, 2) :: Row(null, 60, 3) :: Nil,
-        checkToRDD = false)
+        Row(2, 30, 1) :: Row(1, 30, 2) :: Row(null, 60, 3) :: Nil)
     }
   }
 
-  // SPARK-57346: multi-column ROLLUP with HAVING produces wrong results in single-pass
-  // resolver (1 row instead of 4). This test is ignored until SPARK-57346 is fixed.
-  ignore("SPARK-57353: multi-column ROLLUP with HAVING - single pass resolver (SPARK-57346)") {
+  test("SPARK-57353: multi-column ROLLUP with HAVING - single pass resolver (tentative fallback" +
+      ", SPARK-57346)") {
+    // SPARK-57346: multi-column ROLLUP with HAVING previously produced wrong results (1 row
+    // instead of 4) in pure single-pass. Now throws ExplicitlyUnsupportedResolverFeature so
+    // tentative mode falls back to legacy for correct results.
     val query =
       """SELECT a, b, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
         |GROUP BY ROLLUP(a, b) HAVING SUM(b) > 25""".stripMargin
-    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
       val legacyResult = withSQLConf(
-        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false") {
         sql(query).collect().toSeq
       }
       checkAnswer(sql(query), legacyResult)

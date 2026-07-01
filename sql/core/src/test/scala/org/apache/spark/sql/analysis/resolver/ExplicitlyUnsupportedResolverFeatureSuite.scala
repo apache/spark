@@ -44,6 +44,34 @@ class ExplicitlyUnsupportedResolverFeatureSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57353: HAVING with grouping analytics is unsupported (SPARK-57346)") {
+    checkResolution(
+      """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY ROLLUP(a) HAVING SUM(b) > 30""".stripMargin,
+      shouldPass = false,
+      expectedMessage = Some("HAVING with grouping analytics (SPARK-57346)")
+    )
+  }
+
+  test("SPARK-57353: ORDER BY with grouping analytics is unsupported (SPARK-57346)") {
+    checkResolution(
+      """SELECT a, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY CUBE(a) ORDER BY s""".stripMargin,
+      shouldPass = false,
+      expectedMessage = Some("ORDER BY with grouping analytics (SPARK-57346)")
+    )
+  }
+
+  test("SPARK-57353: LCA with grouping analytics is unsupported") {
+    checkResolution(
+      """SELECT a, SUM(b) as total, total + 1
+        |FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY CUBE(a)""".stripMargin,
+      shouldPass = false,
+      expectedMessage = Some("lateral column alias with grouping analytics")
+    )
+  }
+
   private def checkResolution(
       sqlText: String,
       shouldPass: Boolean = false,
