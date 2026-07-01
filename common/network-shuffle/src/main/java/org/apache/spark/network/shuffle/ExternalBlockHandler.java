@@ -75,6 +75,7 @@ public class ExternalBlockHandler extends RpcHandler
   private final OneForOneStreamManager streamManager;
   private final ShuffleMetrics metrics;
   private final MergedShuffleFileManager mergeManager;
+  private final LocalDirValidator localDirValidator;
 
   public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
@@ -86,14 +87,46 @@ public class ExternalBlockHandler extends RpcHandler
   public ExternalBlockHandler(
       TransportConf conf,
       File registeredExecutorFile,
+      String[] allowedLocalDirs,
+      boolean requireAppScopedLocalDirs) throws IOException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+      new NoOpMergedShuffleFileManager(conf, null),
+      new LocalDirValidator(allowedLocalDirs, requireAppScopedLocalDirs));
+  }
+
+  public ExternalBlockHandler(
+      TransportConf conf,
+      File registeredExecutorFile,
       MergedShuffleFileManager mergeManager) throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile), mergeManager);
   }
 
+  public ExternalBlockHandler(
+      TransportConf conf,
+      File registeredExecutorFile,
+      MergedShuffleFileManager mergeManager,
+      String[] allowedLocalDirs,
+      boolean requireAppScopedLocalDirs) throws IOException {
+    this(new OneForOneStreamManager(),
+      new ExternalShuffleBlockResolver(conf, registeredExecutorFile),
+      mergeManager,
+      new LocalDirValidator(allowedLocalDirs, requireAppScopedLocalDirs));
+  }
+
   @VisibleForTesting
   public ExternalShuffleBlockResolver getBlockResolver() {
     return blockManager;
+  }
+
+  /**
+   * Validates the local directories an executor reports against the service's configured roots.
+   * Applied at the RPC boundary so both the block resolver and the merged-shuffle manager only
+   * consume validated paths. Throws {@link IllegalArgumentException} if an entry is not allowed.
+   */
+  public void validateLocalDirs(String[] localDirs, String appId) {
+    localDirValidator.validate(localDirs, appId);
   }
 
   /** Enables mocking out the StreamManager and BlockManager. */
@@ -110,10 +143,19 @@ public class ExternalBlockHandler extends RpcHandler
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager,
       MergedShuffleFileManager mergeManager) {
+    this(streamManager, blockManager, mergeManager, new LocalDirValidator(null, false));
+  }
+
+  private ExternalBlockHandler(
+      OneForOneStreamManager streamManager,
+      ExternalShuffleBlockResolver blockManager,
+      MergedShuffleFileManager mergeManager,
+      LocalDirValidator localDirValidator) {
     this.metrics = new ShuffleMetrics();
     this.streamManager = streamManager;
     this.blockManager = blockManager;
     this.mergeManager = mergeManager;
+    this.localDirValidator = localDirValidator;
   }
 
   @Override
@@ -185,6 +227,9 @@ public class ExternalBlockHandler extends RpcHandler
       try {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
+        // Validate executor-supplied localDirs once here, at the RPC boundary, so both the block
+        // resolver and the merged-shuffle manager only ever consume validated paths.
+        validateLocalDirs(msg.executorInfo.localDirs, msg.appId);
         blockManager.registerExecutor(msg.appId, msg.execId, msg.executorInfo);
         mergeManager.registerExecutor(msg.appId, msg.executorInfo);
         callback.onSuccess(ByteBuffer.wrap(new byte[0]));
