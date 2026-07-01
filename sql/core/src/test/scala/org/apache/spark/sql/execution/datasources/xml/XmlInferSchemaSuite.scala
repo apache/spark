@@ -842,7 +842,41 @@ class XmlInferSchemaSuite
         s"Expected StringType for nano + non-datetime, got ${df.schema("ts").dataType}")
     }
   }
-}  private def writeXmlStringToFile(
+
+  test("SPARK-57810: nanosecond-precision timestamp infers as TimestampType when config is off") {
+    // Production default: TIMESTAMP_NANOS_TYPES_ENABLED = false.
+    // A nano-precision value must still infer as plain TimestampType (micros).
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlNanos = Seq(
+        """<ROW><ts>2020-01-01T12:00:00.123456789+00:00</ts></ROW>""")
+      val df = readData(xmlNanos)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType with config off, got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: 7-digit trailing-zero fractional seconds infers as TimestampType not nanos") {
+    // .1234560 has 7 fractional digits but nanosWithinMicro == 0.
+    // Must infer as TimestampType, not nanos -- semantics are 'nonzero sub-microsecond value'.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlTrailingZero = Seq(
+        """<ROW><ts>2020-01-01T12:00:00.1234560+00:00</ts></ROW>""")
+      val df = readData(xmlTrailingZero)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType for trailing-zero 7 digits, got ${df.schema("ts").dataType}")
+    }
+  }
+}
+
+trait XmlSchemaInferenceCaseSensitivityTests extends QueryTest {
+
+  protected def customSQLConf: Map[String, String] = Map.empty
+
+  private def writeXmlStringToFile(
       xmlString: String,
       dir: File,
       multiline: Boolean = true,
