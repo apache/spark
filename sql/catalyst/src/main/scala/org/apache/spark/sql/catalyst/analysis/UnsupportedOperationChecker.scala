@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.AnyTimestampNanoType
 
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
@@ -554,6 +555,19 @@ object UnsupportedOperationChecker extends Logging {
             throwError(
               "dropDuplicatesWithinWatermark is not supported on streaming DataFrames/DataSets " +
                 "without watermark")(plan)
+          }
+
+          // TODO(SPARK-57843): Handle nanosecond event-time columns in streaming stateful
+          //  operators incl. dropDuplicatesWithinWatermark. Until then, reject them here to
+          //  avoid silent corruption (the exec layer reads event time via getLong assuming
+          //  microsecond precision).
+          val nanoWatermarkAttributes = watermarkAttributes.filter(
+            _.dataType.isInstanceOf[AnyTimestampNanoType])
+          if (nanoWatermarkAttributes.nonEmpty) {
+            throwError(
+              "dropDuplicatesWithinWatermark does not yet support nanosecond-precision " +
+                "event-time columns (SPARK-57843). Use a microsecond-precision timestamp " +
+                "type for the watermark column instead.")(plan)
           }
 
         case c: CoGroup if c.children.exists(_.isStreaming) =>

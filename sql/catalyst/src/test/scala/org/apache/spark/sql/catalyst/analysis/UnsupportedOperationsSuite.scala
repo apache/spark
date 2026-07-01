@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder, TimestampLTZNanosType}
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends LeafCommand
@@ -353,6 +353,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
+
+  // DeduplicateWithinWatermark with nanosecond event-time column should be rejected
+  testError(
+    "streaming plan - DeduplicateWithinWatermark with nanosecond event-time: not supported",
+    Seq("dropDuplicatesWithinWatermark", "nanosecond", "SPARK-57843")) {
+    val nanoAttr = AttributeReference("ts", TimestampLTZNanosType())()
+    val nanoWatermarkMetadata = new MetadataBuilder()
+      .withMetadata(nanoAttr.metadata)
+      .putLong(EventTimeWatermark.delayKey, 1000L)
+      .build()
+    val nanoAttrWithWatermark = nanoAttr.withMetadata(nanoWatermarkMetadata)
+    val nanoStreamRelation = new TestStreamingRelation(nanoAttrWithWatermark)
+    val plan = DeduplicateWithinWatermark(Seq(nanoAttrWithWatermark), nanoStreamRelation)
+    UnsupportedOperationChecker.checkForStreaming(wrapInStreaming(plan), Append)
+  }
 
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(

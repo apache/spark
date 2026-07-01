@@ -1584,6 +1584,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     // are internally represented as Long.
     // TODO(SPARK-57843): Handle nanosecond event-time columns (TimestampLTZNanosType /
     //  TimestampNTZNanosType) in streaming stateful operators incl. dropDuplicatesWithinWatermark.
+    //  Until then, UnsupportedOperationChecker rejects nanos event-time at analysis time.
     val timestamp = data.getLong(eventTimeColOrdinal)
     // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
     val expiresAt = timestamp + DateTimeUtils.millisToMicros(delayThresholdMs)
