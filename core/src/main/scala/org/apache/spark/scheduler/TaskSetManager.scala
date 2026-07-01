@@ -947,26 +947,17 @@ private[spark] class TaskSetManager(
     if (!isShuffleMapTasks || shuffleId.isEmpty) {
       return
     }
-    val status = result.value()
-    status match {
-      case mapStatus: MapStatus =>
-        val sid = shuffleId.get
-        val partitionId = tasks(index).partitionId
-        val mapOutputTrackerMaster = sched.mapOutputTracker
-        val shuffleStatusOpt = mapOutputTrackerMaster.shuffleStatuses.get(sid)
-        shuffleStatusOpt.foreach { shuffleStatus =>
-          // This method is only called for late-arriving or killed attempts, meaning the
-          // partition already has a successful attempt registered. Any MapStatus arriving
-          // here is from a stale (redundant) attempt that also pushed data.
-          // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so
-          // reducers can detect it in merged block chunks.
-          shuffleStatus.markStalePushedPartition(partitionId)
-          logInfo(s"[StalePush] Late/killed attempt tid=$tid " +
-            s"for partition=$partitionId (index=$index), attemptMapId=${mapStatus.mapId}. " +
-            s"Marked mapIndex $partitionId as stale push.")
-        }
-      case _ => // not a shuffle map task result, ignore
-    }
+    // This method is only called for late-arriving or killed attempts, meaning the partition
+    // already has a successful attempt registered. Any MapStatus arriving here is from a
+    // stale (redundant) attempt that also pushed data to the merger.
+    val mapStatus = result.value().asInstanceOf[MapStatus]
+    val sid = shuffleId.get
+    val partitionId = tasks(index).partitionId
+    // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so reducers can detect
+    // the stale data in merged block chunks via chunkBitmaps and fallback if needed.
+    logInfo(s"[StalePush] Late/killed attempt tid=$tid for partition=$partitionId " +
+      s"(index=$index), attemptMapId=${mapStatus.mapId}. Marked as stale push.")
+    sched.mapOutputTracker.markStalePushedPartition(sid, partitionId)
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {

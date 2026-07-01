@@ -995,6 +995,25 @@ private[spark] class MapOutputTrackerMaster(
     incrementEpoch()
   }
 
+  /**
+   * Mark a partition as having stale (redundant) push attempts and bump the epoch so that
+   * reducers with a cached (empty) stale set are forced to re-fetch. Without the epoch bump,
+   * a reducer that already fetched its merge statuses before this mark would keep its stale
+   * set cached and never see the new mark, causing layer-3 fallback to silently not fire.
+   *
+   * @param shuffleId the shuffle id.
+   * @param mapIndex the partition index (== mapIndex, not MapStatus.mapId) of the stale
+   *                 (redundant) attempt; this is NOT MapStatus.mapId
+   */
+  def markStalePushedPartition(shuffleId: Int, mapIndex: Int): Unit = {
+    getShuffleStatusOrError(shuffleId, "markStalePushedPartition")
+      .markStalePushedPartition(mapIndex)
+    // Bump the epoch so reducers with a cached stale set are forced to re-fetch.
+    // A reducer that fetched its merge statuses before this mark otherwise keeps
+    // its (empty) stale set and layer-3 fallback would not fire.
+    incrementEpoch()
+  }
+
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
 
