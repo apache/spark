@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -43,8 +43,17 @@ case class ExpandExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
-  // as UNKNOWN partitioning
-  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
+  // as UNKNOWN partitioning. Expand only replicates rows within a partition and never moves rows
+  // across partitions, so when the single-task optimization is enabled and the child produces a
+  // single partition, we can forward the `SinglePartition` property to avoid an unneeded shuffle.
+  override def outputPartitioning: Partitioning = {
+    if (conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_EXPAND) &&
+        child.outputPartitioning == SinglePartition) {
+      SinglePartition
+    } else {
+      UnknownPartitioning(0)
+    }
+  }
 
   @transient
   override lazy val references: AttributeSet =
