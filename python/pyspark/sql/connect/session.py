@@ -1412,6 +1412,30 @@ class SparkSession:
         return conf
 
     @staticmethod
+    def _terminate_local_connect_server(proc: Any) -> None:
+        """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM.
+
+        The daemon is a POSIX session leader (``start_new_session=True``) and its child JVM stays in
+        that process group, so signalling the group reaps both -- important when the timeout fires
+        before the daemon has wired up its own signal handling. Escalates to SIGKILL if a graceful
+        stop does not take. On non-POSIX platforms it falls back to terminating just the process.
+        """
+        try:
+            if os.name == "posix":
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            else:
+                proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except Exception:
+                if os.name == "posix":
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                else:
+                    proc.kill()
+        except OSError:
+            pass
+
+    @staticmethod
     def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
         """Launch a detached persistent local Connect server and wait until it is reachable.
 
@@ -1518,11 +1542,11 @@ class SparkSession:
                             return "sc://{}:{}".format(disc["host"], disc["port"])
                 time.sleep(0.25)
 
-            # Timed out: do not leave the detached process orphaned.
-            try:
-                proc.terminate()
-            except OSError:
-                pass
+            # Timed out. The daemon may still be inside getOrCreate() -- i.e. before it has wired up
+            # its own SIGTERM handler -- and it has already spawned a child JVM. Signal the whole
+            # process group (the daemon is a session leader via start_new_session) and escalate to
+            # SIGKILL, so the JVM is reaped rather than orphaned.
+            SparkSession._terminate_local_connect_server(proc)
             raise PySparkRuntimeError(
                 errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
                 messageParameters={"reason": "the server did not become ready within 120 seconds"},
