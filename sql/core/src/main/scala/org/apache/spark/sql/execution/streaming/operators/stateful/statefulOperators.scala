@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.{CollectionAccumulator, CompletionIterator, NextIterator, Utils}
 
 
@@ -671,15 +672,33 @@ object WatermarkSupport {
     // use the attribute itself.
     val evictionExpression =
       if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+        val structType = watermarkAttribute.dataType.asInstanceOf[StructType]
+        val endFieldType = structType("end").dataType
         LessThanOrEqual(
           GetStructField(watermarkAttribute, 1),
-          Literal(optionalWatermarkMs.get * 1000))
+          watermarkLiteral(optionalWatermarkMs.get, endFieldType))
       } else {
         LessThanOrEqual(
           watermarkAttribute,
-          Literal(optionalWatermarkMs.get * 1000))
+          watermarkLiteral(optionalWatermarkMs.get, watermarkAttribute.dataType))
       }
     Some(evictionExpression)
+  }
+
+  /**
+   * Build the watermark boundary literal for the given column type.
+   * For microsecond timestamps the boundary is watermarkMs * 1000 (micros).
+   * For nanosecond timestamps the boundary is a TimestampNanosVal with epochMicros =
+   * watermarkMs * 1000 and nanosWithinMicro = 0.
+   */
+  private def watermarkLiteral(watermarkMs: Long, dataType: DataType): Literal = {
+    dataType match {
+      case _: AnyTimestampNanoType =>
+        Literal.create(
+          TimestampNanosVal.fromParts(watermarkMs * 1000, 0.toShort), dataType)
+      case _ =>
+        Literal(watermarkMs * 1000)
+    }
   }
 
   /**
@@ -1563,6 +1582,8 @@ case class StreamingDeduplicateWithinWatermarkExec(
 
     // We expect data type of event time column to be TimestampType or TimestampNTZType which both
     // are internally represented as Long.
+    // TODO(SPARK-57843): Handle nanosecond event-time columns (TimestampLTZNanosType /
+    //  TimestampNTZNanosType) in streaming stateful operators incl. dropDuplicatesWithinWatermark.
     val timestamp = data.getLong(eventTimeColOrdinal)
     // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
     val expiresAt = timestamp + DateTimeUtils.millisToMicros(delayThresholdMs)
