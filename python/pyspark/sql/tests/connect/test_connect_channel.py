@@ -245,6 +245,32 @@ class PathAwareChannelBuilderTests(unittest.TestCase):
         self.assertFalse(chan.use_ssl)
         self.assertTrue(chan.secure, "a token must set the channel to secure")
 
+    def test_ipv6_endpoint(self):
+        # IPv6 literals must be handled and bracket-wrapped, with or without a port.
+        chan = PathAwareChannelBuilder("sc://[::1]:15002/path1")
+        self.assertEqual("[::1]:15002", chan.endpoint)
+        self.assertEqual("[::1]", chan.host)
+        self.assertEqual("/path1", chan.path_prefix)
+
+        chan = PathAwareChannelBuilder("sc://[::1]/path1")
+        self.assertEqual("[::1]:15002", chan.endpoint)
+        self.assertEqual("[::1]", chan.host)
+        self.assertEqual("/path1", chan.path_prefix)
+
+    def test_missing_hostname_raises(self):
+        # A netloc with only a port (empty host) must raise the wrapped error.
+        self.assertRaises(PySparkValueError, PathAwareChannelBuilder, "sc://:15002/p")
+
+    def test_path_port_with_trailing_slash_params(self):
+        # The trailing ":<port>" must still be recognized when combined with the
+        # standard "/;params" form, which leaves a trailing slash on the path.
+        chan = PathAwareChannelBuilder("sc://gateway/app/driver:443/;token=abc")
+        self.assertEqual("gateway:443", chan.endpoint)
+        self.assertEqual("/app/driver", chan.path_prefix)
+        self.assertEqual("abc", chan.token)
+        self.assertTrue(chan.use_ssl)
+        self.assertTrue(chan.secure)
+
     def test_interceptor_added_for_path_prefix(self):
         chan = PathAwareChannelBuilder("sc://gateway/sparkConnect/app-1/driver:443")
         self.assertEqual(1, len(chan._interceptors))

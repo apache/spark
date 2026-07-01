@@ -685,30 +685,31 @@ class PathAwareChannelBuilder(ChannelBuilder):
                     )
                 self.set(kv[0], urllib.parse.unquote(kv[1]))
 
-        netloc = self.url.netloc.split(":")
-        netloc_has_port = len(netloc) == 2
-        if len(netloc) == 1:
-            self._host = netloc[0]
-            self._port = self.default_port()
-        elif netloc_has_port:
-            self._host = netloc[0]
-            self._port = int(netloc[1])
-        else:
+        if not self.url.hostname:
             raise PySparkValueError(
                 errorClass="INVALID_CONNECT_URL",
                 messageParameters={
-                    "detail": f"Target destination '{self.url.netloc}' should match the "
-                    f"'<host>:<port>' pattern. Please update the destination to follow "
-                    f"the correct format, e.g., 'hostname:port'.",
+                    "detail": f"Hostname is missing in the URL: '{self.url.geturl()}'. "
+                    "Please update the URL to follow the correct format, "
+                    "e.g., 'sc://hostname:port'.",
                 },
             )
+        # Use urllib's parser for host/port so IPv6 literals (e.g. `sc://[::1]:15002`)
+        # are handled correctly and bracket-wrapped consistently with
+        # DefaultChannelBuilder.
+        netloc_has_port = self.url.port is not None
+        self._host = f"[{self.url.hostname}]" if ":" in self.url.hostname else self.url.hostname
+        self._port = self.url.port if netloc_has_port else self.default_port()
 
         # Path component is treated as an ingress route prefix for path-based routing
         # (e.g. `sc://host1/path1:443`). A trailing `:PORT` on the
         # final path segment is parsed as the connection port when the netloc has none.
         path = self.url.path
         if path and path != "/":
-            prefix = path
+            # Strip a trailing slash so the port on the final segment is still
+            # recognized when combined with the standard `/;params` form, e.g.
+            # `sc://gateway/app/driver:443/;token=abc` yields path `/app/driver:443/`.
+            prefix = path.rstrip("/")
             last_segment = prefix.rsplit("/", 1)[-1]
             if ":" in last_segment:
                 head, _, port_str = prefix.rpartition(":")
