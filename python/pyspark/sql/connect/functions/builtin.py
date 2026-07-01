@@ -3788,6 +3788,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
 
 
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+timestamp_nanos.__doc__ = pysparkfuncs.timestamp_nanos.__doc__
+
+
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("timestampdiff", lit(unit), start, end)
 
