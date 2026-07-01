@@ -540,4 +540,40 @@ class ConstraintPropagationSuite extends PlanTest {
       case _ => false
     }, s"Should not infer b >= 'hello' for non-binary-stable collation; got: $inferred")
   }
+
+  test("do not substitute attr=literal bindings into EqualNullSafe or attr-attr EqualTo targets") {
+    // EqualNullSafe and attribute-attribute EqualTo are excluded from substitution targets:
+    //  - Substituting into EqualNullSafe(b, a) would yield b <=> 5, a structurally distinct form
+    //    that subquery-reuse matching treats differently from b = 5, causing duplicate subqueries
+    //    (the q78 regression root).
+    //  - Substituting into EqualTo(c, a) would duplicate the transitivity already handled by
+    //    inferAdditionalConstraints, which derives c = 5 from c = a and a = 5.
+    val tr = LocalRelation($"k".int, $"v".int, $"w".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+    val c = resolveColumn(tr, "w")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      EqualNullSafe(b, a),
+      EqualTo(c, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
+
+    // No b <=> 5 should be synthesized from the EqualNullSafe target.
+    assert(!inferred.exists {
+      case EqualNullSafe(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(b) && lit.semanticEquals(Literal(5))
+      case _ => false
+    }, s"Should not infer b <=> 5 from EqualNullSafe target; got: $inferred")
+
+    // No c = 5 should be synthesized from the attr-attr EqualTo target; that derivation
+    // belongs to inferAdditionalConstraints, not literal substitution.
+    assert(!inferred.exists {
+      case EqualTo(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(c) && lit.semanticEquals(Literal(5))
+      case _ => false
+    }, s"Should not infer c = 5 from attr-attr EqualTo target; got: $inferred")
+  }
 }

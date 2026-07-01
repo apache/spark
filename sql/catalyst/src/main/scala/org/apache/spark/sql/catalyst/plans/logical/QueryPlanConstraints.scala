@@ -87,7 +87,8 @@ trait ConstraintHelper {
    * Infers additional constraints by substituting known attribute-to-literal bindings into
    * non-equality predicates. For example, given `a = 5` and `b >= a`, infers `b >= 5`.
    *
-   * [[EqualTo]] and [[EqualNullSafe]] predicates are excluded from substitution targets.
+   * Attribute-to-attribute (and cast-form) [[EqualTo]] and all [[EqualNullSafe]] predicates are
+   * excluded from substitution targets.
    * Substituting into attribute-attribute [[EqualTo]] would duplicate work already done by the
    * transitivity case in [[inferAdditionalConstraints]] (e.g. `a = 5` and `b = a` imply `b = 5`,
    * already derived there). Substituting into [[EqualNullSafe]] would produce a structurally
