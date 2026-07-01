@@ -949,18 +949,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           // Reject session/temp variables in persisted CHECK constraints.
           case a: AddCheckConstraint =>
-            a.checkConstraint.child.collectFirst {
-              case v: VariableReference => v
-            }.foreach { v =>
-              v.failAnalysis(
-                errorClass = "INVALID_TEMP_OBJ_REFERENCE",
-                messageParameters = Map(
-                  "obj" -> "CHECK CONSTRAINT",
-                  "objName" -> toSQLId(
-                    Option(a.checkConstraint.userProvidedName).getOrElse("")),
-                  "tempObj" -> "VARIABLE",
-                  "tempObjName" -> toSQLId(v.originalNameParts)))
-            }
+            CheckConstraint.rejectTempVariables(a.checkConstraint)
 
           case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)

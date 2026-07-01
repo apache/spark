@@ -96,20 +96,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] with QueryErrorsBase {
             )
           }
           // Reject session/temp variables in persisted CHECK constraints.
-          check.child.collectFirst {
-            case v: VariableReference => v
-          }.foreach { v =>
-            // For an inline (unnamed) constraint the name is not yet available here
-            // (it is synthesized later from the table name), so the empty name is intentional.
-            v.failAnalysis(
-              errorClass = "INVALID_TEMP_OBJ_REFERENCE",
-              messageParameters = Map(
-                "obj" -> "CHECK CONSTRAINT",
-                "objName" -> toSQLId(
-                  Option(check.userProvidedName).getOrElse("")),
-                "tempObj" -> "VARIABLE",
-                "tempObjName" -> toSQLId(v.originalNameParts)))
-          }
+          CheckConstraint.rejectTempVariables(check)
         case _ =>
       }
 
