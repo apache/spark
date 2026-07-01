@@ -221,7 +221,6 @@ com.google.guava:guava
 com.google.j2objc:j2objc-annotations
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
-com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
 com.tdunning:json
