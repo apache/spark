@@ -735,23 +735,41 @@ class XmlInferSchemaSuite
   test("incremental type casting yields the same schema as the legacy batch path") {
     // Incremental inference (the default) must produce the same inferred schema as the legacy
     // per-record path across a range of shapes: mixed numerics, nested structs, repeated elements
-    // (arrays), attributes, value tags, and cross-row widening to StringType.
-    val cases = Seq(
-      Seq("""<ROW><a>1</a><b>1.5</b></ROW>""", """<ROW><a>2.5</a><b>3</b></ROW>"""),
-      Seq("""<ROW><n><x>1</x><y>t</y></n></ROW>""", """<ROW><n><x>2.0</x><y>u</y></n></ROW>"""),
-      Seq("""<ROW><arr>1</arr><arr>2</arr><arr>3.5</arr></ROW>"""),
-      Seq("""<ROW><e k="1">text</e></ROW>""", """<ROW><e k="2.5">other</e></ROW>"""),
-      Seq("""<ROW><v>2024-01-15</v></ROW>""", """<ROW><v>2024-01-15T10:00:00</v></ROW>"""),
-      Seq("""<ROW><v>1</v></ROW>""", """<ROW><v>not-a-number</v></ROW>"""))
+    // (arrays), attributes, value tags, cross-row widening to StringType, and -- the case that
+    // makes incremental inference actually differ if the type-so-far is threaded naively --
+    // prefersDecimal fields mixing a decimal and an integer, in both row orders.
+    //
+    // All records are read as a SINGLE partition so that the incremental path actually threads
+    // one record's type into the next within the partition; with the default parallelism each
+    // record lands in its own partition and both paths trivially agree via the final merge.
+    def readOnePartition(xml: Seq[String], options: Map[String, String]): StructType = {
+      val ds = spark.createDataset(spark.sparkContext.parallelize(xml, 1))(Encoders.STRING)
+      spark.read.options(Map("rowTag" -> "ROW") ++ options).xml(ds).schema
+    }
 
-    cases.foreach { xml =>
+    val cases: Seq[(Seq[String], Map[String, String])] = Seq(
+      Seq("""<ROW><a>1</a><b>1.5</b></ROW>""", """<ROW><a>2.5</a><b>3</b></ROW>""") -> Map.empty,
+      Seq("""<ROW><n><x>1</x><y>t</y></n></ROW>""",
+        """<ROW><n><x>2.0</x><y>u</y></n></ROW>""") -> Map.empty,
+      Seq("""<ROW><arr>1</arr><arr>2</arr><arr>3.5</arr></ROW>""") -> Map.empty,
+      Seq("""<ROW><e k="1">text</e></ROW>""", """<ROW><e k="2.5">other</e></ROW>""") -> Map.empty,
+      Seq("""<ROW><v>2024-01-15</v></ROW>""",
+        """<ROW><v>2024-01-15T10:00:00</v></ROW>""") -> Map.empty,
+      Seq("""<ROW><v>1</v></ROW>""", """<ROW><v>not-a-number</v></ROW>""") -> Map.empty,
+      // prefersDecimal: a decimal then an integer, and the reverse order.
+      Seq("""<ROW><a>123.45</a></ROW>""", """<ROW><a>5</a></ROW>""") ->
+        Map("prefersDecimal" -> "true"),
+      Seq("""<ROW><a>5</a></ROW>""", """<ROW><a>123.45</a></ROW>""") ->
+        Map("prefersDecimal" -> "true"))
+
+    cases.foreach { case (xml, options) =>
       val incremental = withSQLConf(
         SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING.key -> "true") {
-        readData(xml).schema
+        readOnePartition(xml, options)
       }
       val batch = withSQLConf(
         SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING.key -> "false") {
-        readData(xml).schema
+        readOnePartition(xml, options)
       }
       assert(incremental === batch, s"incremental and batch schemas differ for: $xml")
     }

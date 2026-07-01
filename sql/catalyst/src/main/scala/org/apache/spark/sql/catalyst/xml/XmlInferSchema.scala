@@ -371,9 +371,14 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     }
 
     val inferredType = typeSoFar match {
-      case NullType | LongType => tryParseLong(value)
-      case _: DecimalType => tryParseDecimal(value)
-      case DoubleType => tryParseDouble(value)
+      // For a numeric type inferred so far, re-enter the cascade at its top (`tryParseLong`)
+      // rather than at the narrower numeric parser. Entering at `tryParseDecimal` would infer an
+      // integer value directly as a narrow `Decimal` (e.g. "5" -> Decimal(1,0)) instead of the
+      // `Long` that from-scratch inference produces; `compatibleType` then merges those to
+      // different Decimal precisions (Decimal(5,2) vs Decimal(22,2)), which would make the
+      // inferred type differ from the legacy path and depend on row order. Re-entering at the top
+      // yields the same representative as from-scratch inference, so the merged type matches.
+      case NullType | LongType | DoubleType | _: DecimalType => tryParseLong(value)
       case BooleanType => tryParseBoolean(value)
       case _: TimeType => tryParseTime(value)
       case DateType => tryParseDate(value)

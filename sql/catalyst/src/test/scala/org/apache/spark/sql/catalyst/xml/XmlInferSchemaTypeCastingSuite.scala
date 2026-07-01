@@ -122,6 +122,21 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferFrom("abc", DoubleType) == StringType)
   }
 
+  test("Refining a numeric type-so-far matches fresh inference (SPARK-57802)") {
+    // Refining a numeric `typeSoFar` re-enters the cascade at `tryParseLong`, so an integer value
+    // infers as `Long` (not a narrow `Decimal`) exactly as from-scratch inference would, and the
+    // merge with `typeSoFar` yields the same type as the legacy path. Otherwise, under
+    // prefersDecimal, a `Decimal`-so-far field seeing "5" would infer `Decimal(1,0)` and merge to
+    // a different (order-dependent) precision than the legacy `Long`-then-merge result.
+    val prefersDecimal = newInferSchema(Map("prefersDecimal" -> "true"))
+    // "5" fresh -> Long; compatibleType(Decimal(5,2), Long) -> Decimal(22,2).
+    assert(prefersDecimal.inferFrom("5", DecimalType(5, 2)) == DecimalType(22, 2))
+    assert(prefersDecimal.inferFrom("5", DoubleType) == DoubleType)
+    // A fractional value still refines through the decimal/double parsers as usual: "3.5" infers
+    // as Decimal(2,1) and merges with Decimal(5,2) to Decimal(5,2).
+    assert(prefersDecimal.inferFrom("3.5", DecimalType(5, 2)) == DecimalType(5, 2))
+  }
+
   test("date is inferred regardless of preferDate") {
     Seq("true", "false").foreach { preferDate =>
       val inferSchema = newInferSchema(Map("preferDate" -> preferDate))
