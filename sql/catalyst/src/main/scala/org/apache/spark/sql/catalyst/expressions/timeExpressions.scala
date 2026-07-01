@@ -648,11 +648,30 @@ object TryMakeTimeExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
     val numArgs = expressions.length
     if (numArgs == 3) {
-      TryEval(MakeTime(expressions(0), expressions(1), expressions(2)))
+      new TryMakeTime(expressions(0), expressions(1), expressions(2))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(3), numArgs)
     }
   }
+}
+
+case class TryMakeTime(
+    hours: Expression,
+    minutes: Expression,
+    secsAndMicros: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(hours: Expression, minutes: Expression, secsAndMicros: Expression) =
+    this(hours, minutes, secsAndMicros,
+      TryEval(MakeTime(hours, minutes, secsAndMicros)))
+
+  override def prettyName: String = "try_make_time"
+
+  override def parameters: Seq[Expression] = Seq(hours, minutes, secsAndMicros)
+
+  override protected def withNewChildInternal(newChild: Expression): TryMakeTime =
+    copy(replacement = newChild)
 }
 
 /**

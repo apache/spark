@@ -25702,6 +25702,54 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
 
 
 @_try_remote_functions
+def try_make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    """
+    Try to create time from hour, minute and second fields.
+    The function returns NULL on invalid inputs.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    hour : :class:`~pyspark.sql.Column` or column name
+        The hour to represent, from 0 to 23.
+    minute : :class:`~pyspark.sql.Column` or column name
+        The minute to represent, from 0 to 59.
+    second : :class:`~pyspark.sql.Column` or column name
+        The second to represent, from 0 to 59.999999.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A column representing the created time, or NULL in case of an error.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_time`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(6, 30, 45.887)], ["hour", "minute", "second"])
+    >>> df.select(sf.try_make_time("hour", "minute", "second")).show()
+    +------------------------------------+
+    |try_make_time(hour, minute, second)|
+    +------------------------------------+
+    |                       06:30:45.887|
+    +------------------------------------+
+
+    >>> df = spark.createDataFrame([(25, 30, 0.0)], ["hour", "minute", "second"])
+    >>> df.select(sf.try_make_time("hour", "minute", "second")).show()
+    +------------------------------------+
+    |try_make_time(hour, minute, second)|
+    +------------------------------------+
+    |                               NULL|
+    +------------------------------------+
+    """
+    return _invoke_function_over_columns("try_make_time", hour, minute, second)
+
+
+@_try_remote_functions
 def time_from_seconds(col: "ColumnOrName") -> Column:
     """
     Creates a TIME value from seconds since midnight (supports fractional seconds).

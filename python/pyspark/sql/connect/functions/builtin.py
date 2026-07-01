@@ -4103,6 +4103,13 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
 make_time.__doc__ = pysparkfuncs.make_time.__doc__
 
 
+def try_make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_make_time", hour, minute, second)
+
+
+try_make_time.__doc__ = pysparkfuncs.try_make_time.__doc__
+
+
 def time_from_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_from_seconds", col)
 
