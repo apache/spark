@@ -18,13 +18,14 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.TimeType
 import org.apache.spark.tags.SlowSQLTest
 
 /**
@@ -113,6 +114,23 @@ class ApproximatePercentileQuerySuite extends SharedSparkSession {
           Seq(250, 500, 750).map(i => DateTimeUtils.toJavaTimestamp(i.toLong)),
           Seq(250, 500, 750).map(i => DateTimeUtils.microsToLocalDateTime(i.toLong)))
       )
+    }
+  }
+
+  test("SPARK-57557: percentile_approx supports TIME type") {
+    withTempView(table) {
+      spark.sql(
+        s"""SELECT * FROM VALUES
+           |  (TIME '01:00:00'), (TIME '02:00:00'), (TIME '03:00:00'),
+           |  (TIME '04:00:00'), (TIME '05:00:00') AS tab(c)
+         """.stripMargin).createOrReplaceTempView(table)
+      val scalarDf = spark.sql(s"SELECT percentile_approx(c, 0.5) FROM $table")
+      // The result type is TIME, mirroring the input column type.
+      assert(scalarDf.schema.head.dataType === TimeType())
+      checkAnswer(scalarDf, Row(LocalTime.of(3, 0)))
+      checkAnswer(
+        spark.sql(s"SELECT percentile_approx(c, array(0.2, 0.5, 0.8D)) FROM $table"),
+        Row(Seq(LocalTime.of(1, 0), LocalTime.of(3, 0), LocalTime.of(4, 0))))
     }
   }
 
