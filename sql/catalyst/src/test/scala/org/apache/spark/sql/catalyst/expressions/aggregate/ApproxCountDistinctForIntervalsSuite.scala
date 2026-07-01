@@ -256,6 +256,44 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     }
   }
 
+  test("TIME type with realistic nanos-of-day magnitudes") {
+    // Realistic time-of-day values in nanos: midnight, 06:00, 12:00, 18:00, near max
+    // LocalTime.MAX is 23:59:59.999999999 = 86_399_999_999_999 nanos
+    val midnight = 0L
+    val sixAm = 6L * 3600L * 1000000000L       // 21_600_000_000_000
+    val noon = 12L * 3600L * 1000000000L        // 43_200_000_000_000
+    val sixPm = 18L * 3600L * 1000000000L       // 64_800_000_000_000
+    val nearMax = 86399999999999L                // 23:59:59.999999999
+
+    val endpoints = Array(midnight, sixAm, noon, sixPm, nearMax)
+      .map(n => LocalTime.ofNanoOfDay(n))
+
+    // Generate distinct values per interval using minute-granularity nanos.
+    // [midnight, 6AM): 100 distinct minutes (00:00 .. 01:39)
+    // [6AM, noon): 80 distinct minutes (06:00 .. 07:19)
+    // [noon, 6PM): 60 distinct minutes (12:00 .. 12:59)
+    // [6PM, nearMax]: 50 distinct values including edge nearMax
+    val minuteNanos = 60L * 1000000000L
+    val interval1 = (0 until 100).map(i => midnight + i * minuteNanos)
+    val interval2 = (0 until 80).map(i => sixAm + i * minuteNanos)
+    val interval3 = (0 until 60).map(i => noon + i * minuteNanos)
+    val interval4 = (0 until 49).map(i => sixPm + i * minuteNanos) :+ nearMax
+
+    val allNanos = interval1 ++ interval2 ++ interval3 ++ interval4
+
+    val (aggFunc, input, buffer) = createEstimator(endpoints, TimeType())
+    allNanos.foreach { n =>
+      input.update(0, n)
+      aggFunc.update(buffer, input)
+    }
+
+    // 4 intervals: [midnight,6AM), [6AM,noon), [noon,6PM), [6PM,nearMax]
+    checkNDVs(
+      ndvs = aggFunc.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
+      expectedNdvs = Array(100, 80, 60, 50),
+      rsd = aggFunc.relativeSD)
+  }
+
   private def checkNDVs(ndvs: Array[Long], expectedNdvs: Array[Long], rsd: Double): Unit = {
     assert(ndvs.length == expectedNdvs.length)
     for (i <- ndvs.indices) {
