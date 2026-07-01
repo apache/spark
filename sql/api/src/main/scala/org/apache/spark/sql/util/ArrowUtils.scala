@@ -60,6 +60,7 @@ private[sql] object ArrowUtils {
 
       // Temporal types
       case DateType | TimestampType | TimestampNTZType | _: TimeType => true
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
 
       // Interval types
       case _: YearMonthIntervalType | _: DayTimeIntervalType | CalendarIntervalType => true

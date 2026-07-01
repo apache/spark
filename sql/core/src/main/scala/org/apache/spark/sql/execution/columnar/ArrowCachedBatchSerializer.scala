@@ -34,7 +34,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
+import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,11 +51,12 @@ import org.apache.spark.util.Utils
  *
  * This serializer:
  *  - Supports both row-based (InternalRow) and columnar (ColumnarBatch) input
- *  - Stores data in Arrow IPC streaming format with optional compression (zstd/lz4)
+ *  - Stores each batch as an internal, schema-less encapsulated Arrow RecordBatch message with
+ *    optional compression (zstd/lz4); the schema is reconstructed from the relation's attributes
+ *    on read (see [[ArrowCachedBatch]])
  *  - Enables zero-copy columnar reads when output is ColumnarBatch
- *  - Uses off-heap memory via Arrow allocators
+ *  - Uses off-heap memory via Arrow allocators during encode/decode
  *  - Collects per-column statistics for partition pruning
- *  - Provides efficient interoperability with Arrow ecosystem
  *
  * Configuration options:
  *  - spark.sql.cache.serializer: Set to this class name to enable
@@ -179,6 +182,10 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
         // Geometry/Geography are represented as an Arrow struct (srid + wkb); the fast-path
         // ArrowColumnReader does not handle them, so route them through the fallback.
         case _: GeometryType | _: GeographyType => true
+        // Nanosecond timestamps write a 16-byte TimestampNanosVal payload into the UnsafeRow;
+        // the fast-path typed readers only write fixed primitives, so use the fallback, which
+        // reads through ArrowColumnVector.getTimestampNTZNanos/getTimestampLTZNanos.
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
         case _ => false
       }
     }
@@ -248,9 +255,25 @@ private object ArrowCachedBatchSerializer {
     }
   }
 
-  /** Whether the schema has a top-level CalendarInterval column (the only overflow-prone type). */
+  /**
+   * Whether the schema contains a CalendarInterval anywhere, including nested inside arrays,
+   * structs, maps, and UDT sql types (mirroring isSupportedByArrow's traversal): the nested Arrow
+   * writers reach the same nanosecond conversion, so a nested interval can overflow just like a
+   * top-level one. DataType.existsRecursively is not used because it does not descend into
+   * UserDefinedType.sqlType.
+   */
   def hasCalendarInterval(schema: Seq[Attribute]): Boolean =
-    schema.exists(_.dataType == CalendarIntervalType)
+    schema.exists(attr => typeContainsCalendarInterval(attr.dataType))
+
+  private def typeContainsCalendarInterval(dt: DataType): Boolean = dt match {
+    case CalendarIntervalType => true
+    case ArrayType(elementType, _) => typeContainsCalendarInterval(elementType)
+    case StructType(fields) => fields.exists(f => typeContainsCalendarInterval(f.dataType))
+    case MapType(keyType, valueType, _) =>
+      typeContainsCalendarInterval(keyType) || typeContainsCalendarInterval(valueType)
+    case udt: UserDefinedType[_] => typeContainsCalendarInterval(udt.sqlType)
+    case _ => false
+  }
 
   /**
    * Fail fast, once per partition on the driver-facing entry points, if any column type cannot be
@@ -260,9 +283,11 @@ private object ArrowCachedBatchSerializer {
    */
   def checkSupportedSchema(schema: Seq[Attribute]): Unit = {
     schema.find(attr => !ArrowUtils.isSupportedByArrow(attr.dataType)).foreach { attr =>
-      throw SparkException.internalError(
-        s"Arrow cache does not support column '${attr.name}' of type ${attr.dataType.sql}. " +
-          "Use the default cache serializer for this data, or cast the column to a supported type.")
+      // Use the structured user-facing condition (UNSUPPORTED_DATATYPE) rather than an internal
+      // error: an unsupported column type is a user-visible limitation, and the docs promise this
+      // condition. It is also the same condition toArrowSchema raises, so callers see one
+      // condition for the capability regardless of which layer detects it first.
+      throw ExecutionErrors.unsupportedDataTypeError(attr.dataType)
     }
   }
 
@@ -314,8 +339,10 @@ private object ArrowCachedBatchSerializer {
     // future.get observe the interrupt and bail early, the worker could still be allocating into,
     // or have already returned, a root that we then neither join nor close -- and the subsequent
     // allocator.close() would race the worker or fail with "Memory was leaked by query". So we
-    // clear the interrupt for the duration and restore it only at the end.
-    val wasInterrupted = Thread.interrupted()
+    // defer every interruption -- whether present on entry or delivered while blocked (throwing
+    // InterruptedException clears the status, so it must be recorded here or it is lost) -- and
+    // restore the flag once draining is done.
+    var wasInterrupted = Thread.interrupted()
     try {
       if (executor != null) {
         executor.shutdown()
@@ -325,8 +352,8 @@ private object ArrowCachedBatchSerializer {
             terminated =
               executor.awaitTermination(Long.MaxValue, java.util.concurrent.TimeUnit.NANOSECONDS)
           } catch {
-            // Re-clear and keep waiting: we must not leave the worker running.
-            case _: InterruptedException => Thread.interrupted()
+            // Record the interruption and keep waiting: we must not leave the worker running.
+            case _: InterruptedException => wasInterrupted = true
           }
         }
       }
@@ -341,7 +368,7 @@ private object ArrowCachedBatchSerializer {
           // The batch was never produced (cancelled/failed); nothing to close.
           case _: java.util.concurrent.CancellationException =>
           case _: java.util.concurrent.ExecutionException =>
-          case _: InterruptedException => // already terminated; nothing in flight
+          case _: InterruptedException => wasInterrupted = true
         }
       }
     } finally {
@@ -362,6 +389,9 @@ private object ArrowCachedBatchSerializer {
       case LongType => new LongColumnStats
       case TimestampType => new LongColumnStats  // Timestamp is stored as Long
       case TimestampNTZType => new LongColumnStats  // TimestampNTZ is stored as Long
+      // Nanosecond timestamps use the TimestampNanosVal-aware collector (min/max bounds), the
+      // same one the default cache serializer uses for these types.
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => new TimestampNanosColumnStats
       case FloatType => new FloatColumnStats
       case DoubleType => new DoubleColumnStats
       case st: StringType => new StringColumnStats(st)
@@ -419,6 +449,10 @@ private object ArrowCachedBatchSerializer {
         case LongType => calculateMinMaxLong(vector, rowCount)
         case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
         case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
+        case t: TimestampNTZNanosType =>
+          calculateMinMaxTimestampNanos(vector, rowCount, t.precision)
+        case t: TimestampLTZNanosType =>
+          calculateMinMaxTimestampNanos(vector, rowCount, t.precision)
         case FloatType => calculateMinMaxFloat(vector, rowCount)
         case DoubleType => calculateMinMaxDouble(vector, rowCount)
         case st: StringType => calculateMinMaxString(vector, rowCount, st.collationId)
@@ -627,6 +661,40 @@ private object ArrowCachedBatchSerializer {
     }
 
     if (hasValue) (min, max) else (null, null)
+  }
+
+  def calculateMinMaxTimestampNanos(
+      vector: org.apache.arrow.vector.FieldVector,
+      rowCount: Int,
+      precision: Int): (Any, Any) = {
+    // Both TimeStampNanoVector (NTZ) and TimeStampNanoTZVector (LTZ) extend TimeStampVector and
+    // store epoch nanoseconds as a long; min/max over the longs matches TimestampNanosVal's
+    // calendar order. Convert the bounds back to TimestampNanosVal since that is the stat schema's
+    // bound type for these columns.
+    var min = Long.MaxValue
+    var max = Long.MinValue
+    var hasValue = false
+
+    (0 until rowCount).foreach { i =>
+      if (!vector.isNull(i)) {
+        val value = vector.asInstanceOf[org.apache.arrow.vector.TimeStampVector].get(i)
+        if (!hasValue) {
+          min = value
+          max = value
+          hasValue = true
+        } else {
+          if (value < min) min = value
+          if (value > max) max = value
+        }
+      }
+    }
+
+    if (hasValue) {
+      (DateTimeUtils.epochNanosToTimestampNanos(min, precision),
+        DateTimeUtils.epochNanosToTimestampNanos(max, precision))
+    } else {
+      (null, null)
+    }
   }
 
   def calculateMinMaxFloat(

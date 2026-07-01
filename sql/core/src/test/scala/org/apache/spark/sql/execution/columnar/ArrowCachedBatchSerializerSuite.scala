@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.columnar
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, Instant, LocalDateTime, LocalTime, Period}
 
 import org.apache.arrow.vector.{
   BigIntVector, BitVector, DateDayVector, DecimalVector,
@@ -26,7 +26,7 @@ import org.apache.arrow.vector.{
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
@@ -444,17 +444,19 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     )
     supported.foreach(ArrowCachedBatchSerializer.checkSupportedSchema)
 
-    // An unsupported type (ObjectType, also via an unsupported-sqlType UDT) must throw a clear
-    // error rather than failing deeper in conversion.
-    val e = intercept[SparkException] {
+    // An unsupported type (ObjectType, also via an unsupported-sqlType UDT) must fail with the
+    // structured user-facing condition the docs promise, not an internal error.
+    val e = intercept[SparkUnsupportedOperationException] {
       ArrowCachedBatchSerializer.checkSupportedSchema(
         Seq(AttributeReference("obj", ObjectType(classOf[AnyRef]))()))
     }
-    assert(e.getMessage.contains("Arrow cache does not support"))
-    intercept[SparkException] {
+    assert(e.getCondition == "UNSUPPORTED_DATATYPE",
+      s"expected UNSUPPORTED_DATATYPE, got ${e.getCondition}")
+    val e2 = intercept[SparkUnsupportedOperationException] {
       ArrowCachedBatchSerializer.checkSupportedSchema(
         Seq(AttributeReference("udt", new UnsupportedUDT())()))
     }
+    assert(e2.getCondition == "UNSUPPORTED_DATATYPE")
   }
 
   test("isSupportedByArrow correctly validates all types") {
@@ -1135,6 +1137,11 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       DayTimeIntervalType()).isInstanceOf[LongColumnStats])
     // TimeType stored as Long (nanoseconds) -> LongColumnStats
     assert(ArrowCachedBatchSerializer.createColumnStats(TimeType(6)).isInstanceOf[LongColumnStats])
+    // Nanosecond timestamps use the TimestampNanosVal-aware collector (min/max bounds).
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimestampNTZNanosType(9))
+      .isInstanceOf[TimestampNanosColumnStats])
+    assert(ArrowCachedBatchSerializer.createColumnStats(TimestampLTZNanosType(9))
+      .isInstanceOf[TimestampNanosColumnStats])
 
     // Non-orderable types: createColumnStats returns a stats class with null bounds.
     assert(ArrowCachedBatchSerializer.createColumnStats(BinaryType).isInstanceOf[BinaryColumnStats])
@@ -1888,6 +1895,8 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     (DateType, Date.valueOf("2020-01-01")),
     (TimestampType, Timestamp.valueOf("2020-01-01 00:00:00")),
     (TimestampNTZType, LocalDateTime.parse("2020-01-01T00:00:00")),
+    (TimestampNTZNanosType(9), LocalDateTime.parse("2020-01-01T00:00:00.123456789")),
+    (TimestampLTZNanosType(9), Instant.parse("2020-01-01T00:00:00.123456789Z")),
     (TimeType(6), LocalTime.parse("12:00:00")),
     (DecimalType(10, 2), BigDecimal("1.23").bigDecimal),
     (YearMonthIntervalType(), Period.ofMonths(3)),
@@ -1920,6 +1929,8 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     case DateType => "date"
     case TimestampType => "timestamp"
     case TimestampNTZType => "timestampNTZ"
+    case _: TimestampNTZNanosType => "timestampNTZNanos"
+    case _: TimestampLTZNanosType => "timestampLTZNanos"
     case _: TimeType => "time"
     case _: YearMonthIntervalType => "yearMonthInterval"
     case _: DayTimeIntervalType => "dayTimeInterval"
@@ -1941,7 +1952,8 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
   private val supportedBranchRepresentatives: Seq[DataType] = Seq(
     BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
     StringType, BinaryType, NullType, DecimalType(10, 2), DateType, TimestampType,
-    TimestampNTZType, TimeType(6), YearMonthIntervalType(), DayTimeIntervalType(),
+    TimestampNTZType, TimestampNTZNanosType(9), TimestampLTZNanosType(9), TimeType(6),
+    YearMonthIntervalType(), DayTimeIntervalType(),
     CalendarIntervalType, ArrayType(IntegerType), StructType(Seq(StructField("a", IntegerType))),
     MapType(StringType, IntegerType), new ExamplePointUDT(), GeometryType(4326),
     GeographyType(4326), VariantType)
@@ -2118,6 +2130,19 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       overflowDf.unpersist()
       InMemoryRelation.clearSerializer()
     }
+
+    // The same diagnostic must cover intervals nested inside complex types: the recursive Arrow
+    // writers reach the same nanosecond conversion, so hasCalendarInterval must detect them.
+    val nestedDf =
+      singlePartDf(Seq(Seq(overflow)), ArrayType(CalendarIntervalType)).cache()
+    try {
+      val e = intercept[Exception](nestedDf.count())
+      assert(Utils.exceptionString(e).contains("Arrow cache cannot represent a CalendarInterval"),
+        s"expected the clear diagnostic for a nested interval, got: ${Utils.exceptionString(e)}")
+    } finally {
+      nestedDf.unpersist()
+      InMemoryRelation.clearSerializer()
+    }
   }
 
   test("nonpositive maxRecordsPerBatch caches all rows in a single batch") {
@@ -2265,6 +2290,43 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     val result = ArrowCachedBatchSerializer.drainAndClosePrefetch(executor, future)
     assert(result == null)
     assert(Thread.interrupted(), "the interrupt status must be restored (and cleared here)")
+    // If the produced root was not closed, this throws "Memory was leaked by query".
+    alloc.close()
+  }
+
+  test("drainAndClosePrefetch preserves an interrupt delivered while awaiting the worker") {
+    // An InterruptedException thrown by awaitTermination clears the interrupt status, so an
+    // interrupt delivered while the drain is blocked (not just one present on entry) must be
+    // recorded and restored, or the task thread loses its cancellation signal.
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      StructType(Seq(StructField("v", IntegerType))), "UTC", false, false)
+    val alloc =
+      ArrowUtils.rootAllocator.newChildAllocator("test-drain-interrupt-2", 0, Long.MaxValue)
+    val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    val workerGate = new java.util.concurrent.CountDownLatch(1)
+    val workerStarted = new java.util.concurrent.CountDownLatch(1)
+    val future = executor.submit(new java.util.concurrent.Callable[VectorSchemaRoot] {
+      override def call(): VectorSchemaRoot = {
+        workerStarted.countDown()
+        workerGate.await() // hold the worker so the drain must block waiting for it
+        val root = VectorSchemaRoot.create(arrowSchema, alloc)
+        root.allocateNew()
+        root
+      }
+    })
+    @volatile var restored = false
+    val drainer = new Thread(() => {
+      ArrowCachedBatchSerializer.drainAndClosePrefetch(executor, future)
+      restored = Thread.currentThread().isInterrupted
+    })
+    assert(workerStarted.await(10, java.util.concurrent.TimeUnit.SECONDS))
+    drainer.start()
+    Thread.sleep(100) // let the drainer block in awaitTermination
+    drainer.interrupt() // delivered while blocked (or recorded on the next await entry)
+    workerGate.countDown() // now let the worker finish and produce the root
+    drainer.join(30000)
+    assert(!drainer.isAlive, "drainer must finish once the worker completes")
+    assert(restored, "an interrupt delivered during the drain must be restored, not swallowed")
     // If the produced root was not closed, this throws "Memory was leaked by query".
     alloc.close()
   }

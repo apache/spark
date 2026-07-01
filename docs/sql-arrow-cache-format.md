@@ -29,9 +29,10 @@ The Arrow cache format offers several advantages over the default cache format:
 
 - **Zero-copy reads** when input is already in Arrow format (e.g., Arrow-based data sources, re-caching Arrow cached data)
 - **Better filter pushdown** with min/max statistics for partition pruning
-- **Off-heap memory management** via Arrow allocators
-- **Efficient compression** with zstd and lz4 codecs
-- **Arrow ecosystem interoperability** for data sharing
+- **Compact columnar layout** with zstd compression support
+
+Note that the cached bytes are an internal format (a schema-less Arrow RecordBatch payload), not
+a complete Arrow IPC stream, so they are not directly readable by external Arrow tooling.
 
 **Note**: Spark's built-in Parquet/ORC readers use internal column vectors (`OnHeapColumnVector`/`OffHeapColumnVector`), not Arrow format, so they don't benefit from zero-copy optimization.
 
@@ -83,8 +84,9 @@ spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
 
 Available options:
 - `none` - No compression (fastest, largest size, **default**)
-- `lz4` - LZ4 compression (fast, good compression)
-- `zstd` - Zstandard compression (slower, best compression)
+- `zstd` - Zstandard compression (best compression; tunable level)
+- `lz4` - LZ4 compression. Not recommended: Arrow's Java LZ4 codec is implemented with the
+  pure-Java Commons Compress framed LZ4 streams and is much slower than zstd
 
 For zstd, you can also configure the compression level. Positive values (up to 22) give better
 compression but slower speed; negative values give ultra-fast compression with lower ratios:
@@ -228,7 +230,7 @@ these are released as soon as the encode/decode completes.
   proportional to a single batch, not to the total cached size. It generally does not need to grow
   with the size of the cache.
 - Arrow cache is often **more memory-efficient** than the default cache for the heap-resident bytes:
-  efficient zstd/lz4 compression, a compact columnar layout without per-value Java object overhead,
+  efficient zstd compression, a compact columnar layout without per-value Java object overhead,
   and better compression ratios for strings and complex types.
 
 **Memory Cleanup**:
@@ -303,8 +305,8 @@ If Arrow cache is slower than expected:
    // or, for read-heavy workloads where memory is not the constraint:
    spark.conf.set("spark.sql.execution.arrow.compression.codec", "none")
    ```
-   Note: `lz4` is not recommended unless the native LZ4 library is on the classpath. Without it,
-   Arrow falls back to the pure-Java Commons Compress LZ4, which is far slower than zstd.
+   Note: `lz4` is not recommended. Arrow's Java LZ4 codec always uses the pure-Java Commons
+   Compress framed LZ4 implementation, which is far slower than zstd.
 
 3. Increase batch size (if memory allows):
    ```scala
@@ -368,7 +370,7 @@ object ArrowCacheExample {
 2. **Enable Statistics**: Let Arrow cache collect min/max for filter pushdown
 3. **Monitor Memory**: Watch cache block sizes in the Spark UI Storage tab; the cached data lives on the JVM heap
 4. **Test First**: Benchmark your workload before production deployment
-5. **Compression**: Start with `none` for read-heavy workloads, or `zstd` (default level 3) when memory matters; avoid `lz4` unless the native LZ4 library is on the classpath
+5. **Compression**: Start with `none` for read-heavy workloads, or `zstd` (default level 3) when memory matters; avoid `lz4` (Arrow's Java LZ4 codec is pure-Java Commons Compress and much slower than zstd)
 6. **Vectorization**: Enable vectorized reader for primitive-heavy workloads
 
 ## Further Reading

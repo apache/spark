@@ -121,15 +121,10 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         }
       }
 
-      // NOTE: LZ4 compression benchmarks are commented out because Arrow's LZ4 implementation
-      // requires the optional lz4-java native library dependency. Without it, Arrow falls back
-      // to Apache Commons Compress pure-Java LZ4 implementation which is extremely slow
-      // (~50x slower than zstd). To enable fast LZ4 benchmarks, add this dependency to pom.xml:
-      //   <dependency>
-      //     <groupId>org.lz4</groupId>
-      //     <artifactId>lz4-java</artifactId>
-      //     <version>1.8.0</version>
-      //   </dependency>
+      // NOTE: LZ4 compression benchmarks are commented out because Arrow's Java LZ4 codec
+      // (Lz4CompressionCodec) is implemented with the pure-Java Commons Compress framed LZ4
+      // streams unconditionally -- it has no faster native-backed path -- and measured roughly
+      // 50x slower than zstd here, which would dominate the benchmark's wall-clock time.
 
       // // Run Arrow cache with lz4 compression benchmark
       // benchmark.addCase("Arrow cache - write + read (lz4)") { _ =>

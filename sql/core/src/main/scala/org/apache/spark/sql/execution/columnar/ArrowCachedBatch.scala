@@ -21,22 +21,27 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.columnar.SimpleMetricsCachedBatch
 
 /**
- * A [[SimpleMetricsCachedBatch]] implementation that stores Arrow RecordBatch data
- * in Apache Arrow IPC streaming format.
+ * A [[SimpleMetricsCachedBatch]] implementation that stores one Arrow RecordBatch as an internal,
+ * schema-less encapsulated IPC RecordBatch message.
+ *
+ * The payload is deliberately NOT a complete Arrow IPC stream: it carries no Schema message and
+ * no end-of-stream marker, so a standard `ArrowStreamReader` cannot consume it. The schema is
+ * constant for the whole cached relation and is reconstructed from the relation's attributes on
+ * read (via `deserializeRecordBatch`), which avoids repeating the schema bytes in every cached
+ * batch. This is an internal cache format, not an interchange format.
  *
  * The batch contains:
  *  - `numRows`: Number of rows in this batch
- *  - `arrowData`: Serialized Arrow RecordBatch in IPC streaming format (with optional compression)
+ *  - `arrowData`: One encapsulated Arrow RecordBatch message (with optional compression)
  *  - `stats`: Per-column statistics for partition pruning (upperBound, lowerBound, nullCount, etc.)
  *
  * This format enables:
  *  - Zero-copy columnar reads when output is ColumnarBatch with ArrowColumnVector
- *  - Efficient interoperability with Arrow ecosystem
- *  - Off-heap memory management via Arrow allocators
+ *  - Off-heap memory management via Arrow allocators during encode/decode
  *  - Built-in compression support (zstd, lz4) at Arrow level
  *
  * @param numRows Number of rows in this cached batch
- * @param arrowData Serialized Arrow RecordBatch in IPC streaming format
+ * @param arrowData One encapsulated Arrow RecordBatch message
  * @param stats Per-column statistics as InternalRow (5 fields per column:
  *              upperBound, lowerBound, nullCount, rowCount, sizeInBytes)
  */
