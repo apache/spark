@@ -24,15 +24,13 @@ import org.apache.spark.sql.catalyst.expressions.{
   BinaryComparison,
   Cast,
   Equality,
-  Expression,
-  Literal
+  Expression
 }
 import org.apache.spark.sql.types.{
   AnsiIntervalType,
   CalendarIntervalType,
   DataType,
   DoubleType,
-  NullType,
   StringTypeExpression,
   TimestampType,
   TimestampTypeExpression
@@ -63,17 +61,11 @@ object StringPromotionTypeCoercion {
     case p @ BinaryComparison(left, right)
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
       val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
-      p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
+      p.withNewChildren(Seq(
+        TypeCoercionHelper.castExpr(left, commonType),
+        TypeCoercionHelper.castExpr(right, commonType)))
 
     case other => other
-  }
-
-  private def castExpr(expr: Expression, targetType: DataType): Expression = {
-    (expr.dataType, targetType) match {
-      case (NullType, dt) => Literal.create(null, targetType)
-      case (l, dt) if (l != dt) => Cast(expr, targetType)
-      case _ => expr
-    }
   }
 
   private def isIntervalType(dt: DataType): Boolean = dt match {

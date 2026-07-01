@@ -422,6 +422,13 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(AnsiTypeCoercion.ImplicitTypeCasts,
       NumericTypeUnaryExpression(Literal.create(null, NullType)),
       NumericTypeUnaryExpression(Literal.create(null, DoubleType)))
+
+    // SPARK-57806: a NullType expression with side effects must be wrapped in Cast, not replaced
+    // by a null literal, so that the side effect is preserved.
+    val raiseError = RaiseError(Literal(""))
+    ruleTest(AnsiTypeCoercion.ImplicitTypeCasts,
+      NumericTypeUnaryExpression(raiseError),
+      NumericTypeUnaryExpression(Cast(raiseError, DoubleType)))
   }
 
   test("cast NullType for binary operators") {
