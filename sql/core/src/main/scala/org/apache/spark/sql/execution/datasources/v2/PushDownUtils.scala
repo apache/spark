@@ -69,7 +69,12 @@ object PushDownUtils extends Logging {
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
-        for (filterExpr <- filters) {
+        // Expand struct equality predicates into field-level predicates for pushdown.
+        // Original struct predicates remain in the list and end up as post-scan filters.
+        val expandedFilters = DataSourceStrategy.expandStructPredicatesForPushdown(
+          filters.toSeq, SQLConf.get)
+
+        for (filterExpr <- expandedFilters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
               nestedPredicatePushdownEnabled = true)
