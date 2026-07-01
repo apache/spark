@@ -2000,6 +2000,11 @@
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
           </exclusion>
+          <!-- javax.xml.stream is provided by the JDK (java.xml module) -->
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
