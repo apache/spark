@@ -100,14 +100,21 @@ case class TimeWindow(
   private def inputTypeOnTimeColumn: AbstractDataType = {
     TypeCollection(
       AnyTimestampType,
-      // Below two types cover both time window & session window, since they produce the same type
+      AnyTimestampNanoType,
+      // Below types cover both time window & session window, since they produce the same type
       // of output as window column.
       new StructType()
         .add(StructField("start", TimestampType))
         .add(StructField("end", TimestampType)),
       new StructType()
         .add(StructField("start", TimestampNTZType))
-        .add(StructField("end", TimestampNTZType))
+        .add(StructField("end", TimestampNTZType)),
+      new StructType()
+        .add(StructField("start", TimestampNTZNanosType()))
+        .add(StructField("end", TimestampNTZNanosType())),
+      new StructType()
+        .add(StructField("start", TimestampLTZNanosType()))
+        .add(StructField("end", TimestampLTZNanosType()))
     )
   }
 
@@ -251,5 +258,66 @@ case class PreciseTimestampConversion(
   override def nullSafeEval(input: Any): Any = input
 
   override protected def withNewChildInternal(newChild: Expression): PreciseTimestampConversion =
+    copy(child = newChild)
+}
+
+/**
+ * Expression used internally to convert nanosecond-precision timestamp types
+ * ([[TimestampNTZNanosType]] / [[TimestampLTZNanosType]]) to [[LongType]] (total epoch
+ * nanoseconds) and back. Used in time windowing for nanosecond-precision inputs.
+ *
+ * Forward direction (nanos type -> Long): packs [[TimestampNanosVal]] into a single int64 of
+ * epoch-nanoseconds via `epochMicros * 1000 + nanosWithinMicro`.
+ *
+ * Reverse direction (Long -> nanos type): reconstructs [[TimestampNanosVal]] from
+ * epoch-nanoseconds via `floorDiv/floorMod`, preserving full precision.
+ */
+case class PreciseTimestampNanosConversion(
+    child: Expression,
+    fromType: DataType,
+    toType: DataType,
+    precision: Int) extends UnaryExpression with ExpectsInputTypes {
+  import org.apache.spark.unsafe.types.TimestampNanosVal
+
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(fromType)
+  override def dataType: DataType = toType
+
+  private val isToLong: Boolean = toType == LongType
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    if (isToLong) {
+      // TimestampNanosVal → Long (epoch nanos)
+      ev.copy(code = eval.code +
+        code"""boolean ${ev.isNull} = ${eval.isNull};
+           |long ${ev.value} = ${eval.isNull} ? 0L :
+           |  Math.addExact(
+           |    Math.multiplyExact(${eval.value}.epochMicros, 1000L),
+           |    (long) ${eval.value}.nanosWithinMicro);
+         """.stripMargin)
+    } else {
+      // Long (epoch nanos) → TimestampNanosVal
+      ev.copy(code = eval.code +
+        code"""boolean ${ev.isNull} = ${eval.isNull};
+           |org.apache.spark.unsafe.types.TimestampNanosVal ${ev.value} = ${eval.isNull} ? null :
+           |  org.apache.spark.sql.catalyst.util.DateTimeUtils
+           |    .epochNanosToTimestampNanos(${eval.value}, $precision);
+         """.stripMargin)
+    }
+  }
+
+  override def nullSafeEval(input: Any): Any = {
+    if (isToLong) {
+      val v = input.asInstanceOf[TimestampNanosVal]
+      Math.addExact(Math.multiplyExact(v.epochMicros, 1000L), v.nanosWithinMicro.toLong)
+    } else {
+      org.apache.spark.sql.catalyst.util.DateTimeUtils
+        .epochNanosToTimestampNanos(input.asInstanceOf[Long], precision)
+    }
+  }
+
+  override protected def withNewChildInternal(
+      newChild: Expression): PreciseTimestampNanosConversion =
     copy(child = newChild)
 }

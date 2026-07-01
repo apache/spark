@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, ExpectsInputTypes, Expression, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, PreciseTimestampNanosConversion, SessionWindow, Subtract, TimeWindow, UnaryExpression, WindowTime}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimestampNanoType, CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -39,6 +41,46 @@ object TimeWindowResolution {
   final val WINDOW_END = "end"
   final val SESSION_START = "start"
   final val SESSION_END = "end"
+
+  /** Scale factor from microseconds to nanoseconds. */
+  private final val NANOS_PER_MICRO = 1000L
+
+  /** Returns true if the given data type is a nanosecond-precision timestamp type. */
+  private def isNanosType(dt: DataType): Boolean = dt.isInstanceOf[AnyTimestampNanoType]
+
+  /** Extracts the precision from a nanosecond timestamp type. Defaults to 9 for non-nanos. */
+  private def nanosPrecision(dt: DataType): Int = dt match {
+    case t: TimestampNTZNanosType => t.precision
+    case t: TimestampLTZNanosType => t.precision
+    case _ => 9
+  }
+
+  /** Converts a timestamp expression to Long (epoch micros or epoch nanos). */
+  private def timestampToLong(expr: Expression, dataType: DataType): Expression = {
+    if (isNanosType(dataType)) {
+      PreciseTimestampNanosConversion(expr, dataType, LongType, nanosPrecision(dataType))
+    } else {
+      PreciseTimestampConversion(expr, dataType, LongType)
+    }
+  }
+
+  /** Converts a Long expression (epoch micros or epoch nanos) back to timestamp type. */
+  private def longToTimestamp(expr: Expression, dataType: DataType): Expression = {
+    if (isNanosType(dataType)) {
+      PreciseTimestampNanosConversion(expr, LongType, dataType, nanosPrecision(dataType))
+    } else {
+      PreciseTimestampConversion(expr, LongType, dataType)
+    }
+  }
+
+  /** Scales a duration in microseconds to the appropriate unit for the given timestamp type. */
+  private def scaleDuration(microsDuration: Long, dataType: DataType): Long = {
+    if (isNanosType(dataType)) {
+      Math.multiplyExact(microsDuration, NANOS_PER_MICRO)
+    } else {
+      microsDuration
+    }
+  }
 
   /**
    * Synthesizes the [[Project]]/[[Expand]]+[[Filter]] sub-plan for a resolved [[TimeWindow]] and
@@ -60,20 +102,23 @@ object TimeWindowResolution {
       .build()
 
     def getWindow(i: Int, dataType: DataType): Expression = {
-      val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
-      val remainder = (timestamp - window.startTime) % window.slideDuration
+      val timestamp = timestampToLong(window.timeColumn, dataType)
+      val windowDuration = scaleDuration(window.windowDuration, dataType)
+      val slideDuration = scaleDuration(window.slideDuration, dataType)
+      val startTime = scaleDuration(window.startTime, dataType)
+      val remainder = (timestamp - startTime) % slideDuration
       val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
-        remainder + window.slideDuration)), Some(remainder))
-      val windowStart = lastStart - i * window.slideDuration
-      val windowEnd = windowStart + window.windowDuration
+        remainder + slideDuration)), Some(remainder))
+      val windowStart = lastStart - i * slideDuration
+      val windowEnd = windowStart + windowDuration
 
       // We make sure value fields are nullable since the dataType of TimeWindow defines them
       // as nullable.
       CreateNamedStruct(
         Literal(WINDOW_START) ::
-          PreciseTimestampConversion(windowStart, LongType, dataType).castNullable() ::
+          longToTimestamp(windowStart, dataType).castNullable() ::
           Literal(WINDOW_END) ::
-          PreciseTimestampConversion(windowEnd, LongType, dataType).castNullable() ::
+          longToTimestamp(windowEnd, dataType).castNullable() ::
           Nil)
     }
 
@@ -138,7 +183,7 @@ object TimeWindowResolution {
       SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
 
     val sessionStart =
-      PreciseTimestampConversion(session.timeColumn, session.timeColumn.dataType, LongType)
+      timestampToLong(session.timeColumn, session.timeColumn.dataType)
     val gapDuration = session.gapDuration match {
       case expr if expr.dataType == CalendarIntervalType =>
         expr
@@ -147,17 +192,24 @@ object TimeWindowResolution {
       case other =>
         throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
     }
-    val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
-      session.timeColumn.dataType, LongType)
+    val sessionEnd = if (isNanosType(session.timeColumn.dataType)) {
+      // For nanosecond-precision timestamps, TimestampAddInterval does not support
+      // CalendarIntervalType. Compute session end in the epoch-nanos Long domain directly:
+      // sessionStart + (interval.days * NANOS_PER_DAY + interval.microseconds * 1000)
+      val gapNanos = CalendarIntervalToNanos(gapDuration)
+      sessionStart + gapNanos
+    } else {
+      timestampToLong(session.timeColumn + gapDuration, session.timeColumn.dataType)
+    }
 
     // We make sure value fields are nullable since the dataType of SessionWindow defines them
     // as nullable.
     val literalSessionStruct = CreateNamedStruct(
       Literal(SESSION_START) ::
-        PreciseTimestampConversion(sessionStart, LongType, session.timeColumn.dataType)
+        longToTimestamp(sessionStart, session.timeColumn.dataType)
           .castNullable() ::
         Literal(SESSION_END) ::
-        PreciseTimestampConversion(sessionEnd, LongType, session.timeColumn.dataType)
+        longToTimestamp(sessionEnd, session.timeColumn.dataType)
           .castNullable() ::
         Nil)
 
@@ -234,20 +286,23 @@ object TimeWindowResolution {
   }
 
   /**
-   * Builds the expression extracting a [[WindowTime]]'s timestamp: the last microsecond of the
-   * source window (`window.end - 1us`). `window.end` is the exclusive upper bound, so using it
-   * as-is would bind the result to the next window under the same window spec.
+   * Builds the expression extracting a [[WindowTime]]'s timestamp: the last unit of the
+   * source window (`window.end - 1us` for microsecond types, `window.end - 1ns` for nanosecond
+   * types). `window.end` is the exclusive upper bound, so using it as-is would bind the result
+   * to the next window under the same window spec.
    */
-  def windowTimeExtractionExpression(windowTime: WindowTime): Expression =
-    PreciseTimestampConversion(
+  def windowTimeExtractionExpression(windowTime: WindowTime): Expression = {
+    val dt = windowTime.dataType
+    // For nanos types, we subtract 1 (nanosecond in epoch-nanos space).
+    // For micros types, we subtract 1 (microsecond in epoch-micros space).
+    // Both subtraction amounts are Literal(1L) because the conversion to Long already handles
+    // the appropriate unit (epoch-nanos vs epoch-micros).
+    longToTimestamp(
       Subtract(
-        PreciseTimestampConversion(
-          GetStructField(windowTime.windowColumn, 1),
-          windowTime.dataType,
-          LongType),
+        timestampToLong(GetStructField(windowTime.windowColumn, 1), dt),
         Literal(1L)),
-      LongType,
-      windowTime.dataType)
+      dt)
+  }
 
   /** Number of overlapping sliding windows a single row can fall into. */
   def overlappingWindowCount(window: TimeWindow): Int =
@@ -264,4 +319,44 @@ object TimeWindowResolution {
     } else {
       true
     }
+}
+
+/**
+ * Internal expression that converts a [[CalendarInterval]] to total nanoseconds as a [[Long]].
+ * Used by session window rewrite for nanosecond-precision timestamp types where
+ * [[TimestampAddInterval]] does not support [[CalendarIntervalType]] operands.
+ *
+ * Computes: `interval.days * NANOS_PER_DAY + interval.microseconds * NANOS_PER_MICROS`.
+ * Months are assumed to be zero (session window rejects monthly intervals).
+ */
+private[analysis] case class CalendarIntervalToNanos(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+  import org.apache.spark.sql.catalyst.util.DateTimeConstants.{NANOS_PER_DAY, NANOS_PER_MICROS}
+
+  override def nullIntolerant: Boolean = true
+  override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
+  override def dataType: DataType = LongType
+
+  override def nullSafeEval(input: Any): Any = {
+    val interval = input.asInstanceOf[CalendarInterval]
+    Math.addExact(
+      Math.multiplyExact(interval.days.toLong, NANOS_PER_DAY),
+      Math.multiplyExact(interval.microseconds, NANOS_PER_MICROS))
+  }
+
+  override def doGenCode(
+      ctx: CodegenContext,
+      ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(code = eval.code +
+      code"""boolean ${ev.isNull} = ${eval.isNull};
+         |long ${ev.value} = ${eval.isNull} ? 0L :
+         |  Math.addExact(
+         |    Math.multiplyExact((long) ${eval.value}.days, ${NANOS_PER_DAY}L),
+         |    Math.multiplyExact(${eval.value}.microseconds, ${NANOS_PER_MICROS}L));
+       """.stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): CalendarIntervalToNanos =
+    copy(child = newChild)
 }
