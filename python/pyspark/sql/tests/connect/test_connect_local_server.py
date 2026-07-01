@@ -17,6 +17,7 @@
 
 import json
 import os
+import shutil
 import socket
 import tempfile
 import time
@@ -61,11 +62,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
-            try:
-                os.remove(self._discovery)
-            except OSError:
-                pass
-            os.rmdir(self._tmpdir)
+            # Remove the whole scratch dir: besides the discovery file it may hold a .lock file,
+            # seed-conf temp files, and a seeded warehouse directory.
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     # -- discovery / reuse-decision logic (no real server) ----------------------------------------
 
@@ -125,6 +124,57 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     def test_stop_when_no_server_is_safe(self) -> None:
         self.assertFalse(RemoteSparkSession._stop_local_connect_server())
+
+    def test_reuse_from_discovery_none_when_absent(self) -> None:
+        self.assertIsNone(RemoteSparkSession._reuse_from_discovery())
+
+    def test_local_port_available(self) -> None:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            listener.bind(("localhost", 0))
+            listener.listen(1)
+            taken = listener.getsockname()[1]
+            self.assertFalse(RemoteSparkSession._local_port_available(taken))
+        finally:
+            listener.close()
+        # The port is free again once the listener is closed.
+        self.assertTrue(RemoteSparkSession._local_port_available(taken))
+
+    def test_server_conf_seeds_user_confs_and_drops_control_keys(self) -> None:
+        """_local_connect_server_conf keeps user startup confs but not keys the daemon controls."""
+        opts = {
+            "spark.sql.warehouse.dir": "/tmp/wh",
+            "spark.jars.packages": "org.example:lib:1.0",
+            "spark.remote": "local[*]",
+            "spark.master": "local[*]",
+            "spark.connect.authenticate.token": "secret",
+            "spark.connect.grpc.binding.port": "15002",
+            "spark.local.connect.reuse": "true",
+            "spark.local.connect.server.port": "15002",
+            "spark.local.connect.server.idleTimeout": "60",
+        }
+        conf = RemoteSparkSession._local_connect_server_conf(opts)
+        self.assertEqual(conf.get("spark.sql.warehouse.dir"), "/tmp/wh")
+        self.assertEqual(conf.get("spark.jars.packages"), "org.example:lib:1.0")
+        for dropped in (
+            "spark.remote",
+            "spark.master",
+            "spark.connect.authenticate.token",
+            "spark.connect.grpc.binding.port",
+            "spark.local.connect.reuse",
+            "spark.local.connect.server.port",
+            "spark.local.connect.server.idleTimeout",
+        ):
+            self.assertNotIn(dropped, conf)
+
+    def test_start_lock_roundtrip(self) -> None:
+        """Acquiring and releasing the start-up lock creates the lock file and does not error."""
+        fd = RemoteSparkSession._acquire_local_connect_start_lock()
+        try:
+            if fd is not None:  # None only where fcntl is unavailable (e.g. Windows)
+                self.assertTrue(os.path.exists(self._discovery + ".lock"))
+        finally:
+            RemoteSparkSession._release_local_connect_start_lock(fd)
 
     # -- end-to-end: start a real detached server, reconnect to it, verify isolation --------------
 
@@ -191,6 +241,27 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                     break
             time.sleep(0.5)
         self.assertTrue(closed, "server port {} still open after stop".format(port))
+
+    def test_start_seeds_static_conf_on_the_server(self) -> None:
+        """A start-up conf passed by the first caller reaches the daemon's SparkConf.
+
+        Uses a static conf (``spark.sql.warehouse.dir``) that the per-session ``_apply_options``
+        path cannot set on an already-running JVM, so observing it on the server proves the seed
+        conf was forwarded rather than applied client-side afterwards.
+        """
+        warehouse = os.path.join(self._tmpdir, "seeded-wh")
+        opts = {"spark.sql.warehouse.dir": warehouse}
+        endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", opts)
+        spark = None
+        try:
+            spark = RemoteSparkSession.builder.remote(endpoint).create()
+            # Spark normalizes the warehouse dir to a file: URI; the path still identifies our dir,
+            # which proves the seed conf reached the daemon (a per-session apply cannot set it).
+            self.assertTrue(spark.conf.get("spark.sql.warehouse.dir").endswith(warehouse))
+        finally:
+            if spark is not None:
+                self._release(spark)
+            RemoteSparkSession._stop_local_connect_server()
 
 
 if __name__ == "__main__":

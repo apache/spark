@@ -120,6 +120,11 @@ def main() -> None:
     parser.add_argument("--token", default=None)
     parser.add_argument("--discovery", required=True)
     parser.add_argument(
+        "--conf-file",
+        default=None,
+        help="path to a JSON file of extra SparkConf entries to seed the server with",
+    )
+    parser.add_argument(
         "--idle-timeout",
         type=float,
         default=3600.0,
@@ -137,9 +142,15 @@ def main() -> None:
     from pyspark.sql import SparkSession
     from pyspark.version import __version__
 
+    builder = SparkSession.builder.master(args.master)
+    # Seed the caller's start-up confs first so first-run behavior matches the in-process path, then
+    # apply the settings the server itself controls so they always win.
+    if args.conf_file:
+        with open(args.conf_file, "r") as f:
+            for key, value in json.load(f).items():
+                builder = builder.config(key, str(value))
     builder = (
-        SparkSession.builder.master(args.master)
-        .config("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+        builder.config("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
         .config("spark.connect.grpc.binding.port", str(args.port))
         # Match the isolation the in-process `.remote("local[*]")` path sets so per-session
         # artifacts (added jars/files/classes) do not leak across the sessions this server hosts.
