@@ -66,11 +66,11 @@ class InMemoryTableWithTableSample(
       options: CaseInsensitiveStringMap)
     extends InMemoryScanBuilder(tableSchema, options) with SupportsPushDownTableSample {
 
-    private var sampleFraction: Double = 1.0
-    private var sampleSeed: Long = 0L
-    private var sampleMethod: SampleMethod = SampleMethod.BERNOULLI
-    private var sampleWithReplacement: Boolean = false
-    private var samplePushed: Boolean = false
+    protected var sampleFraction: Double = 1.0
+    protected var sampleSeed: Long = 0L
+    protected var sampleMethod: SampleMethod = SampleMethod.BERNOULLI
+    protected var sampleWithReplacement: Boolean = false
+    protected var samplePushed: Boolean = false
 
     override def pushTableSample(
         lowerBound: Double,
@@ -116,6 +116,20 @@ class InMemoryTableWithTableSample(
           sampleFraction, sampleSeed, sampleMethod, sampleWithReplacement)
       } else {
         InMemoryBatchScan(filteredPartitions, schema, tableSchema, options)
+      }
+    }
+
+    protected def hasResultAffectingSample: Boolean = {
+      samplePushed && (sampleWithReplacement || sampleFraction < 1.0)
+    }
+
+    protected def sampleDescription(side: String): Option[String] = {
+      if (samplePushed) {
+        val pct = sampleFraction * 100
+        val method = sampleMethod.toString.toUpperCase(Locale.ROOT)
+        Some(s"$side SAMPLE: $method SAMPLE ($pct)")
+      } else {
+        None
       }
     }
   }
@@ -190,36 +204,12 @@ class InMemoryTableWithJoinAndSample(
         leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         condition: Predicate): Boolean = {
-      pushDownJoin(
-        other,
-        joinType,
-        leftSideRequiredColumnsWithAliases,
-        rightSideRequiredColumnsWithAliases,
-        condition,
-        SupportsPushDownJoin.JoinPushDownInfo.empty())
-    }
-
-    override def supportedPushedOperatorsForJoin(): java.util.Set[
-        SupportsPushDownJoin.PushedOperator] = {
-      util.Collections.singleton(SupportsPushDownJoin.PushedOperator.TABLE_SAMPLE)
-    }
-
-    override def pushDownJoin(
-        other: SupportsPushDownJoin,
-        joinType: JoinType,
-        leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
-        rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
-        condition: Predicate,
-        joinPushDownInfo: SupportsPushDownJoin.JoinPushDownInfo): Boolean = {
-      val leftSample = joinPushDownInfo.leftSideInfo().sample()
-      val rightSample = joinPushDownInfo.rightSideInfo().sample()
-
-      if (Option(leftSample).exists(_.withReplacement()) ||
-          Option(rightSample).exists(_.withReplacement())) {
+      val otherScanBuilder = other.asInstanceOf[InMemoryJoinAndSampleScanBuilder]
+      if (sampleWithReplacement || otherScanBuilder.sampleWithReplacement) {
         return false
       }
 
-      val otherSchema = other.asInstanceOf[InMemoryJoinAndSampleScanBuilder].ownSchema
+      val otherSchema = otherScanBuilder.ownSchema
       val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()
         tableSchema(col.colName()).copy(name = name)
@@ -230,7 +220,7 @@ class InMemoryTableWithJoinAndSample(
       }
       joinedSchema = Some(StructType(leftFields ++ rightFields))
       joinedSampleDescription = Some(
-        Seq(sampleDescription("LEFT", leftSample), sampleDescription("RIGHT", rightSample))
+        Seq(sampleDescription("LEFT"), otherScanBuilder.sampleDescription("RIGHT"))
           .flatten
           .mkString(" "))
       true
@@ -243,16 +233,6 @@ class InMemoryTableWithJoinAndSample(
             data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
             js, tableSchema, options, joinedSampleDescription.getOrElse(""))
         case None => super.build
-      }
-    }
-
-    private def sampleDescription(
-        side: String,
-        sample: SupportsPushDownJoin.TableSample): Option[String] = {
-      Option(sample).map { s =>
-        val pct = (s.upperBound() - s.lowerBound()) * 100
-        val method = s.sampleMethod().toString.toUpperCase(Locale.ROOT)
-        s"$side SAMPLE: $method SAMPLE ($pct)"
       }
     }
 
@@ -272,35 +252,8 @@ class InMemoryTableWithJoinAndSample(
 }
 
 /**
- * An in-memory table that supports TABLESAMPLE pushdown and the sample-aware JOIN pushdown API,
- * but does not acknowledge preserving pushed samples during JOIN pushdown.
- */
-class InMemoryTableWithUnacknowledgedJoinAndSample(
-    name: String,
-    columns: Array[Column],
-    partitioning: Array[Transform],
-    properties: util.Map[String, String])
-  extends InMemoryTableWithJoinAndSample(name, columns, partitioning, properties) {
-
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new InMemoryUnacknowledgedJoinAndSampleScanBuilder(schema, options)
-  }
-
-  class InMemoryUnacknowledgedJoinAndSampleScanBuilder(
-      tableSchema: StructType,
-      options: CaseInsensitiveStringMap)
-    extends InMemoryJoinAndSampleScanBuilder(tableSchema, options) {
-
-    override def supportedPushedOperatorsForJoin(): java.util.Set[
-        SupportsPushDownJoin.PushedOperator] = {
-      util.Set.of()
-    }
-  }
-}
-
-/**
  * An in-memory table that supports TABLESAMPLE pushdown and only the original
- * JOIN pushdown API. Used to test the default sample-aware JOIN pushdown behavior.
+ * JOIN pushdown API. Used to test a connector rejecting pushed samples from pushDownJoin.
  */
 class InMemoryTableWithLegacyJoinAndSample(
     name: String,
@@ -342,7 +295,12 @@ class InMemoryTableWithLegacyJoinAndSample(
         leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         condition: Predicate): Boolean = {
-      val otherSchema = other.asInstanceOf[InMemoryLegacyJoinAndSampleScanBuilder].ownSchema
+      val otherScanBuilder = other.asInstanceOf[InMemoryLegacyJoinAndSampleScanBuilder]
+      if (hasResultAffectingSample || otherScanBuilder.hasResultAffectingSample) {
+        return false
+      }
+
+      val otherSchema = otherScanBuilder.ownSchema
       val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()
         tableSchema(col.colName()).copy(name = name)

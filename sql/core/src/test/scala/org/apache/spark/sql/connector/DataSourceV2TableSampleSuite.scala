@@ -22,8 +22,7 @@ import org.apache.spark.sql.connector.catalog.{
   InMemoryTableWithJoinAndSampleCatalog,
   InMemoryTableWithLegacyJoinAndSampleCatalog,
   InMemoryTableWithLegacyTableSampleCatalog,
-  InMemoryTableWithTableSampleCatalog,
-  InMemoryTableWithUnacknowledgedJoinAndSampleCatalog}
+  InMemoryTableWithTableSampleCatalog}
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -176,8 +175,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         val dfNoSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfNoSample)
 
-        // With the sample-aware join pushdown API, the pushed sample remains
-        // attached to the left side of the pushed join.
+        // The connector preserves its previously pushed sample when pushing down the join.
         val dfWithSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
@@ -236,9 +234,8 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
       sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
       withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-        // At fraction = 1 the sample is a no-op on the result set, so join
-        // pushdown can proceed even for connectors that treat it as ordinary
-        // sample-aware join pushdown input.
+        // At fraction = 1 the sample is a no-op on the result set, so this connector
+        // can safely preserve it while pushing down the join.
         val dfWithSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
@@ -250,7 +247,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
-  test("SPARK-56504: old join pushdown API rejects real pushed samples by default") {
+  test("SPARK-56504: connector rejects join pushdown when it cannot preserve pushed samples") {
     val joinSampleCatalog = "testlegjoinandsample"
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithLegacyJoinAndSampleCatalog])
     val t1 = s"$joinSampleCatalog.ns.t1"
@@ -268,32 +265,6 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(noOpSample)
-
-        val realSample = sql(
-          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
-          s"JOIN $t2 ON $t1.id = $t2.id")
-        checkJoinNotPushed(realSample)
-        checkSamplePushed(realSample, pushed = true)
-      }
-    } finally {
-      sql(s"DROP TABLE IF EXISTS $t1")
-      sql(s"DROP TABLE IF EXISTS $t2")
-    }
-  }
-
-  test("SPARK-56504: join pushdown requires acknowledging pushed samples") {
-    val joinSampleCatalog = "testunackjoinandsample"
-    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithUnacknowledgedJoinAndSampleCatalog])
-    val t1 = s"$joinSampleCatalog.ns.t1"
-    val t2 = s"$joinSampleCatalog.ns.t2"
-    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
-    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
-    try {
-      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
-      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
-      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-        val noSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
-        checkJoinPushed(noSample)
 
         val realSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +

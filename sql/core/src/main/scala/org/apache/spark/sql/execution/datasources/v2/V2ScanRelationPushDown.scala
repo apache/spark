@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
@@ -218,21 +218,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           rightSideRequiredColumnsWithAliases.map(_.prettyString()).mkString(", ")
         )}")
 
-      val joinPushDownInfo = toJoinPushDownInfo(
-        leftHolder.pushedSample, rightHolder.pushedSample)
-      val pushedOperatorsSupported = lBuilder.supportedPushedOperatorsForJoin()
-        .containsAll(joinPushDownInfo.requiredPushedOperators())
-
       if (translatedJoinType.isDefined &&
         translatedCondition.isDefined &&
-        pushedOperatorsSupported &&
         lBuilder.pushDownJoin(
           rBuilder,
           translatedJoinType.get,
           leftSideRequiredColumnsWithAliases,
           rightSideRequiredColumnsWithAliases,
-          translatedCondition.get,
-          joinPushDownInfo)
+          translatedCondition.get)
       ) {
         val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
         val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
@@ -1168,28 +1161,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       sHolder.joinedRelationsPushedDownOperators, optRelationName)
   }
 
-  private def toJoinPushDownInfo(
-      leftSample: Option[TableSampleInfo],
-      rightSample: Option[TableSampleInfo]): SupportsPushDownJoin.JoinPushDownInfo = {
-    new SupportsPushDownJoin.JoinPushDownInfo(
-      new SupportsPushDownJoin.JoinSideInfo(toJoinTableSample(leftSample)),
-      new SupportsPushDownJoin.JoinSideInfo(toJoinTableSample(rightSample)))
-  }
-
-  private def toJoinTableSample(
-      sample: Option[TableSampleInfo]): SupportsPushDownJoin.TableSample = {
-    sample.map { s =>
-      new SupportsPushDownJoin.TableSample(
-        s.lowerBound,
-        s.upperBound,
-        s.withReplacement,
-        s.seed,
-        s.sampleMethod match {
-          case SampleMethod.Bernoulli => SampleMethodV2.BERNOULLI
-          case SampleMethod.System => SampleMethodV2.SYSTEM
-        })
-    }.orNull
-  }
 }
 
 case class ScanBuilderHolder(

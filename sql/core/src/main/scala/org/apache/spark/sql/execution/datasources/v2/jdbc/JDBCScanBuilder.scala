@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.util.Collections
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
@@ -184,27 +182,6 @@ case class JDBCScanBuilder(
       leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
-    pushDownJoin(
-      other,
-      joinType,
-      leftSideRequiredColumnsWithAliases,
-      rightSideRequiredColumnsWithAliases,
-      condition,
-      SupportsPushDownJoin.JoinPushDownInfo.empty())
-  }
-
-  override def supportedPushedOperatorsForJoin(): java.util.Set[
-      SupportsPushDownJoin.PushedOperator] = {
-    Collections.singleton(SupportsPushDownJoin.PushedOperator.TABLE_SAMPLE)
-  }
-
-  override def pushDownJoin(
-      other: SupportsPushDownJoin,
-      joinType: JoinType,
-      leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
-      rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
-      condition: Predicate,
-      joinPushDownInfo: SupportsPushDownJoin.JoinPushDownInfo): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
     }
