@@ -27,7 +27,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger}
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
 
@@ -253,15 +252,6 @@ class AsyncProgressTrackingMicroBatchExecution(
   override protected def getTrigger(): TriggerExecutor = validateAndGetTrigger()
 
   private def validateAndGetTrigger(): TriggerExecutor = {
-    // Sink evolution persists per-sink metadata via the V3 commit log written in the base
-    // MicroBatchExecution.markMicroBatchEnd, which this class overrides with an async write that
-    // only emits V1 commit metadata. The sink metadata would therefore never be persisted, so
-    // reject the combination explicitly instead of silently dropping it.
-    if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
-      throw new IllegalArgumentException(
-        "Async progress tracking cannot be used with streaming sink evolution " +
-          s"(${SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key})")
-    }
     // validate that the pipeline is using a supported sink
     if (!extraOptions
       .getOrElse(

@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.TestUtils
+import org.apache.spark.{SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
@@ -340,17 +340,19 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     val inputData = new MemoryStream[Int](id = 0, spark)
     val ds = inputData.toDF()
 
+    // The sink is intentionally left unnamed: the combination is rejected before the execution is
+    // constructed, so the error does not depend on whether name() is set.
     withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "true") {
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[SparkIllegalArgumentException] {
         ds.writeStream
           .format("noop")
-          .name("evolving_sink")
           .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
           .start()
       }
-      e.getMessage should equal(
-        "Async progress tracking cannot be used with streaming sink evolution " +
-          s"(${SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key})")
+      checkError(
+        e,
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED",
+        parameters = Map.empty)
     }
   }
 
