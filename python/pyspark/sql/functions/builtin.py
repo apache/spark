@@ -13184,6 +13184,57 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    """
+    Creates a nanosecond-precision timestamp (``TIMESTAMP_LTZ(9)``) from the number of
+    nanoseconds since the UTC epoch.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        a column of ``BIGINT`` or ``DECIMAL`` nanosecond values since the UTC epoch.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a ``TIMESTAMP_LTZ(9)`` column representing the corresponding point in time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.timestamp_seconds`
+    :meth:`pyspark.sql.functions.timestamp_millis`
+    :meth:`pyspark.sql.functions.timestamp_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
+    >>> df = spark.createDataFrame([(1577885075123456789,)], ['nanos'])
+    >>> df.select(sf.timestamp_nanos('nanos')).show(truncate=False)
+    +-----------------------------+
+    |timestamp_nanos(nanos)       |
+    +-----------------------------+
+    |2020-01-01 13:24:35.123456789|
+    +-----------------------------+
+
+    >>> df.select(sf.timestamp_nanos(sf.lit(None).cast('bigint'))).show()
+    +-------------------------------------+
+    |timestamp_nanos(CAST(NULL AS BIGINT))|
+    +-------------------------------------+
+    |                                 NULL|
+    +-------------------------------------+
+
+    >>> spark.conf.unset("spark.sql.timestampNanosTypes.enabled")
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+@_try_remote_functions
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
     """
     Gets the difference between the timestamps in the specified units by truncating
