@@ -621,4 +621,34 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
       checkAnswer(df6, Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33)))
     }
   }
+
+  test("SPARK-57555: Read TIME column as TimeType when timeType.enabled is true") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val rows = df.collect().sortBy(_.toString())
+      // c36 is TIME column with value '17:22:31.123'
+      val timeField = df.schema("c36")
+      assert(timeField.dataType.isInstanceOf[TimeType])
+      val localTime = rows(0).getAs[java.time.LocalTime](df.schema.fieldIndex("c36"))
+      assert(localTime == java.time.LocalTime.of(17, 22, 31, 123000000))
+    }
+  }
+
+  test("SPARK-57555: Write and read TIME column round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(StructField("t", TimeType(TimeType.DEFAULT_PRECISION))))
+      val times = Seq(
+        java.time.LocalTime.of(0, 0, 0),
+        java.time.LocalTime.of(12, 30, 45, 123456000),
+        java.time.LocalTime.of(23, 59, 59, 999999000)
+      )
+      val data = times.map(t => Row(t))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_roundtrip", new Properties)
+      val result = spark.read.jdbc(jdbcUrl, "time_roundtrip", new Properties)
+      assert(result.schema("t").dataType.isInstanceOf[TimeType])
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected.toSeq == times.sorted)
+    }
+  }
 }

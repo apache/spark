@@ -124,7 +124,10 @@ private case class PostgresDialect()
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamptz" | "timetz" => Some(TimestampType)
-    case "timestamp" | "time" => Some(getTimestampType(md.build()))
+    case "timestamp" => Some(getTimestampType(md.build()))
+    case "time" =>
+      if (conf.isTimeTypeEnabled) Some(TimeType(TimeType.DEFAULT_PRECISION))
+      else Some(getTimestampType(md.build()))
     case "date" => Some(DateType)
     case "numeric" | "decimal" if precision > 0 =>
       val scale = md.build().getLong("scale").toInt
@@ -159,6 +162,7 @@ private case class PostgresDialect()
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case TimestampType if !conf.legacyPostgresDatetimeMappingEnabled =>
       Some(JdbcType("TIMESTAMP WITH TIME ZONE", Types.TIMESTAMP))
+    case _: TimeType => Some(JdbcType("TIME", Types.TIME))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>
