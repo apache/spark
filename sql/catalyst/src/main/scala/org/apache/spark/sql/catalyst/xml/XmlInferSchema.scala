@@ -542,14 +542,13 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
         timestampType == TimestampNTZType) &&
         timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-        if (SQLConf.get.timestampNanosTypesEnabled) {
-          // Prefer nanosecond type when the fractional seconds part has more than 6 digits,
-          // indicating sub-microsecond precision that cannot be represented by TimestampNTZType.
-          val nanosOpt =
-            timestampNTZFormatter.parseWithoutTimeZoneNanosOptional(field, 9, false)
-          nanosOpt.filter(_.nanosWithinMicro != 0).foreach { _ =>
-            return Some(TimestampNTZNanosType(9))
-          }
+        // Prefer nanosecond type when there is a nonzero sub-microsecond component
+        // (nanosWithinMicro != 0) that TimestampNTZType cannot represent.
+        val hasSubMicro = SQLConf.get.timestampNanosTypesEnabled &&
+          timestampNTZFormatter.parseWithoutTimeZoneNanosOptional(field, 9, false)
+            .exists(_.nanosWithinMicro != 0)
+        if (hasSubMicro) {
+          return Some(TimestampNTZNanosType(9))
         }
         return Some(timestampType)
       }
