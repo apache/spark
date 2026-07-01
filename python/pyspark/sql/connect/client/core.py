@@ -42,6 +42,7 @@ import time
 import traceback
 import weakref
 from typing import (
+    Callable,
     Iterable,
     Iterator,
     Optional,
@@ -580,16 +581,36 @@ class _PathPrefixInterceptor(
             compression=getattr(details, "compression", None),
         )
 
-    def intercept_unary_unary(self, continuation, client_call_details, request):
+    def intercept_unary_unary(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request: Any,
+    ) -> Any:
         return continuation(self._rewrite(client_call_details), request)
 
-    def intercept_unary_stream(self, continuation, client_call_details, request):
+    def intercept_unary_stream(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request: Any,
+    ) -> Any:
         return continuation(self._rewrite(client_call_details), request)
 
-    def intercept_stream_unary(self, continuation, client_call_details, request_iterator):
+    def intercept_stream_unary(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request_iterator: Iterator[Any],
+    ) -> Any:
         return continuation(self._rewrite(client_call_details), request_iterator)
 
-    def intercept_stream_stream(self, continuation, client_call_details, request_iterator):
+    def intercept_stream_stream(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request_iterator: Iterator[Any],
+    ) -> Any:
         return continuation(self._rewrite(client_call_details), request_iterator)
 
 
