@@ -108,6 +108,27 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("SPARK-57558: localtime function") {
+    val df = spark.range(1)
+
+    // localtime() returns TIME with default precision
+    val result1 = df.selectExpr("localtime()")
+    assert(result1.schema.fields.head.dataType == TimeType(TimeType.MICROS_PRECISION))
+
+    // localtime(3) returns TIME(3)
+    val result2 = df.selectExpr("localtime(3)")
+    assert(result2.schema.fields.head.dataType == TimeType(3))
+
+    // Bare LOCALTIME keyword (no parens) returns TIME
+    val result3 = spark.sql("SELECT LOCALTIME")
+    assert(result3.schema.fields.head.dataType == TimeType(TimeType.MICROS_PRECISION))
+
+    // localtime() and current_time() produce approximately the same result
+    val ltResult = df.selectExpr("localtime()")
+    val ctResult = df.selectExpr("current_time()")
+    assertTwoTimesAreApproximatelyEqual(ltResult, ctResult)
+  }
+
   test("SPARK-52881: make_time function") {
     // Input data for the function.
     val schema = StructType(Seq(

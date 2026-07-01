@@ -1123,7 +1123,7 @@ class SessionCatalog(
     // so the SubqueryAlias qualifier reflects the real catalog + multi-part namespace.
     // Fall back to the historical 3-part form for v1 session-catalog tables -- we intentionally
     // always include `SESSION_CATALOG_NAME` here and ignore
-    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-MetadataTable behavior.
+    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-DelegatingTable behavior.
     val multiParts = metadata.multipartIdentifier.getOrElse {
       val qualifiedIdent = qualifyIdentifier(metadata.identifier)
       Seq(CatalogManager.SESSION_CATALOG_NAME, qualifiedIdent.database.get, qualifiedIdent.table)
@@ -1893,9 +1893,10 @@ class SessionCatalog(
     val funcName = function.name.funcName
 
     // Use captured SQL configs when parsing a SQL function.
-    val conf = new SQLConf()
-    function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
-    Analyzer.trySetAnsiValue(conf)
+    val conf = Analyzer.buildSQLFunctionConf(
+      function = function,
+      applySessionOverrides = false,
+      alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType

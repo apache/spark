@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.execution.streaming.LowLatencyMemoryStream
+import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 

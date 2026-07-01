@@ -1,0 +1,294 @@
+================================================================================================
+Cast
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+micros -> string:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> string wholestage off                    3586           3610          35          2.8         358.6       1.0X
+micros -> string wholestage on                     3663           3682          27          2.7         366.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(9) -> string:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> string wholestage off                  8024           8048          33          1.2         802.4       1.0X
+nanos(9) -> string wholestage on                   7987           8002          10          1.3         798.7       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(7) -> string:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(7) -> string wholestage off                  7879           7884           7          1.3         787.9       1.0X
+nanos(7) -> string wholestage on                   7882           7936          70          1.3         788.2       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+micros -> nanos(9):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> nanos(9) wholestage off                   868            870           4         11.5          86.8       1.0X
+micros -> nanos(9) wholestage on                    838            845          12         11.9          83.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(9) -> micros:                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> micros wholestage off                  1999           2024          35          5.0         199.9       1.0X
+nanos(9) -> micros wholestage on                   1988           2025          57          5.0         198.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(9) -> nanos(7):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> nanos(7) wholestage off                2042           2044           3          4.9         204.2       1.0X
+nanos(9) -> nanos(7) wholestage on                 2024           2031           4          4.9         202.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+micros -> date:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros -> date wholestage off                      1418           1515         136          7.0         141.8       1.0X
+micros -> date wholestage on                       1344           1359          18          7.4         134.4       1.1X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(9) -> date:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+nanos(9) -> date wholestage off                    2506           2513          10          4.0         250.6       1.0X
+nanos(9) -> date wholestage on                     2525           2542          21          4.0         252.5       1.0X
+
+
+================================================================================================
+Parse from string
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+string(6 digits) -> micros:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+string(6 digits) -> micros wholestage off            288            291           4          3.5         288.1       1.0X
+string(6 digits) -> micros wholestage on             279            282           3          3.6         278.9       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+string(9 digits) -> nanos(9):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+string(9 digits) -> nanos(9) wholestage off            313            327          19          3.2         313.2       1.0X
+string(9 digits) -> nanos(9) wholestage on             305            310           9          3.3         305.1       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+string(7 digits) -> nanos(7):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+string(7 digits) -> nanos(7) wholestage off            295            301           9          3.4         295.1       1.0X
+string(7 digits) -> nanos(7) wholestage on             293            295           2          3.4         292.7       1.0X
+
+
+================================================================================================
+Hashing
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+murmur3 hash(micros):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+murmur3 hash(micros) wholestage off                 858            868          14         11.7          85.8       1.0X
+murmur3 hash(micros) wholestage on                  834            836           3         12.0          83.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+murmur3 hash(nanos(9)):                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+murmur3 hash(nanos(9)) wholestage off              1987           2044          80          5.0         198.7       1.0X
+murmur3 hash(nanos(9)) wholestage on               2024           2030           6          4.9         202.4       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+xxhash64(micros):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+xxhash64(micros) wholestage off                     806            807           1         12.4          80.6       1.0X
+xxhash64(micros) wholestage on                      801            808           8         12.5          80.1       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+xxhash64(nanos(9)):                       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+xxhash64(nanos(9)) wholestage off                  2043           2043           0          4.9         204.3       1.0X
+xxhash64(nanos(9)) wholestage on                   2003           2038          32          5.0         200.3       1.0X
+
+
+================================================================================================
+Sort (global ORDER BY)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+order by micros:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+order by micros wholestage off                     2345           2399          77          4.3         234.5       1.0X
+order by micros wholestage on                      2325           2344          22          4.3         232.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+order by nanos(9):                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+order by nanos(9) wholestage off                   3037           3172         190          3.3         303.7       1.0X
+order by nanos(9) wholestage on                    3103           3186          65          3.2         310.3       1.0X
+
+
+================================================================================================
+Group-by aggregation (~1M distinct keys)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+group by micros key:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+group by micros key wholestage off                 2080           2114          47          4.8         208.0       1.0X
+group by micros key wholestage on                  1888           1919          19          5.3         188.8       1.1X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+group by nanos(9) key:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+group by nanos(9) key wholestage off               3576           3611          50          2.8         357.6       1.0X
+group by nanos(9) key wholestage on                3039           3127          82          3.3         303.9       1.2X
+
+
+================================================================================================
+MIN/MAX aggregation
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+min/max micros:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+min/max micros wholestage off                       998           1004           7         10.0          99.8       1.0X
+min/max micros wholestage on                        617            651          33         16.2          61.7       1.6X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+min/max nanos(9):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+min/max nanos(9) wholestage off                    2402           2410          11          4.2         240.2       1.0X
+min/max nanos(9) wholestage on                     1895           1912          26          5.3         189.5       1.3X
+
+
+================================================================================================
+Datetime functions
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+hour(micros):                             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+hour(micros) wholestage off                         749            758          13         13.4          74.9       1.0X
+hour(micros) wholestage on                          723            728           5         13.8          72.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+hour(nanos(9)):                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+hour(nanos(9)) wholestage off                      1803           1816          19          5.5         180.3       1.0X
+hour(nanos(9)) wholestage on                       1765           1789          34          5.7         176.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+second(micros):                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+second(micros) wholestage off                       777            783           9         12.9          77.7       1.0X
+second(micros) wholestage on                        863           1117         146         11.6          86.3       0.9X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+second(nanos(9)):                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+second(nanos(9)) wholestage off                    2094           2098           6          4.8         209.4       1.0X
+second(nanos(9)) wholestage on                     1781           2059         340          5.6         178.1       1.2X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+extract(SECOND, micros):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+extract(SECOND, micros) wholestage off              880            880           0         11.4          88.0       1.0X
+extract(SECOND, micros) wholestage on               993           1215         145         10.1          99.3       0.9X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+extract(SECOND, nanos(9)):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+extract(SECOND, nanos(9)) wholestage off           2409           2470          87          4.2         240.9       1.0X
+extract(SECOND, nanos(9)) wholestage on            2217           2346         132          4.5         221.7       1.1X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+unix_micros(micros):                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+unix_micros(micros) wholestage off                  295            301           8         33.8          29.5       1.0X
+unix_micros(micros) wholestage on                   254            272          18         39.4          25.4       1.2X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+unix_nanos(nanos(9)):                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+unix_nanos(nanos(9)) wholestage off                2450           2478          40          4.1         245.0       1.0X
+unix_nanos(nanos(9)) wholestage on                 2398           2450          59          4.2         239.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+micros + interval 1 hour:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros + interval 1 hour wholestage off            1727           1763          51          5.8         172.7       1.0X
+micros + interval 1 hour wholestage on             1693           1750          52          5.9         169.3       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+nanos(9) + interval 1 hour:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+nanos(9) + interval 1 hour wholestage off           3678           3709          44          2.7         367.8       1.0X
+nanos(9) + interval 1 hour wholestage on            3192           3300          89          3.1         319.2       1.2X
+
+
+================================================================================================
+Parquet write/read
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+Save to Parquet:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros (TIMESTAMP_NTZ)                             2279           2279           0          4.4         227.9       1.0X
+nanos(9) (TIMESTAMP_NTZ(9))                        3485           3485           0          2.9         348.5       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+Load from Parquet:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros, vectorized on                               532            616          76         18.8          53.2       1.0X
+micros, vectorized off                             1798           2067         447          5.6         179.8       0.3X
+nanos(9), vectorized on (row-based)                1949           1982          29          5.1         194.9       0.3X
+nanos(9), vectorized off (row-based)               1804           1817          12          5.5         180.4       0.3X
+
+
+================================================================================================
+ORC write/read
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+Save to ORC:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros (TIMESTAMP_NTZ)                             1257           1257           0          8.0         125.7       1.0X
+nanos(9) (TIMESTAMP_NTZ(9))                        5537           5537           0          1.8         553.7       0.2X
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1160-aws-fips
+Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz
+Load from ORC:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+micros, vectorized on                               361            398          42         27.7          36.1       1.0X
+micros, vectorized off                             1026           1047          19          9.7         102.6       0.4X
+nanos(9), vectorized on                            1504           1517          16          6.7         150.4       0.2X
+nanos(9), vectorized off                           2213           2264          44          4.5         221.3       0.2X
+
+

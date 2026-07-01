@@ -318,6 +318,50 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Packs a [[TimestampNanosVal]] (epoch micros + nanos within the micro) into a single int64 of
+   * nanoseconds since the epoch, the representation used by the Arrow nanosecond timestamp vectors
+   * and the Parquet INT64 epoch-nanoseconds physical type. Throws [[ArithmeticException]] when the
+   * value falls outside the int64 epoch-nanosecond range; callers translate that into a
+   * `DATETIME_OVERFLOW` error naming their sink (see
+   * [[org.apache.spark.sql.errors.QueryExecutionErrors.timestampNanosEpochNanosOverflowError]]).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
+    Math.addExact(
+      Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
+      value.nanosWithinMicro.toLong)
+  }
+
+  /**
+   * Packs a [[TimestampNanosVal]] into a single int64 of epoch-nanoseconds for a `sink` that uses
+   * that encoding (the Parquet INT64 and Avro `timestamp-nanos` / `local-timestamp-nanos` physical
+   * types), translating the int64 overflow thrown by [[timestampNanosToEpochNanos]] into a
+   * `DATETIME_OVERFLOW` error that names the `sink`. `isNtz` selects how the offending value is
+   * rendered in that error (a zone-less local date-time vs. a UTC instant).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean, sink: String): Long = {
+    try {
+      timestampNanosToEpochNanos(value)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(value, isNtz, sink)
+    }
+  }
+
+  /**
+   * Unpacks a single int64 of nanoseconds since the epoch (the representation used by the Arrow
+   * nanosecond timestamp vectors and the Parquet / Avro INT64 epoch-nanoseconds encodings) back
+   * into a [[TimestampNanosVal]], truncating the sub-microsecond digits to the given `precision`
+   * (in [7, 9]). This is the inverse of [[timestampNanosToEpochNanos]]. `floorDiv` / `floorMod`
+   * keep `nanosWithinMicro` in [0, 999] for pre-epoch (negative) values too.
+   */
+  def epochNanosToTimestampNanos(epochNanos: Long, precision: Int): TimestampNanosVal = {
+    val epochMicros = Math.floorDiv(epochNanos, NANOS_PER_MICROS)
+    val rawNanosWithinMicro = Math.floorMod(epochNanos, NANOS_PER_MICROS).toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -497,7 +541,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case TRUNC_TO_WEEK => getNextDateForDayOfWeek(days - 7, MONDAY)
       case TRUNC_TO_MONTH => days - getDayOfMonth(days) + 1
       case TRUNC_TO_QUARTER =>
-        localDateToDays(daysToLocalDate(days).`with`(IsoFields.DAY_OF_QUARTER, 1L))
+        val ld = daysToLocalDate(days)
+        val firstMonthOfQuarter = ((ld.getMonthValue - 1) / 3) * 3 + 1
+        localDateToDays(ld.withMonth(firstMonthOfQuarter).withDayOfMonth(1))
       case TRUNC_TO_YEAR => days - getDayInYear(days) + 1
       case _ =>
         // caller make sure that this should never be reached
@@ -511,23 +557,41 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Fast path for truncating to MINUTE/HOUR/DAY using offset arithmetic instead of
-   * allocating a `ZonedDateTime` per row. The offset is resolved once for `micros`; the
-   * truncation then runs as `floorMod` in local time. We fall back to [[truncToUnit]] when
-   * the offset at the candidate truncated instant differs from the offset at `micros`,
-   * which means the truncation crosses a DST/historical transition and the local-time
-   * alignment we computed is no longer valid (see SPARK-30766/30857). The check is
-   * skipped for fixed-offset zones. Sub-minute offsets (e.g. America/Los_Angeles LMT
-   * -07:52:58, see SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu
-   * +05:45) are handled correctly by this path because the offset is applied as part of
-   * the arithmetic; no offset-alignment guard is needed.
+   * Returns the trunc date time from original date time and trunc level.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
    *
-   * `unitMicros` must evenly divide `MICROS_PER_DAY`; otherwise wall-clock unit
-   * boundaries do not align to multiples of `unitMicros` in the shifted-local frame
-   * and the `floorMod` truncation is unsafe.
+   * Uses an offset-arithmetic fast path: the zone offset at `micros` is resolved once,
+   * truncation runs in the shifted-local frame, and the result is shifted back to UTC
+   * micros. Falls back to [[truncTimestampSlow]] when the offset at the candidate
+   * truncated instant differs from the offset at `micros` (DST/historical transition
+   * spans the candidate; SPARK-30766/30857) or on arithmetic overflow.
+   *
+   * Sub-minute LMT offsets (e.g. America/Los_Angeles -07:52:58 pre-1883, see
+   * SPARK-33404) and 30/45-minute offsets (Asia/Kolkata +05:30, Asia/Kathmandu +05:45)
+   * are handled correctly because the offset is applied as part of the arithmetic; no
+   * offset-alignment guard is needed.
+   *
+   * The local-frame truncation is selected by `level`:
+   *   - MICROSECOND/MILLISECOND/SECOND: no zone information needed (zone offsets have
+   *     at most second precision, see `java.time.ZoneOffset`); reduces to pure UTC
+   *     `floorMod`.
+   *   - MINUTE/HOUR/DAY: `floorMod` against the corresponding `unitMicros`. The unit
+   *     must evenly divide `MICROS_PER_DAY`, which holds for all three; otherwise
+   *     wall-clock unit boundaries would not align to multiples of `unitMicros` in
+   *     the shifted-local frame.
+   *   - WEEK/MONTH/QUARTER/YEAR: convert local micros to local epoch-day, run
+   *     [[truncDate]] in the local-day frame, multiply back to local micros.
    */
-  private def truncToUnitFast(
-      micros: Long, zoneId: ZoneId, unitMicros: Long, fallbackUnit: ChronoUnit): Long = {
+  def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
+    // MICROSECOND / MILLISECOND / SECOND don't need zone information.
+    level match {
+      case TRUNC_TO_MICROSECOND => return micros
+      case TRUNC_TO_MILLISECOND =>
+        return Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
+      case TRUNC_TO_SECOND =>
+        return Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
+      case _ =>
+    }
     val rules = zoneId.getRules
     val originalSec = Math.floorDiv(micros, MICROS_PER_SECOND)
     val originalOffsetSec =
@@ -535,45 +599,49 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
     try {
       val local = Math.addExact(micros, offsetMicros)
-      val truncatedLocal = Math.subtractExact(local, Math.floorMod(local, unitMicros))
+      val truncatedLocal = level match {
+        case TRUNC_TO_MINUTE =>
+          Math.subtractExact(local, Math.floorMod(local, MICROS_PER_MINUTE))
+        case TRUNC_TO_HOUR =>
+          Math.subtractExact(local, Math.floorMod(local, MICROS_PER_HOUR))
+        case TRUNC_TO_DAY =>
+          Math.subtractExact(local, Math.floorMod(local, MICROS_PER_DAY))
+        case _ => // Date-level truncation: WEEK / MONTH / QUARTER / YEAR.
+          val localDays = Math.floorDiv(local, MICROS_PER_DAY).toInt
+          Math.multiplyExact(truncDate(localDays, level).toLong, MICROS_PER_DAY)
+      }
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
       if (!rules.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
         val candidateOffsetSec =
           rules.getOffset(Instant.ofEpochSecond(candidateSec)).getTotalSeconds.toLong
         if (candidateOffsetSec != originalOffsetSec) {
-          return truncToUnit(micros, zoneId, fallbackUnit)
+          return truncTimestampSlow(micros, level, zoneId)
         }
       }
       candidate
     } catch {
-      case _: ArithmeticException => truncToUnit(micros, zoneId, fallbackUnit)
+      case _: ArithmeticException => truncTimestampSlow(micros, level, zoneId)
     }
   }
 
   /**
-   * Returns the trunc date time from original date time and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 9.
+   * Slow-path reference implementation: equivalent to [[truncTimestamp]] without the
+   * offset-arithmetic fast path. Invoked from [[truncTimestamp]] on DST-cross or
+   * arithmetic overflow. It is also a complete handler for every supported `level`, so
+   * the fast path's correctness can be verified against this method case-by-case.
    */
-  def truncTimestamp(micros: Long, level: Int, zoneId: ZoneId): Long = {
-    // Time zone offsets have a maximum precision of seconds (see `java.time.ZoneOffset`). Hence
-    // truncation to microsecond, millisecond, and second can be done
-    // without using time zone information. This results in a performance improvement.
+  private def truncTimestampSlow(micros: Long, level: Int, zoneId: ZoneId): Long = {
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
         Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
       case TRUNC_TO_SECOND =>
         Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
-      case TRUNC_TO_MINUTE =>
-        truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
-      case TRUNC_TO_HOUR =>
-        truncToUnitFast(micros, zoneId, MICROS_PER_HOUR, ChronoUnit.HOURS)
-      case TRUNC_TO_DAY =>
-        truncToUnitFast(micros, zoneId, MICROS_PER_DAY, ChronoUnit.DAYS)
-      case _ => // Try to truncate date levels
-        val dDays = microsToDays(micros, zoneId)
-        daysToMicros(truncDate(dDays, level), zoneId)
+      case TRUNC_TO_MINUTE => truncToUnit(micros, zoneId, ChronoUnit.MINUTES)
+      case TRUNC_TO_HOUR => truncToUnit(micros, zoneId, ChronoUnit.HOURS)
+      case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
+      case _ => daysToMicros(truncDate(microsToDays(micros, zoneId), level), zoneId)
     }
   }
 
@@ -962,7 +1030,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
     }
   }
 
@@ -977,9 +1045,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       nanos
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
           new DateTimeException("Overflow in TIME conversion", e))
     }
   }
@@ -1075,6 +1143,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Makes a nanosecond-precision timestamp without time zone from a date and a local time,
+   * flooring the combined value to the target `precision` in [7, 9] (see
+   * [[localDateTimeToTimestampNanos]]).
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_NTZ(precision)`.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZNanos(days: Int, nanos: Long, precision: Int): TimestampNanosVal = {
+    localDateTimeToTimestampNanos(
+      LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)), precision)
+  }
+
+  /**
    * Makes a timestamp from a date and a local time.
    *
    * @param days The number of days since the epoch 1970-01-01.
@@ -1100,6 +1185,42 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
     val zoneId = getZoneId(timezone.toString)
     makeTimestamp(days, nanos, zoneId)
+  }
+
+  /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` (precision in [7, 9]) from a date and
+   * a local time interpreted in the time zone `zoneId`, preserving the time's sub-microsecond
+   * digits up to `precision`. This is the nanosecond counterpart of
+   * [[makeTimestamp(days:Int,nanos:Long,zoneId:java\.time\.ZoneId)*]].
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_LTZ(precision)`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
+    instantToTimestampNanos(ldt.atZone(zoneId).toInstant, precision)
+  }
+
+  /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` from a date and a local time with a
+   * time zone string. Used by the `CAST(time AS TIMESTAMP_LTZ(precision))` rewrite, which embeds
+   * the resolved session time zone as a string literal.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      timezone: UTF8String): TimestampNanosVal = {
+    makeTimestampLTZNanos(days, nanos, precision, getZoneId(timezone.toString))
   }
 
   /**

@@ -100,7 +100,7 @@ trait AlterViewSetTblPropertiesSuiteBase extends QueryTest with DDLCommandTestUt
   test("setting `comment` flows through to SHOW CREATE TABLE") {
     // v1 `AlterTableSetPropertiesCommand` updates the typed `CatalogTable.comment` field when
     // the user passes `'comment'` via SET TBLPROPERTIES, so SHOW CREATE TABLE renders the
-    // comment in the COMMENT clause. The v2 path uses `ViewInfo.properties` as the source of
+    // comment in the COMMENT clause. The v2 path uses `View.properties` as the source of
     // truth for `PROP_COMMENT` (see `AlterV2ViewSetPropertiesExec` and `ShowCreateV2ViewExec`),
     // so the same SET TBLPROPERTIES('comment' = ...) round-trips through SHOW CREATE TABLE.
     // Pin the cross-catalog parity here.

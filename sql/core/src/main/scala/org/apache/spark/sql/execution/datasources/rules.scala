@@ -44,6 +44,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, St
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -106,7 +107,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
-    if (isFileFormat && ident.last.isEmpty) {
+    if (isFileFormat && SparkStringUtils.isBlank(ident.last)) {
       unresolved.failAnalysis(
         errorClass = "INVALID_EMPTY_LOCATION",
         messageParameters = Map("location" -> ident.last))

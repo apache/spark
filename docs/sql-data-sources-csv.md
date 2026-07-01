@@ -181,6 +181,12 @@ Data source options of CSV can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>timeFormat</code></td>
+    <td>HH:mm:ss</td>
+    <td>Sets the string that indicates a time format. Custom time formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>. This applies to time type.</td>
+    <td>read/write</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
@@ -214,6 +220,12 @@ Data source options of CSV can be set via:
     <td><code>columnNameOfCorruptRecord</code></td>
     <td>(value of <code>spark.sql.columnNameOfCorruptRecord</code> configuration)</td>
     <td>Allows renaming the new field having malformed string created by <code>PERMISSIVE</code> mode. This overrides <code>spark.sql.columnNameOfCorruptRecord</code>.</td>
+    <td>read</td>
+  </tr>
+  <tr>
+    <td><code>singleVariantColumn</code></td>
+    <td>(none)</td>
+    <td>If specified, the entire CSV record is parsed and stored as a single column of <code>VariantType</code> with the given column name, instead of being split into individual fields.</td>
     <td>read</td>
   </tr>
   <tr>

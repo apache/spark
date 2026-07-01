@@ -356,6 +356,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -386,6 +396,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putLong(offset, valuesReader.readInteger());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -678,6 +698,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putLong(offset, valuesReader.readLong());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -986,6 +1016,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -1019,6 +1059,16 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
+    }
+
+    @Override
     public void decodeSingleDictionaryId(
         int offset,
         WritableColumnVector values,
@@ -1049,6 +1099,16 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       values.putDouble(offset, valuesReader.readDouble());
+    }
+
+    @Override
+    public void decodeDictionaryIds(
+        int total,
+        int offset,
+        WritableColumnVector values,
+        WritableColumnVector dictionaryIds,
+        Dictionary dictionary) {
+      ParquetVectorUpdater.decodeBatch(total, offset, values, dictionaryIds, dictionary, this);
     }
 
     @Override
@@ -1444,9 +1504,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; i++) {
-        readValue(offset + i, values, valuesReader);
-      }
+      valuesReader.readFixedLenByteArray(total, arrayLen, values, offset);
     }
 
     @Override

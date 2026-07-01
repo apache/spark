@@ -25,11 +25,13 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.STUtils;
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -124,6 +126,18 @@ public class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
+  public TimestampNanosVal getTimestampNTZNanos(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getTimestampNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return accessor.getTimestampNanos(rowId);
+  }
+
+  @Override
   public byte[] getBinary(int rowId) {
     if (isNullAt(rowId)) return null;
     return accessor.getBinary(rowId);
@@ -204,6 +218,10 @@ public class ArrowColumnVector extends ColumnVector {
       accessor = new TimestampNTZAccessor(timeStampMicroVector);
     } else if (vector instanceof TimeNanoVector timeNanoVector) {
       accessor = new TimeNanoAccessor(timeNanoVector);
+    } else if (vector instanceof TimeStampNanoTZVector timeStampNanoTZVector) {
+      accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector);
+    } else if (vector instanceof TimeStampNanoVector timeStampNanoVector) {
+      accessor = new TimestampNTZNanosAccessor(timeStampNanoVector);
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -277,6 +295,10 @@ public class ArrowColumnVector extends ColumnVector {
     }
 
     CalendarInterval getInterval(int rowId) {
+      throw SparkUnsupportedOperationException.apply();
+    }
+
+    TimestampNanosVal getTimestampNanos(int rowId) {
       throw SparkUnsupportedOperationException.apply();
     }
 
@@ -556,6 +578,44 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final long getLong(int rowId) {
       return accessor.get(rowId);
+    }
+  }
+
+  // Decodes a single int64 of epoch-nanoseconds back into the (epochMicros, nanosWithinMicro)
+  // pair. floorDiv/floorMod keep nanosWithinMicro in [0, 999] for pre-epoch (negative) values too.
+  private static TimestampNanosVal decodeEpochNanos(long nanos) {
+    return TimestampNanosVal.fromTrustedRowBytes(
+      Math.floorDiv(nanos, DateTimeConstants.NANOS_PER_MICROS),
+      (short) Math.floorMod(nanos, DateTimeConstants.NANOS_PER_MICROS));
+  }
+
+  static class TimestampNTZNanosAccessor extends ArrowVectorAccessor {
+
+    private final TimeStampNanoVector accessor;
+
+    TimestampNTZNanosAccessor(TimeStampNanoVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final TimestampNanosVal getTimestampNanos(int rowId) {
+      return decodeEpochNanos(accessor.get(rowId));
+    }
+  }
+
+  static class TimestampLTZNanosAccessor extends ArrowVectorAccessor {
+
+    private final TimeStampNanoTZVector accessor;
+
+    TimestampLTZNanosAccessor(TimeStampNanoTZVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    final TimestampNanosVal getTimestampNanos(int rowId) {
+      return decodeEpochNanos(accessor.get(rowId));
     }
   }
 

@@ -23,6 +23,7 @@ import java.util.Map;
 import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -234,7 +235,7 @@ public final class MutableColumnarRow extends InternalRow {
       return getTimestampLTZNanos(ordinal);
     } else {
       throw new SparkUnsupportedOperationException(
-        "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dataType.toString()));
+        "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(dataType)));
     }
   }
 
@@ -267,7 +268,7 @@ public final class MutableColumnarRow extends InternalRow {
         setTimestampLTZNanos(ordinal, (TimestampNanosVal) value);
       } else {
         throw new SparkUnsupportedOperationException(
-          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dt.toString()));
+          "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(dt)));
       }
     }
   }

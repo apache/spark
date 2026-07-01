@@ -21,10 +21,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.Utils
 
 /**
  * Binds [[ArchiveReadSuiteBase]]'s file-format hooks to CSV. The header-mode-specific tests live in
@@ -52,24 +51,6 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   override protected def supportsComplexTypes: Boolean = false
 
   override protected def supportsSchemaMerge: Boolean = false
-
-  override protected def encodeFile(
-      df: DataFrame,
-      writeOptions: Map[String, String]): Array[Byte] = {
-    val dir = Utils.createTempDir(namePrefix = "archive-test-encode")
-    try {
-      df.coalesce(1).write.format("csv")
-        .options(Map("header" -> header.toString) ++ writeOptions)
-        .mode("overwrite").save(dir.getCanonicalPath)
-      val parts = dir.listFiles().filter { f =>
-        f.isFile && !f.getName.startsWith("_") && !f.getName.startsWith(".") &&
-          !f.getName.endsWith(".crc")
-      }
-      assert(parts.length == 1,
-        s"expected exactly one data file, got: ${parts.map(_.getName).toList}")
-      Files.readAllBytes(parts.head.toPath)
-    } finally Utils.deleteRecursively(dir)
-  }
 
   /** Raw CSV bytes, for tests that need precise control over the row layout. */
   protected def csvBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)

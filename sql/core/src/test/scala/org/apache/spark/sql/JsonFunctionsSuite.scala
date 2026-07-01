@@ -18,19 +18,19 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.core.StreamReadConstraints
 
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{JsonToStructs, Literal, MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.{InputAdapter, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -120,6 +120,76 @@ class JsonFunctionsSuite extends SharedSparkSession {
     assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
   }
 
+  test("SPARK-57626: share simple nested get_json_object paths") {
+    val malformed = """{"a":{"b":1,"c":"\q"},"d":2}"""
+    val input = Seq[String](
+      """{"a":{"b":1,"c":"x"},"a.b":{"c.d":"dot"},"d":2}""",
+      """{"a":{"b":"first"},"a":{"b":"second","c":"later"},"d":3}""",
+      """{"a":null,"a":{"b":"after-null","c":null,"c":"after-c-null"},""" +
+        """"a.b":{"c.d":4},"d":5}""",
+      """{"a":"not-object","a":{"b":{"nested":1},"c":[1,2]},""" +
+        """"a.b":{"c.d":"dot"},"d":null,"d":6}""",
+      malformed,
+      """{'a':{'b':'single','c':7},'a.b':{'c.d':8},'d':9}""",
+      """[1,2,3]""",
+      """{}""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$['a']['c']"),
+          get_json_object($"json", "$['a.b']['c.d']"),
+          get_json_object($"json", "$.d"))
+        if (jsonOptimization && sharedParsing) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(6) == Seq(
+      Row("1", "x", "dot", "2"),
+      Row("first", "later", null, "3"),
+      Row("after-null", "after-c-null", "4", "5"),
+      Row("{\"nested\":1}", "[1,2]", "dot", "6"),
+      Row(null, null, null, null),
+      Row("single", "7", "8", "9")))
+  }
+
+  test("SPARK-57626: shared nested get_json_object isolates value rendering failures") {
+    val invalidSurrogate = "\\" + "uD800"
+    val input = Seq(
+      s"""{"a":{"b":"before","c":"$invalidSurrogate","d":"after"},"z":"root"}""")
+
+    def result(jsonOptimization: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
+        rows = input.toDF("json").select(
+          get_json_object($"json", "$.a.b"),
+          get_json_object($"json", "$.a.c"),
+          get_json_object($"json", "$.a.d"),
+          get_json_object($"json", "$.z")).collect().toSeq
+      }
+      rows
+    }
+
+    assert(result(jsonOptimization = true) == result(jsonOptimization = false))
+    assert(result(jsonOptimization = true) == Seq(Row("before", null, "after", "root")))
+  }
+
   test("SPARK-47670: shared get_json_object isolates value rendering failures") {
     val invalidSurrogate = "\\" + "uD800"
     val input = Seq(
@@ -205,7 +275,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     val depth = 999
     val nested = "[" * depth + "1" + "]" * depth
     val expression = MultiGetJsonObject(
-      Literal(s"""{"a":$nested,"b":2}"""), Seq("a", "b"), Seq("$.a", "$.b"))
+      Literal(s"""{"a":$nested,"b":2}"""), Seq("$.a", "$.b"))
     val result = Array.ofDim[Any](1)
     val thread = new Thread(
       null,
@@ -233,11 +303,11 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-47670: shared get_json_object supports project code generation") {
+  test("SPARK-57626: shared nested get_json_object supports project code generation") {
     withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
-      val df = Seq("""{"a":1,"b":2}""").toDF("json").select(
-        get_json_object($"json", "$.a"),
-        get_json_object($"json", "$.b"))
+      val df = Seq("""{"a":{"x":1,"y":2}}""").toDF("json").select(
+        get_json_object($"json", "$.a.x"),
+        get_json_object($"json", "$.a.y"))
 
       checkAnswer(df, Row("1", "2"))
       def containsSharedExtraction(plan: SparkPlan): Boolean = plan match {
@@ -539,8 +609,12 @@ class JsonFunctionsSuite extends SharedSparkSession {
 
   test("SPARK-57164: from_json with a nanos timestamp DDL schema string") {
     val df = Seq("""{"c": "2020-01-01T00:00:00.123456789"}""").toDF("value")
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+    // Fix the session timezone so the TIMESTAMP_LTZ expected value is deterministic.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
         Seq(
           s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
           s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
@@ -551,12 +625,73 @@ class JsonFunctionsSuite extends SharedSparkSession {
               from_json($"value", s"c $spelling", Map.empty[String, String]).as("v"))
             // The schema string resolves to the nanos type ...
             assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
-            // ... but the JSON datasource does not support nanosecond timestamps yet, so the
-            // value converter rejects it at execution.
-            checkError(
-              exception = intercept[SparkUnsupportedOperationException](parsed.collect()),
-              condition = "UNSUPPORTED_DATATYPE",
-              parameters = Map("typeName" -> toSQLType(expected)))
+            // ... and the JSON datasource correctly parses the nanosecond timestamp, truncating
+            // sub-precision digits toward zero.
+            val expectedValue = expected match {
+              case _: TimestampNTZNanosType => LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano)
+              case _: TimestampLTZNanosType =>
+                LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC)
+            }
+            checkAnswer(parsed, Row(Row(expectedValue)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: to_json with nanos timestamp types") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        // The pattern must carry `p` fractional digits to emit the full declared precision; the
+        // floored value has exactly `p` significant digits, so the rendered fraction is the first
+        // `p` digits of 123456789.
+        val fracPat = "S" * p
+        val frac = "123456789".take(p)
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any,
+            s"""{"ts":"2020-01-01T00:00:00.$frac"}"""),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any,
+            s"""{"ts":"2020-01-01T00:00:00.${frac}Z"}""")).foreach {
+          case (nanosType, optKey, fmt, value, expectedJson) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            checkAnswer(
+              df.select(to_json(struct($"ts"), Map(optKey -> fmt))),
+              Row(expectedJson))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57456: roundtrip in to_json and from_json - nanos timestamps") {
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val fracPat = "S" * p
+        val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+        Seq(
+          (TimestampNTZNanosType(p): DataType, "timestampNTZFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.$fracPat", ldt: Any),
+          (TimestampLTZNanosType(p): DataType, "timestampFormat",
+            s"yyyy-MM-dd'T'HH:mm:ss.${fracPat}XXX", ldt.toInstant(ZoneOffset.UTC): Any)).foreach {
+          case (nanosType, optKey, fmt, value) =>
+            val schema = new StructType().add("ts", nanosType)
+            val df = spark.createDataFrame(
+              spark.sparkContext.parallelize(Seq(Row(value))), schema)
+            val options = Map(optKey -> fmt)
+            // The input column already carries precision `p`, so the to_json -> from_json
+            // round-trip with a `p`-digit pattern is loss-free.
+            val readBack = df
+              .select(to_json(struct($"ts"), options).as("json"))
+              .select(from_json($"json", schema, options).as("data"))
+              .select($"data.ts".as("ts"))
+            checkAnswer(readBack, df.select($"ts"))
         }
       }
     }

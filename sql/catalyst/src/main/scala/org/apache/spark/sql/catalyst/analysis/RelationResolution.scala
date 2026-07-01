@@ -34,16 +34,17 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogPlugin,
   CatalogV2Util,
   ChangelogContext,
+  DelegatingTable,
   Identifier,
   LookupCatalog,
-  MetadataTable,
+  Relation,
+  RelationCatalog,
   Table,
   TableCatalog,
-  TableViewCatalog,
   V1Table,
   V2TableWithV1Fallback,
-  ViewCatalog,
-  ViewInfo
+  View,
+  ViewCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
@@ -243,8 +244,8 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            // For a `TableViewCatalog` with no time-travel / write privileges, the single-RPC
-            // `loadTableOrView` answers both "is there a table?" and "is there a view?" in one
+            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
+            // `loadRelation` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the
             // lookup falls through to the table-only `loadTable` path below; views are not
             // reachable via the v2 fallback in those cases.
@@ -252,10 +253,10 @@ class RelationResolution(
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
             // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
             // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
-            val tableOrView: Option[Table] = catalog match {
-              case mc: TableViewCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+            val relation: Option[Relation] = catalog match {
+              case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                 try {
-                  Some(mc.loadTableOrView(ident))
+                  Some(mc.loadRelation(ident))
                 } catch {
                   case _: NoSuchTableException => None
                 }
@@ -280,7 +281,7 @@ class RelationResolution(
                     catalog match {
                       case vc: ViewCatalog =>
                         try {
-                          Some(new MetadataTable(vc.loadView(ident), ident.toString))
+                          Some(vc.loadView(ident))
                         } catch {
                           case _: NoSuchViewException => None
                         }
@@ -291,12 +292,9 @@ class RelationResolution(
                   }
                 }
             }
-            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // `table` is `relation` filtered to tables only -- used for cache lookup since
             // we don't share-cache views.
-            val table: Option[Table] = tableOrView.filter {
-              case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
-              case _ => true
-            }
+            val table: Option[Table] = relation.collect { case t: Table => t }
 
             val sharedRelationCacheMatch = for {
               t <- table
@@ -314,7 +312,7 @@ class RelationResolution(
               val loaded = createRelation(
                 catalog,
                 ident,
-                tableOrView,
+                relation,
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)
@@ -373,7 +371,7 @@ class RelationResolution(
   private def createRelation(
       catalog: CatalogPlugin,
       ident: Identifier,
-      table: Option[Table],
+      relation: Option[Relation],
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
@@ -393,7 +391,12 @@ class RelationResolution(
       }
     }
 
-    table.map {
+    relation.map {
+      // A view is interpreted via v1: project it to a `CatalogTable` and run the v1 scan path,
+      // which expands the view text.
+      case v: View =>
+        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, v))
+
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
       // must be false so it does not require use catalog to manage partitions.
@@ -405,13 +408,13 @@ class RelationResolution(
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
         createDataSourceV1Scan(v1Table.v1Table)
 
-      // MetadataTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // DelegatingTable is a sentinel meaning "interpret via v1", so unlike the V1Table
       // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
-      // returning MetadataTable has opted into v1 read semantics.
-      case t: MetadataTable =>
+      // returning DelegatingTable has opted into v1 read semantics.
+      case t: DelegatingTable =>
         createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
-      case table =>
+      case table: Table =>
         if (isStreaming) {
           assert(timeTravelSpec.isEmpty, "time travel is not allowed in streaming")
           val v1Fallback = table match {

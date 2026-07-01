@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
@@ -209,7 +210,6 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
           case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
         }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
         val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
-        assert(shared.fieldNames == Seq("b", "a"))
         assert(shared.fallbackPaths == Seq("$.b", "$['a']"))
 
         val sharedAttr = sharedAlias.toAttribute
@@ -243,12 +243,45 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(Optimizer.execute(query.analyze), query.analyze)
   }
 
-  test("SPARK-47670: do not combine nested get_json_object paths") {
-    val nested = GetJsonObject($"json", Literal("$.a.b"))
+  test("SPARK-57626: share simple nested get_json_object paths") {
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a.b")).as("b"),
+      GetJsonObject($"json", Literal("$['a']['c.d']")).as("c"),
+      GetJsonObject($"json", Literal("$.e")).as("e"),
+      GetJsonObject($"json", Literal("$.f.b")).as("other_b"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAlias = innerProjectList.collectFirst {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fallbackPaths == Seq("$.a.b", "$['a']['c.d']", "$.e", "$.f.b"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        val extractedFields = projectList.flatMap(_.collect {
+          case getStructField: GetStructField
+              if getStructField.child.semanticEquals(sharedAttr) => getStructField
+        })
+        assert(extractedFields.map(_.ordinal) == Seq(0, 1, 2, 3))
+
+      case _ =>
+        fail(s"Expected shared nested JSON paths below the project, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-57626: leave prefix-conflicting and unsupported paths independent") {
+    val deepPath = (1 to 65).map(index => s"field$index").mkString("$.", ".", "")
+    val legacyPaths = Seq("$.a.b", "$.items[0].id", "$.a.*", deepPath)
     val query = testRelation2.select(
       GetJsonObject($"json", Literal("$.a")).as("a"),
-      nested.as("nested"),
-      GetJsonObject($"json", Literal("$.c")).as("c"))
+      GetJsonObject($"json", Literal(legacyPaths(0))).as("nested"),
+      GetJsonObject($"json", Literal("$.c.d")).as("d"),
+      GetJsonObject($"json", Literal(legacyPaths(1))).as("array"),
+      GetJsonObject($"json", Literal(legacyPaths(2))).as("wildcard"),
+      GetJsonObject($"json", Literal(legacyPaths(3))).as("deep"),
+      GetJsonObject($"json", Literal("$.e")).as("e"))
     val optimized = Optimizer.execute(query.analyze)
 
     val shared = optimized.collect {
@@ -256,11 +289,80 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
         case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
       }
     }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
-    assert(shared.child.asInstanceOf[MultiGetJsonObject].fieldNames == Seq("a", "c"))
+      .child.asInstanceOf[MultiGetJsonObject]
+    assert(shared.fallbackPaths == Seq("$.a", "$.c.d", "$.e"))
+
+    val remainingPaths = optimized.expressions.flatMap(_.collect {
+      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString
+    })
+    assert(legacyPaths.forall(remainingPaths.contains))
+  }
+
+  test("SPARK-57626: keep a later prefix-conflicting path independent") {
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a.b")).as("b"),
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      GetJsonObject($"json", Literal("$.a.c")).as("c"),
+      GetJsonObject($"json", Literal("$.d")).as("d"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val shared = optimized.collect {
+      case Project(projectList, _) => projectList.collectFirst {
+        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+      }
+    }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+      .child.asInstanceOf[MultiGetJsonObject]
+    assert(shared.fallbackPaths == Seq("$.a.b", "$.a.c", "$.d"))
     assert(optimized.expressions.exists(_.exists {
-      case GetJsonObject(_, Literal(path, StringType)) => path.toString == "$.a.b"
+      case GetJsonObject(_, Literal(path: UTF8String, StringType)) => path.toString == "$.a"
       case _ => false
     }))
+  }
+
+  test("SPARK-57626: share parallel prefix chains in one optimizer invocation") {
+    def prefixChain(root: String): Seq[String] = (1 to 9).map { depth =>
+      (1 to depth).map(index => s"$root$index").mkString("$.", ".", "")
+    }
+
+    val leftPaths = prefixChain("a")
+    val rightPaths = prefixChain("x")
+    val query = testRelation2.select((leftPaths ++ rightPaths).zipWithIndex.map {
+      case (path, index) => GetJsonObject($"json", Literal(path)).as(s"field_$index")
+    }: _*)
+
+    val expectedSharedPaths = leftPaths.zip(rightPaths).map {
+      case (left, right) => Seq(left, right)
+    }
+    def assertSharedPaths(optimized: LogicalPlan): Unit = {
+      val sharedPaths = optimized.collect {
+        case Project(projectList, _) => projectList.collect {
+          case Alias(shared: MultiGetJsonObject, "_shared_json_paths") => shared.fallbackPaths
+        }
+      }.flatten
+      assert(sharedPaths == expectedSharedPaths)
+    }
+
+    assertSharedPaths(OptimizeCsvJsonExprs(query.analyze))
+    assertSharedPaths(Optimizer.execute(query.analyze))
+    assertSharedPaths(OptimizerWithCollapseProject.execute(query.analyze))
+  }
+
+  test("SPARK-57626: share a wide set of simple paths") {
+    val pathCount = 2000
+    val query = testRelation2.select((0 until pathCount).map { index =>
+      GetJsonObject($"json", Literal(s"$$.field_$index")).as(s"field_$index")
+    }: _*)
+    val optimized = Optimizer.execute(query.analyze)
+
+    val shared = optimized.collect {
+      case Project(projectList, _) => projectList.collectFirst {
+        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+      }
+    }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+      .child.asInstanceOf[MultiGetJsonObject]
+    assert(shared.fallbackPaths.length == pathCount)
+    assert(shared.fallbackPaths.head == "$.field_0")
+    assert(shared.fallbackPaths.last == s"$$.field_${pathCount - 1}")
   }
 
   test("SPARK-47670: shared get_json_object paths survive project collapsing") {

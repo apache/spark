@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
   SupportsRowLevelOperations,
-  Table => CatalogTable,
+  Table => V2Table,
   TableCatalog,
   TableChange,
   TableInfo
@@ -277,7 +277,7 @@ object DatasetManager extends Logging {
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
-      context: PipelineUpdateContext): (Table, CatalogTable) = {
+      context: PipelineUpdateContext): (Table, V2Table) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     val catalogManager = context.spark.sessionState.catalogManager
     val catalog = (table.identifier.catalog match {
@@ -338,7 +338,7 @@ object DatasetManager extends Logging {
     // Create the table if absent, otherwise evolve it (schema + properties).
     existingTableOpt match {
       case Some(existingTable) =>
-        evolveTableInCatalog(
+        evolveTable(
           catalog = catalog,
           tableIdentifier = identifier,
           existingTable = existingTable,
@@ -347,7 +347,7 @@ object DatasetManager extends Logging {
           mergeWithExistingSchema = isTableIncrementallyUpdated
         )
       case None =>
-        createTableInCatalog(
+        createTable(
           catalog = catalog,
           tableIdentifier = identifier,
           schema = outputSchema,
@@ -357,12 +357,12 @@ object DatasetManager extends Logging {
     }
 
     val catalogTableEntity = catalog.loadTable(identifier)
-    val tableWithMaterializationMetadata = 
+    val tableWithMaterializationMetadata =
       table.copy(
         normalizedPath =
           Option(catalogTableEntity.properties().get(TableCatalog.PROP_LOCATION))
       )
-    
+
     (tableWithMaterializationMetadata, catalogTableEntity)
   }
 
@@ -379,7 +379,7 @@ object DatasetManager extends Logging {
    */
   private def requireAutoCdcTargetSupportsRowLevelOps(
       targetTable: Table,
-      targetTableCatalogEntity: CatalogTable): Unit = {
+      targetTableCatalogEntity: V2Table): Unit = {
     if (!targetTableCatalogEntity.isInstanceOf[SupportsRowLevelOperations]) {
       throw new AnalysisException(
         errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
@@ -419,7 +419,7 @@ object DatasetManager extends Logging {
       context.spark.sql(
         s"DROP TABLE IF EXISTS ${auxiliaryTableCatalystIdentifier.quotedString}"
       )
-      createTableInCatalog(
+      createTable(
         catalog = catalog,
         tableIdentifier = auxiliaryTableIdentifier,
         schema = auxiliaryTableSpec.schema,
@@ -447,7 +447,7 @@ object DatasetManager extends Logging {
                 expectedScdType = autoCdcSpec.expectedScdType
               )
           }
-          evolveTableInCatalog(
+          evolveTable(
             catalog = catalog,
             tableIdentifier = auxiliaryTableIdentifier,
             existingTable = existingAuxiliaryTable,
@@ -456,7 +456,7 @@ object DatasetManager extends Logging {
             mergeWithExistingSchema = true
           )
         case None =>
-          createTableInCatalog(
+          createTable(
             catalog = catalog,
             tableIdentifier = auxiliaryTableIdentifier,
             schema = auxiliaryTableSpec.schema,
@@ -470,7 +470,7 @@ object DatasetManager extends Logging {
   /** Loads the table at `identifier` from `catalog`, or `None` if it does not exist. */
   private def loadTableIfExists(
       catalog: TableCatalog,
-      identifier: Identifier): Option[CatalogTable] = {
+      identifier: Identifier): Option[V2Table] = {
     Option.when(catalog.tableExists(identifier))(catalog.loadTable(identifier))
   }
 
@@ -483,7 +483,7 @@ object DatasetManager extends Logging {
    * @param properties the table properties to create the table with.
    * @param transforms the partition/cluster transforms to create the table with.
    */
-  private def createTableInCatalog(
+  private def createTable(
       catalog: TableCatalog,
       tableIdentifier: Identifier,
       schema: StructType,
@@ -501,8 +501,9 @@ object DatasetManager extends Logging {
 
   /**
    * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema and
-   * (re)setting its properties. Partitioning/clustering cannot change in place, so no transforms are
-   * accepted here. Used both for graph datasets and for internal auxiliary tables.
+   * properties, skipping the catalog `alterTable` entirely when nothing actually changes.
+   * Partitioning/clustering cannot change in place, so no transforms are accepted here. Used both
+   * for graph datasets and for internal auxiliary tables.
    *
    * @param existingTable           the currently materialized table.
    * @param desiredSchema           the schema the table should have as computed in the current
@@ -510,15 +511,17 @@ object DatasetManager extends Logging {
    *                                schema; for auxiliary tables, the derived schema). This is the
    *                                "incoming" side and may differ from `existingTable`'s recorded
    *                                schema due to schema evolution across runs.
-   * @param properties              the table properties to (re)set on evolve.
+   * @param properties              the declared table properties to (re)set on the table. Note
+   *                                that properties absent here are NOT removed from the table (see
+   *                                the TODO in the body).
    * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
    *                                desired schemas (additive evolution) rather than the desired
    *                                schema as-is.
    */
-  private def evolveTableInCatalog(
+  private def evolveTable(
       catalog: TableCatalog,
       tableIdentifier: Identifier,
-      existingTable: CatalogTable,
+      existingTable: V2Table,
       desiredSchema: StructType,
       properties: Map[String, String],
       mergeWithExistingSchema: Boolean): Unit = {
@@ -529,8 +532,26 @@ object DatasetManager extends Logging {
       desiredSchema
     }
     val columnChanges = diffSchemas(currentSchema, targetSchema)
-    val setProperties = properties.map { case (k, v) => TableChange.setProperty(k, v) }
-    catalog.alterTable(tableIdentifier, (columnChanges ++ setProperties).toArray: _*)
+
+    val existingProperties = existingTable.properties()
+
+    // TODO (SPARK-57670): Property removal is intentionally not handled here: a property dropped
+    // from the table definition between runs is left in place rather than actually removed from the
+    // corresponding catalog table entry. Removing it reliably is hard because we cannot distinguish
+    // a user-declared property the user dropped from a catalog/engine-managed property (e.g. the
+    // non-reserved `clusteringColumns`, or arbitrary catalog-internal keys) that must never be
+    // removed, and there is no record of which keys the pipeline previously set.
+    val propertiesToSet = properties.collect {
+      case (k, v) if !Option(existingProperties.get(k)).contains(v) =>
+        TableChange.setProperty(k, v)
+    }
+
+    val allTableChanges = columnChanges ++ propertiesToSet
+
+    // If there are no table changes to evolve with, avoid the no-op round-trip alter altogether.
+    if (allTableChanges.nonEmpty) {
+      catalog.alterTable(tableIdentifier, allTableChanges.toArray: _*)
+    }
   }
 
   /**

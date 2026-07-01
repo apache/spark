@@ -307,6 +307,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
   test("Locality support for FileScanRDD - one file per partition") {
     withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true") {
       val table =
@@ -332,6 +333,7 @@ class FileSourceStrategySuite extends SharedSparkSession {
     withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+        SQLConf.IGNORE_DATA_LOCALITY.key -> "false",
         "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
         "fs.file.impl.disable.cache" -> "true") {
       val table =
@@ -605,25 +607,27 @@ class FileSourceStrategySuite extends SharedSparkSession {
   }
 
   test(s"SPARK-44021: Test ${SQLConf.FILES_MAX_PARTITION_NUM.key} works as expected") {
-    val files =
-      Range(0, 300000).map(p => PartitionedFile(InternalRow.empty, sp(s"$p"), 0, 50000000))
-    val maxPartitionBytes = conf.filesMaxPartitionBytes
-    val defaultPartitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
-    assert(defaultPartitions.size === 150000)
+    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "128MB") {
+      val files =
+        Range(0, 300000).map(p => PartitionedFile(InternalRow.empty, sp(s"$p"), 0, 50000000))
+      val maxPartitionBytes = conf.filesMaxPartitionBytes
+      val defaultPartitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
+      assert(defaultPartitions.size === 150000)
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "20000") {
-      val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
-      assert(partitions.size === 20000)
-    }
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "20000") {
+        val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
+        assert(partitions.size === 20000)
+      }
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "50000") {
-      val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
-      assert(partitions.size === 50000)
-    }
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "50000") {
+        val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
+        assert(partitions.size === 50000)
+      }
 
-    withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "200000") {
-      val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
-      assert(partitions.size === defaultPartitions.size)
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_NUM.key -> "200000") {
+        val partitions = FilePartition.getFilePartitions(spark, files, maxPartitionBytes)
+        assert(partitions.size === defaultPartitions.size)
+      }
     }
   }
 

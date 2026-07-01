@@ -713,12 +713,6 @@ class SparkToParquetSchemaConverter(
         Types.primitive(INT32, repetition)
           .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
-      case t: TimeType =>
-        // Precision 0..6 is stored as TIME(MICROS); precision 7..9 as TIME(NANOS).
-        val unit = if (t.precision > TimeType.MICROS_PRECISION) TimeUnit.NANOS else TimeUnit.MICROS
-        Types.primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timeType(false, unit)).named(field.name)
-
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
       // behavior same as before.
@@ -758,14 +752,6 @@ class SparkToParquetSchemaConverter(
       case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
-
-      case _: TimestampLTZNanosType =>
-        Types.primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.NANOS)).named(field.name)
-
-      case _: TimestampNTZNanosType =>
-        Types.primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.NANOS)).named(field.name)
 
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)

@@ -65,6 +65,14 @@ public class InMemoryStore implements KVStore {
   @Override
   public long count(Class<?> type, String index, Object indexedValue) throws Exception {
     InstanceList<?> list = inMemoryLists.get(type);
+    if (list == null) {
+      // The type has never been written, so there are no matching entities. Still validate
+      // the index name (via reflection on the type) before returning, so that an unknown
+      // index fails the same way it does for a populated type and for the LevelDB/RocksDB
+      // stores, instead of being silently swallowed.
+      new KVTypeInfo(type).getAccessor(index);
+      return 0;
+    }
     int count = 0;
     Object comparable = asKey(indexedValue);
     KVTypeInfo.Accessor accessor = list.getIndexAccessor(index);
@@ -241,7 +249,10 @@ public class InMemoryStore implements KVStore {
         // delete them from `data`.
         for (Object indexValue : indexValues) {
           Comparable<Object> parentKey = asKey(indexValue);
-          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.get(parentKey);
+          if (children == null) {
+            continue;
+          }
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.remove(naturalKey);
             count ++;
@@ -405,7 +416,10 @@ public class InMemoryStore implements KVStore {
           // If there is a parent index for the natural index and the parent of `index` happens to
           // be it, Spark can use the `parentToChildrenMap` to get the related natural keys, and
           // then copy them from `data`.
-          NaturalKeys children = parentToChildrenMap.getOrDefault(parentKey, new NaturalKeys());
+          NaturalKeys children = parentToChildrenMap.get(parentKey);
+          if (children == null) {
+            return new ArrayList<>();
+          }
           ArrayList<T> elements = new ArrayList<>();
           for (Comparable<Object> naturalKey : children.keySet()) {
             data.computeIfPresent(naturalKey, (k, v) -> {

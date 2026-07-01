@@ -76,6 +76,11 @@ message DataType {
     Unparsed unparsed = 24;
 
     Time time = 28;
+
+    // Nanosecond-capable timestamp types (precision 7..9). NTZ and LTZ are distinct kinds
+    // even though their physical value is identical, mirroring timestamp vs timestamp_ntz.
+    TimestampNTZNanos timestamp_ntz_nanos = 29;
+    TimestampLTZNanos timestamp_ltz_nanos = 30;
   }
 
   message Boolean {
@@ -133,6 +138,20 @@ message DataType {
 
   message Time {
     optional int32 precision = 1;
+    uint32 type_variation_reference = 2;
+  }
+
+  // Timestamp without time zone with nanosecond-capable fractional-second precision.
+  message TimestampNTZNanos {
+    // Number of fractional-second digits. Valid values are 7, 8, and 9.
+    optional uint32 precision = 1;
+    uint32 type_variation_reference = 2;
+  }
+
+  // Timestamp with local time zone with nanosecond-capable fractional-second precision.
+  message TimestampLTZNanos {
+    // Number of fractional-second digits. Valid values are 7, 8, and 9.
+    optional uint32 precision = 1;
     uint32 type_variation_reference = 2;
   }
 
