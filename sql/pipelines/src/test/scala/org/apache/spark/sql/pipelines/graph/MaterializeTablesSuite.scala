@@ -1098,21 +1098,18 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
   private val recordingNamespace = "rec_ns"
 
   /**
-   * Registers [[RecordingInMemoryTableCatalog]] under `recordingCatalogName`, resets its shared
-   * alter buffer and any cached catalog state, creates `recordingNamespace`, runs `body`, then
-   * tears the registration back down.
+   * Registers [[RecordingInMemoryTableCatalog]] under `recordingCatalogName`, creates
+   * `recordingNamespace`, runs `body`, then tears the registration back down.
    */
   private def withRecordingCatalog(body: => Unit): Unit = {
     spark.conf.set(
       s"spark.sql.catalog.$recordingCatalogName",
       classOf[RecordingInMemoryTableCatalog].getName
     )
-    RecordingInMemoryTableCatalog.reset()
     try {
       spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $recordingCatalogName.$recordingNamespace")
       body
     } finally {
-      RecordingInMemoryTableCatalog.reset()
       spark.sessionState.catalogManager.reset()
       spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$recordingCatalogName")
     }
@@ -1144,6 +1141,11 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
     )
   }
 
+  private def recordingCatalog: RecordingInMemoryTableCatalog =
+    spark.sessionState.catalogManager
+      .catalog(recordingCatalogName)
+      .asInstanceOf[RecordingInMemoryTableCatalog]
+
   private def loadTableFromRecordingCatalog(name: String): V2Table = {
     val catalog = spark.sessionState.catalogManager
       .catalog(recordingCatalogName)
@@ -1158,9 +1160,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       // Creating the table issues no alter, and re-materializing the unchanged table is a no-op,
       // so no alter is ever recorded.
       materializeStreamingTable("t", schema, props)
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
       materializeStreamingTable("t", schema, props)
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
     }
   }
 
@@ -1170,11 +1172,11 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       // Creating the table issues no alter; re-materializing with changed/added properties issues
       // exactly one alter that sets them.
       materializeStreamingTable("t", schema, Map("p.a" -> "1"))
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
       materializeStreamingTable("t", schema, Map("p.a" -> "2", "p.new" -> "n"))
-      assert(RecordingInMemoryTableCatalog.recordedAlters.size == 1)
+      assert(recordingCatalog.recordedAlters.size == 1)
 
-      val changes = RecordingInMemoryTableCatalog.recordedAlters.flatten
+      val changes = recordingCatalog.recordedAlters.flatten
       assert(changes.forall(_.isInstanceOf[TableChange.SetProperty]))
       val set = changes.collect {
         case s: TableChange.SetProperty => s.property() -> s.value()
@@ -1192,15 +1194,15 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       // Creating the table issues no alter; re-materializing with an added column issues exactly
       // one alter that adds it.
       materializeStreamingTable("t", new StructType().add("id", IntegerType), Map("p.a" -> "1"))
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
       materializeStreamingTable(
         "t",
         new StructType().add("id", IntegerType).add("value", StringType),
         Map("p.a" -> "1")
       )
-      assert(RecordingInMemoryTableCatalog.recordedAlters.size == 1)
+      assert(recordingCatalog.recordedAlters.size == 1)
 
-      val changes = RecordingInMemoryTableCatalog.recordedAlters.flatten
+      val changes = recordingCatalog.recordedAlters.flatten
       assert(changes.exists(_.isInstanceOf[TableChange.AddColumn]))
 
       assert(
@@ -1218,9 +1220,9 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
       // This test locks in the current buggy behavior where dropped properties do not materialize
       // against the catalog table entity. See SPARK-57670.
       materializeStreamingTable("t", schema, Map("p.keep" -> "v", "p.stale" -> "old"))
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
       materializeStreamingTable("t", schema, Map("p.keep" -> "v"))
-      assert(RecordingInMemoryTableCatalog.recordedAlters.isEmpty)
+      assert(recordingCatalog.recordedAlters.isEmpty)
 
       assert(loadTableFromRecordingCatalog("t").properties().get("p.stale") == "old")
     }
@@ -1228,19 +1230,14 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 }
 
 /**
- * An [[InMemoryTableCatalog]] that records every `alterTable` invocation (into the shared companion
- * buffer) while still applying it, so tests can assert whether materialization issued an alter or
- * skipped it as a no-op.
+ * An [[InMemoryTableCatalog]] that records every `alterTable` invocation while still applying it,
+ * so tests can assert whether materialization issued an alter or skipped it as a no-op.
  */
 class RecordingInMemoryTableCatalog extends InMemoryTableCatalog {
+  val recordedAlters: mutable.ArrayBuffer[Seq[TableChange]] = mutable.ArrayBuffer.empty
+
   override def alterTable(ident: Identifier, changes: TableChange*): V2Table = {
-    RecordingInMemoryTableCatalog.recordedAlters += changes.toSeq
+    recordedAlters += changes.toSeq
     super.alterTable(ident, changes: _*)
   }
-}
-
-object RecordingInMemoryTableCatalog {
-  val recordedAlters: mutable.ArrayBuffer[Seq[TableChange]] =
-    mutable.ArrayBuffer.empty
-  def reset(): Unit = recordedAlters.clear()
 }
