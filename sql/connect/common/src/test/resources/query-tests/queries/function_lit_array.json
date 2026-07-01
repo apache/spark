@@ -521,7 +521,6 @@
           "array": {
             "elementType": {
               "string": {
-                "collation": "UTF8_BINARY"
               }
             },
             "containsNull": true
@@ -579,7 +578,6 @@
           "array": {
             "elementType": {
               "string": {
-                "collation": "UTF8_BINARY"
               }
             },
             "containsNull": true
