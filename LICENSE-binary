@@ -514,7 +514,6 @@ Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.servlet:javax.servlet-api https://oss.oracle.com/licenses/CDDL+GPL-1.1
-javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 
 
 
