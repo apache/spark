@@ -77,7 +77,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     executionResult match {
       case Success(_) => true
-      case Failure(e: SQLException) if dialect.isObjectNotFoundException(e) => false
+      case Failure(e: SQLException)
+        if dialect.isObjectNotFoundException(e) || dialect.isNotSelectableObjectException(e) =>
+        false
       case Failure(e) => throw e  // Re-throw unexpected exceptions
     }
   }
