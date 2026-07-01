@@ -29,6 +29,7 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
+  SupportsRowLevelOperations,
   Table => CatalogTable,
   TableCatalog,
   TableChange,
@@ -106,24 +107,36 @@ object DatasetManager extends Logging {
             if (tablesToMaterialize.keySet.contains(table.identifier)) {
               try {
                 val isFullRefresh = tablesToMaterialize(table.identifier).isFullRefresh
-                val materializedTable = materializeTable(
+                val (tableWithMaterializationMetadata, catalogTableEntity) = materializeTable(
                   resolvedDataflowGraph = resolvedDataflowGraph,
                   table = table,
                   isFullRefresh = isFullRefresh,
                   context = context
                 )
                 // Auxiliary tables' lifecycle should follow the table that it is complimentary to.
-                // If this table has any auxiliary tables, materialize/full-refresh them
-                // accordingly.
-                resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).foreach { 
+                // If this table has any auxiliary tables, validate the target can host them and
+                // materialize/full-refresh them accordingly.
+                resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).foreach {
                   auxiliaryTableSpec =>
+                    // If this table is an AutoCDC target table, as identified by being
+                    // accompanied by an AutoCDC auxiliary table, additionally validate that the
+                    // target table supports row level mutations. This is a relevant validation for
+                    // the auxiliary table itself too, whose format for AutoCDC is fully derived
+                    // from the target table.
+                    if (auxiliaryTableSpec.isInstanceOf[AutoCdcAuxiliaryTableSpec]) {
+                      requireAutoCdcTargetSupportsRowLevelOps(
+                        targetTable = table,
+                        targetTableCatalogEntity = catalogTableEntity
+                      )
+                    }
+                    
                     materializeAuxiliaryTable(
                       auxiliaryTableSpec = auxiliaryTableSpec,
                       isFullRefresh = isFullRefresh,
                       context = context
                     )
-                  }
-                materializedTable
+                }
+                tableWithMaterializationMetadata
               } catch {
                 case NonFatal(e) =>
                   throw TableMaterializationException(
@@ -257,13 +270,14 @@ object DatasetManager extends Logging {
    * @param table The table to be materialized.
    * @param isFullRefresh Whether this table should be full refreshed or not.
    * @param context The context for the pipeline update.
-   * @return The materialized table (with additional metadata set).
+   * @return The materialized graph [[Table]] (with additional metadata set) paired with the loaded
+   *         DSv2 handle of the just created/evolved table.
    */
   private def materializeTable(
       resolvedDataflowGraph: DataflowGraph,
       table: Table,
       isFullRefresh: Boolean,
-      context: PipelineUpdateContext): Table = {
+      context: PipelineUpdateContext): (Table, CatalogTable) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
     val catalogManager = context.spark.sessionState.catalogManager
     val catalog = (table.identifier.catalog match {
@@ -342,11 +356,42 @@ object DatasetManager extends Logging {
         )
     }
 
-    table.copy(
-      normalizedPath = Option(
-        catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
+    val catalogTableEntity = catalog.loadTable(identifier)
+    val tableWithMaterializationMetadata = 
+      table.copy(
+        normalizedPath =
+          Option(catalogTableEntity.properties().get(TableCatalog.PROP_LOCATION))
       )
-    )
+    
+    (tableWithMaterializationMetadata, catalogTableEntity)
+  }
+
+  /**
+   * Validate that the AutoCDC target table is backed by a connector implementing
+   * [[SupportsRowLevelOperations]], the DSv2 contract for the MERGE/UPDATE/DELETE-with-rewrite
+   * operations the AutoCDC transformation relies on. Reuses the target handle already loaded by
+   * [[materializeTable]], so it performs no additional catalog I/O. Only AutoCDC auxiliary specs
+   * carry a MERGE-backed target; other auxiliary tables have no such requirement.
+   *
+   * @param targetTable              the target table graph entity, source of the identifier and
+   *                                 declared format used in the error message.
+   * @param targetTableCatalogEntity the target table's loaded DSv2 handle.
+   */
+  private def requireAutoCdcTargetSupportsRowLevelOps(
+      targetTable: Table,
+      targetTableCatalogEntity: CatalogTable): Unit = {
+    if (!targetTableCatalogEntity.isInstanceOf[SupportsRowLevelOperations]) {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
+        messageParameters = Map(
+          "tableName" -> targetTable.identifier.quotedString,
+          // Prefer the flow-declared format, falling back to the connector's provider property.
+          "format" -> targetTable.format
+            .orElse(Option(targetTableCatalogEntity.properties.get(TableCatalog.PROP_PROVIDER)))
+            .getOrElse("<unknown>")
+        )
+      )
+    }
   }
 
   /**
