@@ -90,11 +90,19 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     DataType,
+    DecimalType,
+    GeographyType,
+    GeometryType,
     MapType,
+    NullType,
     Row,
     StringType,
     StructField,
     StructType,
+    TimestampNTZType,
+    TimestampType,
+    UserDefinedType,
+    VariantType,
     _create_row,
     _parse_datatype_json_string,
 )
@@ -3031,6 +3039,49 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
     ):
         import pyarrow as pa
 
+        def _output_fast_path_safe(dt: DataType) -> bool:
+            # True when building an Arrow array directly from raw UDF results
+            # (pa.array(results, type=...)) yields values identical to running the
+            # per-element LocalDataToArrowConversion converter first. This holds for
+            # numeric/bool/string/binary (and nested containers of them), where the
+            # converter is a no-op for already-correct-type values and pa.array
+            # raises for anything that would need coercion (so we fall back safely).
+            #
+            # It does NOT hold, and the type must be excluded, when the converter can
+            # transform a value that pa.array would ALSO accept (silently producing a
+            # different result) or when pa.array accepts an input the converter is
+            # meant to reject:
+            #   - Timestamp/TimestampNTZ: converter truncates to session tz.
+            #   - Decimal: pa.array coerces int->decimal, but the converter only does
+            #     so when intToDecimalCoercionEnabled; skipping it would bypass that
+            #     gate (and rescaling / Decimal('NaN')->None handling).
+            #   - UDT/Variant/Geo: converter serializes to a storage form.
+            #   - Null: trivial; keep on the safe/simple side.
+            if isinstance(dt, ArrayType):
+                return _output_fast_path_safe(dt.elementType)
+            elif isinstance(dt, MapType):
+                return _output_fast_path_safe(dt.keyType) and _output_fast_path_safe(
+                    dt.valueType
+                )
+            elif isinstance(dt, StructType):
+                return all(_output_fast_path_safe(f.dataType) for f in dt.fields)
+            elif isinstance(
+                dt,
+                (
+                    TimestampType,
+                    TimestampNTZType,
+                    DecimalType,
+                    UserDefinedType,
+                    VariantType,
+                    GeographyType,
+                    GeometryType,
+                    NullType,
+                ),
+            ):
+                return False
+            else:
+                return True
+
         # --- UDF preparation ---
         udf_infos = []
         for udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type in udfs:
@@ -3053,6 +3104,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         none_on_identity=True,
                         int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                     ),
+                    _output_fast_path_safe(udf_return_type),
                 )
             )
         col_names = [f"_{i}" for i in range(len(udfs))]
@@ -3088,7 +3140,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 # --- Process: evaluate each UDF row-by-row ---
                 output_arrays = []
-                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
+                for (
+                    udf_func,
+                    offsets,
+                    zero_arg,
+                    arrow_return_type,
+                    result_conv,
+                    fast_ok,
+                ) in udf_infos:
                     rows = (
                         [() for _ in range(num_rows)]
                         if zero_arg
@@ -3098,15 +3157,34 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     verify_result_row_count(len(results), num_rows)
 
                     # --- Output: Python -> Arrow ---
-                    converted = (
-                        [result_conv(r) for r in results] if result_conv is not None else results
-                    )
-                    try:
-                        arr = pa.array(converted, type=arrow_return_type)
-                    except pa.lib.ArrowInvalid:
-                        arr = pa.array(converted).cast(
-                            target_type=arrow_return_type, safe=runner_conf.safecheck
+                    # Fast path: when the return type has no value-transforming
+                    # coercion (see output_fast_path_safe), try building the Arrow
+                    # array directly from the raw UDF results and let PyArrow (C++)
+                    # do the work, skipping the per-element Python converter, which
+                    # is pure overhead when results already match the declared type.
+                    # Only fall back to the converter if PyArrow rejects the raw
+                    # results (an element genuinely needs coercion, e.g. int->string).
+                    # NOTE: types like timestamp are excluded because raw pa.array
+                    # succeeds but yields DIFFERENT values than the converter (tz
+                    # truncation), so a try/except gate alone is unsafe for them.
+                    arr = None
+                    if result_conv is not None and fast_ok:
+                        try:
+                            arr = pa.array(results, type=arrow_return_type)
+                        except pa.lib.ArrowException:
+                            arr = None
+                    if arr is None:
+                        converted = (
+                            [result_conv(r) for r in results]
+                            if result_conv is not None
+                            else results
                         )
+                        try:
+                            arr = pa.array(converted, type=arrow_return_type)
+                        except pa.lib.ArrowInvalid:
+                            arr = pa.array(converted).cast(
+                                target_type=arrow_return_type, safe=runner_conf.safecheck
+                            )
                     output_arrays.append(arr)
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)

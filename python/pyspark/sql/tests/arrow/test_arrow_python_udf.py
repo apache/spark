@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
     VarcharType,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -269,6 +270,63 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
 
             rounded = df.select(f("v").alias("d")).first().d
             self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
+    def test_array_string_output_fast_path(self):
+        # Regression test for the Arrow Python UDF output fast path: an
+        # array<string> UDF whose elements are already strings must produce the
+        # same result whether or not the per-element output converter is used.
+        df = self.spark.range(0, 5)
+
+        @udf(returnType=ArrayType(StringType()))
+        def reverse_each(i):
+            words = ["alpha", "beta", "gamma"]
+            return [w[::-1] for w in words[: (int(i) % 3) + 1]]
+
+        result = [r.res for r in df.select(reverse_each("id").alias("res")).collect()]
+        self.assertEqual(
+            result,
+            [
+                ["ahpla"],
+                ["ahpla", "ateb"],
+                ["ahpla", "ateb", "ammag"],
+                ["ahpla"],
+                ["ahpla", "ateb"],
+            ],
+        )
+
+    def test_array_string_output_requires_coercion(self):
+        # When the array<string> UDF returns non-string elements, the output must
+        # still be coerced to string (fast path must fall back to the converter).
+        df = self.spark.range(0, 3)
+
+        @udf(returnType=ArrayType(StringType()))
+        def ints_as_strings(i):
+            return [int(i), int(i) + 1]
+
+        result = [r.res for r in df.select(ints_as_strings("id").alias("res")).collect()]
+        self.assertEqual(result, [["0", "1"], ["1", "2"], ["2", "3"]])
+
+    def test_array_timestamp_output_timezone(self):
+        # array<timestamp> is excluded from the fast path because the converter
+        # applies session-timezone truncation that raw pa.array would skip. Verify
+        # the timestamps come back correctly (i.e. the converter path was used).
+        import datetime
+
+        with self.sql_conf({"spark.sql.session.timeZone": "America/Los_Angeles"}):
+            df = self.spark.range(0, 2)
+
+            @udf(returnType=ArrayType(TimestampType()))
+            def make_ts(i):
+                return [datetime.datetime(2020, 1, 1, 12, 0, 0)]
+
+            result = [r.res for r in df.select(make_ts("id").alias("res")).collect()]
+            self.assertEqual(
+                result,
+                [
+                    [datetime.datetime(2020, 1, 1, 12, 0, 0)],
+                    [datetime.datetime(2020, 1, 1, 12, 0, 0)],
+                ],
+            )
 
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
