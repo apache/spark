@@ -3956,7 +3956,8 @@ class SparkConnectPlanner(
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    val profile = session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
+    val profile =
+      session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
