@@ -39,6 +39,7 @@ import pyarrow as pa
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
 from pyspark.serializers import write_int, write_long, SpecialLengths
 from pyspark.sql.types import (
+    ArrayType,
     BinaryType,
     BooleanType,
     DoubleType,
@@ -251,6 +252,12 @@ class MockDataFactory:
         "string": (lambda r: pa.array([f"s{j}" for j in range(r)]), StringType()),
         "binary": (lambda r: pa.array([f"b{j}".encode() for j in range(r)]), BinaryType()),
         "boolean": (lambda r: pa.array(np.random.choice([True, False], r)), BooleanType()),
+        "string_array": (
+            lambda r: pa.array(
+                [[f"s{j}", f"t{j}"] for j in range(r)], type=pa.list_(pa.string())
+            ),
+            ArrayType(StringType()),
+        ),
     }
 
     MIXED_TYPES = [
@@ -266,6 +273,7 @@ class MockDataFactory:
         "pure_ints": [TYPE_REGISTRY["int"]],
         "pure_floats": [TYPE_REGISTRY["double"]],
         "pure_strings": [TYPE_REGISTRY["string"]],
+        "pure_string_arrays": [TYPE_REGISTRY["string_array"]],
         "pure_ts": [
             (
                 lambda r: pa.array(
@@ -480,6 +488,7 @@ class _ArrowBatchedBenchMixin:
         "pure_ints": ("pure_ints", 50_000, 10, 5_000),
         "pure_floats": ("pure_floats", 50_000, 10, 5_000),
         "pure_strings": ("pure_strings", 50_000, 10, 5_000),
+        "pure_string_arrays": ("pure_string_arrays", 50_000, 10, 5_000),
         "mixed_types": ("mixed", 50_000, 10, 5_000),
     }
 
@@ -502,6 +511,16 @@ class _ArrowBatchedBenchMixin:
         "identity_udf": (lambda x: x, None, [0]),
         "stringify_udf": (lambda x: str(x), StringType(), [0]),
         "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
+        # array<string> out. Exercises the output-side Python->Arrow conversion
+        # for a nested type. Type-agnostic on input (like the other UDFs here, so
+        # it runs across every scenario in the cross product); pair with the
+        # ``pure_string_arrays`` scenario for the array<string>-in / array<string>-out
+        # case that stresses the nested output conversion the most.
+        "to_string_array_udf": (
+            lambda x: [str(e)[::-1] for e in x] if isinstance(x, (list, tuple)) else [str(x)],
+            ArrayType(StringType()),
+            [0],
+        ),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
