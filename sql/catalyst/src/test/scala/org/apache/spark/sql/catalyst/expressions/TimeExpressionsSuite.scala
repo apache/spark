@@ -366,6 +366,17 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         s"TIME($precision) SECOND should have DecimalType(${2 + precision}, $precision)")
       checkEvaluation(expr, BigDecimal(expected))
     }
+    // Precisions 7-9 require sub-microsecond nanos
+    Seq(
+      7 -> BigDecimal("15.9876543"),
+      8 -> BigDecimal("15.98765432"),
+      9 -> BigDecimal("15.987654321")).foreach { case (precision, expected) =>
+      val expr = SecondsOfTimeWithFraction(
+        Literal(localTime(13, 11, 15, 987654, 321), TimeType(precision)))
+      assert(expr.dataType == DecimalType(2 + precision, precision),
+        s"TIME($precision) SECOND should have DecimalType(${2 + precision}, $precision)")
+      checkEvaluation(expr, expected)
+    }
     // Verify NULL handling
     checkEvaluation(
       SecondsOfTimeWithFraction(Literal.create(null, TimeType(TimeType.MICROS_PRECISION))),
