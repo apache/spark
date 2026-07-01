@@ -36,7 +36,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.util.LineReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType

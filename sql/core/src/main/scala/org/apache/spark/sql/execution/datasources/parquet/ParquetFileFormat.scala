@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.{Closeable, FileNotFoundException, IOException}
+import java.io.{Closeable, FileNotFoundException}
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
