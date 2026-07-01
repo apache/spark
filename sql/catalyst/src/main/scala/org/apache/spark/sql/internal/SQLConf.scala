@@ -5439,6 +5439,7 @@ object SQLConf {
         "Parquet row-group filtering). The original struct predicate is always retained " +
         "as a post-scan filter for correctness.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -5449,6 +5450,7 @@ object SQLConf {
         "predicates to be decomposed into field-level predicates for pushdown. Structs " +
         "exceeding this limit are not decomposed.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .checkValue(_ > 0, "The threshold must be positive.")
       .createWithDefault(100)
