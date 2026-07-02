@@ -1046,7 +1046,7 @@ case class TimeToMicros(child: Expression) extends TimeToBase {
        9:05 AM
   """,
   group = "datetime_funcs",
-  since = "4.2.0")
+  since = "4.3.0")
 // scalastyle:on line.size.limit
 case class TimeFormat(left: Expression, right: Expression)
   extends BinaryExpression

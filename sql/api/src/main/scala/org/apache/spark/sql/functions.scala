@@ -8738,7 +8738,7 @@ object functions {
    * @return
    *   String representation of the time in the specified format.
    * @group datetime_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def time_format(time: Column, format: String): Column = {
     Column.fn("time_format", time, lit(format))
