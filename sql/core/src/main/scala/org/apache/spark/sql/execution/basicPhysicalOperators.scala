@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD, SQLPartitioningAwareUnionRDD, UnionPartition, UnionRDD}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -1243,7 +1243,7 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
     if (numPartitions == 1 && rdd.getNumPartitions < 1) {
       // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
       // `SinglePartition`.
-      new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
+      new EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
       rdd.coalesce(numPartitions, shuffle = false)
     }
@@ -1251,23 +1251,6 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 
   override protected def withNewChildInternal(newChild: SparkPlan): CoalesceExec =
     copy(child = newChild)
-}
-
-object CoalesceExec {
-  /** A simple RDD with no data, but with the given number of partitions. */
-  class EmptyRDDWithPartitions(
-      @transient private val sc: SparkContext,
-      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
-
-    override def getPartitions: Array[Partition] =
-      Array.tabulate(numPartitions)(i => EmptyPartition(i))
-
-    override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
-      Iterator.empty
-    }
-  }
-
-  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**
