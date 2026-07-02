@@ -19,7 +19,6 @@ package org.apache.spark.ui
 import scala.xml.{Node, Unparsed}
 
 import jakarta.servlet.http.HttpServletRequest
-import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -71,12 +70,9 @@ private[ui] class DriverLogPage(
         End of Log
       </div>
 
-    val logParams = "/?logType=%s".format(logType)
-    // The query string carries request-supplied values into an inline script literal, so encode
-    // it for a JavaScript string context before embedding it via Unparsed below.
-    val jsOnload = "window.onload = " +
-      s"initLogPage('${StringEscapeUtils.escapeEcmaScript(logParams)}', " +
-      s"$curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+    val logParams = "/?logType=%s".format(UIUtils.encodeLogParam(logType))
+    val jsOnload = UIUtils.logPageOnloadScript(
+      logParams, curLogLength, startByte, endByte, logLength, byteLength)
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
