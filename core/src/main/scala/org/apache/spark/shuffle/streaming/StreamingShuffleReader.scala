@@ -90,8 +90,8 @@ class StreamingShuffleReader[K, C](
   setShuffleIdForLogging(streamingShuffleHandle.shuffleId)
   // a mapping of mapId and client
   private[spark] val clientMap = new ConcurrentHashMap[Long, TransportClient]()
-  // Track factories so we can close them on shutdown
-  // TODO SC-220828: refactor code to reuse client factory
+  // Track factories so we can close them on shutdown.
+  // TODO: refactor to reuse a single client factory across writers.
   private val clientFactories = new ConcurrentLinkedQueue[TransportClientFactory]()
   private val tracker = SparkEnv.get.streamingShuffleOutputTracker.get
 
@@ -271,7 +271,6 @@ class StreamingShuffleReader[K, C](
                         logError(errorMsg, th.getCause)
                         errorNotifier.markError(th.getCause)
                         throw new RuntimeException(errorMsg)
-                        null
                       })
                     clientFutureMap.put(mapId, future)
                   }
@@ -344,9 +343,10 @@ class StreamingShuffleReader[K, C](
     terminationAckControlMessageSet.add(shuffleWriterId.toLong)
     val curSent = terminationAckControlMessageSet.size()
     val totalSentNeeded = totalNumShuffleWriters.get()
-    logInfo(s"Termination ack message sent successfully to shuffle writer ${shuffleWriterId}." +
-      s" ${curSent} / ${totalSentNeeded}" +
-      s" sent successfully")
+    logInfo(log"Termination ack message sent successfully to shuffle writer " +
+      log"${MDC(LogKeys.SHUFFLE_WRITER_ID, shuffleWriterId)}." +
+      log" ${MDC(LogKeys.NUM_TERMINATION_ACKS, curSent)} / " +
+      log"${MDC(LogKeys.NUM_SHUFFLE_WRITERS, totalSentNeeded)} sent successfully.")
 
     // if we have sent all term acks successfully
     if (totalSentNeeded > 0 && curSent == totalSentNeeded) {
@@ -486,8 +486,6 @@ class StreamingShuffleReader[K, C](
         }
         override def close(): Unit = {
           dataMessage.release()
-          // !!Potential issue alert!!: if the task fails between the above and below line,
-          // dataMessage.release will get called twice.
           currentDataMessage = null
         }
       }

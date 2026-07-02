@@ -24,7 +24,7 @@ import io.netty.buffer.{ByteBuf, CompositeByteBuf, Unpooled}
 import io.netty.channel.{Channel, ChannelOption}
 import io.netty.util.concurrent.{Future, GenericFutureListener}
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
 import org.apache.spark.network.server.{RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.streaming.{CreditControlMessage, DataMessage, StreamingShuffleMessage, StreamingShuffleMessageType, TerminationAckMessage, TerminationControlMessage}
@@ -37,8 +37,8 @@ import org.apache.spark.util.ErrorNotifier
  * them to a concurrent queue that the calling task (StreamingShuffleReader) can dequeue from.
  */
 class StreamingShuffleClientHandler(
-    // The shuffle writer that we're connected to
-    // TODO(SC-169611) we might remove the field, avoid using it in future development
+    // The shuffle writer that we're connected to.
+    // TODO: we might remove this field; avoid relying on it in future development.
     shuffleWriterId: Int,
     shuffleReaderId: Int,
     queue: LinkedBlockingQueue[StreamingShuffleMessage],
@@ -50,6 +50,11 @@ class StreamingShuffleClientHandler(
   private val SENDBUF_SIZE: Integer = 512
 
   private var lastSeqNum = -1L  // The most recent sequence number we have seen.
+  // Set once this writer's TerminationControlMessage has been received, so that channelInactive
+  // can tell an expected end-of-stream close apart from a premature disconnect (a writer that
+  // died before terminating). @volatile because it is written on the Netty event-loop thread in
+  // receive() and read in channelInactive().
+  @volatile private var terminationReceived = false
   // These variables are used for flow control by updateQuota below.
   private var channel: Channel = _  // The channel to the shuffle writer, captured in channelActive.
   private var remainingBytesQuota: Long = byteLimit // Remaining bytes before pushback.
@@ -181,6 +186,10 @@ class StreamingShuffleClientHandler(
           // we can only release the buf after we have decoded all the rows in the buffer
           sendCreditControlMessage(client, dataMessage.shuffleWriterId, 1)
         case controlMessage: TerminationControlMessage =>
+          // Record termination before sending the ack: the writer only closes its connection
+          // after it receives this ack, so setting the flag here guarantees it is visible before
+          // the resulting channelInactive fires, avoiding a false "premature disconnect" error.
+          terminationReceived = true
           sendTerminationAckMessage(client, controlMessage.shuffleWriterId)
         case _ =>
           throw new IllegalArgumentException(s"Unexpected message type in ShuffleClientHandler: " +
@@ -200,8 +209,16 @@ class StreamingShuffleClientHandler(
   }
 
   override def channelInactive(client: TransportClient): Unit = {
-    // TODO if we haven't received termination marker and channel becomes inactive
-    // we need to fail query.  Something when wrong.
+    // A clean end-of-stream also closes the channel, but only after this reader has received the
+    // writer's TerminationControlMessage (which sets terminationReceived). So a close while the
+    // flag is still false means the writer disconnected before terminating -- e.g. the writer
+    // task failed, its executor was lost, or the network dropped. Surface it through the shared
+    // ErrorNotifier so the reader task fails instead of polling the message queue forever.
+    if (!terminationReceived) {
+      errorNotifier.markError(new SparkException(
+        s"Connection to streaming shuffle writer ${shuffleWriterId} closed before termination; " +
+          "the writer task likely failed."))
+    }
   }
 
   override def exceptionCaught(cause: Throwable, client: TransportClient): Unit = {
