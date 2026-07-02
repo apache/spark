@@ -581,22 +581,37 @@ class _PathPrefixInterceptor(
             compression=getattr(details, "compression", None),
         )
 
-    def _intercept(
+    def intercept_unary_unary(
         self,
         continuation: Callable[[grpc.ClientCallDetails, Any], Any],
         client_call_details: grpc.ClientCallDetails,
-        request_or_iterator: Any,
+        request: Any,
     ) -> Any:
-        # The four unary/stream entry points share this body; the request payload
-        # (a single message or an iterator) is forwarded to the continuation unchanged.
-        return continuation(self._rewrite(client_call_details), request_or_iterator)
+        return continuation(self._rewrite(client_call_details), request)
 
-    # gRPC dispatches on these four specific method names; alias each to the single
-    # shared implementation above.
-    intercept_unary_unary = _intercept
-    intercept_unary_stream = _intercept
-    intercept_stream_unary = _intercept
-    intercept_stream_stream = _intercept
+    def intercept_unary_stream(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request: Any,
+    ) -> Any:
+        return continuation(self._rewrite(client_call_details), request)
+
+    def intercept_stream_unary(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request_iterator: Iterator[Any],
+    ) -> Any:
+        return continuation(self._rewrite(client_call_details), request_iterator)
+
+    def intercept_stream_stream(
+        self,
+        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
+        client_call_details: grpc.ClientCallDetails,
+        request_iterator: Iterator[Any],
+    ) -> Any:
+        return continuation(self._rewrite(client_call_details), request_iterator)
 
 
 class PathAwareChannelBuilder(DefaultChannelBuilder):
