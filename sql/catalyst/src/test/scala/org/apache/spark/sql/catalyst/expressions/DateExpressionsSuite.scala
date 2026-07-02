@@ -768,7 +768,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MonthsBetween(Literal.create(zeroDay1, ntzType), Literal.create(zeroDay2, ntzType),
         Literal.FalseLiteral, Some("UTC")),
       baseline)
-    // Matches the production formula: diff = monthDiff + (secondsDiff + nanosFraction) / secondsInMonth
+    // Matches the production formula:
+    // diff = monthDiff + (secondsDiff + nanosFraction) / secondsInMonth
     val withNanosFraction =
       (86400.0 + 500.0 / NANOS_PER_SECOND.toDouble) / (31 * SECONDS_PER_DAY).toDouble
     checkEvaluation(

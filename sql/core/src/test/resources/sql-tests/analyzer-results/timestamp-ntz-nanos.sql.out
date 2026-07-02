@@ -697,6 +697,60 @@ Project [unix_nanos(cast(null as timestamp_ntz(9))) AS unix_nanos(CAST(NULL AS T
 
 
 -- !query
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00')
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00 as timestamp), cast(1996-10-30 00:00:00 as timestamp), true, Some(America/Los_Angeles)) AS months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00', true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00',
+    TIMESTAMP_NTZ '1996-10-30 00:00:00', false)
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00 as timestamp), cast(1996-10-30 00:00:00 as timestamp), false, Some(America/Los_Angeles)) AS months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00', false)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false)
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000000 as timestamp_ntz(9)), cast(1996-10-30 00:00:00.000000000 as timestamp_ntz(9)), false, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000000 AS TIMESTAMP_NTZ(9)), CAST(1996-10-30 00:00:00.000000000 AS TIMESTAMP_NTZ(9)), false)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false)
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000500 as timestamp_ntz(9)), cast(1996-10-30 00:00:00.000000000 as timestamp_ntz(9)), false, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000500 AS TIMESTAMP_NTZ(9)), CAST(1996-10-30 00:00:00.000000000 AS TIMESTAMP_NTZ(9)), false)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9))
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000500 as timestamp_ntz(9)), cast(1996-10-30 00:00:00.000000000 as timestamp_ntz(9)), true, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000500 AS TIMESTAMP_NTZ(9)), CAST(1996-10-30 00:00:00.000000000 AS TIMESTAMP_NTZ(9)), true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    TIMESTAMP_NTZ '1996-10-30 00:00:00')
+-- !query analysis
+Project [months_between(cast(1997-02-28 10:30:00.000000000 as timestamp_ntz(9)), cast(1996-10-30 00:00:00 as timestamp), true, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000000 AS TIMESTAMP_NTZ(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00', true)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT months_between(CAST(NULL AS timestamp_ntz(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00')
+-- !query analysis
+Project [months_between(cast(null as timestamp_ntz(9)), cast(1996-10-30 00:00:00 as timestamp), true, Some(America/Los_Angeles)) AS months_between(CAST(NULL AS TIMESTAMP_NTZ(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00', true)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT typeof(c), c FROM (
     SELECT TIMESTAMP_NTZ '0001-01-01 00:00:00' AS c
     UNION ALL SELECT TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999') ORDER BY c
