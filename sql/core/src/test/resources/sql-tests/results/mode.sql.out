@@ -85,7 +85,7 @@ struct<mode(col):int>
 -- !query
 SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col)
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY col DESC):int>
+struct<mode() WITHIN GROUP (ORDER BY col):int>
 -- !query output
 -10
 
@@ -182,7 +182,7 @@ struct<mode(col):map<int,string>>
 -- !query
 SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col)
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY col DESC):map<int,string>>
+struct<mode() WITHIN GROUP (ORDER BY col):map<int,string>>
 -- !query output
 {1:"a"}
 
@@ -193,7 +193,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY col DESC)
 FROM VALUES (null), (null), (null) AS tab(col)
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY col DESC):void,mode() WITHIN GROUP (ORDER BY col):void>
+struct<mode() WITHIN GROUP (ORDER BY col):void,mode() WITHIN GROUP (ORDER BY col DESC):void>
 -- !query output
 NULL	NULL
 
@@ -205,7 +205,7 @@ SELECT
 FROM basic_pays
 WHERE salary > 20000
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary):int>
+struct<mode() WITHIN GROUP (ORDER BY salary):int,mode() WITHIN GROUP (ORDER BY salary DESC):int>
 -- !query output
 NULL	NULL
 
@@ -216,7 +216,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY salary DESC)
 FROM basic_pays
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary):int>
+struct<mode() WITHIN GROUP (ORDER BY salary):int,mode() WITHIN GROUP (ORDER BY salary DESC):int>
 -- !query output
 5186	11798
 
@@ -227,7 +227,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE salary > 10000)
 FROM basic_pays
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000)):int>
+struct<mode() WITHIN GROUP (ORDER BY salary):int,mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE (salary > 10000)):int>
 -- !query output
 5186	10449
 
@@ -241,7 +241,7 @@ FROM basic_pays
 GROUP BY department
 ORDER BY department
 -- !query schema
-struct<department:string,mode() WITHIN GROUP (ORDER BY salary DESC):int,mode() WITHIN GROUP (ORDER BY salary DESC) FILTER (WHERE (salary > 10000)):int>
+struct<department:string,mode() WITHIN GROUP (ORDER BY salary):int,mode() WITHIN GROUP (ORDER BY salary) FILTER (WHERE (salary > 10000)):int>
 -- !query output
 Accounting	6627	11472
 IT	5186	NULL
@@ -258,7 +258,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -288,7 +288,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -318,7 +318,7 @@ SELECT
 FROM basic_pays
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):int>
 -- !query output
 Leslie Thompson	IT	5186	5186
 Anthony Bow	Accounting	6627	6627
@@ -350,7 +350,7 @@ WHERE salary > 8900
 WINDOW w AS (PARTITION BY department)
 ORDER BY salary
 -- !query schema
-struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary DESC) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
+struct<employee_name:string,department:string,salary:int,mode() WITHIN GROUP (ORDER BY salary) OVER (PARTITION BY department ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
 Jeff Firrelli	Accounting	8992	8992
 Julie Firrelli	Sales	9181	9181
@@ -466,7 +466,7 @@ SELECT
   mode() WITHIN GROUP (ORDER BY dt DESC)
 FROM intervals
 -- !query schema
-struct<mode() WITHIN GROUP (ORDER BY dt DESC):interval month,mode() WITHIN GROUP (ORDER BY dt):interval month>
+struct<mode() WITHIN GROUP (ORDER BY dt):interval month,mode() WITHIN GROUP (ORDER BY dt DESC):interval month>
 -- !query output
 0-10	1-8
 
@@ -480,7 +480,7 @@ FROM intervals
 GROUP BY k
 ORDER BY k
 -- !query schema
-struct<k:int,mode() WITHIN GROUP (ORDER BY ym DESC):interval second,mode() WITHIN GROUP (ORDER BY dt):interval month>
+struct<k:int,mode() WITHIN GROUP (ORDER BY ym):interval second,mode() WITHIN GROUP (ORDER BY dt DESC):interval month>
 -- !query output
 0	0 00:00:00.000000000	3-4
 1	0 00:00:10.000000000	1-8
