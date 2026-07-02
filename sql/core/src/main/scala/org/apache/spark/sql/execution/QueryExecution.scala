@@ -777,6 +777,11 @@ object QueryExecution {
       // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
       // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
       RemoveRedundantSorts,
+      // `RemoveRedundantAggregates` must run after `EnsureRequirements`: it relies on the absence
+      // of a ShuffleExchangeExec between Partial and Final agg nodes as proof that no shuffle
+      // was inserted. Running it before EnsureRequirements would incorrectly collapse pairs that
+      // still need a shuffle.
+      RemoveRedundantAggregates,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++

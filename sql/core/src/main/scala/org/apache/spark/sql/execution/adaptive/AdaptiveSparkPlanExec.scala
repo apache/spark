@@ -138,7 +138,8 @@ case class AdaptiveSparkPlanExec(
       // `RemoveRedundantSorts` runs after `OptimizeSkewedJoin` so that it can also clean up the
       // local sort left dangling right below the extra shuffle that skew join optimization may
       // insert between two joins.
-      RemoveRedundantSorts
+      RemoveRedundantSorts,
+      RemoveRedundantAggregates
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
