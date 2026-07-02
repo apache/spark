@@ -13702,7 +13702,7 @@ def time_format(time: "ColumnOrName", format: str) -> Column:
     A pattern could be for instance `HH:mm:ss` and could return a string like '14:30:45'.
     Time-related pattern letters of `datetime pattern`_ can be used.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.4.0
 
     Parameters
     ----------
