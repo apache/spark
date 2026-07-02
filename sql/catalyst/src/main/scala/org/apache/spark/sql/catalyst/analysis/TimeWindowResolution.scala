@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, ExpectsInputTypes, Expression, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, PreciseTimestampNanosConversion, SessionWindow, Subtract, TimeWindow, UnaryExpression, WindowTime}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, ExpectsInputTypes, Expression, GetStructField, IsNotNull, LessThan, Literal, NamedExpression, PreciseTimestampConversion, PreciseTimestampNanosConversion, SessionWindow, Subtract, TimestampAddInterval, TimeWindow, UnaryExpression, WindowTime}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimestampNanoType, CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder, TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimestampNanoType, CalendarIntervalType, DataType, DayTimeIntervalType, LongType, Metadata, MetadataBuilder, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -193,11 +193,13 @@ object TimeWindowResolution {
         throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
     }
     val sessionEnd = if (isNanosType(session.timeColumn.dataType)) {
-      // For nanosecond-precision timestamps, TimestampAddInterval does not support
-      // CalendarIntervalType. Compute session end in the epoch-nanos Long domain directly:
-      // sessionStart + (interval.days * NANOS_PER_DAY + interval.microseconds * 1000)
-      val gapNanos = CalendarIntervalToNanos(gapDuration)
-      sessionStart + gapNanos
+      // For nanosecond-precision timestamps, convert the CalendarInterval gap to
+      // DayTimeIntervalType (microseconds) and use TimestampAddInterval which natively
+      // supports DayTimeIntervalType + nanos timestamps (timezone-aware).
+      val gapAsDayTime = CalendarIntervalToMicros(gapDuration)
+      timestampToLong(
+        TimestampAddInterval(session.timeColumn, gapAsDayTime),
+        session.timeColumn.dataType)
     } else {
       timestampToLong(session.timeColumn + gapDuration, session.timeColumn.dataType)
     }
@@ -322,26 +324,27 @@ object TimeWindowResolution {
 }
 
 /**
- * Internal expression that converts a [[CalendarInterval]] to total nanoseconds as a [[Long]].
- * Used by session window rewrite for nanosecond-precision timestamp types where
- * [[TimestampAddInterval]] does not support [[CalendarIntervalType]] operands.
+ * Internal expression that converts a [[CalendarInterval]] to total microseconds, typed as
+ * [[DayTimeIntervalType]]. Used by session window rewrite for nanosecond-precision timestamp
+ * types so that [[TimestampAddInterval]] can be used (it supports DayTimeIntervalType + nanos
+ * timestamps natively with timezone awareness).
  *
- * Computes: `interval.days * NANOS_PER_DAY + interval.microseconds * NANOS_PER_MICROS`.
+ * Computes: `interval.days * MICROS_PER_DAY + interval.microseconds`.
  * Months are assumed to be zero (session window rejects monthly intervals).
  */
-private[analysis] case class CalendarIntervalToNanos(child: Expression)
+private[analysis] case class CalendarIntervalToMicros(child: Expression)
   extends UnaryExpression with ExpectsInputTypes {
-  import org.apache.spark.sql.catalyst.util.DateTimeConstants.{NANOS_PER_DAY, NANOS_PER_MICROS}
+  import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(CalendarIntervalType)
-  override def dataType: DataType = LongType
+  override def dataType: DataType = DayTimeIntervalType()
 
   override def nullSafeEval(input: Any): Any = {
     val interval = input.asInstanceOf[CalendarInterval]
     Math.addExact(
-      Math.multiplyExact(interval.days.toLong, NANOS_PER_DAY),
-      Math.multiplyExact(interval.microseconds, NANOS_PER_MICROS))
+      Math.multiplyExact(interval.days.toLong, MICROS_PER_DAY),
+      interval.microseconds)
   }
 
   override def doGenCode(
@@ -352,11 +355,11 @@ private[analysis] case class CalendarIntervalToNanos(child: Expression)
       code"""boolean ${ev.isNull} = ${eval.isNull};
          |long ${ev.value} = ${eval.isNull} ? 0L :
          |  Math.addExact(
-         |    Math.multiplyExact((long) ${eval.value}.days, ${NANOS_PER_DAY}L),
-         |    Math.multiplyExact(${eval.value}.microseconds, ${NANOS_PER_MICROS}L));
+         |    Math.multiplyExact((long) ${eval.value}.days, ${MICROS_PER_DAY}L),
+         |    ${eval.value}.microseconds);
        """.stripMargin)
   }
 
-  override protected def withNewChildInternal(newChild: Expression): CalendarIntervalToNanos =
+  override protected def withNewChildInternal(newChild: Expression): CalendarIntervalToMicros =
     copy(child = newChild)
 }
