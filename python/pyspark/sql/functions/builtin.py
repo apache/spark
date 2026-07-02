@@ -25732,19 +25732,19 @@ def try_make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnO
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(6, 30, 45.887)], ["hour", "minute", "second"])
     >>> df.select(sf.try_make_time("hour", "minute", "second")).show()
-    +------------------------------------+
+    +-----------------------------------+
     |try_make_time(hour, minute, second)|
-    +------------------------------------+
+    +-----------------------------------+
     |                       06:30:45.887|
-    +------------------------------------+
+    +-----------------------------------+
 
     >>> df = spark.createDataFrame([(25, 30, 0.0)], ["hour", "minute", "second"])
     >>> df.select(sf.try_make_time("hour", "minute", "second")).show()
-    +------------------------------------+
+    +-----------------------------------+
     |try_make_time(hour, minute, second)|
-    +------------------------------------+
+    +-----------------------------------+
     |                               NULL|
-    +------------------------------------+
+    +-----------------------------------+
     """
     return _invoke_function_over_columns("try_make_time", hour, minute, second)
 
