@@ -181,6 +181,11 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
           Row(6, 0, "hr"))) // insert
 
       checkReplacedPartitions(Seq("hr"))
+
+      val summary = getMergeSummary()
+      assert(summary.groupFilterTimeMs() > 0,
+        s"Expected groupFilterTimeMs > 0 when the runtime group filter subquery fires, " +
+          s"got ${summary.groupFilterTimeMs()}")
     }
   }
 

@@ -226,6 +226,8 @@ trait InsertIntoSQLOnlyTests
     val summary = inMemoryTable.commits.last.writeSummary.get.asInstanceOf[InsertSummary]
     assert(summary.numInsertedRows() === numInsertedRows,
       s"Expected numInsertedRows=$numInsertedRows, got ${summary.numInsertedRows()}")
+    assert(summary.executionTimeMs() >= 0,
+      s"Expected executionTimeMs >= 0, got ${summary.executionTimeMs()}")
   }
 
   protected val v2Format: String

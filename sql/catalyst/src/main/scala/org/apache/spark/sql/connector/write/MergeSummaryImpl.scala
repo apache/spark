@@ -28,6 +28,9 @@ private[sql] case class MergeSummaryImpl(
     numTargetRowsMatchedUpdated: Long,
     numTargetRowsMatchedDeleted: Long,
     numTargetRowsNotMatchedBySourceUpdated: Long,
-    numTargetRowsNotMatchedBySourceDeleted: Long)
+    numTargetRowsNotMatchedBySourceDeleted: Long,
+    executionTimeMs: Long,
+    groupFilterTimeMs: Long,
+    writeJobTimeMs: Long)
   extends MergeSummary {
 }

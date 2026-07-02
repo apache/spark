@@ -118,6 +118,11 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
           Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
 
         checkReplacedPartitions(Seq("hr"))
+
+        val summary = getUpdateSummary()
+        assert(summary.groupFilterTimeMs() > 0,
+          s"Expected groupFilterTimeMs > 0 when the runtime group filter subquery fires, " +
+            s"got ${summary.groupFilterTimeMs()}")
       }
     }
   }

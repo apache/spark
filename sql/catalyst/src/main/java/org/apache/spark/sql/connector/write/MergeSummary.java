@@ -69,4 +69,17 @@ public interface MergeSummary extends WriteSummary {
    * or -1 if not found.
    */
   long numTargetRowsNotMatchedBySourceDeleted();
+
+  /**
+   * Returns the time, in milliseconds, spent in the runtime group-filter subquery that identifies
+   * which target files contain rows matching the merge condition. Returns -1 when no such
+   * subquery was injected.
+   */
+  long groupFilterTimeMs();
+
+  /**
+   * Returns the wall-clock time, in milliseconds, of the main write job that scans pruned
+   * target files, applies the merge logic, and writes output.
+   */
+  long writeJobTimeMs();
 }

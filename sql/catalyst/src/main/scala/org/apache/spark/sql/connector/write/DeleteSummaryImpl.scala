@@ -22,6 +22,9 @@ package org.apache.spark.sql.connector.write
  */
 private[sql] case class DeleteSummaryImpl(
     numDeletedRows: Long,
-    numCopiedRows: Long)
+    numCopiedRows: Long,
+    executionTimeMs: Long,
+    groupFilterTimeMs: Long,
+    writeJobTimeMs: Long)
   extends DeleteSummary {
 }

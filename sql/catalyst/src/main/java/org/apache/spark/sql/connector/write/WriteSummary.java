@@ -26,4 +26,10 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public interface WriteSummary {
+
+  /**
+   * Returns the total time, in milliseconds, taken to execute the write operation up to (but not
+   * including) the connector commit.
+   */
+  long executionTimeMs();
 }

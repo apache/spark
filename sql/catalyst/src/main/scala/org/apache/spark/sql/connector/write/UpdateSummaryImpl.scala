@@ -22,6 +22,9 @@ package org.apache.spark.sql.connector.write
  */
 private[sql] case class UpdateSummaryImpl(
     numUpdatedRows: Long,
-    numCopiedRows: Long)
+    numCopiedRows: Long,
+    executionTimeMs: Long,
+    groupFilterTimeMs: Long,
+    writeJobTimeMs: Long)
   extends UpdateSummary {
 }
