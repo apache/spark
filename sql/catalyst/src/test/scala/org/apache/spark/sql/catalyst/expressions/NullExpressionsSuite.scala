@@ -207,8 +207,19 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-22705: Coalesce should use less global variables") {
     val ctx = new CodegenContext()
-    Coalesce(Seq(Literal("a"), Literal("b"))).genCode(ctx)
+    // Use three children so that the general do-while codegen path is exercised: the two-argument
+    // form with a non-nullable pure fallback is now special-cased to a ternary with no global
+    // state (covered by the test below).
+    Coalesce(Seq(Literal("a"), Literal("b"), Literal("c"))).genCode(ctx)
     assert(ctx.inlinedMutableStates.size == 1)
+  }
+
+  test("Coalesce with a non-nullable pure fallback compiles to a ternary with no global state") {
+    val ctx = new CodegenContext()
+    Coalesce(Seq(Literal.create(null, StringType), Literal("b"))).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
+    checkEvaluation(Coalesce(Seq(Literal.create(null, StringType), Literal("a"))), "a")
+    checkEvaluation(Coalesce(Seq(Literal("x"), Literal("y"))), "x")
   }
 
   test("AtLeastNNonNulls should not throw 64KiB exception") {

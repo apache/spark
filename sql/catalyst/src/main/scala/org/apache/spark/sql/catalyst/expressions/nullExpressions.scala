@@ -93,11 +93,37 @@ case class Coalesce(children: Seq[Expression])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // Fast path for the common `coalesce(a, b)` where `b` is non-nullable and its evaluation
+    // generates no code (a literal or an already-evaluated value), e.g. the `coalesce(sum, 0)`
+    // emitted for every SUM/AVG update. The result can never be null and `b` carries a pure
+    // Java expression, so a single ternary replaces the general do-while block below and no
+    // global mutable isNull state is needed. The empty-code requirement also preserves lazy
+    // evaluation: there are no statements of `b` to hoist before the null check.
+    val probedEvals: Option[Seq[ExprCode]] =
+      if (children.length == 2 && !children(1).nullable) {
+        val first = children(0).genCode(ctx)
+        val second = children(1).genCode(ctx)
+        if (second.code.isEmpty) {
+          val resultType = CodeGenerator.javaType(dataType)
+          return ev.copy(
+            code = code"""
+               |${first.code}
+               |$resultType ${ev.value} = ${first.isNull} ? ${second.value} : ${first.value};
+             """.stripMargin,
+            isNull = FalseLiteral)
+        }
+        // The fast path does not apply, so the general path below reuses the code generated for
+        // the probe: generating a child twice would duplicate codegen side effects on the context
+        // (orphaned mutable state for stateful expressions, repeated reference registrations).
+        Some(Seq(first, second))
+      } else {
+        None
+      }
+
     ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
 
     // all the evals are meant to be in a do { ... } while (false); loop
-    val evals = children.map { e =>
-      val eval = e.genCode(ctx)
+    val evals = probedEvals.getOrElse(children.map(_.genCode(ctx))).map { eval =>
       s"""
          |${eval.code}
          |if (!${eval.isNull}) {
