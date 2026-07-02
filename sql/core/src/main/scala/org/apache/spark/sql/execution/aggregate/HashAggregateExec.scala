@@ -177,6 +177,17 @@ case class HashAggregateExec(
     TaskContext.get()
   }
 
+  /**
+   * Registers a task-completion hook to close the generated fast hash map. This is called by the
+   * generated Java class so that the close hook is a plain method call on this plan, with the
+   * listener being a lambda in compiled Scala code, rather than an anonymous
+   * `TaskCompletionListener` emitted per fast hash map (one fewer generated inner class per map).
+   * Should be public.
+   */
+  def addFastHashMapCloseHook(fastHashMap: AutoCloseable): Unit = {
+    TaskContext.get().addTaskCompletionListener[Unit](_ => fastHashMap.close())
+  }
+
   def getEmptyAggregationBuffer(): InternalRow = {
     val initExpr = declFunctions.flatMap(f => f.initialValues)
     val initialBuffer = UnsafeProjection.create(initExpr)(EmptyRow)
@@ -488,13 +499,7 @@ case class HashAggregateExec(
     // output (e.g. aggregate followed by limit).
     val addHookToCloseFastHashMap = if (isFastHashMapEnabled) {
       s"""
-         |$thisPlan.getTaskContext().addTaskCompletionListener(
-         |  new org.apache.spark.util.TaskCompletionListener() {
-         |    @Override
-         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
-         |      $fastHashMapTerm.close();
-         |    }
-         |});
+         |$thisPlan.addFastHashMapCloseHook($fastHashMapTerm);
        """.stripMargin
     } else ""
 
