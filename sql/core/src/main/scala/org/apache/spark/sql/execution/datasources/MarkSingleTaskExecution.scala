@@ -61,7 +61,9 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
   /**
    * Plan patterns that make a query ineligible for the optimization. These operators either
    * require shuffles that we cannot safely elide, or run user code whose behavior we should not
-   * change (e.g. user-defined aggregations skip the final merge step when run in a single task).
+   * change. User-defined aggregations are excluded defensively: an optimization that collapses
+   * the partial and final aggregates when no exchange separates them would skip the user's merge
+   * step, so single-task plans must never be assumed safe for them.
    */
   val unsupportedPatterns: Seq[TreePattern] = Seq(
     EVAL_PYTHON_UDF,
@@ -71,7 +73,8 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
     LATERAL_SUBQUERY,
     LIST_SUBQUERY,
     PYTHON_UDF,
-    SCALAR_SUBQUERY)
+    SCALAR_SUBQUERY,
+    USER_DEFINED_AGGREGATION)
 
   /**
    * The per-operator sub-flags, resolved once per invocation. Each field indicates whether the
@@ -114,14 +117,14 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
    */
   private def isSupportedShape(plan: LogicalPlan, enabled: EnabledOperators): Boolean = plan match {
     case _: LogicalRelation | _: LocalRelation => true
-    // Operators that never introduce a shuffle by themselves.
-    case _: Project | _: Filter | _: SubqueryAlias |
+    // Operators that never introduce a shuffle by themselves. Note that `Distinct` and
+    // `SubqueryAlias` need no cases here: they are rewritten away by non-excludable rules
+    // (`ReplaceDistinctWithAggregate` and `EliminateSubqueryAliases`) long before this rule runs.
+    case _: Project | _: Filter |
          _: DeserializeToObject | _: SerializeFromObject =>
       plan.children.forall(isSupportedShape(_, enabled))
     // Shuffle-inducing operators, allowed only when the matching sub-flag is enabled.
     case _: Aggregate if enabled.aggregation =>
-      plan.children.forall(isSupportedShape(_, enabled))
-    case _: Distinct if enabled.aggregation =>
       plan.children.forall(isSupportedShape(_, enabled))
     case _: Expand if enabled.expand =>
       plan.children.forall(isSupportedShape(_, enabled))

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{FileSourceScanExec, LocalTableScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
-import org.apache.spark.sql.functions.{count, sum}
+import org.apache.spark.sql.expressions.Aggregator
+import org.apache.spark.sql.functions.{count, sum, udaf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -152,6 +153,31 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
 
   test("does not mark plans with subquery expressions") {
     checkNotMarked(s"select col from $t where col = (select max(col) from $t2) order by col")
+  }
+
+  test("does not mark plans with user-defined aggregations") {
+    val strLen = new Aggregator[String, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: String): Long = b + a.length
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = Encoders.scalaLong
+      override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+    }
+    // `functions.udaf` produces a `ScalaAggregator` expression.
+    spark.udf.register("test_str_len_agg", udaf(strLen))
+    try {
+      checkNotMarked(s"select test_str_len_agg(col_str) from $t")
+    } finally {
+      spark.sessionState.catalog.dropTempFunction("test_str_len_agg", ignoreIfNotExists = true)
+    }
+    // A typed Dataset aggregation produces a `TypedAggregateExpression`.
+    withSQLConf(enabledConfs: _*) {
+      import testImplicits._
+      val ds = spark.table(t).select($"col_str").as[String].select(strLen.toColumn)
+      assert(!isMarked(ds.queryExecution.optimizedPlan),
+        s"expected plan with typed aggregation NOT to be marked:\n${ds.queryExecution.optimizedPlan}")
+    }
   }
 
   test("output partitioning is SinglePartition, scan + sort") {
