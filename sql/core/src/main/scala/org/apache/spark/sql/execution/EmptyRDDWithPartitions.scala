@@ -39,4 +39,4 @@ class EmptyRDDWithPartitions(
   }
 }
 
-case class EmptyPartition(index: Int) extends Partition
+private[execution] case class EmptyPartition(index: Int) extends Partition
