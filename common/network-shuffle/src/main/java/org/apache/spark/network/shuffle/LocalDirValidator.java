@@ -23,10 +23,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.spark.internal.SparkLogger;
-import org.apache.spark.internal.SparkLoggerFactory;
-import org.apache.spark.internal.LogKeys;
-import org.apache.spark.internal.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Validates the local directories an executor reports at registration, before the external shuffle
@@ -42,7 +40,7 @@ import org.apache.spark.internal.MDC;
  * contain the entries against and they are accepted. An empty array is always allowed.
  */
 class LocalDirValidator {
-  private static final SparkLogger logger = SparkLoggerFactory.getLogger(LocalDirValidator.class);
+  private static final Logger logger = LoggerFactory.getLogger(LocalDirValidator.class);
 
   private final List<Path> allowedLocalDirRoots;
   private final boolean requireAppScopedLocalDirs;
@@ -106,7 +104,7 @@ class LocalDirValidator {
           roots.add(new File(root).getCanonicalFile().toPath());
         } catch (IOException e) {
           logger.warn("Ignoring local dir root that could not be canonicalized: {}",
-            MDC.of(LogKeys.PATH, root));
+            root);
         }
       }
     }

@@ -144,8 +144,8 @@ public class ExternalShuffleBlockResolverSuite {
       File localDir = new File(context.localDirs[0]);
       File parentOfLocalDir = localDir.getParentFile();
       outsideFile = new File(parentOfLocalDir, "outside-" + UUID.randomUUID() + ".txt");
-      Files.writeString(outsideFile.toPath(), "should not be deleted", StandardCharsets.UTF_8);
-      assertTrue(outsideFile.exists(), "precondition: file was created");
+      Files.write(outsideFile.toPath(), "should not be deleted".getBytes(StandardCharsets.UTF_8));
+      assertTrue("precondition: file was created", outsideFile.exists());
 
       ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
       resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
@@ -153,10 +153,11 @@ public class ExternalShuffleBlockResolverSuite {
       String blockId = ".." + File.separator + ".." + File.separator + outsideFile.getName();
       int removed = resolver.removeBlocks("app0", "0", new String[] { blockId });
 
-      assertEquals(0, removed, "A block id with parent-dir segments must not remove a block");
-      assertTrue(outsideFile.exists(),
+      assertEquals("A block id with parent-dir segments must not remove a block", 0, removed);
+      assertTrue(
         "A file outside the local directory must not be removed (" +
-          outsideFile.getAbsolutePath() + ")");
+          outsideFile.getAbsolutePath() + ")",
+        outsideFile.exists());
     } finally {
       if (outsideFile != null && outsideFile.exists()) {
         assertTrue(outsideFile.delete() || !outsideFile.exists());
@@ -180,7 +181,7 @@ public class ExternalShuffleBlockResolverSuite {
       String blockId = "sub" + File.separator + "child";
       int removed = resolver.removeBlocks("app0", "0", new String[] { blockId });
 
-      assertEquals(0, removed, "A block id containing a path separator must be skipped");
+      assertEquals("A block id containing a path separator must be skipped", 0, removed);
     } finally {
       context.cleanup();
     }
@@ -199,7 +200,7 @@ public class ExternalShuffleBlockResolverSuite {
       File localDir = new File(context.localDirs[0]);
       File parentOfLocalDir = localDir.getParentFile();
       outsideFile = new File(parentOfLocalDir, "outside-" + UUID.randomUUID() + ".txt");
-      Files.writeString(outsideFile.toPath(), "should not be deleted", StandardCharsets.UTF_8);
+      Files.write(outsideFile.toPath(), "should not be deleted".getBytes(StandardCharsets.UTF_8));
 
       // Plant a real, legitimately-named block in the localDir so the valid removal has something
       // to actually remove.
@@ -207,7 +208,7 @@ public class ExternalShuffleBlockResolverSuite {
       String validBlockId = "rdd_7_0";
       File validFile = new File(ExecutorDiskUtils.getFilePath(
         context.localDirs, context.subDirsPerLocalDir, validBlockId));
-      assertTrue(validFile.exists(), "precondition: block file was created");
+      assertTrue("precondition: block file was created", validFile.exists());
 
       ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
       resolver.registerExecutor("app0", "0", context.createExecutorInfo(SORT_MANAGER));
@@ -217,10 +218,11 @@ public class ExternalShuffleBlockResolverSuite {
       int removed = resolver.removeBlocks(
         "app0", "0", new String[] { invalidBlockId, validBlockId });
 
-      assertEquals(1, removed, "The valid block id in the batch should still be removed");
-      assertTrue(outsideFile.exists(),
-        "The invalid entry must not remove a file outside the local directory");
-      assertFalse(validFile.exists(), "The valid block file should have been removed by the batch");
+      assertEquals("The valid block id in the batch should still be removed", 1, removed);
+      assertTrue(
+        "The invalid entry must not remove a file outside the local directory",
+        outsideFile.exists());
+      assertFalse("The valid block file should have been removed by the batch", validFile.exists());
     } finally {
       if (outsideFile != null && outsideFile.exists()) {
         assertTrue(outsideFile.delete() || !outsideFile.exists());

@@ -367,7 +367,7 @@ public class ExternalShuffleBlockResolver {
         validateBlockId(blockId);
       } catch (IllegalArgumentException e) {
         logger.warn("Skipping block with invalid id: {}",
-          MDC.of(LogKeys.BLOCK_ID, blockId));
+          blockId);
         continue;
       }
       File file = new File(

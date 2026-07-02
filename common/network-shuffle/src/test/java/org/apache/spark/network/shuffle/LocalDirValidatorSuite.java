@@ -21,9 +21,9 @@ import java.io.File;
 import java.nio.file.Files;
 
 import org.apache.spark.network.util.JavaUtils;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.Assert.*;
 
 public class LocalDirValidatorSuite {
 
@@ -68,11 +68,11 @@ public class LocalDirValidatorSuite {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
       File otherAppDir = new File(root, "usercache/u/appcache/app1/blockmgr-x");
-      assertTrue(otherAppDir.mkdirs(), "precondition: directory created");
+      assertTrue("precondition: directory created", otherAppDir.mkdirs());
       LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
-      assertThrows(IllegalArgumentException.class,
-        () -> validator.validate(new String[] { otherAppDir.getPath() }, "app0"),
-        "validate must reject a localDir scoped to a different application");
+      assertThrows("validate must reject a localDir scoped to a different application",
+        IllegalArgumentException.class,
+        () -> validator.validate(new String[] { otherAppDir.getPath() }, "app0"));
     } finally {
       JavaUtils.deleteRecursively(root);
     }
@@ -83,7 +83,7 @@ public class LocalDirValidatorSuite {
     File root = Files.createTempDirectory("ess-nm-local").toFile();
     try {
       File ownDir = new File(root, "usercache/u/appcache/app0/blockmgr-x");
-      assertTrue(ownDir.mkdirs(), "precondition: directory created");
+      assertTrue("precondition: directory created", ownDir.mkdirs());
       LocalDirValidator validator = new LocalDirValidator(new String[] { root.getPath() }, true);
       // Must not throw.
       validator.validate(new String[] { ownDir.getPath() }, "app0");
