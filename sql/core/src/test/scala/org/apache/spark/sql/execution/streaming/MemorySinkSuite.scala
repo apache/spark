@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -341,6 +342,28 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(
       sqlContext.createDataFrame(sparkContext.makeRDD(rows), schema),
       intsToDF(expected)(schema))
+  }
+
+  test("SPARK-57879: ContinuousMemorySink throws UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK") {
+    val sink = new ContinuousMemorySink()
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.latestBatchData
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "latestBatchData"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.dataSinceBatch(0L)
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "dataSinceBatch"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sink.write(0L, needTruncate = false, newRows = Array.empty)
+      },
+      condition = "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK",
+      parameters = Map("operation" -> "write"))
   }
 
   private implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
