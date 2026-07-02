@@ -2212,11 +2212,17 @@ class PlanParserSuite extends AnalysisTest {
         s"expected PARSE_SYNTAX_ERROR for: $q")
     }
 
+    // The '@' suffix conflicts with an AS OF clause.
     checkError(
       exception = parseException("SELECT * FROM t@v1 VERSION AS OF 2"),
       condition = "MULTIPLE_TIME_TRAVEL_SPEC",
       parameters = Map.empty,
       context = ExpectedContext(fragment = "VERSION AS OF 2", start = 19, stop = 33))
+    checkError(
+      exception = parseException("SELECT * FROM t@v1 TIMESTAMP AS OF '2019-01-29'"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "TIMESTAMP AS OF '2019-01-29'", start = 19, stop = 46))
 
     assert(intercept[ParseException] {
       parsePlan("INSERT INTO t@v1 VALUES (1)")

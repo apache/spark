@@ -6999,7 +6999,7 @@ object SQLConf {
       .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
         "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
         "table names fails at parse time.")
-      .version("5.0.0")
+      .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
 

@@ -3889,8 +3889,28 @@ class DataSourceV2SQLSuiteV1Filter
         parameters = Map.empty,
         context = ExpectedContext(fragment = "VERSION AS OF 1", start = 28, stop = 42))
       checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 TIMESTAMP AS OF '2019-01-29'")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "TIMESTAMP AS OF '2019-01-29'", start = 28, stop = 55))
+      checkError(
         exception = intercept[AnalysisException] {
           spark.read.option("versionAsOf", "2345678910").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@v2345678910 WITH ('timestampAsOf' = '2019-01-29')")
         },
         condition = "MULTIPLE_TIME_TRAVEL_SPEC",
         parameters = Map.empty)
