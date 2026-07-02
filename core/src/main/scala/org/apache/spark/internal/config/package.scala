@@ -736,6 +736,7 @@ package object config {
         "idle executors. 'balance' spreads tasks as evenly as possible across executors. " +
         "'none' keeps the offers in their given order without shuffling.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
       .checkValues(Set("roundrobin", "binpack", "balance", "none"))

@@ -551,14 +551,13 @@ private[spark] class TaskSchedulerImpl(
       }
     }.getOrElse(offers)
 
-    val workOffers = filteredOffers
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
     // close estimate
-    val tasks = workOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
-    val availableResources = workOffers.map(_.resources).toArray
-    val availableCpus = workOffers.map(o => o.cores).toArray
-    val resourceProfileIds = workOffers.map(o => o.resourceProfileId).toArray
+    val tasks = filteredOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    val availableResources = filteredOffers.map(_.resources).toArray
+    val availableCpus = filteredOffers.map(o => o.cores).toArray
+    val resourceProfileIds = filteredOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -598,7 +597,7 @@ private[spark] class TaskSchedulerImpl(
           var launchedTaskAtCurrentMaxLocality = false
           do {
             val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
-              taskSet, currentMaxLocality, workOffers, availableCpus,
+              taskSet, currentMaxLocality, filteredOffers, availableCpus,
               availableResources, tasks)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
@@ -736,7 +735,7 @@ private[spark] class TaskSchedulerImpl(
                 launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
               tasks(task.assignedOfferIndex) += taskDesc
-              workOffers(task.assignedOfferIndex).address.get -> taskDesc
+              filteredOffers(task.assignedOfferIndex).address.get -> taskDesc
             }
 
             // materialize the barrier coordinator.
