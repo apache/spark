@@ -1006,7 +1006,15 @@ private[spark] class MapOutputTrackerMaster(
    *                 (redundant) attempt; this is NOT MapStatus.mapId
    */
   def markStalePushedPartition(shuffleId: Int, mapIndex: Int): Unit = {
-    getShuffleStatusOrError(shuffleId, "markStalePushedPartition")
+  def markStalePushedPartition(shuffleId: Int, mapIndex: Int): Unit = {
+    shuffleStatuses.get(shuffleId).foreach { shuffleStatus =>
+      shuffleStatus.markStalePushedPartition(mapIndex)
+      // Bump the epoch so reducers with a cached stale set are forced to re-fetch.
+      // A reducer that fetched its merge statuses before this mark otherwise keeps
+      // its (empty) stale set and layer-3 fallback would not fire.
+      incrementEpoch()
+    }
+  }
       .markStalePushedPartition(mapIndex)
     // Bump the epoch so reducers with a cached stale set are forced to re-fetch.
     // A reducer that fetched its merge statuses before this mark otherwise keeps
