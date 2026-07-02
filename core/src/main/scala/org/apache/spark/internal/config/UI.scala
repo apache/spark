@@ -120,8 +120,8 @@ private[spark] object UI {
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header. The default is '0' which disables " +
-      "the browser's XSS Auditor. The XSS Auditor is deprecated and removed from modern " +
-      "browsers (Chrome, Edge, Firefox) and can introduce side-channel vulnerabilities " +
+      "the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and Edge, " +
+      "and was never implemented in Firefox. It can introduce side-channel vulnerabilities " +
       "in browsers that still support it (Safari). Use Content-Security-Policy instead.")
     .version("2.3.0")
     .stringConf

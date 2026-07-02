@@ -769,11 +769,11 @@ Security.
   <td><code>0</code></td>
   <td>
     Value for HTTP X-XSS-Protection response header. The default is <code>0</code> which
-    disables the browser's XSS Auditor. The XSS Auditor is deprecated and has been removed
-    from modern browsers (Chrome, Edge, Firefox). In browsers that still support it (Safari),
+    disables the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and
+    Edge, and was never implemented in Firefox. In browsers that still support it (Safari),
     it can introduce side-channel vulnerabilities. Use Content-Security-Policy instead.
     <ul>
-      <li><code>0</code> (Disables XSS filtering — recommended)</li>
+      <li><code>0</code> (Disables XSS filtering. Recommended.)</li>
       <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected,
         the browser will sanitize the page.)</li>
       <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering
