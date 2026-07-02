@@ -33,7 +33,7 @@ import org.apache.spark.util.ErrorNotifier
 /**
  * A StreamingShuffleClientHandler is used by ShuffleReaders to receive data from ShuffleWriters.
  *
- * Our V1 protocol is very simple: the sever pushes records to us that we read one-by-one and write
+ * Our V1 protocol is very simple: the server pushes records to us that we read one-by-one and write
  * them to a concurrent queue that the calling task (StreamingShuffleReader) can dequeue from.
  */
 class StreamingShuffleClientHandler(
@@ -89,7 +89,7 @@ class StreamingShuffleClientHandler(
   }
 
   // Update the number of outstanding bytes from this writer, toggling auto-read if necessary.
-  // Can be called from main or Netty threeads, so synchronization is required.
+  // Can be called from main or Netty threads, so synchronization is required.
   private def updateQuota(bytes: Long): Unit = synchronized {
     remainingBytesQuota -= bytes
     val autoRead = remainingBytesQuota > 0
@@ -229,7 +229,7 @@ class StreamingShuffleClientHandler(
 
   // not needed for streaming shuffle
   // cannot throw UnsupportedException because this function will be called
-  // even if it this feature is not used.
+  // even if this feature is not used.
   override def getStreamManager: StreamManager = null
 
   private def getResponseHandler(

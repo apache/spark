@@ -114,7 +114,7 @@ class StreamingShuffleReader[K, C](
   private var perWriterByteLimit: Long = 1
 
   // We might need to revisit if the size limit is enough. If not, there should be a way to tie it
-  // the per task memory limit from task context
+  // to the per-task memory limit from the task context.
   private val MAX_MEMORY = conf.get(STREAMING_SHUFFLE_READER_MAX_MEMORY)
   // Data and termination messages from all writers are put into this queue.
   private[spark] val messageQueue = new LinkedBlockingQueue[StreamingShuffleMessage]()
@@ -130,7 +130,7 @@ class StreamingShuffleReader[K, C](
     null
   }
 
-  // The set shuffle writers that this reader have successfully received
+  // The set of shuffle writers that this reader has successfully received
   // termination ack messages from.  This is used to make sure all term ack messages
   // are successfully sent before exiting.
   private[spark] val terminationAckControlMessageSet = ConcurrentHashMap.newKeySet[Long]()
@@ -142,11 +142,10 @@ class StreamingShuffleReader[K, C](
     Runtime.getRuntime.availableProcessors,
     s"streaming-shuffle-async-client-creation-${context.partitionId()}")
 
-  // Signal for other threads that task discovery should be done
-  // for example, we get all the term messages before we actually put the client
-  // in the client map.  In this scenario we can just exit
-  // without checking the client map on whether we can created all the clients
-  // or not
+  // Signals to other threads that task discovery should stop. For example, we may receive all
+  // the termination messages before we actually put the clients in the client map. In that
+  // scenario we can just exit without checking the client map for whether all the clients were
+  // created.
   @volatile private var taskDiscoveryShouldStop = false
 
   private var currentDataMessage: StreamingShuffleMessage = _
@@ -208,7 +207,7 @@ class StreamingShuffleReader[K, C](
   }
 
   // Register a task completion listener to make sure we clean up resources
-  // when the task is completed.  Without this, threads, client connections/factories
+  // when the task is completed.  Without this, threads, client connections/factories,
   // message buffers, and memory allocations could be leaked.
   context.addTaskCompletionListener[Unit] { _ =>
     cleanupResources()
@@ -226,12 +225,12 @@ class StreamingShuffleReader[K, C](
       def shouldStop(): Boolean = {
         (
           // Got all locations for shuffle writers
-          // and is creating the clients to communicate with them
+          // and started creating the clients to communicate with them.
           isDone
           // signal from main thread that task discovery should terminate.
           // For example, we got all the term messages from all clients
           || taskDiscoveryShouldStop
-          // task has failed or interrupted.
+          // task has failed or been interrupted.
           || context.isFailed()
           || context.isInterrupted()
           )
@@ -277,7 +276,7 @@ class StreamingShuffleReader[K, C](
               }
 
             val numClients = clientFutureMap.size()
-            // we should not be getting more clients then expected
+            // we should not be getting more clients than expected
             assert(!(numClients > numShuffleWriters))
             if (numClients != numShuffleWriters) {
               // TODO also implement timeout
@@ -291,7 +290,7 @@ class StreamingShuffleReader[K, C](
               }
             } else {
               // we have received all shuffle writer locations
-              // and is the process of creating clients to connect to them
+              // and are in the process of creating clients to connect to them
               isDone = true
             }
         }
