@@ -218,9 +218,13 @@ object VariantPathParser extends RegexParsers {
   private val parser: Parser[List[VariantPathSegment]] = phrase(root ~> rep(key | index))
 
   def parse(str: String): Option[Array[VariantPathSegment]] = {
-    this.parseAll(parser, str) match {
-      case Success(result, _) => Some(result.toArray)
-      case _ => None
+    try {
+      this.parseAll(parser, str) match {
+        case Success(result, _) => Some(result.toArray)
+        case _ => None
+      }
+    } catch {
+      case _: NumberFormatException => None
     }
   }
 }
