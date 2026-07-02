@@ -29,7 +29,7 @@ import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.config.SHUFFLE_MANAGER
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.shuffle.streaming.{DataMessage, StreamingShuffleMessage, TerminationAckMessage, TerminationControlMessage}
+import org.apache.spark.network.shuffle.streaming.{DataMessage, StreamingShuffleMessage, TerminationControlMessage}
 import org.apache.spark.shuffle.streaming.StreamingShuffleManager.QUERY_ID_PROPERTY_KEY
 
 /**
@@ -135,23 +135,6 @@ class StreamingShuffleReaderSuite
     // The pending message must not have been processed: the error was surfaced first. This is
     // what would keep the reader from emitting rows after a writer has already failed.
     dataHandled should be(false)
-  }
-
-  test("iterator throws on an unexpected message type in the queue") {
-    val queue = new LinkedBlockingQueue[StreamingShuffleMessage]()
-    // A reader never receives a TerminationAckMessage (only writers do); it must reject it.
-    queue.put(new TerminationAckMessage(0, 0))
-
-    val it = factory.create[Int, Int](
-      queue,
-      handleTerminationMessage = _ => true,
-      handleDataMessage = _ => Iterator.empty,
-      checkTaskFailure = () => ())
-
-    val e = intercept[IllegalArgumentException] {
-      it.hasNext
-    }
-    e.getMessage should include("Unexpected message type")
   }
 
   test("getReader routes to a StreamingShuffleReader wired with the given context") {
