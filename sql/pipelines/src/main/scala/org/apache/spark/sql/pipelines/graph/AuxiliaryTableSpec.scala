@@ -61,8 +61,8 @@ sealed trait AuxiliaryTableSpec {
  *                             towards).
  * @param properties           the table properties the auxiliary table should be created/altered
  *                             with.
- * @param targetTableIdentifier the identifier of the AutoCDC target this auxiliary table belongs to,
- *                              used to name the target in drift error messages.
+ * @param targetTableIdentifier the identifier of the AutoCDC target this auxiliary table belongs
+ *                              to, used to name the target in drift error messages.
  * @param expectedKeyFields    the AutoCDC key fields the auxiliary table is expected to carry if
  *                             it already exists, in order (names and types).
  * @param expectedScdType      the SCD type the auxiliary table is expected to have recorded, if it

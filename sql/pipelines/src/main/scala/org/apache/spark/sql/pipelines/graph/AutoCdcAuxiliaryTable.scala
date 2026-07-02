@@ -268,9 +268,9 @@ object AutoCdcAuxiliaryTable {
   }
 
   /**
-   * Reject an existing auxiliary table whose recorded `scdType` differs from the expected one. SCD1
-   * and SCD2 auxiliary tables carry different state shapes, so an in-place flip is incompatible; the
-   * remedy is a full refresh, which recreates the auxiliary table.
+   * Reject an existing auxiliary table whose recorded `scdType` differs from the expected one.
+   * SCD1 and SCD2 auxiliary tables carry different state shapes, so an in-place flip is
+   * incompatible; the remedy is a full refresh, which recreates the auxiliary table.
    */
   private[graph] def validateNoScdTypeDrift(
       existingAuxiliaryTable: CatalogTable,

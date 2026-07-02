@@ -412,9 +412,7 @@ object DatasetManager extends Logging {
     if (isFullRefresh) {
       // Intentionally DROP and not TRUNCATE on full refresh. The auxiliary table is an internal
       // table whose identity does not need to be preserved on full refresh, and has metadata
-      // (ex. table properties) that should not persist between full refreshes. After the drop the
-      // table is recreated from scratch. Use the catalog API (rather than a SQL DROP) to stay
-      // consistent with the create/evolve calls around it; dropTable is a no-op if absent.
+      // (ex. table properties) that should not persist between full refreshes.
       //
       // DROP + CREATE (rather than an atomic REPLACE) because REPLACE is not universally supported
       // by DSv2 catalogs. The non-atomicity is acceptable: a CREATE that fails after the DROP is
@@ -424,9 +422,10 @@ object DatasetManager extends Logging {
         log"Dropping and recreating auxiliary table " +
         log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)} as part of full refresh."
       )
-      
+
+      // [[dropTable]] is a no-op if the table does not exist.
       catalog.dropTable(auxiliaryTableIdentifier)
-      
+
       createTable(
         catalog = catalog,
         tableIdentifier = auxiliaryTableIdentifier,
