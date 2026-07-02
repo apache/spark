@@ -31,8 +31,8 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions.{count, sum, udaf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, LongType}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
  * Test suite for the [[MarkSingleTaskExecution]] optimizer rule and its physical effects. The rule
