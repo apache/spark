@@ -380,10 +380,18 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       // yields the same representative as from-scratch inference, so the merged type matches.
       case NullType | LongType | DoubleType | _: DecimalType => tryParseLong(value)
       case BooleanType => tryParseBoolean(value)
-      case _: TimeType => tryParseTime(value)
-      case DateType => tryParseDate(value)
-      case TimestampNTZType | _: TimestampNTZNanosType => tryParseTimestampNTZ(value)
-      case TimestampType => tryParseTimestamp(value)
+      // For a temporal type inferred so far, re-enter the cascade at the top of the temporal
+      // sub-cascade (`tryParseTime`, which flows Time -> Date -> TimestampNTZ -> Timestamp)
+      // rather than at the narrower temporal parser. Entering at `tryParseTimestamp` for a
+      // `Timestamp` type-so-far, for example, would fail to parse a date-only value (when
+      // `timestampFormat` requires a time part) and fall through to `String`; `compatibleType`
+      // then merges `Timestamp` with `String` to `String`, whereas from-scratch inference yields
+      // `Date` which widens with `Timestamp` to `Timestamp` via `findWiderDateTimeType`. That
+      // would make the inferred type differ from the legacy path and depend on row order.
+      // Re-entering at the top yields the same representative as from-scratch inference (which
+      // reaches the temporal parsers through `tryParseDouble`), so the merged type matches.
+      case _: TimeType | DateType | TimestampNTZType | _: TimestampNTZNanosType | TimestampType =>
+        tryParseTime(value)
       case StringType => StringType
       case other: DataType =>
         throw SparkException.internalError(s"Unexpected data type $other")

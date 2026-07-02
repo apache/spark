@@ -137,6 +137,24 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(prefersDecimal.inferFrom("3.5", DecimalType(5, 2)) == DecimalType(5, 2))
   }
 
+  test("Refining a temporal type-so-far matches fresh inference (SPARK-57802)") {
+    // Refining a temporal `typeSoFar` re-enters the cascade at the top of the temporal sub-cascade
+    // (`tryParseTime`, flowing Time -> Date -> TimestampNTZ -> Timestamp), so a date-only value
+    // infers as `Date` exactly as from-scratch inference would, and the merge with `typeSoFar`
+    // widens through `findWiderDateTimeType` to the same type as the legacy path. Otherwise, with a
+    // time-requiring `timestampFormat`, a `Timestamp`-so-far field seeing a date-only value would
+    // fail `tryParseTimestamp`, fall through to `String`, and merge to `String` -- an
+    // order-dependent divergence from the legacy `Date`-then-merge result.
+    val inferSchema = newInferSchema(Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"))
+    // "2024-01-15" fresh -> Date; compatibleType(Timestamp, Date) -> Timestamp (DATE adopts the
+    // LTZ family of the other side).
+    assert(inferSchema.inferFrom("2024-01-15", TimestampType) == TimestampType)
+    // Same for a TimestampNTZ-so-far field: DATE adopts the NTZ family, so the merge stays NTZ.
+    assert(inferSchema.inferFrom("2024-01-15", TimestampNTZType) == TimestampNTZType)
+    // A Date-so-far field seeing a timestamp value widens to Timestamp.
+    assert(inferSchema.inferFrom("2024-01-15T10:00:00", DateType) == TimestampType)
+  }
+
   test("date is inferred regardless of preferDate") {
     Seq("true", "false").foreach { preferDate =>
       val inferSchema = newInferSchema(Map("preferDate" -> preferDate))

@@ -760,7 +760,17 @@ class XmlInferSchemaSuite
       Seq("""<ROW><a>123.45</a></ROW>""", """<ROW><a>5</a></ROW>""") ->
         Map("prefersDecimal" -> "true"),
       Seq("""<ROW><a>5</a></ROW>""", """<ROW><a>123.45</a></ROW>""") ->
-        Map("prefersDecimal" -> "true"))
+        Map("prefersDecimal" -> "true"),
+      // Temporal family with a time-requiring timestampFormat, in both row orders. A date-only
+      // value must widen with a timestamp identically whether it is seen first (so the field is
+      // Date when the timestamp arrives) or last (so the field is Timestamp when the date arrives):
+      // entering the temporal cascade at its top keeps the date-only value inferring as Date rather
+      // than falling through to String, so `findWiderDateTimeType` widens Date + Timestamp to
+      // Timestamp on both the incremental and the legacy path.
+      Seq("""<ROW><v>2024-01-15T10:00:00</v></ROW>""", """<ROW><v>2024-01-15</v></ROW>""") ->
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      Seq("""<ROW><v>2024-01-15</v></ROW>""", """<ROW><v>2024-01-15T10:00:00</v></ROW>""") ->
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"))
 
     cases.foreach { case (xml, options) =>
       val incremental = withSQLConf(
