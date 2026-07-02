@@ -123,13 +123,14 @@ object DatasetManager extends Logging {
                     // target table supports row level mutations. This is a relevant validation for
                     // the auxiliary table itself too, whose format for AutoCDC is fully derived
                     // from the target table.
-                    if (auxiliaryTableSpec.isInstanceOf[AutoCdcAuxiliaryTableSpec]) {
-                      requireAutoCdcTargetSupportsRowLevelOps(
-                        targetTable = table,
-                        targetTableCatalogEntity = catalogTableEntity
-                      )
+                    auxiliaryTableSpec match {
+                      case _: AutoCdcAuxiliaryTableSpec =>
+                        requireAutoCdcTargetSupportsRowLevelOps(
+                          targetTable = table,
+                          targetTableCatalogEntity = catalogTableEntity
+                        )
                     }
-                    
+
                     materializeAuxiliaryTable(
                       auxiliaryTableSpec = auxiliaryTableSpec,
                       isFullRefresh = isFullRefresh,
@@ -279,16 +280,10 @@ object DatasetManager extends Logging {
       isFullRefresh: Boolean,
       context: PipelineUpdateContext): (Table, V2Table) = {
     logInfo(log"Materializing metadata for table ${MDC(LogKeys.TABLE_NAME, table.identifier)}.")
-    val catalogManager = context.spark.sessionState.catalogManager
-    val catalog = (table.identifier.catalog match {
-      case Some(catalogName) =>
-        catalogManager.catalog(catalogName)
-      case None =>
-        catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
+    // Get the DSv2 catalog handler and identifier for the table.
+    val (catalog, identifier) =
+      PipelinesCatalogUtils.resolveTableCatalog(context.spark, table.identifier)
 
-    val identifier =
-      Identifier.of(Array(table.identifier.database.get), table.identifier.identifier)
     val outputSchema = table.specifiedSchema.getOrElse(
       resolvedDataflowGraph.inferredSchema(table.identifier).asNullable
     )
@@ -405,20 +400,33 @@ object DatasetManager extends Logging {
       auxiliaryTableSpec: AuxiliaryTableSpec,
       isFullRefresh: Boolean,
       context: PipelineUpdateContext): Unit = {
-    val auxiliaryTableCatalystIdentifier = auxiliaryTableSpec.identifier
-
     // Get the DSv2 catalog handler and identifier for the aux table.
     val (catalog, auxiliaryTableIdentifier) =
-      PipelinesCatalogUtils.resolveTableCatalog(context.spark, auxiliaryTableCatalystIdentifier)
+      PipelinesCatalogUtils.resolveTableCatalog(context.spark, auxiliaryTableSpec.identifier)
+
+    logInfo(
+      log"Materializing auxiliary table " +
+      log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)}."
+    )
 
     if (isFullRefresh) {
       // Intentionally DROP and not TRUNCATE on full refresh. The auxiliary table is an internal
-      // table whose identity does not need to be perserved on full refresh, and has metadata
+      // table whose identity does not need to be preserved on full refresh, and has metadata
       // (ex. table properties) that should not persist between full refreshes. After the drop the
-      // table is recreated from scratch.
-      context.spark.sql(
-        s"DROP TABLE IF EXISTS ${auxiliaryTableCatalystIdentifier.quotedString}"
+      // table is recreated from scratch. Use the catalog API (rather than a SQL DROP) to stay
+      // consistent with the create/evolve calls around it; dropTable is a no-op if absent.
+      //
+      // DROP + CREATE (rather than an atomic REPLACE) because REPLACE is not universally supported
+      // by DSv2 catalogs. The non-atomicity is acceptable: a CREATE that fails after the DROP is
+      // self-healing on the next run (a full refresh re-enters here; an incremental run recreates
+      // via the create path below).
+      logInfo(
+        log"Dropping and recreating auxiliary table " +
+        log"${MDC(LogKeys.TABLE_NAME, auxiliaryTableSpec.identifier)} as part of full refresh."
       )
+      
+      catalog.dropTable(auxiliaryTableIdentifier)
+      
       createTable(
         catalog = catalog,
         tableIdentifier = auxiliaryTableIdentifier,
