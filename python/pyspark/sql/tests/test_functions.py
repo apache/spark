@@ -3670,6 +3670,9 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.variant_strip_nulls(strip_v, False))),
             ['{"a":1,"c":[1,null]}', '{"a":1,"c":[1,null]}'],
         )
+        check(df.select(F.to_json(F.variant_pick(v, "$.a"))), ['{"a":1}', "{}"])
+        check(df.select(F.to_json(F.variant_pick(v, df.path))), ['{"a":1}', '{"b":2}'])
+        check(df.select(F.to_json(F.variant_pick(v, F.lit(None)))), ["{}", "{}"])
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 

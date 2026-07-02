@@ -276,6 +276,31 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
+  /**
+   * Throws `INVALID_VARIANT_PATH` on a malformed path. Unlike the other variant manipulation
+   * functions, the empty (root `$`) path is allowed: for `variant_pick` it selects the whole
+   * variant.
+   */
+  def parseVariantPickPath(pathValue: String): Array[VariantPathSegment] =
+    parseVariantPath(pathValue, "variant_pick", allowRoot = true)
+
+  def parsePickPath(path: UTF8String): Array[VariantBuilder.PathSegment] =
+    toJavaSegments(parseVariantPickPath(path.toString))
+
+  def pickAtPaths(
+      input: VariantVal,
+      paths: java.util.List[Array[VariantBuilder.PathSegment]]): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.pickAtPaths(v, paths)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
+  def pickAtPaths(input: VariantVal, tree: VariantBuilder.PickNode): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.pickAtPaths(v, tree)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate

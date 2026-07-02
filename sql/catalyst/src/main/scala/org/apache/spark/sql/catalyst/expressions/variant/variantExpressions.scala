@@ -1000,6 +1000,194 @@ object VariantDelete {
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path1[, path2, ...]) - Keeps only the fields or array elements of a variant " +
+    "at the given JSONPath locations, preserving their enclosing structure; kept array elements " +
+    "are compacted into a new array in their original order. Returns NULL if `v` is NULL; NULL " +
+    "paths are skipped. If no path matches, an object or array input yields an empty object or " +
+    "array, while a scalar or variant-null input is unchanged.",
+  arguments = """
+    Arguments:
+      * v - A variant value to project.
+      * path1, path2, ... - One or more string expressions, each evaluating to a JSONPath
+          identifying a substructure to keep. A valid path should start with `$` and is followed by
+          zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2, "c": 3}'), '$.a', '$.c');
+       {"a":1,"c":3}
+      > SELECT _FUNC_(parse_json('{"a": {"b": 1, "c": 2}, "d": 3}'), '$.a.b');
+       {"a":{"b":1}}
+      > SELECT _FUNC_(parse_json('[10, 20, 30, 40]'), '$[0]', '$[2]');
+       [10,30]
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2}'), NULL, '$.a', '$.missing');
+       {"a":1}
+      > SELECT _FUNC_(parse_json('{"a": {"b": 1}}'), '$.a.x');
+       {}
+      > SELECT _FUNC_(parse_json('42'), '$.a');
+       42
+      > SELECT _FUNC_(NULL, '$.a');
+       NULL
+  """,
+  since = "5.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+case class VariantPick(children: Seq[Expression])
+    extends Expression
+    with ExpectsInputTypes {
+
+  override def dataType: DataType = VariantType
+
+  override def nullable: Boolean = children.headOption.forall(_.nullable)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // First argument is the variant; subsequent arguments are JSONPath strings.
+    VariantType +: Seq.fill(math.max(children.length - 1, 0))(
+      StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length < 2) {
+      // `wrongNumArgsError` already quotes the function name via `toSQLId`, so pass the raw name.
+      throw QueryCompilationErrors.wrongNumArgsError(
+        prettyName, Seq("> 1"), children.length)
+    }
+    super.checkInputDataTypes()
+  }
+
+  private def variantChild: Expression = children.head
+  private def pathChildren: Seq[Expression] = children.tail
+
+  @transient private lazy val pathArgs: Seq[VariantPick.PickPathArg] =
+    pathChildren.flatMap(VariantPick.toPathArg)
+
+  // When every path is constant, the keep-tree is the same for all rows, so build it once here and
+  // reuse it rather than rebuilding it per row. `None` means at least one path is dynamic.
+  @transient private lazy val foldableTree: Option[VariantBuilder.PickNode] = {
+    if (pathArgs.forall(_.isInstanceOf[VariantPick.ParsedPickPath])) {
+      val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
+      pathArgs.foreach {
+        case parsed: VariantPick.ParsedPickPath => paths.add(parsed.javaSegments)
+        case _ =>
+      }
+      Some(VariantBuilder.buildPickTree(paths))
+    } else {
+      None
+    }
+  }
+
+  // Collect the java path segments of all non-NULL paths. Unlike `variant_delete`, the paths are a
+  // set applied in a single pass, so they must be gathered before projecting.
+  private def collectPaths(
+      input: InternalRow): java.util.List[Array[VariantBuilder.PathSegment]] = {
+    val paths = new java.util.ArrayList[Array[VariantBuilder.PathSegment]](pathArgs.length)
+    var i = 0
+    while (i < pathArgs.length) {
+      pathArgs(i) match {
+        case parsed: VariantPick.ParsedPickPath =>
+          paths.add(parsed.javaSegments)
+        case VariantPick.DynamicPickPath(expr) =>
+          val pathVal = expr.eval(input).asInstanceOf[UTF8String]
+          if (pathVal != null) {
+            paths.add(VariantExpressionEvalUtils.parsePickPath(pathVal))
+          }
+      }
+      i += 1
+    }
+    paths
+  }
+
+  override def eval(input: InternalRow): Any = {
+    // Force constant-path parsing before the NULL short-circuit so a malformed constant path fails
+    // identically in interpreted and codegen modes, even when the input variant is NULL (codegen
+    // parses constant paths at code-generation time).
+    val tree = foldableTree
+    val inputVariant = variantChild.eval(input).asInstanceOf[VariantVal]
+    if (inputVariant == null) return null
+    tree match {
+      case Some(t) => VariantExpressionEvalUtils.pickAtPaths(inputVariant, t)
+      case None => VariantExpressionEvalUtils.pickAtPaths(inputVariant, collectPaths(input))
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val variantValType = CodeGenerator.javaType(VariantType)
+    val childCode = variantChild.genCode(ctx)
+
+    val project = foldableTree match {
+      case Some(tree) =>
+        // Constant paths: use the keep-tree built once and shipped as a reference.
+        val treeArg = ctx.addReferenceObj("vpTree", tree, classOf[VariantBuilder.PickNode].getName)
+        s"${ev.value} = $cls.pickAtPaths(${childCode.value}, $treeArg);"
+      case None =>
+        // At least one dynamic path: gather the paths per row, then project.
+        val paths = ctx.freshName("vpPaths")
+        val addPaths = pathArgs.map {
+          case parsed: VariantPick.ParsedPickPath =>
+            val parsedArg = ctx.addReferenceObj("vpParsed", parsed)
+            s"$paths.add($parsedArg.javaSegments());"
+          case VariantPick.DynamicPickPath(expr) =>
+            val pCode = expr.genCode(ctx)
+            s"""
+               |${pCode.code}
+               |if (!${pCode.isNull}) {
+               |  $paths.add($cls.parsePickPath(${pCode.value}));
+               |}
+             """.stripMargin
+        }.mkString("\n")
+        s"""
+           |java.util.ArrayList $paths = new java.util.ArrayList();
+           |$addPaths
+           |${ev.value} = $cls.pickAtPaths(${childCode.value}, $paths);
+         """.stripMargin
+    }
+
+    val code = code"""
+      ${childCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull};
+      $variantValType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+      if (!${ev.isNull}) {
+        $project
+      }
+    """
+    ev.copy(code = code)
+  }
+
+  override def prettyName: String = "variant_pick"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VariantPick = copy(children = newChildren)
+}
+
+object VariantPick {
+  sealed trait PickPathArg
+  case class ParsedPickPath(segments: Array[VariantPathSegment]) extends PickPathArg {
+    // `VariantBuilder.PathSegment` is not `Serializable`, so the cached Java form is
+    // `@transient` and re-initialized once per executor task after deserialization.
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
+  case class DynamicPickPath(expr: Expression) extends PickPathArg
+
+  private[variant] def toPathArg(child: Expression): Option[PickPathArg] = {
+    if (child.foldable) {
+      val v = child.eval()
+      if (v == null) {
+        None
+      } else {
+        Some(ParsedPickPath(
+          VariantExpressionEvalUtils.parseVariantPickPath(v.asInstanceOf[UTF8String].toString)))
+      }
+    } else {
+      Some(DynamicPickPath(child))
+    }
+  }
+}
+
 case class VariantInsert(
     input: Expression,
     path: Expression,

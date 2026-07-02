@@ -2127,4 +2127,87 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         StringType),
       null)
   }
+
+  test("variant_pick") {
+    def checkPick(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantPick(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Keep a subset of object fields, and union paths under the same parent (parent preserved).
+    checkPick("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"a":1,"c":3}""")
+    checkPick("""{"a": {"b": 1, "c": 2}, "d": 3}""", Seq("$.a.b"), """{"a":{"b":1}}""")
+    checkPick(
+      """{"a": {"b": 1, "c": 2, "d": 3}}""", Seq("$.a.b", "$.a.c"), """{"a":{"b":1,"c":2}}""")
+
+    // A broader path subsumes a narrower one.
+    checkPick("""{"a": {"b": 1, "c": 2}}""", Seq("$.a", "$.a.b"), """{"a":{"b":1,"c":2}}""")
+
+    // Arrays are compacted in original order; out-of-range indices are skipped.
+    checkPick("[10, 20, 30, 40]", Seq("$[2]", "$[0]"), "[10,30]")
+    checkPick("[10, 20, 30]", Seq("$[5]"), "[]")
+    checkPick("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[20]}""")
+
+    // Missing keys are skipped; a parent whose picks all miss is dropped.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.missing"), """{"a":1}""")
+    checkPick("""{"a": {"b": 1}}""", Seq("$.a.x"), "{}")
+
+    // Root path is identity; a scalar or variant-null input is returned unchanged. The variant
+    // null is compared directly, since casting it to a string yields SQL NULL, not the text "null".
+    checkPick("""{"a": 1}""", Seq("$"), """{"a":1}""")
+    checkPick("42", Seq("$.a"), "42")
+    checkEvaluation(
+      VariantPick(Seq(Literal(parseJson("null")), Literal("$.a"))),
+      parseJson("null"))
+
+    // Type mismatch matches nothing, but the top-level shape is preserved (object -> {}, array
+    // -> []); descending into a scalar drops the parent.
+    checkPick("[1, 2, 3]", Seq("$.a"), "[]")
+    checkPick("""{"a": 1}""", Seq("$.a.b"), "{}")
+
+    // Duplicate paths are deduplicated, and bracket notation resolves like dot notation.
+    checkPick("""{"a": 1, "b": 2}""", Seq("$.a", "$.a"), """{"a":1}""")
+    checkPick("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"a":1}""")
+
+    // A NULL path is skipped; the remaining paths still apply.
+    checkPick("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"a":1}""")
+
+    // Dynamic (non-foldable) path mixed with a literal.
+    val mixedLitDyn = VariantPick(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"a":1,"c":3}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    // NULL variant input yields NULL.
+    checkEvaluation(
+      VariantPick(Seq(Literal.create(null, VariantType), Literal("$.a"))),
+      null)
+
+    // Malformed paths are rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(Literal(parseJson("""{"a": 1}""")), Literal("garbage"))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // A malformed constant path is rejected in both interpreted and codegen modes even when the
+    // input variant is NULL: the path is parsed before the NULL short-circuit.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantPick(Seq(BoundReference(0, VariantType, nullable = true), Literal("garbage"))),
+      InternalRow(null),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "garbage", "functionName" -> "`variant_pick`"))
+
+    // At least one path is required.
+    val noPaths = VariantPick(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
+    }
+  }
 }

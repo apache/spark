@@ -23545,6 +23545,71 @@ def variant_strip_nulls(v: "ColumnOrName", include_arrays: bool = True) -> Colum
 
 
 @_try_remote_functions
+def variant_pick(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    """
+    Keeps only the fields or array elements of a variant at the given JSONPath locations, preserving
+    their enclosing structure; kept array elements are compacted into a new array in their
+    original order. Returns NULL if `v` is NULL; NULL paths are skipped. If no path matches, an
+    object or array input yields an empty object or array, while a scalar or variant-null input is
+    unchanged.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    paths : :class:`~pyspark.sql.Column` or str
+        one or more JSONPaths identifying substructures to keep. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column keeping only the specified paths
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_pick
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": {"b": 1, "c": 2}, "items": [10, 20, 30, 40] }''',
+    ...     'path': '$.a.b'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_pick(v, "$.a.b")).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, "$.a.c", "$.items[0]")).alias("r")).collect()
+    [Row(r='{"a":{"c":2},"items":[10]}')]
+    >>> df.select(to_json(variant_pick(v, "$.items[0]", "$.items[2]")).alias("r")).collect()
+    [Row(r='{"items":[10,30]}')]
+    >>> df.select(to_json(variant_pick(v, df.path)).alias("r")).collect()
+    [Row(r='{"a":{"b":1}}')]
+    >>> df.select(to_json(variant_pick(v, "$.missing")).alias("r")).collect()
+    [Row(r='{}')]
+    >>> df.select(variant_pick(lit(None), "$.a").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    sc = _get_active_spark_context()
+
+    path_cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function(
+        "variant_pick",
+        _to_java_column(v),
+        _to_java_column(path_cols[0]),
+        _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
