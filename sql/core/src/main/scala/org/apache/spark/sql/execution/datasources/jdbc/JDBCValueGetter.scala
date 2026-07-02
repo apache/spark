@@ -219,7 +219,7 @@ private[jdbc] object JDBCValueGetter {
   }
 
   // SPARK-47628: Handle PostgreSQL bit(n>1) array type ahead. As in the pgjdbc driver,
-  // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolen[].
+  // bit(n>1)[] is not distinguishable from bit(1)[], and they are all recognized as boolean[].
   // This is wrong for bit(n>1)[], so we need to handle it first as byte array.
   case object PostgresBitArrayGetter extends JDBCValueGetter {
     def apply(rs: ResultSet, row: InternalRow, pos: Int): Unit = {
