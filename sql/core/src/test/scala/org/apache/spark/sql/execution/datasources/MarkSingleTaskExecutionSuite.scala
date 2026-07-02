@@ -18,14 +18,20 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{Encoder, Encoders, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.BoundReference
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.trees.TreePattern.USER_DEFINED_AGGREGATION
+import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
 import org.apache.spark.sql.execution.{FileSourceScanExec, LocalTableScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions.{count, sum, udaf}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, LongType}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -179,6 +185,24 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
       assert(!isMarked(optimized),
         s"expected plan with typed aggregation NOT to be marked:\n$optimized")
     }
+  }
+
+  test("V2Aggregator carries the USER_DEFINED_AGGREGATION pattern") {
+    // ScalaAggregator and the typed aggregate expressions are covered by the end-to-end test
+    // above; V2Aggregator has no operator-level pattern of its own, so verify it directly.
+    // HiveUDAFFunction lives in the hive module and is covered there.
+    val v2Func = new V2AggregateFunction[java.lang.Long, java.lang.Long] {
+      override def newAggregationState(): java.lang.Long = 0L
+      override def update(state: java.lang.Long, input: InternalRow): java.lang.Long =
+        state + input.getLong(0)
+      override def merge(l: java.lang.Long, r: java.lang.Long): java.lang.Long = l + r
+      override def produceResult(state: java.lang.Long): java.lang.Long = state
+      override def name(): String = "test_v2_sum"
+      override def inputTypes(): Array[DataType] = Array(LongType)
+      override def resultType(): DataType = LongType
+    }
+    val agg = V2Aggregator(v2Func, Seq(BoundReference(0, LongType, nullable = false)))
+    assert(agg.containsPattern(USER_DEFINED_AGGREGATION))
   }
 
   test("output partitioning is SinglePartition, scan + sort") {
