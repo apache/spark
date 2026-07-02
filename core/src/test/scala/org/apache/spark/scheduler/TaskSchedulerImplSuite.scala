@@ -208,6 +208,95 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!failedTaskSet)
   }
 
+  test("SPARK-57878: Binpack assignment concentrates tasks onto a part of executors") {
+    val taskScheduler = setupScheduler(config.TASK_ASSIGNMENT_STRATEGY.key -> "binpack")
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 5),
+      WorkerOffer("executor1", "host0", 4),
+      WorkerOffer("executor2", "host1", 6))
+    val taskSet = FakeTask.createTaskSet(6)
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(taskDescriptions.length === 6)
+    val perExecutor = taskDescriptions.groupBy(_.executorId).view.mapValues(_.size).toMap
+    assert(perExecutor.size === 2)
+    assert(perExecutor.get("executor1").contains(4))
+    assert(perExecutor.get("executor0").contains(2))
+    assert(!perExecutor.contains("executor2"))
+  }
+
+  test("SPARK-57878: Balance assignment spreads tasks across executors") {
+    val taskScheduler = setupScheduler(config.TASK_ASSIGNMENT_STRATEGY.key -> "balance")
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 2),
+      WorkerOffer("executor1", "host0", 4),
+      WorkerOffer("executor2", "host1", 4))
+    val taskSet = FakeTask.createTaskSet(4)
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(taskDescriptions.length === 4)
+    val perExecutor = taskDescriptions.groupBy(_.executorId).view.mapValues(_.size).toMap
+    assert(perExecutor.size === 2)
+    assert(!perExecutor.contains("executor0"))
+    assert(perExecutor.get("executor1").contains(2))
+    assert(perExecutor.get("executor2").contains(2))
+  }
+
+  test("SPARK-57878: Binpack assignment still honors PROCESS_LOCAL preference over packing") {
+    // A fresh strategy is created per locality level in resourceOfferSingleTaskSet, and
+    // TaskSetManager.resourceOffer gates each launch by locality. So bin-packing only reorders
+    // which offers are tried within a locality tier; it must not steal a task away from the
+    // executor it prefers.
+    val taskScheduler = setupScheduler(config.TASK_ASSIGNMENT_STRATEGY.key -> "binpack")
+    // executor2 has the fewest free cores, so binpack would try it first if locality did not
+    // constrain placement. The single task prefers executor0 (which has more cores).
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 4),
+      WorkerOffer("executor1", "host1", 3),
+      WorkerOffer("executor2", "host2", 1))
+    val taskSet = FakeTask.createTaskSet(1,
+      Seq(ExecutorCacheTaskLocation("host0", "executor0")))
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(taskDescriptions.length === 1)
+    // The task lands on its preferred executor, not on the most-packed one.
+    assert(taskDescriptions.head.executorId === "executor0")
+    // ...and it is scheduled at PROCESS_LOCAL, i.e. binpack did not force a worse locality.
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, 0).get
+    assert(tsm.taskInfos(taskDescriptions.head.taskId).taskLocality === TaskLocality.PROCESS_LOCAL)
+  }
+
+  test("SPARK-57878: Balance assignment still honors PROCESS_LOCAL preference over spreading") {
+    val taskScheduler = setupScheduler(config.TASK_ASSIGNMENT_STRATEGY.key -> "balance")
+    // executor0 has the most free cores, so balance would try it first if locality did not
+    // constrain placement. The single task prefers executor2 (which has the fewest cores).
+    val workerOffers = IndexedSeq(
+      WorkerOffer("executor0", "host0", 4),
+      WorkerOffer("executor1", "host1", 3),
+      WorkerOffer("executor2", "host2", 1))
+    val taskSet = FakeTask.createTaskSet(1,
+      Seq(ExecutorCacheTaskLocation("host2", "executor2")))
+    taskScheduler.submitTasks(taskSet)
+    val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(taskDescriptions.length === 1)
+    // The task lands on its preferred executor, not on the one with the most free cores.
+    assert(taskDescriptions.head.executorId === "executor2")
+    // ...and it is scheduled at PROCESS_LOCAL, i.e. balance did not force a worse locality.
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, 0).get
+    assert(tsm.taskInfos(taskDescriptions.head.taskId).taskLocality === TaskLocality.PROCESS_LOCAL)
+  }
+
+  test("SPARK-57878: Rejects an unknown assignment strategy") {
+    val conf = new SparkConf()
+    // checkValues on the config entry rejects unknown values at get() time.
+    val error = intercept[IllegalArgumentException] {
+      conf.set(config.TASK_ASSIGNMENT_STRATEGY.key, "does-not-exist")
+      conf.get(config.TASK_ASSIGNMENT_STRATEGY)
+    }
+    assert(error.getMessage.contains(
+      "'does-not-exist' in the config \"spark.scheduler.taskAssignmentStrategy\" is invalid"))
+  }
+
   test("Scheduler correctly accounts for multiple CPUs per task") {
     val taskCpus = 2
     val taskScheduler = setupSchedulerWithMaster(
@@ -243,17 +332,13 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   private def setupTaskSchedulerForLocalityTests(
       clock: ManualClock,
       conf: SparkConf = new SparkConf()): TaskSchedulerImpl = {
+    conf.set(config.TASK_ASSIGNMENT_STRATEGY, "none")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc,
       sc.conf.get(config.TASK_MAX_FAILURES),
       clock = clock) {
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
         new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
-      }
-      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
-        // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
-        // the permutations we care about directly.
-        offers
       }
     }
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
@@ -1372,6 +1457,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
   test("Locality should be used for bulk offers even with delay scheduling off") {
     val conf = new SparkConf()
       .set(config.LOCALITY_WAIT.key, "0")
+      .set(config.TASK_ASSIGNMENT_STRATEGY, "none")
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     // we create a manual clock just so we can be sure the clock doesn't advance at all in this test
     val clock = new ManualClock()
@@ -1379,11 +1465,6 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     // We customize the task scheduler just to let us control the way offers are shuffled, so we
     // can be sure we try both permutations, and to control the clock on the tasksetmanager.
     val taskScheduler = new TaskSchedulerImpl(sc) {
-      override def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
-        // Don't shuffle the offers around for this test.  Instead, we'll just pass in all
-        // the permutations we care about directly.
-        offers
-      }
       override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
         new TaskSetManager(this, taskSet, maxTaskFailures, healthTrackerOpt, clock)
       }

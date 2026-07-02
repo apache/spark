@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
 
 import com.google.common.cache.CacheBuilder
 
@@ -118,6 +117,8 @@ private[spark] class TaskSchedulerImpl(
 
   // CPUs to request per task
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
+
+  private val taskAssignmentStrategy = conf.get(config.TASK_ASSIGNMENT_STRATEGY)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.  Protected by `this`
@@ -390,19 +391,19 @@ private[spark] class TaskSchedulerImpl(
    *
    * @param taskSet task set manager to offer resources to
    * @param maxLocality max locality to allow when scheduling
-   * @param shuffledOffers shuffled resource offers to use for scheduling,
-   *                       remaining resources are tracked by below fields as tasks are scheduled
+   * @param workerOffers  resource offers to use for scheduling,
+   *                      remaining resources are tracked by below fields as tasks are scheduled
    * @param availableCpus  remaining cpus per offer,
-   *                       value at index 'i' corresponds to shuffledOffers[i]
+   *                       value at index 'i' corresponds to workerOffers[i]
    * @param availableResources remaining resources per offer,
-   *                           value at index 'i' corresponds to shuffledOffers[i]
-   * @param tasks tasks scheduled per offer, value at index 'i' corresponds to shuffledOffers[i]
+   *                           value at index 'i' corresponds to workerOffers[i]
+   * @param tasks tasks scheduled per offer, value at index 'i' corresponds to workerOffers[i]
    * @return tuple of (no delay schedule rejects?, option of min locality of launched task)
    */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
-      shuffledOffers: Seq[WorkerOffer],
+      workerOffers: Seq[WorkerOffer],
       availableCpus: Array[Int],
       availableResources: Array[ExecutorResourcesAmounts],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
@@ -411,14 +412,18 @@ private[spark] class TaskSchedulerImpl(
     var minLaunchedLocality: Option[TaskLocality] = None
     // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
-    for (i <- shuffledOffers.indices) {
-      val execId = shuffledOffers(i).executorId
-      val host = shuffledOffers(i).host
+    val assignmentStrategy = TaskAssignmentStrategy.create(taskAssignmentStrategy)
+    assignmentStrategy.prepare(workerOffers)
+    while (assignmentStrategy.hasNext) {
+      val i = assignmentStrategy.next()
+      val execId = workerOffers(i).executorId
+      val host = workerOffers(i).host
       val taskSetRpID = taskSet.taskSet.resourceProfileId
+      var launched = false
 
       // check whether the task can be scheduled to the executor base on resource profile.
       if (sc.resourceProfileManager
-        .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
+        .canBeScheduled(taskSetRpID, workerOffers(i).resourceProfileId)) {
         val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
           availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
@@ -441,6 +446,7 @@ private[spark] class TaskSchedulerImpl(
                 (barrierTask.taskLocality, barrierTask.assignedResources)
               }
 
+              launched = true
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
               availableCpus(i) -= taskCpus
               assert(availableCpus(i) >= 0)
@@ -458,6 +464,7 @@ private[spark] class TaskSchedulerImpl(
           }
         }
       }
+      assignmentStrategy.taskLaunched(launched)
     }
     (noDelayScheduleRejects, minLaunchedLocality)
   }
@@ -544,14 +551,14 @@ private[spark] class TaskSchedulerImpl(
       }
     }.getOrElse(offers)
 
-    val shuffledOffers = shuffleOffers(filteredOffers)
+    val workOffers = filteredOffers
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
     // close estimate
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
-    val availableResources = shuffledOffers.map(_.resources).toArray
-    val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
+    val tasks = workOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    val availableResources = workOffers.map(_.resources).toArray
+    val availableCpus = workOffers.map(o => o.cores).toArray
+    val resourceProfileIds = workOffers.map(o => o.resourceProfileId).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -591,7 +598,7 @@ private[spark] class TaskSchedulerImpl(
           var launchedTaskAtCurrentMaxLocality = false
           do {
             val (noDelayScheduleReject, minLocality) = resourceOfferSingleTaskSet(
-              taskSet, currentMaxLocality, shuffledOffers, availableCpus,
+              taskSet, currentMaxLocality, workOffers, availableCpus,
               availableResources, tasks)
             launchedTaskAtCurrentMaxLocality = minLocality.isDefined
             launchedAnyTask |= launchedTaskAtCurrentMaxLocality
@@ -729,7 +736,7 @@ private[spark] class TaskSchedulerImpl(
                 launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)
               tasks(task.assignedOfferIndex) += taskDesc
-              shuffledOffers(task.assignedOfferIndex).address.get -> taskDesc
+              workOffers(task.assignedOfferIndex).address.get -> taskDesc
             }
 
             // materialize the barrier coordinator.
@@ -785,14 +792,6 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
-  }
-
-  /**
-   * Shuffle offers around to avoid always placing tasks on the same workers.  Exposed to allow
-   * overriding in tests, so it can be deterministic.
-   */
-  protected def shuffleOffers(offers: IndexedSeq[WorkerOffer]): IndexedSeq[WorkerOffer] = {
-    Random.shuffle(offers)
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer): Unit = {
