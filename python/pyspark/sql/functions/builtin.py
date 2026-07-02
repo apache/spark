@@ -25707,7 +25707,7 @@ def try_make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnO
     Try to create time from hour, minute and second fields.
     The function returns NULL on invalid inputs.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------

@@ -901,7 +901,7 @@ object functions {
    * @param second
    *   the second to represent, from 0 to 59.999999
    * @group datetime_funcs
-   * @since 4.1.0
+   * @since 4.3.0
    */
   def try_make_time(hour: Column, minute: Column, second: Column): Column = {
     Column.fn("try_make_time", hour, minute, second)

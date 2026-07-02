@@ -234,40 +234,44 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("creating values of TimeType via try_make_time") {
+    // Verify TryMakeTime prettyName
+    val expr = new TryMakeTime(Literal(13), Literal(2), Literal(Decimal(23.5, 16, 6)))
+    assert(expr.prettyName == "try_make_time")
+
     // Valid cases should return the same result as make_time
     checkEvaluation(
-      TryEval(MakeTime(Literal(13), Literal(2), Literal(Decimal(23.5, 16, 6)))),
+      new TryMakeTime(Literal(13), Literal(2), Literal(Decimal(23.5, 16, 6))),
       LocalTime.of(13, 2, 23, 500000000))
     checkEvaluation(
-      TryEval(MakeTime(Literal(0), Literal(0), Literal(Decimal(0.0, 16, 6)))),
+      new TryMakeTime(Literal(0), Literal(0), Literal(Decimal(0.0, 16, 6))),
       LocalTime.of(0, 0, 0, 0))
     checkEvaluation(
-      TryEval(MakeTime(Literal(23), Literal(59), Literal(Decimal(59.999999, 16, 6)))),
+      new TryMakeTime(Literal(23), Literal(59), Literal(Decimal(59.999999, 16, 6))),
       LocalTime.of(23, 59, 59, 999999000))
 
     // Null cases
     checkEvaluation(
-      TryEval(MakeTime(
-        Literal.create(null, IntegerType), Literal(18), Literal(Decimal(23.5, 16, 6)))),
+      new TryMakeTime(
+        Literal.create(null, IntegerType), Literal(18), Literal(Decimal(23.5, 16, 6))),
       null)
     checkEvaluation(
-      TryEval(MakeTime(
-        Literal(13), Literal.create(null, IntegerType), Literal(Decimal(23.5, 16, 6)))),
+      new TryMakeTime(
+        Literal(13), Literal.create(null, IntegerType), Literal(Decimal(23.5, 16, 6))),
       null)
     checkEvaluation(
-      TryEval(MakeTime(
-        Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6)))),
+      new TryMakeTime(
+        Literal(13), Literal(18), Literal.create(null, DecimalType(16, 6))),
       null)
 
     // Invalid cases return null instead of throwing
     checkEvaluation(
-      TryEval(MakeTime(Literal(25), Literal(2), Literal(Decimal(23.5, 16, 6)))),
+      new TryMakeTime(Literal(25), Literal(2), Literal(Decimal(23.5, 16, 6))),
       null)
     checkEvaluation(
-      TryEval(MakeTime(Literal(23), Literal(-1), Literal(Decimal(23.5, 16, 6)))),
+      new TryMakeTime(Literal(23), Literal(-1), Literal(Decimal(23.5, 16, 6))),
       null)
     checkEvaluation(
-      TryEval(MakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6)))),
+      new TryMakeTime(Literal(23), Literal(12), Literal(Decimal(100.5, 16, 6))),
       null)
   }
 
