@@ -496,6 +496,25 @@ object UnsupportedOperationChecker extends Logging {
             }
           }
 
+          // SPARK-57843: Reject ALL stream-stream joins when the watermark column uses
+          // nanosecond precision. SymmetricHashJoinStateManager reads event-time via
+          // getLong (microseconds); a TimestampNanosVal would be silently misread.
+          // This check is hoisted above the per-join-type dispatch so that InnerLike
+          // (which skips checkForStreamStreamJoinWatermark) is also covered.
+          if (left.isStreaming && right.isStreaming) {
+            val allOutput = left.output ++ right.output
+            val nanoWatermarkInJoin = allOutput.exists { a =>
+              a.metadata.contains(EventTimeWatermark.delayKey) &&
+                a.dataType.isInstanceOf[AnyTimestampNanoType]
+            }
+            if (nanoWatermarkInJoin) {
+              throwError(
+                "Stream-stream joins do not yet support nanosecond-precision event-time " +
+                  "columns (SPARK-57843). Use a microsecond-precision timestamp type for " +
+                  "the watermark column instead.")(j)
+            }
+          }
+
           joinType match {
             case _: InnerLike =>
               // no further validations needed
@@ -555,19 +574,6 @@ object UnsupportedOperationChecker extends Logging {
             throwError(
               "dropDuplicatesWithinWatermark is not supported on streaming DataFrames/DataSets " +
                 "without watermark")(plan)
-          }
-
-          // TODO(SPARK-57843): Handle nanosecond event-time columns in streaming stateful
-          //  operators incl. dropDuplicatesWithinWatermark. Until then, reject them here to
-          //  avoid silent corruption (the exec layer reads event time via getLong assuming
-          //  microsecond precision).
-          val nanoWatermarkAttributes = watermarkAttributes.filter(
-            _.dataType.isInstanceOf[AnyTimestampNanoType])
-          if (nanoWatermarkAttributes.nonEmpty) {
-            throwError(
-              "dropDuplicatesWithinWatermark does not yet support nanosecond-precision " +
-                "event-time columns (SPARK-57843). Use a microsecond-precision timestamp " +
-                "type for the watermark column instead.")(plan)
           }
 
         case c: CoGroup if c.children.exists(_.isStreaming) =>
@@ -684,6 +690,21 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
+    // TODO(SPARK-57843 follow-up): Stream-stream joins with nanosecond event-time columns
+    //  are not yet supported because SymmetricHashJoinStateManager.extractEventTimeFn reads
+    //  event time via getLong assuming microsecond precision.
+    val allOutput = join.left.output ++ join.right.output
+    val nanoWatermarkInJoin = allOutput.exists { a =>
+      a.metadata.contains(EventTimeWatermark.delayKey) &&
+        a.dataType.isInstanceOf[AnyTimestampNanoType]
+    }
+    if (nanoWatermarkInJoin) {
+      throwError(
+        "Stream-stream joins do not yet support nanosecond-precision event-time columns " +
+          "(SPARK-57843). Use a microsecond-precision timestamp type for the watermark " +
+          "column instead.")(join)
+    }
+
     val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
 
     // Check if the nullable side has a watermark, and there's a range condition which

@@ -1580,12 +1580,16 @@ case class StreamingDeduplicateWithinWatermarkExec(
     assert(reusedDupInfoRow.isDefined, "This should have reused row.")
     val timeoutRow = reusedDupInfoRow.get
 
-    // We expect data type of event time column to be TimestampType or TimestampNTZType which both
-    // are internally represented as Long.
-    // TODO(SPARK-57843): Handle nanosecond event-time columns (TimestampLTZNanosType /
-    //  TimestampNTZNanosType) in streaming stateful operators incl. dropDuplicatesWithinWatermark.
-    //  Until then, UnsupportedOperationChecker rejects nanos event-time at analysis time.
-    val timestamp = data.getLong(eventTimeColOrdinal)
+    // Extract event-time as microseconds. For nanosecond-precision timestamp types the value
+    // is stored as a TimestampNanosVal; we extract epochMicros to keep state in micros.
+    val timestamp: Long = eventTimeCol.dataType match {
+      case _: TimestampLTZNanosType =>
+        data.getTimestampLTZNanos(eventTimeColOrdinal).epochMicros
+      case _: TimestampNTZNanosType =>
+        data.getTimestampNTZNanos(eventTimeColOrdinal).epochMicros
+      case _ =>
+        data.getLong(eventTimeColOrdinal)
+    }
     // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
     val expiresAt = timestamp + DateTimeUtils.millisToMicros(delayThresholdMs)
 

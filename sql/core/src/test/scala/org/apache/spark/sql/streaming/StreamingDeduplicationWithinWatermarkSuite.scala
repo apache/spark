@@ -21,7 +21,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions.{timestamp_nanos, timestamp_seconds}
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
@@ -255,6 +255,82 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       // Value schema includes the expiration time
       valueSchema = new StructType().add("expiresAtMicros", LongType),
       sqlConf = spark.sessionState.conf
+    )
+  }
+
+  test("SPARK-57843: dropDuplicatesWithinWatermark with nanosecond-precision event-time") {
+    // Verify that nanosecond-precision event-time columns work correctly with
+    // dropDuplicatesWithinWatermark. Event-time values are converted to micros internally
+    // for the expiration state, ensuring correct dedup and eviction behavior.
+    val inputData = MemoryStream[(String, Long)]
+    val result = inputData.toDS()
+      .withColumn("eventTime", timestamp_nanos($"_2"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicatesWithinWatermark("_1")
+      .select($"_1")
+
+    testStream(result, Append)(
+      // "a" at 17s, "b" at 22s, "c" at 21s (nanos). Watermark -> max(17,22,21) - 10 = 12s.
+      AddData(inputData,
+        ("a", 17L * 1000000000L),
+        ("b", 22L * 1000000000L),
+        ("c", 21L * 1000000000L)),
+      CheckNewAnswer("a", "b", "c"),
+      assertNumStateRows(total = 3, updated = 3),
+
+      // Duplicate "a" at 16s. Should not emit (within watermark, key exists).
+      AddData(inputData, ("a", 16L * 1000000000L)),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 3, updated = 0),
+
+      // "a" at 11s: older than watermark (12s), should be dropped as late.
+      AddData(inputData, ("a", 11L * 1000000000L)),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
+
+      // "d" at 35s. Watermark advances to 25s.
+      // "a" expiresAt = 17+10=27s > 25 (kept), "b" expiresAt = 22+10=32s > 25 (kept),
+      // "c" expiresAt = 21+10=31s > 25 (kept). All kept.
+      AddData(inputData, ("d", 35L * 1000000000L)),
+      CheckNewAnswer("d"),
+      assertNumStateRows(total = 4, updated = 1),
+
+      // "e" at 55s. Watermark advances to 45s.
+      // "a" expiresAt=27 <= 45 (evicted), "b" expiresAt=32 <= 45 (evicted),
+      // "c" expiresAt=31 <= 45 (evicted), "d" expiresAt=45 <= 45 (evicted).
+      AddData(inputData, ("e", 55L * 1000000000L)),
+      CheckNewAnswer("e"),
+      assertNumStateRows(total = 1, updated = 1)
+    )
+  }
+
+  test("SPARK-57843: sub-microsecond dedup semantics - epochMicros truncation dedup key") {
+    // Two rows with the SAME epochMicros but DIFFERENT nanosWithinMicro values.
+    // dropDuplicatesWithinWatermark uses the full (key-columns) for dedup grouping,
+    // so both rows should be emitted because their _1 (key) differs, even though
+    // their timestamps truncate to the same microsecond. This documents the intent
+    // that the dedup key is NOT the truncated timestamp itself.
+    val inputData = MemoryStream[(String, Long)]
+    val result = inputData.toDS()
+      .withColumn("eventTime", timestamp_nanos($"_2"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicatesWithinWatermark("_1")
+      .select($"_1")
+
+    // 20_000_000_001 ns = 20.000000001s; 20_000_000_999 ns = 20.000000999s
+    // Both truncate to the same epochMicros (20_000_000) but are distinct nanos.
+    // With different keys ("x" vs "y"), both should emit.
+    testStream(result, Append)(
+      AddData(inputData,
+        ("x", 20000000001L),
+        ("y", 20000000999L)),
+      CheckNewAnswer("x", "y"),
+      assertNumStateRows(total = 2, updated = 2),
+
+      // Same key "x" at a slightly different nano offset (same micro) -> duplicate, not emitted
+      AddData(inputData, ("x", 20000000500L)),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 2, updated = 0)
     )
   }
 }
