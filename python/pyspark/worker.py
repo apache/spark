@@ -3746,9 +3746,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             def _reader_thread():
                 try:
                     for batch in deserializer.load_stream(input_data_stream):
-                        # Some serializers (e.g., ArrowStreamGroupSerializer,
-                        # ArrowStreamAggPandasUDFSerializer) yield lazy iterators
-                        # that still read from the input stream. Materialize them here so
+                        # Some serializers (e.g., ArrowStreamGroupSerializer) yield lazy
+                        # iterators that still read from the input stream. Materialize them here so
                         # the main thread can consume them without touching the stream.
                         if hasattr(batch, "__next__"):
                             batch = list(batch)
