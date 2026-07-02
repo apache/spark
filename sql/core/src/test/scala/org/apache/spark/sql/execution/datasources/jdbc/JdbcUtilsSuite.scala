@@ -151,20 +151,25 @@ class JdbcUtilsSuite extends SparkFunSuite {
     assert(JdbcUtils.measureRowSize(row, schema) === 8L)
   }
 
+  // scalastyle:off nonascii
   test("SPARK-57471: measureRowSize counts actual UTF-8 bytes for non-ASCII strings") {
     val schema = StructType(Seq(StructField("s", StringType)))
-    // "\u00e9" is 'e-acute' which is 2 UTF-8 bytes but 1 char; "\u4e16" is 3 UTF-8 bytes
+    // "\u00e9" is U+00E9 (e-acute) which is 2 UTF-8 bytes but 1 char;
+    // "\u4e16" is U+4E16 (CJK char) which is 3 UTF-8 bytes
     val row = Row("\u00e9\u4e16") // 2 + 3 = 5 UTF-8 bytes, but only 2 chars
     assert(JdbcUtils.measureRowSize(row, schema) === 5L)
   }
+  // scalastyle:on nonascii
 
+  // scalastyle:off nonascii
   test("SPARK-57471: measureRowSize counts actual UTF-8 bytes for strings in arrays") {
     val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
-    // Each "\u00e9" is 2 UTF-8 bytes
+    // Each "\u00e9" is U+00E9 (e-acute), 2 UTF-8 bytes
     val row = Row(Seq("\u00e9", "\u00e9"))
     // 2 + 2 = 4 UTF-8 bytes, but 2 chars total
     assert(JdbcUtils.measureRowSize(row, schema) === 4L)
   }
+  // scalastyle:on nonascii
 
   test("SPARK-57471: measureInternalRowSize measures ArrayType(StringType) by actual content") {
     import org.apache.spark.unsafe.types.UTF8String
