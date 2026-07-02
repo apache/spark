@@ -259,8 +259,12 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
       TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
 
       // Check executor memory is also updated
-      val execInfo = sc.statusTracker.getExecutorInfos.head
-      assert(execInfo.totalOffHeapStorageMemory() == MemoryOverridePlugin.offHeapMemory)
+      eventually(timeout(10.seconds), interval(100.milliseconds)) {
+        val execs = sc.statusStore.executorList(true).filter(_.id != SparkContext.DRIVER_IDENTIFIER)
+        assert(execs.nonEmpty)
+        assert(execs.forall(_.memoryMetrics.exists(
+          _.totalOffHeapStorageMemory == MemoryOverridePlugin.offHeapMemory)))
+      }
     } finally {
       if (sc != null) {
         sc.stop()

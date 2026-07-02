@@ -420,6 +420,28 @@ class QueryExecutionErrorsSuite
       sqlState = "22008")
   }
 
+  test("DATETIME_OVERFLOW: timestamp constructors overflow") {
+    Seq(
+      (
+        s"timestamp_seconds(CAST('${Long.MaxValue}' AS BIGINT))",
+        s"create a TIMESTAMP from ${Long.MaxValue}L seconds since the epoch"),
+      (
+        s"timestamp_millis(CAST('${Long.MaxValue}' AS BIGINT))",
+        s"create a TIMESTAMP from ${Long.MaxValue}L milliseconds since the epoch"),
+      (
+        s"timestamp_seconds(CAST('${"9".repeat(38)}' AS DECIMAL(38, 0)))",
+        s"create a TIMESTAMP from ${"9".repeat(38)}BD seconds since the epoch")
+    ).foreach { case (expression, operation) =>
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select $expression").collect()
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> operation),
+        sqlState = "22008")
+    }
+  }
+
   test("CANNOT_PARSE_DECIMAL: unparseable decimal") {
     val e1 = intercept[SparkException] {
       withTempPath { path =>

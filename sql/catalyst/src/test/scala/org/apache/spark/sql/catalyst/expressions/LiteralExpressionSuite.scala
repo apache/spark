@@ -842,4 +842,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(lit.dataType === GeometryType(0))
     assert(lit.value.isInstanceOf[BinaryView])
   }
+
+  test("SPARK-57777: render explicit collation in string literal SQL") {
+    // The default `StringType` (case object) has no explicit collation, so it renders
+    // without a `collate` clause.
+    assert(Literal(UTF8String.fromString("x"), StringType).sql === "'x'")
+    // A non-default (non-singleton) `UTF8_BINARY` `StringType` is an explicit collation, so it
+    // renders the clause and stays distinguishable from the default on re-parse.
+    assert(Literal(UTF8String.fromString("x"), StringType("UTF8_BINARY")).sql ===
+      "'x' collate UTF8_BINARY")
+    // Other explicit collations are rendered as before.
+    assert(Literal(UTF8String.fromString("x"), StringType("UTF8_LCASE")).sql ===
+      "'x' collate UTF8_LCASE")
+  }
 }

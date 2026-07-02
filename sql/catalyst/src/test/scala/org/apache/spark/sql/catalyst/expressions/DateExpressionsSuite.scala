@@ -1860,8 +1860,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test integral input
     testIntegralInput(testIntegralFunc)
     // test overflow
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+    checkErrorInExpression[SparkArithmeticException](
+      SecondsToTimestamp(Literal(Long.MaxValue, LongType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "create a TIMESTAMP from 9223372036854775807L seconds since the epoch"))
 
     def testFractionalInput(input: String): Unit = {
       Seq(input.toFloat, input.toDouble, Decimal(input)).foreach { value =>
@@ -1877,9 +1880,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFractionalInput("-1.234567")
 
     // test overflow for decimal input
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))), "Overflow"
-    )
+    checkErrorInExpression[SparkArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> (
+        "create a TIMESTAMP from 99999999999999999999999999999999999999BD " +
+          "seconds since the epoch")))
     // test truncation error for decimal input
     checkExceptionInExpression[ArithmeticException](
       SecondsToTimestamp(Literal(Decimal("0.1234567"))), "Rounding necessary"
@@ -1914,8 +1920,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test integral input
     testIntegralInput(testIntegralFunc)
     // test overflow
-    checkExceptionInExpression[ArithmeticException](
-      MillisToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+    checkErrorInExpression[SparkArithmeticException](
+      MillisToTimestamp(Literal(Long.MaxValue, LongType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "create a TIMESTAMP from 9223372036854775807L milliseconds since the epoch"))
   }
 
   test("TIMESTAMP_MICROS") {

@@ -101,6 +101,60 @@ class XmlFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("from_xml variant output honors the parse mode") {
+    // A raw control char (code 5, ENQ) in XML text is illegal in XML 1.0 and the parser rejects
+    // it. Before the fix the variant path bypassed FailureSafeParser, so the parse `mode` had no
+    // effect and a malformed record aborted the whole query.
+    val badRec = "<Event>ab" + 5.toChar + "cd</Event>"
+    val goodRec = "<Event><a>1</a></Event>"
+    val df = Seq(badRec, goodRec).toDF("value")
+    df.createOrReplaceTempView("from_xml_variant_mode")
+
+    // Exercise both the interpreted path and whole-stage codegen.
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        // PERMISSIVE: the good record parses, the malformed record is rescued to null. Compare
+        // to_json of the variant so the expected value is concrete; key off `value` since row
+        // order is not guaranteed.
+        checkAnswer(
+          spark.sql("SELECT value, to_json(from_xml(value, 'variant', " +
+            "map('rowTag','Event','mode','PERMISSIVE'))) AS json FROM from_xml_variant_mode"),
+          Seq(Row(goodRec, "{\"a\":1}"), Row(badRec, null)))
+
+        // FAILFAST: the malformed record aborts the query.
+        checkError(
+          exception = intercept[SparkException] {
+            spark.sql("SELECT from_xml(value, 'variant', " +
+              "map('rowTag','Event','mode','FAILFAST')) AS d FROM from_xml_variant_mode").collect()
+          },
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+      }
+    }
+  }
+
+  test("from_xml variant output validates each record against rowValidationXSDPath") {
+    val xsdPath =
+      getTestResourcePath("test-data/xml-resources/basket.xsd").replace("file:/", "/")
+    // The first record satisfies basket.xsd; the second has an element not allowed by the schema.
+    val valid = "<basket><entry><key>1</key><value>fork</value></entry></basket>"
+    val invalid = "<basket><unexpected>x</unexpected></basket>"
+    val df = Seq(valid, invalid).toDF("value")
+    df.createOrReplaceTempView("from_xml_xsd")
+
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val result = spark.sql("SELECT value, to_json(from_xml(value, 'variant', " +
+          s"map('rowTag','basket','rowValidationXSDPath','$xsdPath'))) AS json FROM from_xml_xsd")
+          .collect().map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(result(invalid) == null,
+          s"XSD-invalid record should be rescued to null (wholeStageCodegen=$wholeStage)")
+        assert(result(valid) != null && result(valid).contains("fork"),
+          s"XSD-valid record should parse (wholeStageCodegen=$wholeStage), got: ${result(valid)}")
+      }
+    }
+  }
+
   test("from_xml with option (timestampFormat)") {
     val df = Seq("""<ROW><time>26/08/2015 18:00</time></ROW>""").toDS()
     val schema = new StructType().add("time", TimestampType)
