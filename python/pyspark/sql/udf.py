@@ -220,22 +220,26 @@ class UserDefinedFunction:
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
+
         # A nondeterministic UDF must not be transpiled: replacing it with a plain
         # Catalyst expression would let the optimizer fold/reorder/duplicate it,
         # discarding the nondeterminism barrier. (asNondeterministic() also clears
         # any options set here, for the udf(f).asNondeterministic() ordering.)
+        # Conf values are compared case-insensitively: `SET conf=True` stores
+        # the literal "True", which would otherwise silently disable
+        # transpilation (or mis-trigger the ANSI warning below).
+        def _conf_is_true(key: str) -> bool:
+            if session is None:
+                return False
+            value = session.conf.get(key)
+            return value is not None and value.lower() == "true"
+
         transpile_enabled = (
-            False
-            if session is None
-            else (
-                deterministic
-                and evalType == PythonEvalType.SQL_BATCHED_UDF
-                and session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFs") == "true"
-            )
+            deterministic
+            and evalType == PythonEvalType.SQL_BATCHED_UDF
+            and _conf_is_true("spark.sql.experimental.optimizer.transpilePyUDFs")
         )
-        ansi_enabled = (
-            False if session is None else session.conf.get("spark.sql.ansi.enabled") == "true"
-        )
+        ansi_enabled = _conf_is_true("spark.sql.ansi.enabled")
         # Transpilation only attempts to reproduce ANSI-mode Spark SQL semantics
         # (no silent integer overflow, divide-by-zero raises, etc.). Running it
         # against non-ANSI Spark would balloon the test matrix we'd have to
@@ -275,6 +279,7 @@ class UserDefinedFunction:
                 warnings.warn(f"Exception transpiling UDF {func}: {e}")
                 self.transpiled = []
                 self._transpiled_param_names = []
+                self._transpiled_input_categories = []
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
@@ -480,7 +485,9 @@ class UserDefinedFunction:
             self._judf_placeholder = self._create_judf(self.func)
         return self._judf_placeholder
 
-    def _create_judf(self, func: Callable[..., Any]) -> "JavaObject":
+    def _create_judf(
+        self, func: Callable[..., Any], include_transpiled: bool = True
+    ) -> "JavaObject":
         from pyspark.sql import SparkSession
         from pyspark.sql.classic.column import _to_java_column_opt
 
@@ -490,14 +497,16 @@ class UserDefinedFunction:
         wrapped_func = _wrap_function(sc, func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
+        transpiled = self.transpiled if include_transpiled else []
+        input_categories = self._transpiled_input_categories if include_transpiled else []
         judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
             self._name,
             wrapped_func,
             jdt,
             self.evalType,
             self.deterministic,
-            map(_to_java_column_opt, self.transpiled),
-            self._transpiled_input_categories,
+            map(_to_java_column_opt, transpiled),
+            input_categories,
         )
         return judf
 
@@ -579,7 +588,11 @@ class UserDefinedFunction:
                     return profiler.profile(f, *args, **kwargs)
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-                judf = self._create_judf(func)
+                # Profiling requires the Python function to actually execute,
+                # and the transpiled path never runs it (it also produces a
+                # TranspiledPythonUDF, which has no resultId for the profiler
+                # to key on). Build this call's judf without transpiled options.
+                judf = self._create_judf(func, include_transpiled=False)
                 jUDFExpr = judf.builderWithColumns(_to_seq(sc, jcols))
                 jPythonUDF = judf.fromUDFExpr(jUDFExpr)
                 id = jUDFExpr.resultId().id()
@@ -601,7 +614,9 @@ class UserDefinedFunction:
                     )
 
                 func.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
-                judf = self._create_judf(func)
+                # See the profiler branch above: no transpiled options while
+                # profiling, since only the interpreted path runs the function.
+                judf = self._create_judf(func, include_transpiled=False)
                 jUDFExpr = judf.builderWithColumns(_to_seq(sc, jcols))
                 jPythonUDF = judf.fromUDFExpr(jUDFExpr)
                 id = jUDFExpr.resultId().id()
