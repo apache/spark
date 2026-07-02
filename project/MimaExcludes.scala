@@ -38,7 +38,7 @@ object MimaExcludes {
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
-    // [SPARK-47103] ALS reuses the shared HasIntermediateStorageLevel param; the param and its
+    // [SPARK-57910] ALS reuses the shared HasIntermediateStorageLevel param; the param and its
     // getter are declared final in the shared trait (same name, type, default and validation).
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
