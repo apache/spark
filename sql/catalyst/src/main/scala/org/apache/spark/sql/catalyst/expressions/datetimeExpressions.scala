@@ -629,19 +629,36 @@ abstract class IntegralToTimestampBase extends UnaryExpression
 
   protected def upScaleFactor: Long
 
+  protected def inputUnit: String
+
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    try {
+      Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, inputUnit)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (upScaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+      val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+      val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+           |try {
+           |  ${ev.value} = java.lang.Math.multiplyExact($c, ${upScaleFactor}L);
+           |} catch (java.lang.ArithmeticException e) {
+           |  throw $errors.timestampConstructorOverflowError($c, $dataType, "$inputUnit");
+           |}
+           |""".stripMargin)
     }
   }
 }
@@ -675,10 +692,11 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
   @transient
   private lazy val evalFunc: Any => Any = child.dataType match {
     case _: IntegralType => input =>
-      Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+      withOverflowError(input) {
+        Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+      }
     case _: DecimalType => input =>
-      val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
-      input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
+      decimalToMicros(input.asInstanceOf[Decimal])
     case _: FloatType => input =>
       val f = input.asInstanceOf[Float]
       if (f.isNaN || f.isInfinite) null else (f.toDouble * MICROS_PER_SECOND).toLong
@@ -687,14 +705,64 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
 
+  private def withOverflowError(input: Any)(f: => Long): Long = {
+    try {
+      f
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, "seconds")
+    }
+  }
+
+  private def decimalToMicros(input: Decimal): Long = {
+    val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
+    val micros = input.toJavaBigDecimal.multiply(operand)
+    try {
+      micros.longValueExact()
+    } catch {
+      case e: ArithmeticException if isOutsideLongRange(micros) =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, "seconds")
+      case e: ArithmeticException =>
+        throw e
+    }
+  }
+
+  private def isOutsideLongRange(value: java.math.BigDecimal): Boolean = {
+    value.compareTo(java.math.BigDecimal.valueOf(Long.MinValue)) < 0 ||
+      value.compareTo(java.math.BigDecimal.valueOf(Long.MaxValue)) > 0
+  }
+
   override def nullSafeEval(input: Any): Any = evalFunc(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case _: IntegralType =>
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L)")
+      timestampSecondsCodeGen(ctx, ev) { c =>
+        s"${ev.value} = java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L);"
+      }
     case _: DecimalType =>
       val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
-      defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
+      val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+      val minLong = ctx.addReferenceObj("minLong",
+        java.math.BigDecimal.valueOf(Long.MinValue), classOf[java.math.BigDecimal].getName)
+      val maxLong = ctx.addReferenceObj("maxLong",
+        java.math.BigDecimal.valueOf(Long.MaxValue), classOf[java.math.BigDecimal].getName)
+      val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c => {
+        val micros = ctx.freshName("micros")
+        s"""
+           |java.math.BigDecimal $micros = $c.toJavaBigDecimal().multiply($operand);
+           |try {
+           |  ${ev.value} = $micros.longValueExact();
+           |} catch (java.lang.ArithmeticException e) {
+           |  if ($micros.compareTo($minLong) < 0 || $micros.compareTo($maxLong) > 0) {
+           |    throw $errors.timestampConstructorOverflowError($c, $dataType, "seconds");
+           |  }
+           |  throw e;
+           |}
+           |""".stripMargin
+      })
     case other =>
       val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
       nullSafeCodeGen(ctx, ev, c => {
@@ -707,6 +775,22 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
            |}
            |""".stripMargin
       })
+  }
+
+  private def timestampSecondsCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode)(
+      convert: String => String): ExprCode = {
+    val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+    val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         |try {
+         |  ${convert(c)}
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw $errors.timestampConstructorOverflowError($c, $dataType, "seconds");
+         |}
+         |""".stripMargin)
   }
 
   override def prettyName: String = "timestamp_seconds"
@@ -731,6 +815,8 @@ case class MillisToTimestamp(child: Expression)
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
+  override def inputUnit: String = "milliseconds"
+
   override def prettyName: String = "timestamp_millis"
 
   override protected def withNewChildInternal(newChild: Expression): MillisToTimestamp =
@@ -752,6 +838,8 @@ case class MicrosToTimestamp(child: Expression)
   extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = 1L
+
+  override def inputUnit: String = "microseconds"
 
   override def prettyName: String = "timestamp_micros"
 
