@@ -175,8 +175,9 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
     withSQLConf(enabledConfs: _*) {
       import testImplicits._
       val ds = spark.table(t).select($"col_str").as[String].select(strLen.toColumn)
-      assert(!isMarked(ds.queryExecution.optimizedPlan),
-        s"expected plan with typed aggregation NOT to be marked:\n${ds.queryExecution.optimizedPlan}")
+      val optimized = ds.queryExecution.optimizedPlan
+      assert(!isMarked(optimized),
+        s"expected plan with typed aggregation NOT to be marked:\n$optimized")
     }
   }
 
