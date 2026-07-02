@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.net.URLDecoder
+import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.{Instant, ZoneId}
 import java.time.format.DateTimeFormatter
@@ -32,6 +32,7 @@ import scala.xml.transform.{RewriteRule, RuleTransformer}
 
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.ws.rs.core.{MediaType, MultivaluedMap, Response}
+import org.apache.commons.text.StringEscapeUtils
 import org.eclipse.jetty.server.Request
 import org.glassfish.jersey.internal.util.collection.MultivaluedStringMap
 
@@ -750,6 +751,32 @@ private[spark] object UIUtils extends Logging {
 
   def getTimeZoneOffset() : Int =
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
+
+  /**
+   * URL-encode a single request-supplied value before embedding it in a log page query string.
+   * This keeps characters such as '&', '=', '#' and whitespace from changing the structure of the
+   * subsequent `/log` requests (parameter injection / query truncation).
+   */
+  def encodeLogParam(value: String): String = URLEncoder.encode(String.valueOf(value), UTF_8)
+
+  /**
+   * Build the inline `window.onload = initLogPage(...)` bootstrap script shared by the log pages
+   * (history / master / worker / driver). Individual parameter values in `logParams` must already
+   * be URL-encoded via [[encodeLogParam]] so the query string is unambiguous; the assembled string
+   * is additionally escaped for the surrounding JavaScript string literal so request-supplied
+   * values cannot break out of the inline &lt;script&gt; block.
+   */
+  def logPageOnloadScript(
+      logParams: String,
+      curLogLength: Long,
+      startByte: Long,
+      endByte: Long,
+      logLength: Long,
+      byteLength: Long): String = {
+    "window.onload = " +
+      s"initLogPage('${StringEscapeUtils.escapeEcmaScript(logParams)}', " +
+      s"$curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+  }
 
   /**
   * Return the correct Href after checking if master is running in the
