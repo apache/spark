@@ -25,9 +25,9 @@ import scala.concurrent.duration.Duration
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
-import org.apache.spark.sql.execution.streaming.{LowLatencyMemoryStream, RealTimeTrigger}
+import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemorySink
+import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {

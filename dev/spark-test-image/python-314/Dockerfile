@@ -57,7 +57,8 @@ RUN apt-get update && apt-get install -y \
     tzdata \
     software-properties-common \
     wget \
-    zlib1g-dev
+    zlib1g-dev \
+    zstd
 
 # Install Python 3.14
 RUN add-apt-repository ppa:deadsnakes/ppa

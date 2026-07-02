@@ -1854,34 +1854,29 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
   }
 
-  test("instance metrics() does not NPE before latestOffset() is called") {
+  test("SPARK-57438: metrics should not NPE when latestPartitionOffsets is null") {
+    // Construct a KafkaMicroBatchStream instance without calling latestOffset(),
+    // so latestPartitionOffsets remains null (its default uninitialized value).
+    // Calling metrics() on this instance exercises the real non-RTM code path.
     val topic = newTopic()
-    testUtils.createTopic(topic, partitions = 1)
+    val tp = new TopicPartition(topic, 0)
 
     SparkSession.setActiveSession(spark)
     withTempDir { dir =>
       val provider = new KafkaSourceProvider()
-      val dsOptions = new CaseInsensitiveStringMap(Map(
+      val options = Map(
         "kafka.bootstrap.servers" -> testUtils.brokerAddress,
         "subscribe" -> topic
-      ).asJava)
-      val stream = provider.getTable(dsOptions)
-        .newScanBuilder(dsOptions)
-        .build()
-        .toMicroBatchStream(dir.getAbsolutePath)
+      )
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+      val table = provider.getTable(dsOptions)
+      val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         .asInstanceOf[KafkaMicroBatchStream]
 
-      try {
-        // latestPartitionOffsets is null (= _) because latestOffset() has not been called yet.
-        // Before the fix, the instance metrics() used Some(latestPartitionOffsets) = Some(null),
-        // which caused an NPE inside the companion object metrics(). After the fix,
-        // Option(latestPartitionOffsets) = None, so metrics() returns an empty map.
-        val tp = new TopicPartition(topic, 0)
-        val consumedOffset = KafkaSourceOffset(Map(tp -> 0L))
-        assert(stream.metrics(Optional.of(consumedOffset)).isEmpty)
-      } finally {
-        stream.stop()
-      }
+      // latestPartitionOffsets is still null - metrics() must not NPE
+      val offset = KafkaSourceOffset(Map(tp -> 0L))
+      val result = stream.metrics(Optional.of(offset))
+      assert(result.isEmpty)
     }
   }
 }

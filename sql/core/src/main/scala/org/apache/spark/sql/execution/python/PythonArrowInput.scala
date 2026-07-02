@@ -19,18 +19,16 @@ package org.apache.spark.sql.execution.python
 import java.io.DataOutputStream
 import java.nio.channels.Channels
 
-import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
-import org.apache.spark.sql.execution.arrow.{ArrowWriter, ArrowWriterWrapper}
+import org.apache.spark.sql.execution.arrow.{ArrowCompressionUtils, ArrowWriter, ArrowWriterWrapper}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -77,22 +75,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
   protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
   // Create compression codec based on config
-  private val compressionCodecName = SQLConf.get.arrowCompressionCodec
-  private val codec = compressionCodecName match {
-    case "none" => NoCompressionCodec.INSTANCE
-    case "zstd" =>
-      val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-      factory.createCodec(codecType)
-    case "lz4" =>
-      val factory = CompressionCodec.Factory.INSTANCE
-      val codecType = new Lz4CompressionCodec().getCodecType()
-      factory.createCodec(codecType)
-    case other =>
-      throw SparkException.internalError(
-        s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-  }
+  private val codec = ArrowCompressionUtils.createCompressionCodec(
+    SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
   protected val unloader = new VectorUnloader(root, true, codec, true)
 
   protected var writer: ArrowStreamWriter = _
@@ -276,21 +260,8 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
 
   // Helper method to create VectorUnloader with compression for grouped operations
   private def createUnloaderForGroup(root: VectorSchemaRoot): VectorUnloader = {
-    val codec = SQLConf.get.arrowCompressionCodec match {
-      case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
-      case other =>
-        throw SparkException.internalError(
-          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
-    }
+    val codec = ArrowCompressionUtils.createCompressionCodec(
+      SQLConf.get.arrowCompressionCodec, SQLConf.get.arrowZstdCompressionLevel)
     new VectorUnloader(root, true, codec, true)
   }
   protected override def newWriter(

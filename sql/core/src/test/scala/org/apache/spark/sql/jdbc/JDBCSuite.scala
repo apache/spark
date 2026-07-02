@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Connection, Date, DriverManager, ResultSet, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
@@ -26,6 +26,7 @@ import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
@@ -779,6 +781,31 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
   }
 
+  test("SPARK-57447: (H2|MySQL|Postgres)Dialect escape a single quote in indexExists") {
+    // indexExists builds a lookup query with the index name as a SQL string literal, so a single
+    // quote in the name must be escaped to keep the WHERE clause well-formed.
+    Seq(
+      "jdbc:h2:mem:testdb0" -> "INDEX_NAME = 'i''1'",
+      "jdbc:mysql://127.0.0.1/db" -> "key_name = 'i''1'",
+      "jdbc:postgresql://127.0.0.1/db" -> "indexname = 'i''1'"
+    ).foreach { case (jdbcUrl, expectedClause) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "i'1", Identifier.of(Array("test"), "people"), options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      assert(sqlCaptor.getValue.contains(expectedClause),
+        s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+    }
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
@@ -834,6 +861,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
     }
     assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
+  }
+
+  test("SPARK-57446: escape single quotes in JDBC comment queries") {
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    assert(defaultDialect.getTableCommentQuery("t", "a'b") ===
+      "COMMENT ON TABLE t IS 'a''b'")
+    assert(defaultDialect.getSchemaCommentQuery("s", "a'b") ===
+      """COMMENT ON SCHEMA "s" IS 'a''b'""")
+
+    // MySQL overrides getTableCommentQuery with its own ALTER TABLE syntax.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySQLDialect.getTableCommentQuery("t", "a'b") ===
+      "ALTER TABLE t COMMENT = 'a''b'")
   }
 
   test("Dialect unregister") {

@@ -273,7 +273,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getTableCommentQuery(table: String, comment: String): String = {
-    s"ALTER TABLE $table COMMENT = '$comment'"
+    s"ALTER TABLE $table COMMENT = '${escapeSql(comment)}'"
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -325,7 +325,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())} " +
-      s"WHERE key_name = '$indexName'"
+      s"WHERE key_name = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
