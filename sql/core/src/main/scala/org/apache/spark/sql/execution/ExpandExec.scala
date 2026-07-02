@@ -59,6 +59,16 @@ case class ExpandExec(
     }
   }
 
+  // Show `useSingleTask` in the string representation only when it is set, so that plans not
+  // using single-task execution (the default) keep their existing explain output.
+  override protected def stringArgs: Iterator[Any] = {
+    if (useSingleTask) {
+      super.stringArgs
+    } else {
+      Iterator(projections, output, child)
+    }
+  }
+
   @transient
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
