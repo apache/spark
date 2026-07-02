@@ -188,7 +188,8 @@ class StreamingShuffleWriter[K, V](
     val terminationAckReceived: AtomicBoolean = new AtomicBoolean(false)
 
     // send will never block; push back is instead handled by blocking buffer allocation in write
-    // on `allocatedBytesSemaphore`. All send methods are synchronized to preserve message order.
+    // on `allocatedBufferBytesSemaphore`. All send methods are synchronized to preserve message
+    // order.
     def send(message: StreamingShuffleMessage, done: () => Unit = () => ()): Unit = synchronized {
       message.setSeqNum(lastSentSequenceNum.incrementAndGet())
       var buf: CompositeByteBuf = null
@@ -382,10 +383,10 @@ class StreamingShuffleWriter[K, V](
    * Write a sequence of records to downstream shuffle readers.
    *
    * For each record, the reader partition is determined using the key and the
-   * partitioner. Multiple rows can be packed into a single DataMessage. The maximum
-   * number of rows can be packed is dependent on STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE config.
-   * The data message will be enqueue on the messageQueue, which the Netty server threads
-   * dequeue from.
+   * partitioner. Multiple rows can be packed into a single DataMessage; the maximum
+   * number of rows that can be packed depends on the STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE
+   * config. Each DataMessage is sent to the reader for its partition over that reader's
+   * Netty connection.
    */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     val isWriteFinished = new CountDownLatch(1)
@@ -414,9 +415,9 @@ class StreamingShuffleWriter[K, V](
         // However, if JavaSerializer is used (for test mainly), we need to serialize
         // the key since we will be attempting to read it from the shuffle reader
         //
-        // TODO we are actually not guaranteeing that a buffer used to send data to for a
+        // TODO we are actually not guaranteeing that a buffer used to send data for a
         // partition does not exceed BUFFER_SIZE. We currently are not implementing spanning rows
-        // across multiple buffers as it requires interface chances in the serializers
+        // across multiple buffers as it requires interface changes in the serializers
         if (serializerInstance.isInstanceOf[JavaSerializerInstance]) {
           partitionSerializationStream.writeKey(record._1.asInstanceOf[Any])
         }

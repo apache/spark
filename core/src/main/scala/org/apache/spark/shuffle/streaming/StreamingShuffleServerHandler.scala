@@ -100,6 +100,6 @@ class StreamingShuffleServerHandler(
 
   // not needed for streaming shuffle
   // cannot throw UnsupportedException because this function will be called
-  // even if it this feature is not used.
+  // even if this feature is not used.
   override def getStreamManager: StreamManager = null
 }
