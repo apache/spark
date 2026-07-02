@@ -1330,4 +1330,46 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
     c
   }
+
+  /**
+   * Nanosecond-precision DayTimeInterval bucketing. `bucketMicros` is an integer number of
+   * microseconds, so every bucket boundary `origin + k * bucketSize` carries the same
+   * `nanosWithinMicro` remainder as `origin` -- only the choice of `k` needs nanosecond
+   * resolution, and only when the micro-level boundary lands on the same microsecond as `ts`:
+   * if `origin`'s remainder is larger than `ts`'s there, the true boundary is one bucket earlier.
+   */
+  def timeBucketDTIntervalNanos(
+      bucketMicros: Long,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketDTInterval(bucketMicros, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketDTInterval(bucketMicros, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
+  }
+
+  /**
+   * Nanosecond-precision YearMonthInterval bucketing. See
+   * [[timeBucketDTIntervalNanos]] for why the result's `nanosWithinMicro` always equals
+   * `origin`'s, and why only the choice of `k` needs sub-microsecond resolution.
+   */
+  def timeBucketYMIntervalNanos(
+      bucketMonths: Int,
+      ts: TimestampNanosVal,
+      origin: TimestampNanosVal,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val startMicros = timeBucketYMInterval(bucketMonths, ts.epochMicros, origin.epochMicros, zoneId)
+    val adjustedStartMicros =
+      if (startMicros == ts.epochMicros && origin.nanosWithinMicro > ts.nanosWithinMicro) {
+        timeBucketYMInterval(bucketMonths, startMicros - 1, origin.epochMicros, zoneId)
+      } else {
+        startMicros
+      }
+    TimestampNanosVal.fromParts(adjustedStartMicros, origin.nanosWithinMicro)
+  }
 }

@@ -318,7 +318,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"DATE '2024-01-15'\"",
     "inputType" : "\"DATE\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, DATE '2024-01-15', TIMESTAMP '1970-01-01 00:00:00')\""
   },
   "queryContext" : [ {
@@ -342,7 +342,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2024-01-15 10:23:00\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, 2024-01-15 10:23:00, TIMESTAMP '1970-01-01 00:00:00')\""
   },
   "queryContext" : [ {
@@ -366,7 +366,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"DATE '2024-01-01'\"",
     "inputType" : "\"DATE\"",
     "paramIndex" : "third",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', DATE '2024-01-01')\""
   },
   "queryContext" : [ {
@@ -390,7 +390,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputSql" : "\"2024-01-01 00:00:00\"",
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")",
     "sqlExpr" : "\"time_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-01-15 10:23:00', 2024-01-01 00:00:00)\""
   },
   "queryContext" : [ {
@@ -868,6 +868,90 @@ SELECT t, time_bucket(INTERVAL '1' MONTH, t) AS bucket
   ORDER BY t
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' SECOND, CAST('2024-06-20 10:00:00.123456789' AS timestamp_ntz(9)))
+-- !query analysis
+Project [time_bucket(INTERVAL '01' SECOND, cast(2024-06-20 10:00:00.123456789 as timestamp_ntz(9)), 1970-01-01 00:00:00, Some(UTC)) AS time_bucket(INTERVAL '01' SECOND, CAST(2024-06-20 10:00:00.123456789 AS TIMESTAMP_NTZ(9)), TIMESTAMP_NTZ '1970-01-01 00:00:00.000000000')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' MONTH, CAST('2024-06-20 10:00:00.123456789' AS timestamp_ltz(9)))
+-- !query analysis
+Project [time_bucket(INTERVAL '1' MONTH, cast(2024-06-20 10:00:00.123456789 as timestamp_ltz(9)), 1969-12-31 16:00:00, Some(UTC)) AS time_bucket(INTERVAL '1' MONTH, CAST(2024-06-20 10:00:00.123456789 AS TIMESTAMP_LTZ(9)), TIMESTAMP_LTZ '1970-01-01 00:00:00.000000000')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:03.500000999' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)))
+-- !query analysis
+Project [time_bucket(INTERVAL '01' SECOND, cast(2024-06-20 10:00:03.500000999 as timestamp_ntz(9)), cast(1970-01-01 00:00:00.000000500 as timestamp_ntz(9)), Some(UTC)) AS time_bucket(INTERVAL '01' SECOND, CAST(2024-06-20 10:00:03.500000999 AS TIMESTAMP_NTZ(9)), CAST(1970-01-01 00:00:00.000000500 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:04.000000100' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)))
+-- !query analysis
+Project [time_bucket(INTERVAL '01' SECOND, cast(2024-06-20 10:00:04.000000100 as timestamp_ntz(9)), cast(1970-01-01 00:00:00.000000500 as timestamp_ntz(9)), Some(UTC)) AS time_bucket(INTERVAL '01' SECOND, CAST(2024-06-20 10:00:04.000000100 AS TIMESTAMP_NTZ(9)), CAST(1970-01-01 00:00:00.000000500 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(
+  INTERVAL '1' SECOND,
+  CAST('2024-06-20 10:00:04.000000700' AS timestamp_ntz(9)),
+  CAST('1970-01-01 00:00:00.000000500' AS timestamp_ntz(9)))
+-- !query analysis
+Project [time_bucket(INTERVAL '01' SECOND, cast(2024-06-20 10:00:04.000000700 as timestamp_ntz(9)), cast(1970-01-01 00:00:00.000000500 as timestamp_ntz(9)), Some(UTC)) AS time_bucket(INTERVAL '01' SECOND, CAST(2024-06-20 10:00:04.000000700 AS TIMESTAMP_NTZ(9)), CAST(1970-01-01 00:00:00.000000500 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(
+  INTERVAL '1' HOUR,
+  CAST('2024-01-01 11:27:00.123456789' AS timestamp_ntz(9)),
+  TIMESTAMP_NTZ '2024-01-01 00:00:00')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2024-01-01 00:00:00'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIMESTAMP_NTZ(9)\"",
+    "sqlExpr" : "\"time_bucket(INTERVAL '01' HOUR, CAST(2024-01-01 11:27:00.123456789 AS TIMESTAMP_NTZ(9)), TIMESTAMP_NTZ '2024-01-01 00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 140,
+    "fragment" : "time_bucket(\n  INTERVAL '1' HOUR,\n  CAST('2024-01-01 11:27:00.123456789' AS timestamp_ntz(9)),\n  TIMESTAMP_NTZ '2024-01-01 00:00:00')"
+  } ]
+}
+
+
+-- !query
+SELECT t, time_bucket(INTERVAL '1' HOUR, t) AS bucket
+  FROM VALUES
+    (CAST('2024-01-15 10:23:00.123456789' AS timestamp_ltz(9))),
+    (CAST('2024-01-15 14:45:00.987654321' AS timestamp_ltz(9))) tab(t)
+  ORDER BY t
+-- !query analysis
+Sort [t#x ASC NULLS FIRST], true
++- Project [t#x, time_bucket(INTERVAL '01' HOUR, t#x, 1969-12-31 16:00:00, Some(UTC)) AS bucket#x]
+   +- SubqueryAlias tab
+      +- LocalRelation [t#x]
 
 
 -- !query
