@@ -110,26 +110,31 @@ class StreamingShuffleReaderSuite
     terminationsSeen should be(2)
   }
 
-  test("iterator surfaces a background error via checkTaskFailure") {
+  test("iterator surfaces a background error before dequeuing the next message") {
     val queue = new LinkedBlockingQueue[StreamingShuffleMessage]()
+    // A message is available in the queue, but a background error has already been recorded
+    // (e.g. the channelInactive premature-disconnect path). Because checkTaskFailure runs before
+    // every dequeue, the iterator must throw before this message is dequeued and handled, rather
+    // than emitting stale data and only failing later.
     queue.put(emptyDataMessage())
 
-    // checkTaskFailure is polled before every dequeue; simulate a background error being
-    // recorded (e.g. the channelInactive premature-disconnect path) after the first row.
-    var checks = 0
+    var dataHandled = false
     val it = factory.create[Int, Int](
       queue,
       handleTerminationMessage = _ => true,
-      handleDataMessage = _ => Iterator((1, 1)),
-      checkTaskFailure = () => {
-        checks += 1
-        if (checks >= 2) throw new SparkException("background failure")
-      })
+      handleDataMessage = _ => {
+        dataHandled = true
+        Iterator((1, 1))
+      },
+      checkTaskFailure = () => throw new SparkException("background failure"))
 
     val e = intercept[SparkException] {
-      it.toSeq
+      it.hasNext
     }
     e.getMessage should include("background failure")
+    // The pending message must not have been processed: the error was surfaced first. This is
+    // what would keep the reader from emitting rows after a writer has already failed.
+    dataHandled should be(false)
   }
 
   test("iterator throws on an unexpected message type in the queue") {
@@ -149,7 +154,11 @@ class StreamingShuffleReaderSuite
     e.getMessage should include("Unexpected message type")
   }
 
-  test("getReader returns a StreamingShuffleReader") {
+  test("getReader routes to a StreamingShuffleReader wired with the given context") {
+    // A construction/routing smoke test: the manager must dispatch to the streaming reader (not a
+    // fallback shuffle reader), the reader must construct successfully (its constructor asserts the
+    // output tracker, starts the task-discovery and client-creation executors, and registers the
+    // task-completion listener), and it must be wired with the context we passed in.
     withSpark(new SparkContext("local", "StreamingShuffleReaderSuite", newConf())) { sc =>
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -162,6 +171,8 @@ class StreamingShuffleReaderSuite
         val reader = new StreamingShuffleManager()
           .getReader[Int, Int](handle, 0, 1, 0, 1, context, null)
         reader shouldBe a[StreamingShuffleReader[_, _]]
+        val streamingReader = reader.asInstanceOf[StreamingShuffleReader[_, _]]
+        streamingReader.context should be theSameInstanceAs context
       } finally {
         // Constructing the reader starts a background task-discovery thread; the task-completion
         // listener (cleanupResources) shuts it down.
