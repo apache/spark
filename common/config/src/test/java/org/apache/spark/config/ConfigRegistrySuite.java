@@ -150,11 +150,13 @@ public class ConfigRegistrySuite {
 
   @Test
   public void testLoadConfigs() {
-    assertEquals(4, registry.keys().size());
+    assertEquals(6, registry.keys().size());
     assertTrue(registry.contains("spark.test.bool.config"));
     assertTrue(registry.contains("spark.test.int.config"));
     assertTrue(registry.contains("spark.test.string.config"));
     assertTrue(registry.contains("spark.test.long.doc.config"));
+    assertTrue(registry.contains("spark.test.optional.config"));
+    assertTrue(registry.contains("spark.test.testdefault.config"));
   }
 
   @Test
@@ -207,7 +209,29 @@ public class ConfigRegistrySuite {
 
   @Test
   public void testAll() {
-    assertEquals(4, registry.all().size());
+    assertEquals(6, registry.all().size());
+  }
+
+  @Test
+  public void testOptionalConfig() {
+    // A config without a default_value: hasDefaultValue is false and the field is empty.
+    ConfigEntry config = registry.get("spark.test.optional.config");
+    assertNotNull(config);
+    assertEquals("spark.test.optional.config", config.getKey());
+    assertEquals(ValueType.VALUE_TYPE_STRING, config.getValueType());
+    assertFalse(config.hasDefaultValue());
+    assertEquals("", config.getDefaultValue());
+  }
+
+  @Test
+  public void testTestDefaultConfig() {
+    // A config with a test_default distinct from default_value.
+    ConfigEntry config = registry.get("spark.test.testdefault.config");
+    assertNotNull(config);
+    assertEquals("spark.test.testdefault.config", config.getKey());
+    assertEquals("10", config.getDefaultValue());
+    assertTrue(config.hasTestDefault());
+    assertEquals("20", config.getTestDefault());
   }
 
   @Test

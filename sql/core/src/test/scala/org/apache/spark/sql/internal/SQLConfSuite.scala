@@ -223,7 +223,7 @@ class SQLConfSuite extends SharedSparkSession {
       parameters = Map(
         "confName" -> config.key,
         "confValue" -> "0",
-        "confRequirement" -> "The shuffle hash join factor cannot be negative."))
+        "confRequirement" -> "The shuffle hash join factor must be at least 1."))
 
     sqlConf.clear()
   }

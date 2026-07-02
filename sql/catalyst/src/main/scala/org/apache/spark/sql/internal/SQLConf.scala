@@ -141,7 +141,14 @@ object SQLConf {
   def buildConfFromConfigFile[T](key: String): ProtoBackedConfigEntry[T] = {
     Option(ConfigEntry.findProtoBackedEntry(key)).map(_.asInstanceOf[ProtoBackedConfigEntry[T]])
       .getOrElse {
-        throw SparkException.internalError(s"Config entry $key not found in ConfigRegistry")
+        if (ConfigRegistry.containsConfig(key)) {
+          // The key is defined in a .textproto file but has no default value, so it is backed by
+          // a ProtoBackedOptionalConfigEntry. Such configs must be accessed via getConfByKeyStrict.
+          throw SparkException.internalError(
+            s"Config entry $key has no default value; use getConfByKeyStrict to read it.")
+        } else {
+          throw SparkException.internalError(s"Config entry $key not found in ConfigRegistry")
+        }
       }
   }
 
@@ -161,7 +168,7 @@ object SQLConf {
   private[sql] def mergeNonStaticSQLConfigs(
       sqlConf: SQLConf,
       configs: Map[String, String]): Unit = {
-    for ((k, v) <- configs if !staticConfKeys.contains(k)) {
+    for ((k, v) <- configs if !isStaticConfigKey(k)) {
       sqlConf.setConfString(k, v)
     }
   }
@@ -1031,7 +1038,7 @@ object SQLConf {
 
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
-      .checkValue(_ >= 1, "The shuffle hash join factor cannot be negative.")
+      .checkValue(_ >= 1, "The shuffle hash join factor must be at least 1.")
 
   val LIMIT_INITIAL_NUM_PARTITIONS = buildConf("spark.sql.limit.initialNumPartitions")
     .internal()
@@ -9492,7 +9499,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   }
 
   def getConfByKeyStrict[T](key: String): T = {
-    Option(ConfigEntry.findProtoBackedEntry(key))
+    Option(ConfigEntry.findProtoDefinedEntry(key))
       .map(_.asInstanceOf[ConfigEntry[T]].readFrom(reader))
       .getOrElse {
         throw SparkException.internalError(s"Config entry $key not found in ConfigRegistry")

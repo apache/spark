@@ -55,6 +55,17 @@ configs {
 }
 
 configs {
+  key: "spark.test.optional.config"
+  value_type: VALUE_TYPE_STRING
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test config without a default value"
+  version: "4.0.0"
+}
+
+configs {
   key: "spark.test.string.config"
   value_type: VALUE_TYPE_STRING
   default_value: "default_value"
@@ -63,5 +74,18 @@ configs {
   visibility: VISIBILITY_PUBLIC
   binding_policy: BINDING_POLICY_NOT_APPLICABLE
   doc: "A test string config"
+  version: "4.0.0"
+}
+
+configs {
+  key: "spark.test.testdefault.config"
+  value_type: VALUE_TYPE_INT
+  default_value: "10"
+  test_default: "20"
+  scope: SCOPE_SESSION
+  mutability: MUTABILITY_DYNAMIC
+  visibility: VISIBILITY_PUBLIC
+  binding_policy: BINDING_POLICY_NOT_APPLICABLE
+  doc: "A test config with a distinct test default"
   version: "4.0.0"
 }
