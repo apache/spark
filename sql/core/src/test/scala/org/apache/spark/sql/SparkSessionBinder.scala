@@ -111,6 +111,17 @@ trait SparkSessionBinderBase
   protected override def spark: SparkSession = _spark
 
   /**
+   * The classic [[SparkSession]] this binder is bound to. The per-test lifecycle hooks operate on
+   * it (e.g. `DebugFilesystem`, cache clearing) via its classic-only APIs, which the abstract
+   * [[spark]] does not expose (the connect binder narrows `spark` to a connect session). By default
+   * this is the session created in [[beforeAll]]. Suites that bind their session outside `beforeAll`
+   * -- e.g. a fresh per-test instance under `OneInstancePerTest`, where `beforeAll` /
+   * [[initializeSession]] never run and `_spark` stays `null` -- override this to return their own
+   * session so the inherited hooks act on the live session.
+   */
+  protected def classicSpark: classic.SparkSession = _spark
+
+  /**
    * The [[SQLContext]] to use for all tests in this suite.
    */
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
@@ -178,7 +189,7 @@ trait SparkSessionBinderBase
   protected override def afterEach(): Unit = {
     super.afterEach()
     // Clear all persistent datasets after each test
-    _spark.sharedState.cacheManager.clearCache()
+    classicSpark.sharedState.cacheManager.clearCache()
     // files can be closed from other threads, so wait a bit
     // normally this doesn't take more than 1s
     eventually(timeout(10.seconds), interval(2.seconds)) {
