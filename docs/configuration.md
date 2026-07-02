@@ -2860,6 +2860,25 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8.1</td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.taskAssignmentStrategy</code></td>
+  <td>roundrobin</td>
+  <td>
+    The strategy that decides, within a single resource-offer round, the order in which offered
+    executors are considered when launching tasks.
+    <ul>
+      <li><code>roundrobin</code>: shuffles the offers so tasks are not always placed on the same
+      executors.</li>
+      <li><code>binpack</code>: concentrates tasks onto as few executors as possible, which can
+      help dynamic allocation reclaim idle executors.</li>
+      <li><code>balance</code>: spreads tasks as evenly as possible across executors.</li>
+      <li><code>none</code>: keeps the offers in their given order without shuffling.</li>
+    </ul>
+    Note that this only reorders which executors are tried within a locality level; task locality
+    preferences are still respected.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
   <td>10000</td>
   <td>
