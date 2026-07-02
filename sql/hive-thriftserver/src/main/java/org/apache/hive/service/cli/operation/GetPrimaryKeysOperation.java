@@ -20,12 +20,16 @@ package org.apache.hive.service.cli.operation;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.PrimaryKeysRequest;
 import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType;
 import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -75,6 +79,13 @@ public class GetPrimaryKeysOperation extends MetadataOperation {
     setState(OperationState.RUNNING);
     try {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
+      if (isAuthV2Enabled()) {
+        List<HivePrivilegeObject> privObjs = Collections.singletonList(
+            new HivePrivilegeObject(HivePrivilegeObjectType.TABLE_OR_VIEW, schemaName, tableName));
+        String cmdStr = "catalog : " + catalogName + ", schema : " + schemaName
+            + ", table : " + tableName;
+        authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
+      }
       PrimaryKeysRequest sqlReq = new PrimaryKeysRequest(schemaName, tableName);
       List<SQLPrimaryKey> pks = metastoreClient.getPrimaryKeys(sqlReq);
       if (pks == null) {
