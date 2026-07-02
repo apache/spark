@@ -581,62 +581,44 @@ class _PathPrefixInterceptor(
             compression=getattr(details, "compression", None),
         )
 
-    def intercept_unary_unary(
+    def _intercept(
         self,
         continuation: Callable[[grpc.ClientCallDetails, Any], Any],
         client_call_details: grpc.ClientCallDetails,
-        request: Any,
+        request_or_iterator: Any,
     ) -> Any:
-        return continuation(self._rewrite(client_call_details), request)
+        # The four unary/stream entry points share this body; the request payload
+        # (a single message or an iterator) is forwarded to the continuation unchanged.
+        return continuation(self._rewrite(client_call_details), request_or_iterator)
 
-    def intercept_unary_stream(
-        self,
-        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
-        client_call_details: grpc.ClientCallDetails,
-        request: Any,
-    ) -> Any:
-        return continuation(self._rewrite(client_call_details), request)
-
-    def intercept_stream_unary(
-        self,
-        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
-        client_call_details: grpc.ClientCallDetails,
-        request_iterator: Iterator[Any],
-    ) -> Any:
-        return continuation(self._rewrite(client_call_details), request_iterator)
-
-    def intercept_stream_stream(
-        self,
-        continuation: Callable[[grpc.ClientCallDetails, Any], Any],
-        client_call_details: grpc.ClientCallDetails,
-        request_iterator: Iterator[Any],
-    ) -> Any:
-        return continuation(self._rewrite(client_call_details), request_iterator)
+    # gRPC dispatches on these four specific method names; alias each to the single
+    # shared implementation above.
+    intercept_unary_unary = _intercept
+    intercept_unary_stream = _intercept
+    intercept_stream_unary = _intercept
+    intercept_stream_stream = _intercept
 
 
-class PathAwareChannelBuilder(ChannelBuilder):
+class PathAwareChannelBuilder(DefaultChannelBuilder):
     """
-    Channel builder that parses Spark Connect URLs, with support for ingress
-    path-based routing.
+    Channel builder that extends :class:`DefaultChannelBuilder` with support for
+    ingress path-based routing.
 
-    Accepts the standard form (`sc://host[:port][/;params]`) and the path-routed
-    form `sc://gateway/<prefix>:<port>`, where the trailing `:<port>` on the
-    final path segment is treated as the connection port. When a path prefix is
-    present it is prepended to every gRPC method via an interceptor, so an
-    HTTPS ingress can dispatch by URL to the right Spark Connect driver. TLS is
-    enabled implicitly when the resolved port is 443 and `;use_ssl=` was not
-    specified.
+    In addition to the standard form (`sc://host[:port][/;params]`), it accepts a
+    path-routed form `sc://gateway/<prefix>[:<port>][/;params]`, where the path
+    component is an ingress route prefix and an optional trailing `:<port>` on the
+    final path segment is the connection port (used only when the netloc carries no
+    port of its own). When a path prefix is present it is prepended to every gRPC
+    method via an interceptor, so an HTTPS ingress can dispatch by URL to the right
+    Spark Connect driver, and TLS is enabled implicitly when the resolved port is
+    443 and `;use_ssl=` was not specified.
 
     Examples
     --------
     >>> cb = PathAwareChannelBuilder("sc://host1/path1:443")
-    ... (cb.endpoint, cb.path_prefix, cb.secure)
-    ("host1:443", "/path1", True)
+    >>> cb.endpoint, cb.path_prefix, cb.secure
+    ('host1:443', '/path1', True)
     """
-
-    @staticmethod
-    def default_port() -> int:
-        return 15002
 
     def __init__(self, url: str, channelOptions: Optional[List[Tuple[str, Any]]] = None) -> None:
         """
@@ -650,138 +632,91 @@ class PathAwareChannelBuilder(ChannelBuilder):
         channelOptions: list of tuple, optional
             Additional options that can be passed to the GRPC channel construction.
         """
+        # Strip the ingress route prefix (and optional trailing :port) from the path,
+        # then let DefaultChannelBuilder parse the remaining path-free URL. This reuses
+        # its scheme check, params/hostname/port parsing (including IPv6 handling and the
+        # SPARK_TESTING ephemeral-port resolution) and channel construction.
+        base_url, path_prefix = self._split_path_prefix(url)
+        super().__init__(base_url, channelOptions=channelOptions)
+        self._path_prefix = path_prefix
+        if path_prefix:
+            # A resolved port of 443 implies a standard HTTPS ingress; enable TLS unless
+            # ;use_ssl= was set explicitly. This lives under the same condition as the
+            # prefix, so a prefix-less URL never gets a port-implied TLS (or, worse, a
+            # path-derived port 443 spoken in plaintext).
+            if self._port == 443 and ChannelBuilder.PARAM_USE_SSL not in self._params:
+                self.set(ChannelBuilder.PARAM_USE_SSL, "true")
+            self.add_interceptor(_PathPrefixInterceptor(path_prefix))
 
-        super().__init__(channelOptions=channelOptions)
-
-        # Explicitly check the scheme of the URL.
+    @staticmethod
+    def _split_path_prefix(url: str) -> Tuple[str, str]:
+        """Split a path-routed `sc://` URL into a path-free URL for
+        :class:`DefaultChannelBuilder` and the extracted ingress route prefix (empty
+        when there is none). Raises for a malformed path port or a route prefix that
+        contains a `;` parameter separator.
+        """
         if url[:5] != "sc://":
+            # Defer to DefaultChannelBuilder to raise the standard scheme error.
+            return url, ""
+        # Rewrite the URL to use http as the scheme so we can reuse Python's parser.
+        parsed = urllib.parse.urlparse("http" + url[2:])
+        path = parsed.path
+        if not path or path == "/":
+            return url, ""
+
+        # A trailing slash may remain when the path is combined with the standard
+        # `/;params` form (e.g. `sc://gateway/app/driver:443/;token=abc` parses to path
+        # `/app/driver:443/`); strip it so the port on the final segment is recognized.
+        prefix = path.rstrip("/")
+        path_port: Optional[int] = None
+        last_segment = prefix.rsplit("/", 1)[-1]
+        if ":" in last_segment:
+            head, _, port_str = prefix.rpartition(":")
+            # Validate the path-derived port the way urlparse validates the netloc port,
+            # so `driver:99999`, `driver:-1` and `driver:4_43` are not silently accepted.
+            if not (port_str.isdigit() and 0 <= int(port_str) <= 65535):
+                raise PySparkValueError(
+                    errorClass="INVALID_CONNECT_URL",
+                    messageParameters={
+                        "detail": f"Port '{port_str}' in the path of '{url}' must be an "
+                        "integer between 0 and 65535. Please update the URL to follow the "
+                        "correct format, e.g., 'sc://host/prefix:port'.",
+                    },
+                )
+            path_port = int(port_str)
+            prefix = head
+
+        prefix = "/" + prefix.strip("/")
+        if prefix == "/":
+            # A bare `:port` with no route prefix is not a path-routed URL; drop both the
+            # empty prefix and the meaningless port and defer to the standard parser.
+            prefix = ""
+            path_port = None
+        elif ";" in prefix:
+            # urlparse only strips `;params` from the final path segment, so a
+            # `;key=value` elsewhere would otherwise be silently swallowed into the route
+            # prefix (and leak into the :path of every RPC). `;` is never legal here.
             raise PySparkValueError(
                 errorClass="INVALID_CONNECT_URL",
                 messageParameters={
-                    "detail": "The URL must start with 'sc://'. Please update the URL to "
-                    "follow the correct format, e.g., 'sc://hostname:port'.",
+                    "detail": f"The path prefix '{prefix}' must not contain ';'. A "
+                    "';key=value' parameter is only recognized after the final path "
+                    "segment, e.g., 'sc://host/prefix:port/;key=value'.",
                 },
             )
-        # Rewrite the URL to use http as the scheme so that we can leverage
-        # Python's built-in parser.
-        tmp_url = "http" + url[2:]
-        self.url = urllib.parse.urlparse(tmp_url)
-        self._path_prefix = ""
-        self._extract_attributes()
 
-    def _extract_attributes(self) -> None:
-        if len(self.url.params) > 0:
-            parts = self.url.params.split(";")
-            for p in parts:
-                kv = p.split("=")
-                if len(kv) != 2:
-                    raise PySparkValueError(
-                        errorClass="INVALID_CONNECT_URL",
-                        messageParameters={
-                            "detail": f"Parameter '{p}' should be provided as a "
-                            f"key-value pair separated by an equal sign (=). Please update "
-                            f"the parameter to follow the correct format, e.g., 'key=value'.",
-                        },
-                    )
-                self.set(kv[0], urllib.parse.unquote(kv[1]))
-
-        if not self.url.hostname:
-            raise PySparkValueError(
-                errorClass="INVALID_CONNECT_URL",
-                messageParameters={
-                    "detail": f"Hostname is missing in the URL: '{self.url.geturl()}'. "
-                    "Please update the URL to follow the correct format, "
-                    "e.g., 'sc://hostname:port'.",
-                },
-            )
-        # Use urllib's parser for host/port so IPv6 literals (e.g. `sc://[::1]:15002`)
-        # are handled correctly and bracket-wrapped consistently with
-        # DefaultChannelBuilder.
-        netloc_has_port = self.url.port is not None
-        self._host = f"[{self.url.hostname}]" if ":" in self.url.hostname else self.url.hostname
-        self._port = self.url.port if netloc_has_port else self.default_port()
-
-        # Path component is treated as an ingress route prefix for path-based routing
-        # (e.g. `sc://host1/path1:443`). A trailing `:PORT` on the
-        # final path segment is parsed as the connection port when the netloc has none.
-        path = self.url.path
-        if path and path != "/":
-            # Strip a trailing slash so the port on the final segment is still
-            # recognized when combined with the standard `/;params` form, e.g.
-            # `sc://gateway/app/driver:443/;token=abc` yields path `/app/driver:443/`.
-            prefix = path.rstrip("/")
-            last_segment = prefix.rsplit("/", 1)[-1]
-            if ":" in last_segment:
-                head, _, port_str = prefix.rpartition(":")
-                try:
-                    parsed_port = int(port_str)
-                    prefix = head
-                    if not netloc_has_port:
-                        self._port = parsed_port
-                except ValueError:
-                    pass
-            prefix = "/" + prefix.strip("/")
-            if prefix != "/":
-                self._path_prefix = prefix
-                # Standard HTTPS ingresses imply TLS; honor any explicit ;use_ssl= override.
-                if self._port == 443 and ChannelBuilder.PARAM_USE_SSL not in self._params:
-                    self.set(ChannelBuilder.PARAM_USE_SSL, "true")
-                self.add_interceptor(_PathPrefixInterceptor(self._path_prefix))
-
-    @property
-    def secure(self) -> bool:
-        return self.use_ssl or self.token is not None
-
-    @property
-    def use_ssl(self) -> bool:
-        return self.getDefault(ChannelBuilder.PARAM_USE_SSL, "").lower() == "true"
-
-    @property
-    def host(self) -> str:
-        """
-        The hostname where this client intends to connect.
-        """
-        return self._host
-
-    @property
-    def endpoint(self) -> str:
-        return f"{self._host}:{self._port}"
+        # Rebuild a path-free URL for DefaultChannelBuilder. The path-derived port is
+        # folded into the netloc only when the netloc carries no port of its own.
+        netloc = parsed.netloc
+        if path_port is not None and parsed.port is None:
+            netloc = f"{netloc}:{path_port}"
+        base_url = f"sc://{netloc}/;{parsed.params}" if parsed.params else f"sc://{netloc}"
+        return base_url, prefix
 
     @property
     def path_prefix(self) -> str:
         """The ingress path prefix prepended to every gRPC method, or '' if unset."""
         return self._path_prefix
-
-    def toChannel(self) -> grpc.Channel:
-        """
-        Applies the parameters of the connection string and creates a new
-        GRPC channel according to the configuration. Passes optional channel options to
-        construct the channel.
-
-        Returns
-        -------
-        GRPC Channel instance.
-        """
-
-        if not self.secure:
-            return self._insecure_channel(self.endpoint)
-        elif not self.use_ssl and self._host == "localhost":
-            creds = grpc.local_channel_credentials()
-
-            if self.token is not None:
-                creds = grpc.composite_channel_credentials(
-                    creds, grpc.access_token_call_credentials(self.token)
-                )
-            return self._secure_channel(self.endpoint, creds)
-        else:
-            creds = grpc.ssl_channel_credentials()
-
-            if self.token is not None:
-                creds = grpc.composite_channel_credentials(
-                    creds, grpc.access_token_call_credentials(self.token)
-                )
-
-            return self._secure_channel(self.endpoint, creds)
 
 
 class PlanObservedMetrics(ObservedMetrics):

@@ -142,3 +142,28 @@ example the following examples are invalid.
 server_url = "sc://myhost.com:443/mypathprefix/;token=AAAAAAA"
 ```
 
+### Path-based routing (Python client only)
+
+The rules above describe the default connection-string parser, which is shared by
+all clients and rejects a non-empty path. The Python client additionally ships an
+opt-in `PathAwareChannelBuilder` that interprets the path component as an ingress
+route prefix, so a single HTTPS gateway can dispatch by URL to the right Spark
+Connect driver. It treats an optional trailing `:<port>` on the final path segment
+as the connection port and, when the resolved port is `443`, enables TLS unless
+`;use_ssl=` is set explicitly. For example, the URL listed as invalid above is
+accepted by this builder:
+
+```python
+from pyspark.sql.connect.client import PathAwareChannelBuilder
+
+spark = (
+    SparkSession.builder.channelBuilder(
+        PathAwareChannelBuilder("sc://myhost.com/mypathprefix/driver:443/;token=AAAAAAA")
+    ).getOrCreate()
+)
+```
+
+This is a Python-only extension; the default parser and the other clients (e.g. the
+Scala client) still reject non-empty paths, so a path-routed URL is not portable
+across clients.
+

@@ -271,6 +271,54 @@ class PathAwareChannelBuilderTests(unittest.TestCase):
         self.assertTrue(chan.use_ssl)
         self.assertTrue(chan.secure)
 
+    def test_subclasses_default_builder(self):
+        # It inherits DefaultChannelBuilder so parsing/credential handling (and the
+        # SPARK_TESTING-aware default_port) stay in sync between the two builders.
+        self.assertTrue(issubclass(PathAwareChannelBuilder, DefaultChannelBuilder))
+        self.assertEqual(
+            DefaultChannelBuilder.default_port(), PathAwareChannelBuilder.default_port()
+        )
+
+    def test_no_path_no_implicit_tls(self):
+        # Without a path prefix the 443-implies-TLS rule does not apply; this matches
+        # DefaultChannelBuilder and the (now narrowed) docstring.
+        chan = PathAwareChannelBuilder("sc://gateway:443")
+        self.assertEqual("gateway:443", chan.endpoint)
+        self.assertEqual("", chan.path_prefix)
+        self.assertFalse(chan.use_ssl)
+        self.assertFalse(chan.secure)
+        self.assertEqual([], chan._interceptors)
+
+    def test_bare_path_port_without_prefix(self):
+        # "sc://host/:443" has a trailing port but no route prefix. The port must not
+        # be adopted on its own (which would speak plaintext against an HTTPS port);
+        # it collapses to a plain "sc://host" with the default port and no TLS.
+        chan = PathAwareChannelBuilder("sc://host/:443")
+        self.assertEqual(f"host:{PathAwareChannelBuilder.default_port()}", chan.endpoint)
+        self.assertEqual("", chan.path_prefix)
+        self.assertFalse(chan.use_ssl)
+        self.assertFalse(chan.secure)
+        self.assertEqual([], chan._interceptors)
+
+    def test_param_in_non_final_segment_rejected(self):
+        # urlparse only strips ";params" from the final segment; a ";key=value" on an
+        # earlier segment would otherwise be swallowed into the route prefix (leaking
+        # the credential into every RPC path). It must be rejected instead.
+        self.assertRaises(
+            PySparkValueError, PathAwareChannelBuilder, "sc://gateway/app;token=abc/driver"
+        )
+
+    def test_invalid_path_port_rejected(self):
+        # The path-derived port must pass the same 0-65535 integer validation as the
+        # netloc port; out-of-range, negative and PEP 515 underscore forms are invalid.
+        for url in [
+            "sc://gateway/driver:99999",
+            "sc://gateway/driver:-1",
+            "sc://gateway/driver:4_43",
+        ]:
+            with self.subTest(url=url):
+                self.assertRaises(PySparkValueError, PathAwareChannelBuilder, url)
+
     def test_interceptor_added_for_path_prefix(self):
         chan = PathAwareChannelBuilder("sc://gateway/sparkConnect/app-1/driver:443")
         self.assertEqual(1, len(chan._interceptors))

@@ -50,7 +50,7 @@ import urllib
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
+from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.plan import (
     SQL,
@@ -126,7 +126,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
-            self._channel_builder: Optional[DefaultChannelBuilder] = None
+            self._channel_builder: Optional[ChannelBuilder] = None
             self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
@@ -159,7 +159,7 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
-        def channelBuilder(self, channelBuilder: DefaultChannelBuilder) -> "SparkSession.Builder":
+        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
             """Uses custom :class:`ChannelBuilder` implementation, when there is a need
             to customize the behavior for creation of GRPC connections.
 
@@ -279,7 +279,7 @@ class SparkSession:
 
     def __init__(
         self,
-        connection: Union[str, DefaultChannelBuilder],
+        connection: Union[str, ChannelBuilder],
         userId: Optional[str] = None,
         hook_factories: Optional[list["Callable[[SparkSession], Hook]"]] = None,
     ) -> None:
