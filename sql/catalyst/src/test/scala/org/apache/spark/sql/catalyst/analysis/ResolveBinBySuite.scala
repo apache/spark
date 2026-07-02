@@ -47,6 +47,7 @@ class ResolveBinBySuite extends AnalysisTest {
   private val tsEndNtz = $"ts_end".timestampNTZ
   private val value = $"value".double
   private val label = $"label".string
+  private val label2 = $"label2".string
 
   private val ltzChild: LogicalPlan = LocalRelation(tsStart, tsEnd, value, label)
   private val ntzChild: LogicalPlan = LocalRelation(tsStartNtz, tsEndNtz, value)
@@ -228,6 +229,38 @@ class ResolveBinBySuite extends AnalysisTest {
 
     // Forwarded (non-distribute) columns keep their identity.
     assert(bi.output.exists(_.exprId == label.exprId))
+    assert(bi.output.exists(_.exprId == tsStart.exprId))
+  }
+
+  test("resolved BinBy emits each of multiple DISTRIBUTE columns as a produced attribute " +
+    "replacing the input") {
+    // `v1`, `v2`, `v3` sit at non-adjacent schema positions with forwarded columns between
+    // them, so this covers per-slot in-place replacement with distinct fresh ids.
+    val v1 = AttributeReference("v1", DoubleType, nullable = true)()
+    val v2 = AttributeReference("v2", DoubleType, nullable = true)()
+    val v3 = AttributeReference("v3", DoubleType, nullable = true)()
+    val child = LocalRelation(tsStart, tsEnd, v1, label, v2, label2, v3)
+    val distribute = Seq(v1, v2, v3)
+    val bi = ResolveBinBy.apply(
+      unresolved(child = child, distribute = distribute)).asInstanceOf[BinBy]
+
+    // The inputs are read (held in distributeColumns) but none is forwarded by identity.
+    assert(bi.distributeColumns.map(_.exprId) == distribute.map(_.exprId))
+    assert(distribute.forall(v => !bi.output.exists(_.exprId == v.exprId)))
+
+    // Each is replaced at its own position by a fresh-id, same-name produced attribute.
+    val outputs = distribute.map(v => bi.output(child.output.indexWhere(_.exprId == v.exprId)))
+    outputs.zip(distribute).foreach { case (out, in) =>
+      assert(out.name == in.name && out.exprId != in.exprId)
+    }
+    assert(outputs.map(_.exprId).distinct.length == distribute.length)
+    assert(bi.scaledDistributeColumns.map(_.exprId) == outputs.map(_.exprId))
+    assert(outputs.forall(bi.producedAttributes.contains))
+
+    // The child portion of `output` keeps the child's column order and names.
+    assert(bi.output.take(child.output.length).map(_.name) == child.output.map(_.name))
+    assert(bi.output.exists(_.exprId == label.exprId))
+    assert(bi.output.exists(_.exprId == label2.exprId))
     assert(bi.output.exists(_.exprId == tsStart.exprId))
   }
 

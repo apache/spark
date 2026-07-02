@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
@@ -1822,11 +1821,9 @@ case class BinBy(
     timeZoneId: Option[String])
   extends UnaryNode {
 
-  if (timeZoneId.isDefined != rangeStart.dataType.isInstanceOf[TimestampType]) {
-    throw SparkException.internalError(
-      s"timeZoneId must be set iff rangeStart is TIMESTAMP (LTZ); got rangeStart.dataType=" +
-        s"${rangeStart.dataType}, timeZoneId=$timeZoneId")
-  }
+  assert(timeZoneId.isDefined == rangeStart.dataType.isInstanceOf[TimestampType],
+    s"timeZoneId must be set iff rangeStart is TIMESTAMP (LTZ); got rangeStart.dataType=" +
+      s"${rangeStart.dataType}, timeZoneId=$timeZoneId")
 
   assert(distributeColumns.length == scaledDistributeColumns.length,
     "BinBy requires one scaled attribute per DISTRIBUTE column, got " +
