@@ -249,3 +249,22 @@ SELECT typeof(array(TIMESTAMP_NTZ '9999-12-31 23:59:59',
     '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9)));
 SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ntz(9),
     'max', TIMESTAMP_NTZ '9999-12-31 23:59:59.999999');
+
+-- SORT / ORDER BY tie-breaks on the sub-microsecond remainder: 001 and 999 share a microsecond,
+-- 1000 rolls into the next, so a micro-truncating sort would misorder them (full value 001<999<1000).
+SELECT v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000001000' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') ORDER BY v;
+
+-- row_number() over a nanosecond ORDER BY key: the row numbers follow the sub-microsecond order.
+SELECT v, row_number() OVER (ORDER BY v) AS rn FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY rn;
+
+-- lead() over a nanosecond ORDER BY key returns the next sub-microsecond value (carrier round-trip).
+SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
