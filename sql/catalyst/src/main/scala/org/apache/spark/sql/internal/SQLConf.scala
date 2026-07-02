@@ -7367,6 +7367,7 @@ object SQLConf {
         "operator such as a sort or aggregation. This avoids the scheduling overhead of an " +
         "unnecessary shuffle for small, low-latency queries.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -7376,6 +7377,7 @@ object SQLConf {
       .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
         "enable the single-task optimization for query plans with aggregation operators.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
 
   val SINGLE_TASK_EXECUTION_EXPAND =
@@ -7384,6 +7386,7 @@ object SQLConf {
       .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
         "enable the single-task optimization for query plans with expand operators.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
 
   val SINGLE_TASK_EXECUTION_LIMIT_OFFSET =
@@ -7392,6 +7395,7 @@ object SQLConf {
       .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
         "enable the single-task optimization for query plans with limit or offset operators.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
 
   val SINGLE_TASK_EXECUTION_SORT =
@@ -7400,6 +7404,7 @@ object SQLConf {
       .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
         "enable the single-task optimization for query plans with sort operators.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
 
   val SINGLE_TASK_EXECUTION_WINDOW =
@@ -7408,6 +7413,7 @@ object SQLConf {
       .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
         "enable the single-task optimization for query plans with window operators.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
 
   val SINGLE_TASK_EXECUTION_MAX_NUM_FILES =
@@ -7416,6 +7422,7 @@ object SQLConf {
       .doc("The maximum number of files that a file scan may have for the single-task " +
         "optimization to apply to it.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(1)
 
@@ -7425,6 +7432,7 @@ object SQLConf {
       .doc("The minimum number of files that a file scan may have for the single-task " +
         "optimization to apply to it.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(1)
 
@@ -7434,6 +7442,7 @@ object SQLConf {
       .doc("The minimum total size in bytes that a file scan may have for the single-task " +
         "optimization to apply to it.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .createWithDefault(1)
 
@@ -7443,6 +7452,7 @@ object SQLConf {
       .doc("The minimum number of rows that a local in-memory relation may have for the " +
         "single-task optimization to apply to it.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(1)
 
@@ -7452,6 +7462,7 @@ object SQLConf {
       .doc("The maximum number of rows that a local in-memory relation may have for the " +
         "single-task optimization to apply to it.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(1000)
 
