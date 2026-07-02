@@ -1151,7 +1151,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
-        execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
+        val useSingleTask = e.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        execution.ExpandExec(e.projections, e.output, planLater(child), useSingleTask) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
         if (sampleMethod == logical.SampleMethod.System) {
           // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples

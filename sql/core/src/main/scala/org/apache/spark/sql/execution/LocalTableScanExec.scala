@@ -57,7 +57,15 @@ case class LocalTableScanExec(
 
   @transient private lazy val rdd: RDD[InternalRow] = {
     if (rows.isEmpty) {
-      sparkContext.emptyRDD
+      if (useSingleTask) {
+        // Produce a single empty partition to match the `SinglePartition` reported by
+        // `outputPartitioning`. `emptyRDD` has zero partitions, and running e.g. a global
+        // aggregation on a zero-partition RDD with the shuffle elided would return no rows
+        // instead of the single row expected on empty input.
+        sparkContext.parallelize(Seq.empty[InternalRow], 1)
+      } else {
+        sparkContext.emptyRDD
+      }
     } else {
       val numSlices = if (useSingleTask) {
         1

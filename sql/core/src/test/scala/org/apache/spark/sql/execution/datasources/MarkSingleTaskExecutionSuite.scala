@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{FileSourceScanExec, LocalTableScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
+import org.apache.spark.sql.functions.{count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -122,6 +123,10 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
     checkMarked(s"select sum(col) from (select col from $t where col < 42)")
   }
 
+  test("marks scan + expand (grouping sets)") {
+    checkMarked(s"select col, count(1) from $t group by rollup(col)")
+  }
+
   test("marks scan + window") {
     checkMarked(
       s"select col, row_number() over (partition by col order by col) from $t")
@@ -167,6 +172,30 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
     checkSinglePartition(s"select distinct col from $t2", Seq(Row(0), Row(1)))
   }
 
+  test("output partitioning is SinglePartition, scan + expand") {
+    checkSinglePartition(
+      s"select col, count(1) as c from $t group by rollup(col)",
+      Seq(Row(0, 1), Row(1, 1), Row(null, 2)))
+  }
+
+  test("bucketed scan does not run in a single task") {
+    val bucketed = "single_task_bucketed"
+    withTable(bucketed) {
+      spark.range(0, 2).selectExpr("id as col").write.bucketBy(2, "col").saveAsTable(bucketed)
+      // Raise the file count bound so that only the bucketing makes the scan ineligible.
+      val confs = enabledConfs :+ (SQLConf.SINGLE_TASK_EXECUTION_MAX_NUM_FILES.key -> "4")
+      withSQLConf(confs: _*) {
+        val df = sql(s"select col, count(1) as c from $bucketed group by col")
+        checkAnswer(df, Seq(Row(0, 1), Row(1, 1)))
+        val scans = collect(getFinalPhysicalPlan(df)) { case s: FileSourceScanExec => s }
+        assert(scans.nonEmpty)
+        assert(scans.forall(!_.useSingleTaskExecution),
+          "a bucketed scan must not run in a single task as that would invalidate its " +
+            "HashPartitioning over the bucket columns")
+      }
+    }
+  }
+
   test("empty table scan + aggregation is correct and single-partition") {
     // Without single-task execution eliding the shuffle before the aggregation, an empty scan
     // could incorrectly return zero rows instead of a single NULL row for a global aggregation.
@@ -179,9 +208,23 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
       Seq(Row(0), Row(1)))
   }
 
+  test("empty local relation + global aggregation returns one row") {
+    withSQLConf(enabledConfs: _*) {
+      import testImplicits._
+      val df = Seq.empty[Int].toDF("col").agg(count($"col"), sum($"col"))
+      assert(isMarked(df.queryExecution.optimizedPlan),
+        "expected the empty local relation to be marked for single-task execution")
+      // A global aggregation over an empty input must still return a single row.
+      checkAnswer(df, Row(0, null))
+    }
+  }
+
   test("does not mark when a leaf-node parallelism override is set") {
     checkNotMarked(
       "select col from values (0), (1) as tab(col) order by col",
+      enabledConfs :+ (SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "4"))
+    checkNotMarked(
+      s"select col from $t order by col",
       enabledConfs :+ (SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "4"))
   }
 }

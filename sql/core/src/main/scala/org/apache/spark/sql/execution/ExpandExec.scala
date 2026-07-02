@@ -36,7 +36,11 @@ import org.apache.spark.sql.internal.SQLConf
 case class ExpandExec(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
-    child: SparkPlan)
+    child: SparkPlan,
+    // When true, this Expand is part of a plan marked for single-task execution by the
+    // `MarkSingleTaskExecution` optimizer rule, and forwards the child's `SinglePartition`
+    // output partitioning (see `outputPartitioning`).
+    useSingleTask: Boolean = false)
   extends UnaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
@@ -44,11 +48,11 @@ case class ExpandExec(
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
   // as UNKNOWN partitioning. Expand only replicates rows within a partition and never moves rows
-  // across partitions, so when the single-task optimization is enabled and the child produces a
-  // single partition, we can forward the `SinglePartition` property to avoid an unneeded shuffle.
+  // across partitions, so when this Expand is part of a plan marked for single-task execution
+  // and the child produces a single partition, we can forward the `SinglePartition` property to
+  // avoid an unneeded shuffle.
   override def outputPartitioning: Partitioning = {
-    if (conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_EXPAND) &&
-        child.outputPartitioning == SinglePartition) {
+    if (useSingleTask && child.outputPartitioning == SinglePartition) {
       SinglePartition
     } else {
       UnknownPartitioning(0)

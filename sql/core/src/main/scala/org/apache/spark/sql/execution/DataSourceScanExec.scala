@@ -329,11 +329,12 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
    * Whether this file scan should run in a single task, reporting a `SinglePartition` output
    * partitioning so that a following shuffle can be elided. This is true when the plan shape was
    * marked eligible by the optimizer and the statically-selected files fall within the configured
-   * count and size bounds. It relies on `selectedPartitions`, so it must not be evaluated before
-   * the scan's file listing is available.
+   * count and size bounds. Bucketed scans are excluded: they report a `HashPartitioning` over the
+   * bucket columns, which coalescing to a single partition would invalidate. It relies on
+   * `selectedPartitions`, so it must not be evaluated before the scan's file listing is available.
    */
   lazy val useSingleTaskExecution: Boolean = {
-    if (!markedForSingleTaskExecution) {
+    if (!markedForSingleTaskExecution || bucketedScan) {
       false
     } else {
       val sqlConf = getSqlConf(relation.sparkSession)
@@ -969,7 +970,8 @@ case class FileSourceScanExec(
       optionalNumCoalescedBuckets,
       QueryPlan.normalizePredicates(dataFilters, output),
       None,
-      disableBucketedScan)
+      disableBucketedScan,
+      markedForSingleTaskExecution)
   }
 
   override def getStream: Option[SparkDataStream] = stream

@@ -32,7 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
  * limit/offset) on top. When it detects such a shape, it marks the underlying scan:
  *
  *  - a [[LogicalRelation]] or [[LocalRelation]] is marked with the
- *    [[MarkSingleTaskExecution.markTag]] tag.
+ *    [[MarkSingleTaskExecution.markTag]] tag, as is any [[Expand]] in the plan so that the
+ *    physical Expand can forward the child's `SinglePartition` output partitioning.
  *
  * The physical scan then reports a `SinglePartition` output partitioning, which allows
  * [[org.apache.spark.sql.execution.exchange.EnsureRequirements]] to elide the shuffle that would
@@ -49,14 +50,13 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
 
   /**
    * Tag placed on a [[LogicalRelation]] or [[LocalRelation]] that has been marked eligible for
-   * single-task execution. The planning strategies read this tag to propagate the decision to the
-   * physical [[org.apache.spark.sql.execution.FileSourceScanExec]] /
-   * [[org.apache.spark.sql.execution.LocalTableScanExec]].
+   * single-task execution, and on any [[Expand]] in such a plan. The planning strategies read
+   * this tag to propagate the decision to the physical
+   * [[org.apache.spark.sql.execution.FileSourceScanExec]] /
+   * [[org.apache.spark.sql.execution.LocalTableScanExec]] /
+   * [[org.apache.spark.sql.execution.ExpandExec]].
    */
   val markTag: TreeNodeTag[Boolean] = TreeNodeTag[Boolean]("__single_task_execution")
-
-  private def get[T](entry: org.apache.spark.internal.config.ConfigEntry[T]): T =
-    SQLConf.get.getConf(entry)
 
   /**
    * Plan patterns that make a query ineligible for the optimization. These operators either
@@ -85,15 +85,18 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
       window: Boolean)
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!get(SQLConf.SINGLE_TASK_EXECUTION_ENABLED)) {
+    // An explicit leaf-node parallelism override expresses the user's intent about how many
+    // partitions leaf scans should produce, so do not force scans into a single partition.
+    if (!conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_ENABLED) ||
+        conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).isDefined) {
       return plan
     }
     val enabled = EnabledOperators(
-      aggregation = get(SQLConf.SINGLE_TASK_EXECUTION_AGGREGATION),
-      expand = get(SQLConf.SINGLE_TASK_EXECUTION_EXPAND),
-      limitOffset = get(SQLConf.SINGLE_TASK_EXECUTION_LIMIT_OFFSET),
-      sort = get(SQLConf.SINGLE_TASK_EXECUTION_SORT),
-      window = get(SQLConf.SINGLE_TASK_EXECUTION_WINDOW))
+      aggregation = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_AGGREGATION),
+      expand = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_EXPAND),
+      limitOffset = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_LIMIT_OFFSET),
+      sort = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_SORT),
+      window = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_WINDOW))
 
     if (plan.containsAnyPattern(unsupportedPatterns: _*)) {
       plan
@@ -144,18 +147,23 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
         r.setTagValue(markTag, true)
       }
       r
+    case e: Expand =>
+      // Also mark the Expand itself: the physical `ExpandExec` reads this tag to forward the
+      // child's `SinglePartition` output partitioning, which it must only do within a plan
+      // marked for single-task execution.
+      val marked = e.withNewChildren(e.children.map(markSingleTaskExecution))
+      marked.setTagValue(markTag, true)
+      marked
     case other =>
       other.withNewChildren(other.children.map(markSingleTaskExecution))
   }
 
   /**
-   * A local in-memory relation is eligible when its row count falls within the configured bounds
-   * and there is no explicit leaf-node parallelism override in effect.
+   * A local in-memory relation is eligible when its row count falls within the configured bounds.
    */
   private def isLocalRelationEligible(r: LocalRelation): Boolean = {
-    val minRows = get(SQLConf.SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_MIN_ROWS)
-    val threshold = get(SQLConf.SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_THRESHOLD)
-    get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).isEmpty &&
-      r.data.length >= minRows && r.data.length <= threshold
+    val minRows = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_MIN_ROWS)
+    val threshold = conf.getConf(SQLConf.SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_THRESHOLD)
+    r.data.length >= minRows && r.data.length <= threshold
   }
 }
