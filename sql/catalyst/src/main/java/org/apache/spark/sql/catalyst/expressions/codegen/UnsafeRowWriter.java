@@ -21,6 +21,11 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
+import org.apache.spark.unsafe.types.BinaryView;
+import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
+import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.unsafe.types.VariantVal;
 
 /**
  * A helper class to write data into global row buffer using `UnsafeRow` format.
@@ -217,5 +222,73 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // move the cursor forward.
       increaseCursor(16);
     }
+  }
+
+  // The `writeNullable` family collapses the common codegen pattern
+  // `if (isNull) { setNullAt(i); } else { write(i, value); }` into a single call, which keeps the
+  // generated code small. The overload set mirrors the `write` overloads so that Janino resolves
+  // the same target for a given value type. The null branch of each overload matches the setNull
+  // code that `GenerateUnsafeProjection` emits for the corresponding data type.
+
+  public void writeNullable(int ordinal, boolean value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, byte value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, short value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, int value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, long value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, float value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, double value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, UTF8String value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, BinaryView value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, byte[] value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, VariantVal value, boolean isNull) {
+    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+  }
+
+  public void writeNullable(int ordinal, CalendarInterval value, boolean isNull) {
+    // `write(int, CalendarInterval)` accepts a null input and still reserves the 16-byte
+    // interval slot in the variable-length region, which is what the codegen setNull branch
+    // relies on for this type.
+    write(ordinal, isNull ? null : value);
+  }
+
+  public void writeNullable(int ordinal, TimestampNanosVal value, boolean isNull) {
+    // `write(int, TimestampNanosVal)` accepts a null input, see the CalendarInterval overload.
+    write(ordinal, isNull ? null : value);
+  }
+
+  public void writeNullable(int ordinal, Decimal value, boolean isNull, int precision, int scale) {
+    // `write(int, Decimal, int, int)` treats a null input as a null value for both the compact
+    // and the byte-array precision ranges.
+    write(ordinal, isNull ? null : value, precision, scale);
   }
 }
