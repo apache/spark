@@ -34,7 +34,10 @@ class XmlOptions(
     val parameters: CaseInsensitiveMap[String],
     private val defaultTimeZoneId: String,
     private val defaultColumnNameOfCorruptRecord: String,
-    private val rowTagRequired: Boolean)
+    private val rowTagRequired: Boolean,
+    // Set internally (e.g. by `from_xml` with a Variant schema) to parse each record as a
+    // root Variant value. Not a user-facing option.
+    val rootVariantType: Boolean)
   extends FileSourceOptions(parameters) with Logging {
 
   import XmlOptions._
@@ -43,12 +46,14 @@ class XmlOptions(
       parameters: Map[String, String] = Map.empty,
       defaultTimeZoneId: String = SQLConf.get.sessionLocalTimeZone,
       defaultColumnNameOfCorruptRecord: String = SQLConf.get.columnNameOfCorruptRecord,
-      rowTagRequired: Boolean = false) = {
+      rowTagRequired: Boolean = false,
+      rootVariantType: Boolean = false) = {
     this(
       CaseInsensitiveMap(parameters),
       defaultTimeZoneId,
       defaultColumnNameOfCorruptRecord,
-      rowTagRequired)
+      rowTagRequired,
+      rootVariantType)
   }
 
 
@@ -58,7 +63,8 @@ class XmlOptions(
       parameters != null && parameters == other.parameters) &&
       defaultTimeZoneId == other.defaultTimeZoneId &&
       defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord &&
-      rowTagRequired == other.rowTagRequired
+      rowTagRequired == other.rowTagRequired &&
+      rootVariantType == other.rootVariantType
     case _ => false
   }
 
@@ -67,6 +73,7 @@ class XmlOptions(
     result = 31 * result + defaultTimeZoneId.hashCode()
     result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
     result = 31 * result + (if (rowTagRequired) 1 else 0)
+    result = 31 * result + (if (rootVariantType) 1 else 0)
     result
   }
 

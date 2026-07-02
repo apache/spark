@@ -148,18 +148,18 @@ class StaxXmlParser(
       xsdSchema.foreach { schema =>
         schema.newValidator().validate(new StreamSource(new StringReader(xml)))
       }
-      options.singleVariantColumn match {
-        case Some(_) =>
-          // If the singleVariantColumn is specified, parse the entire xml string as a Variant
-          val v = StaxXmlParser.parseVariant(xml, options)
-          Some(InternalRow(v))
-        case _ =>
-          // Otherwise, parse the xml string as Structs
-          val parser = StaxXmlParserUtils.filteredReader(xml)
-          val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
-          val result = Some(convertObject(parser, schema, rootAttributes))
-          parser.close()
-          result
+      if (options.singleVariantColumn.isDefined || options.rootVariantType) {
+        // If the singleVariantColumn is specified or the requested output is a root Variant,
+        // parse the entire xml string as a Variant.
+        val v = StaxXmlParser.parseVariant(xml, options)
+        Some(InternalRow(v))
+      } else {
+        // Otherwise, parse the xml string as Structs
+        val parser = StaxXmlParserUtils.filteredReader(xml)
+        val rootAttributes = StaxXmlParserUtils.gatherRootAttributes(parser)
+        val result = Some(convertObject(parser, schema, rootAttributes))
+        parser.close()
+        result
       }
     } catch {
       case e: SparkUpgradeException => throw e

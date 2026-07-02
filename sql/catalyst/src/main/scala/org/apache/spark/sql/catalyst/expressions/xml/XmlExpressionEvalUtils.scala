@@ -136,8 +136,14 @@ case class XmlToStructsEvaluator(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  private lazy val converter =
-    (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+  private lazy val converter: Iterator[InternalRow] => Any = nullableSchema match {
+    // For variant output the parser wraps the value in a single-field row (see `parser`),
+    // so unwrap it back to the variant.
+    case _: VariantType =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next().getVariant(0) else null
+    case _ =>
+      (rows: Iterator[InternalRow]) => if (rows.hasNext) rows.next() else null
+  }
 
   // Parser that parse XML strings as internal rows
   @transient
@@ -147,11 +153,21 @@ case class XmlToStructsEvaluator(
       throw QueryCompilationErrors.parseModeUnsupportedError("from_xml", mode)
     }
 
-    // The parser is only used when the input schema is StructType
-    val schema = nullableSchema.asInstanceOf[StructType]
-    ExprUtils.verifyColumnNameOfCorruptRecord(schema, parsedOptions.columnNameOfCorruptRecord)
-    val rawParser = new StaxXmlParser(schema, parsedOptions)
+    // For Variant output, wrap the value in a single-field struct and have the parser emit a
+    // root Variant via `rootVariantType`; the struct path uses the schema as-is. Routing both
+    // through StaxXmlParser.doParseColumn keeps the parse `mode` honored (PERMISSIVE -> null,
+    // FAILFAST -> rethrow) and gives Variant output XSD validation as well.
+    val (schema, rawOptions) = nullableSchema match {
+      case _: VariantType =>
+        (StructType(Array(StructField("value", VariantType))),
+          new XmlOptions(options, timeZoneId.get, nameOfCorruptRecord, rootVariantType = true))
+      case _ =>
+        val s = nullableSchema.asInstanceOf[StructType]
+        ExprUtils.verifyColumnNameOfCorruptRecord(s, parsedOptions.columnNameOfCorruptRecord)
+        (s, parsedOptions)
+    }
 
+    val rawParser = new StaxXmlParser(schema, rawOptions)
     val xsdSchema = Option(parsedOptions.rowValidationXSDPath).map(ValidatorUtil.getSchema)
 
     new FailureSafeParser[String](
@@ -163,10 +179,7 @@ case class XmlToStructsEvaluator(
 
   final def evaluate(xml: UTF8String): Any = {
     if (xml == null) return null
-    nullableSchema match {
-      case _: VariantType => StaxXmlParser.parseVariant(xml.toString, parsedOptions)
-      case _: StructType => converter(parser.parse(xml.toString))
-    }
+    converter(parser.parse(xml.toString))
   }
 }
 
