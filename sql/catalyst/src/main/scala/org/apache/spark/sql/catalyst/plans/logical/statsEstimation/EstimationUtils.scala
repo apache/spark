@@ -152,6 +152,8 @@ object EstimationUtils {
       case DateType => double.toInt
       case TimestampType => double.toLong
       case _: AnyTimestampNanoType =>
+        // Lossy: the input Double may have lost precision in toDouble (see above).
+        // Acceptable for CBO estimation only.
         val nanos = double.toLong
         TimestampNanosVal.fromParts(Math.floorDiv(nanos, 1000L), Math.floorMod(nanos, 1000).toShort)
       case ByteType => double.toByte

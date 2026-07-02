@@ -1115,4 +1115,53 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 1)
   }
 
+  // High-magnitude nanos tests: exercise the lossy toDouble/fromDouble path where
+  // epochMicros*1000 exceeds Double's 2^53 exact-integer range (real-world 2024 timestamps).
+  // epochMicros ~1.7e15 => epoch nanos ~1.7e18 >> 2^53 (~9e15).
+  // The point is to verify estimation remains sensible despite floating-point rounding.
+
+  test("NTZ nanos filter estimation at high magnitude (2024 timestamps)") {
+    // 2024-01-01T00:00:00Z => epochMicros = 1704067200000000L
+    // 2024-01-01T00:00:09Z => epochMicros = 1704067209000000L
+    // Range in nanos = 9000000 nanos (9 ms)
+    val hiMin = TimestampNanosVal.fromParts(1704067200000000L, 0.toShort)
+    val hiMax = TimestampNanosVal.fromParts(1704067209000000L, 0.toShort)
+    val attrHiNtz = AttributeReference("ctsnanos_hi", TimestampNTZNanosType(9))()
+    val colStatHi = ColumnStat(distinctCount = Some(10),
+      min = Some(hiMin), max = Some(hiMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val hiMap = AttributeMap(Seq(attrHiNtz -> colStatHi))
+    // Filter value at ~1/3 of the range
+    val tsVal = TimestampNanosVal.fromParts(1704067203000000L, 0.toShort)
+    // Expected: fraction ~ 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrHiNtz, Literal(tsVal, TimestampNTZNanosType(9))),
+        childStatsTestPlan(Seq(attrHiNtz), 10L, hiMap)),
+      Seq(attrHiNtz -> ColumnStat(distinctCount = Some(4),
+        min = Some(hiMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
+  test("LTZ nanos filter estimation at high magnitude (2024 timestamps)") {
+    // Same magnitude as above but using TimestampLTZNanosType.
+    val hiMin = TimestampNanosVal.fromParts(1704067200000000L, 0.toShort)
+    val hiMax = TimestampNanosVal.fromParts(1704067209000000L, 0.toShort)
+    val attrHiLtz = AttributeReference("ctsltznanos_hi", TimestampLTZNanosType(9))()
+    val colStatHi = ColumnStat(distinctCount = Some(10),
+      min = Some(hiMin), max = Some(hiMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val hiMap = AttributeMap(Seq(attrHiLtz -> colStatHi))
+    // Filter value at ~1/3 of the range
+    val tsVal = TimestampNanosVal.fromParts(1704067203000000L, 0.toShort)
+    // Expected: fraction ~ 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrHiLtz, Literal(tsVal, TimestampLTZNanosType(9))),
+        childStatsTestPlan(Seq(attrHiLtz), 10L, hiMap)),
+      Seq(attrHiLtz -> ColumnStat(distinctCount = Some(4),
+        min = Some(hiMin), max = Some(tsVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
 }
