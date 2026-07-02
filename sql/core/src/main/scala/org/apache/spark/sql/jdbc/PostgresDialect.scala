@@ -40,10 +40,8 @@ import org.apache.spark.sql.types._
 private case class PostgresDialect()
   extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
-  override def canHandle(url: String): Boolean = {
-    val lower = url.toLowerCase(Locale.ROOT)
-    lower.startsWith("jdbc:postgresql") || lower.startsWith("jdbc:aws-wrapper:postgresql")
-  }
+  override def canHandle(url: String): Boolean =
+    url.toLowerCase(Locale.ROOT).matches("jdbc:(.*:)?postgresql.*")
 
   // See https://www.postgresql.org/docs/8.4/functions-aggregate.html
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",

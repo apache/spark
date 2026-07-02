@@ -36,10 +36,8 @@ import org.apache.spark.sql.types._
 
 private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
-  override def canHandle(url : String): Boolean = {
-    val lower = url.toLowerCase(Locale.ROOT)
-    lower.startsWith("jdbc:mysql") || lower.startsWith("jdbc:aws-wrapper:mysql")
-  }
+  override def canHandle(url : String): Boolean =
+    url.toLowerCase(Locale.ROOT).matches("jdbc:(.*:)?mysql.*")
 
   private val distinctUnsupportedAggregateFunctions =
     Set("VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP")
