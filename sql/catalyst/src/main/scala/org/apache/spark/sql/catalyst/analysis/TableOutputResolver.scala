@@ -439,7 +439,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     // Resolve auto-filled generated column references against the post-cast stored columns, so the
     // generated value is computed from the values as they will be written (after any
-    // store-assignment cast) Generated columns only exist at the top level,
+    // store-assignment cast). Generated columns only exist at the top level,
     // so this only applies when colPath is empty.
     val finalCols = if (colPath.isEmpty && autoFilledGenCols.nonEmpty) {
       val storedCols = reordered.filterNot(col => autoFilledGenCols.contains(col.name))
