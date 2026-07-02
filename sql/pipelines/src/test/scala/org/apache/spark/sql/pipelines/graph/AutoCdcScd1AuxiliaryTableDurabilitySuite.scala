@@ -186,10 +186,6 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val session = spark
     import session.implicits._
 
-    // Auxiliary-table provisioning moved out of flow execution and into the materialization
-    // phase, which a dry run deliberately skips (`dryRunPipeline` only resolves + validates
-    // the graph; it never calls `DatasetManager.materializeDatasets`). So a dry run must
-    // leave no auxiliary table behind -- it stays free of catalog side effects.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"

@@ -226,13 +226,6 @@ class AutoCdcScd1SchemaEvolutionSuite
     val session = spark
     import session.implicits._
 
-    // The SCD1 auxiliary table carries only the AutoCDC key columns plus the CDC metadata
-    // column -- never any data columns. So when the target evolves additively (a new data
-    // column appears between runs), the target grows but the auxiliary schema must stay
-    // (keys + _cdc_metadata). This is the SCD1 counterpart to the SCD2 hidden-aux
-    // schema-evolution contract (`AutoCdcScd2SchemaEvolutionSuite`): SCD1 is immune to the
-    // motivating union-by-name bug precisely because its aux carries no data columns. The
-    // materialization-time aux create/evolve path must preserve this invariant across reruns.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
@@ -263,10 +256,12 @@ class AutoCdcScd1SchemaEvolutionSuite
       "auxiliary schema after run #1 should be the keys plus the CDC metadata column"
     )
 
-    // Run #2: `name` is added to the target (appended last by mergeSchemas). The auxiliary
-    // schema must be byte-for-byte unchanged.
+    // Run #2: `name` is added to the target but the auxiliary schema must remain unchanged, since
+    // the SCD keys remain unchanged. For SCD1, the auxiliary table only contains key and CDC
+    // metadata columns.
     stream.addData((2, "bob", 2L))
     runPipeline(buildCtx(includeName = true))
+
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
       Seq(
@@ -274,10 +269,7 @@ class AutoCdcScd1SchemaEvolutionSuite
         Row(2, 2L, cdcMeta(None, Some(2L)), "bob")
       )
     )
-    assert(
-      spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema,
-      "additive target evolution must not alter the SCD1 auxiliary schema"
-    )
+    assert(spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema)
   }
 
   test("broadening the column selection between runs adds the newly-included column to " +
