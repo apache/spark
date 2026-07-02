@@ -1026,9 +1026,15 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
     if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
       return plan
     }
-    plan.transformAllExpressionsWithPruning(
+    // Traverse subquery plans too: this batch runs Once, and later rules (e.g.
+    // PullupCorrelatedPredicates) can move expressions from a subquery into the
+    // outer plan, so an Unevaluable TranspiledPythonUDF left inside a subquery
+    // here could otherwise escape and reach execution un-stripped.
+    plan.transformDownWithSubqueriesAndPruning(
       _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
-      case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false)
+      case p => p.transformExpressionsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+        case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false)
+      }
     }
   }
 
@@ -1075,8 +1081,12 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         }
       case _ =>
-        // Not a PythonUDF, just recurse down
-        expression.mapChildren(applyExpr(_, parentIsUdf = false))
+        // Not a TranspiledPythonUDF: recurse down, telling the children whether
+        // this node is itself a scalar Python UDF so a transpiled child can
+        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
+        // transpiled wrapping one that could).
+        expression.mapChildren(
+          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
     }
   }
 }

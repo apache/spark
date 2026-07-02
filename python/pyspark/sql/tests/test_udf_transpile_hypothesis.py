@@ -31,9 +31,14 @@ silence.
 
 The suite is gated on two things, both required:
 
-* the ``RUN_HYPOTHESIS`` env var must be present in the environment
-  (its value doesn't matter, only its presence), and
+* the ``RUN_HYPOTHESIS`` env var must be set to a truthy value
+  (``1``, ``true``, or ``yes``, case-insensitive), and
 * the ``hypothesis`` package must be installed.
+
+The gate is value-based rather than presence-based because CI always sets
+``RUN_HYPOTHESIS`` (to ``"true"`` or ``"false"``) via the transpile
+precondition in ``build_and_test.yml``; mere presence must not opt in, or
+the slow suite would run on every PySpark job.
 
 If either gate is unmet the entire suite is skipped cleanly so it never
 becomes a CI tax for folks who haven't opted in. In CI, this opt-in suite
@@ -48,7 +53,7 @@ To run locally::
         python/run-tests --testnames pyspark.sql.tests.test_udf_transpile_hypothesis
 
 Set ``RUN_HYPOTHESIS_MAX_EXAMPLES`` to override the per-test example count
-(default 100, kept small for CI).
+(default 1000).
 """
 
 import os
@@ -77,14 +82,25 @@ _SENTINEL_RAISED = object()
 
 _HYPOTHESIS_ENV = "RUN_HYPOTHESIS"
 _have_hypothesis = have_package("hypothesis")
-# Presence-based: any value (including empty) opts in. We just check for the
-# key being in os.environ so e.g. `RUN_HYPOTHESIS= python ...` still counts.
-_hypothesis_enabled = _HYPOTHESIS_ENV in os.environ
+
+
+def _env_opts_in(value: Optional[str]) -> bool:
+    """Value-based opt-in: only 1/true/yes (case-insensitive) enable the suite.
+
+    CI always sets ``RUN_HYPOTHESIS`` -- to ``"true"`` or ``"false"`` -- via the
+    transpile precondition in ``build_and_test.yml``, so a presence-based check
+    would run this very slow suite on every PySpark job regardless of the
+    gating decision.
+    """
+    return value is not None and value.strip().lower() in ("1", "true", "yes")
+
+
+_hypothesis_enabled = _env_opts_in(os.environ.get(_HYPOTHESIS_ENV))
 # Transpilation is only supported in regular (non-Connect) Spark for now,
 # so the hypothesis suite skips cleanly under a pyspark-client-only install.
 _regular_spark = not is_remote_only()
 _skip_reason = (
-    f"Set {_HYPOTHESIS_ENV} in the environment to run; hypothesis must also be installed, "
+    f"Set {_HYPOTHESIS_ENV}=1 (or true/yes) to run; hypothesis must also be installed, "
     "and the suite only runs under regular (non-Connect) Spark."
 )
 
@@ -115,7 +131,7 @@ if _have_hypothesis:
     # overflow.  Worse, the Python UDF runner silently wraps out-of-range
     # return values even with ANSI=True, so "both raised" never fires for
     # overflow values and the test sees a spurious mismatch instead.
-    # 2**61 is safe for all operations: (2**61)*3 ≈ 6.9e18 < 9.2e18 = Long.MAX.
+    # 2**61 is safe for all operations: (2**61)*3 ~= 6.9e18 < 9.2e18 = Long.MAX.
     _LONG_ARITH_BOUND = 2**61
     _long_arith_strategy = st.one_of(
         st.none(),
@@ -657,6 +673,16 @@ class UDFTranspileHypothesisGatingTests(unittest.TestCase):
 
     def test_skip_reason_mentions_env_var(self):
         self.assertIn(_HYPOTHESIS_ENV, _skip_reason)
+
+    def test_env_gate_is_value_based(self):
+        # CI always sets RUN_HYPOTHESIS (to "true" or "false") via the
+        # transpile precondition in build_and_test.yml. If this gate ever
+        # regresses to presence-based, the very slow suite silently runs on
+        # every PySpark job. Pin the contract from both directions.
+        for opted_in in ("1", "true", "TRUE", "yes", " True "):
+            self.assertTrue(_env_opts_in(opted_in), f"{opted_in!r} must opt in")
+        for opted_out in (None, "", "0", "false", "FALSE", "no", "off"):
+            self.assertFalse(_env_opts_in(opted_out), f"{opted_out!r} must NOT opt in")
 
 
 if __name__ == "__main__":

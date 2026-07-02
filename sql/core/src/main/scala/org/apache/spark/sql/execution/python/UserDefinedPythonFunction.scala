@@ -116,11 +116,22 @@ case class UserDefinedPythonFunction(
     // is `optionInputCategories.nonEmpty`); an empty or mismatched categories
     // list would leave a type-invalid option to fail CheckAnalysis instead of
     // falling back. If the two lists don't line up, skip transpilation.
+    // A call-site arity mismatch (user passed more or fewer args than the UDF's
+    // parameters) must fall back to the plain Python UDF so the standard runtime
+    // TypeError surfaces. Each option's category list has exactly one entry per
+    // public parameter, so a length mismatch against the bound children detects
+    // both directions: too few args would otherwise trip the placeholder bounds
+    // check below as a misleading "internal error", and too many args on a
+    // zero/fewer-param UDF would otherwise silently succeed where Python raises.
     if (transpiledExprsForUse.nonEmpty &&
-        optionInputTypesForUse.length == transpiledExprsForUse.length) {
-      val tpu =
-        TranspiledPythonUDF(name, udfExpr, transpiledExprsForUse, optionInputTypesForUse)
-      // Resolve the UDF parameters to match the original UDF children
+        optionInputTypesForUse.length == transpiledExprsForUse.length &&
+        optionInputTypesForUse.forall(_.length == e.length)) {
+      val udfChildren = udfExpr.children.toArray
+      // Resolve the `_udf_param_N` placeholders the transpiler emits into the bound
+      // UDF arguments. Apply this ONLY to the transpiled options -- never to
+      // `udfExpr` itself, whose children are the user's argument expressions. A user
+      // column literally named `_udf_param_N` passed as an argument must not be
+      // rewritten, so we leave `udfExpr` untouched.
       def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
         expression match {
           case UnresolvedAttribute(nameParts)
@@ -139,7 +150,8 @@ case class UserDefinedPythonFunction(
             expression.mapChildren(resolveUDFParams(_, children))
         }
       }
-      resolveUDFParams(tpu, udfExpr.children.toArray)
+      val resolvedOptions = transpiledExprsForUse.map(resolveUDFParams(_, udfChildren))
+      TranspiledPythonUDF(name, udfExpr, resolvedOptions, optionInputTypesForUse)
     } else {
       udfExpr
     }

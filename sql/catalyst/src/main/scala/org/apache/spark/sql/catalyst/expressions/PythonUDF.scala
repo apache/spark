@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -77,8 +76,7 @@ object PythonUDF {
 }
 
 
-trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression
-    with Logging { self: Expression =>
+trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
   def name: String
   def func: PythonFunction
   def evalType: Int
