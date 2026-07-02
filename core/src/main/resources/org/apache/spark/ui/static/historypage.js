@@ -17,7 +17,7 @@
 
 /* global $, Mustache, jQuery, uiRoot */
 
-import {formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
+import {escapeHtml, formatDuration, formatTimeMillis, stringAbbreviate} from "./utils.js";
 
 export {setAppLimit};
 
@@ -27,17 +27,7 @@ var appLimit = -1;
 function setAppLimit(val) {
   appLimit = val;
 }
-/* escape XSS  */
-function escapeHtml(text) {
-  if (typeof text !== 'string') return text;
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-/* eslint-enable no-unused-vars*/
+/* eslint-enable no-unused-vars */
 
 function makeIdNumeric(id) {
   var strs = id.split("_");
