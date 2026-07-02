@@ -2458,24 +2458,61 @@ case class MonthsBetween(
   override def second: Expression = date2
   override def third: Expression = roundOff
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType, BooleanType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    TypeCollection(TimestampType, AnyTimestampNanoType),
+    TypeCollection(TimestampType, AnyTimestampNanoType),
+    BooleanType)
 
   override def dataType: DataType = DoubleType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  private def date1IsNanos: Boolean = date1.dataType.isInstanceOf[AnyTimestampNanoType]
+  private def date2IsNanos: Boolean = date2.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // TIMESTAMP_NTZ(p) carries wall-clock fields (evaluated in UTC), independently of whether the
+  // other side is LTZ, NTZ, micro, or nanos. See TimeZoneAwareExpression.zoneIdForType.
+  @transient private lazy val zoneId1: ZoneId = zoneIdForType(date1.dataType)
+  @transient private lazy val zoneId2: ZoneId = zoneIdForType(date2.dataType)
+
+  private def asTimestampNanosVal(value: Any, isNanos: Boolean): TimestampNanosVal = if (isNanos) {
+    value.asInstanceOf[TimestampNanosVal]
+  } else {
+    TimestampNanosVal.fromParts(value.asInstanceOf[Long], 0.toShort)
+  }
+
   override def nullSafeEval(t1: Any, t2: Any, roundOff: Any): Any = {
-    DateTimeUtils.monthsBetween(
-      t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], zoneId)
+    if (date1IsNanos || date2IsNanos) {
+      DateTimeUtils.monthsBetween(
+        asTimestampNanosVal(t1, date1IsNanos),
+        asTimestampNanosVal(t2, date2IsNanos),
+        roundOff.asInstanceOf[Boolean],
+        zoneId1,
+        zoneId2)
+    } else {
+      DateTimeUtils.monthsBetween(
+        t1.asInstanceOf[Long], t2.asInstanceOf[Long], roundOff.asInstanceOf[Boolean], zoneId)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
-      s"""$dtu.monthsBetween($d1, $d2, $roundOff, $zid)"""
-    })
+    if (date1IsNanos || date2IsNanos) {
+      val tsNanosCls = classOf[TimestampNanosVal].getName
+      val zid1 = ctx.addReferenceObj("zoneId1", zoneId1, classOf[ZoneId].getName)
+      val zid2 = ctx.addReferenceObj("zoneId2", zoneId2, classOf[ZoneId].getName)
+      defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
+        val d1Expr = if (date1IsNanos) d1 else s"$tsNanosCls.fromParts($d1, (short) 0)"
+        val d2Expr = if (date2IsNanos) d2 else s"$tsNanosCls.fromParts($d2, (short) 0)"
+        s"""$dtu.monthsBetween($d1Expr, $d2Expr, $roundOff, $zid1, $zid2)"""
+      })
+    } else {
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      defineCodeGen(ctx, ev, (d1, d2, roundOff) => {
+        s"""$dtu.monthsBetween($d1, $d2, $roundOff, $zid)"""
+      })
+    }
   }
 
   override def prettyName: String = "months_between"

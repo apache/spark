@@ -942,6 +942,68 @@ NULL
 
 
 -- !query
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query schema
+struct<months_between(TIMESTAMP '1997-02-28 02:30:00', TIMESTAMP '1996-10-29 16:00:00', true):double>
+-- !query output
+3.94959677
+
+
+-- !query
+SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC', false)
+-- !query schema
+struct<months_between(TIMESTAMP '1997-02-28 02:30:00', TIMESTAMP '1996-10-29 16:00:00', false):double>
+-- !query output
+3.9495967741935485
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false)
+-- !query schema
+struct<months_between(CAST(1997-02-28 10:30:00.000000000 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), false):double>
+-- !query output
+3.9495967741935485
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false)
+-- !query schema
+struct<months_between(CAST(1997-02-28 10:30:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), false):double>
+-- !query output
+3.949596774193735
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
+    '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9))
+-- !query schema
+struct<months_between(CAST(1997-02-28 10:30:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), true):double>
+-- !query output
+3.94959677
+
+
+-- !query
+SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query schema
+struct<months_between(CAST(1997-02-28 10:30:00.000000000 UTC AS TIMESTAMP_LTZ(9)), TIMESTAMP '1996-10-29 16:00:00', true):double>
+-- !query output
+3.94959677
+
+
+-- !query
+SELECT months_between(CAST(NULL AS timestamp_ltz(9)), TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
+-- !query schema
+struct<months_between(CAST(NULL AS TIMESTAMP_LTZ(9)), TIMESTAMP '1996-10-29 16:00:00', true):double>
+-- !query output
+NULL
+
+
+-- !query
 SELECT typeof(c), c FROM (
     SELECT TIMESTAMP_LTZ '0001-01-01 00:00:00' AS c
     UNION ALL SELECT TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999') ORDER BY c

@@ -199,6 +199,28 @@ SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
 -- NULL nanosecond timestamp.
 SELECT unix_nanos(NULL :: timestamp_ntz(9));
 
+-- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_NTZ. Matches the
+-- microsecond-only result when nanosWithinMicro is 0 on both sides, and the sub-microsecond
+-- remainder contributes an additional (far smaller than roundOff's 8-digit precision) fraction of
+-- a month otherwise. NTZ is zone-independent.
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00', TIMESTAMP_NTZ '1996-10-30 00:00:00');
+SELECT months_between(TIMESTAMP_NTZ '1997-02-28 10:30:00',
+    TIMESTAMP_NTZ '1996-10-30 00:00:00', false);
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+-- Same pair, with a non-zero nanosWithinMicro remainder on one side: the roundOff=false result
+-- diverges from the remainder=0 case above only in the far decimal digits.
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9), false);
+-- roundOff (default true) rounds the sub-microsecond remainder away.
+SELECT months_between('1997-02-28 10:30:00.000000500' :: timestamp_ntz(9),
+    '1996-10-30 00:00:00.000000000' :: timestamp_ntz(9));
+-- A nanos operand paired with a plain (microsecond) TIMESTAMP_NTZ operand.
+SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
+    TIMESTAMP_NTZ '1996-10-30 00:00:00');
+-- NULL nanosecond timestamp.
+SELECT months_between(CAST(NULL AS timestamp_ntz(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00');
+
 -- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_NTZ(p). The resolved
 -- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
 -- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in
