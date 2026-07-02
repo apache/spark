@@ -3091,7 +3091,8 @@ private[spark] object Utils
   def checkOffHeapEnabled(sparkConf: ReadOnlySparkConf, offHeapSize: Long): Long = {
     if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
       require(offHeapSize > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+        s"${MEMORY_OFFHEAP_SIZE.key} must be at least 1MiB when " +
+          s"${MEMORY_OFFHEAP_ENABLED.key} == true")
       offHeapSize
     } else {
       0
