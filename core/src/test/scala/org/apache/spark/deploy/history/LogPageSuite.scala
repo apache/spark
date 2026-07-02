@@ -32,9 +32,11 @@ class LogPageSuite extends SparkFunSuite {
     when(request.getParameter("logType")).thenReturn("stdout');alert('xss')</script>")
     val html = page.render(request).mkString
 
-    // The value must be encoded for the JavaScript string context: quotes, backslashes and the
-    // slash in a closing tag are all escaped, so no raw breakout sequence reaches the browser.
-    assert(html.contains("""stdout\');alert(\'xss\')<\/script>"""))
-    assert(!html.contains("stdout');alert('xss')</script>"))
+    // The value is URL-encoded, so the quotes, angle brackets and slash that would break out of
+    // the inline <script> (or inject extra /log parameters) become inert percent escapes.
+    assert(html.contains("logType=stdout%27%29%3Balert%28%27xss%27%29%3C%2Fscript%3E"))
+    // The raw, structure-breaking form must never reach the generated query string. (The page
+    // title reflects logType too, but there the XML library HTML-escapes it, so it is safe.)
+    assert(!html.contains("logType=stdout');"))
   }
 }

@@ -131,18 +131,8 @@ function loadNew() {
   });
 }
 
-function encodeLogParams(params) {
-  // baseParams is only ever concatenated into the /log request URL (see loadMore/loadNew), never
-  // written to the DOM, so URL-encode it for that context rather than stripping characters.
-  // encodeURI keeps the ?, &, = and / separators intact while percent-encoding characters such as
-  // spaces, angle brackets, quotes, backslash and CR/LF that have no place in the query string.
-  // The server decodes the values again, so this is lossless for legitimate parameters (the
-  // executor/app/driver ids and the allowlisted logType).
-  return encodeURI(String(params)).replace(/'/g, "%27");
-}
-
 function initLogPage(params, logLen, start, end, totLogLen, defaultLen) {
-  baseParams = encodeLogParams(params);
+  baseParams = params;
   curLogLength = logLen;
   startByte = start;
   endByte = end;

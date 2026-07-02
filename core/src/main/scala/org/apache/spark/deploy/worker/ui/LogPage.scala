@@ -22,7 +22,6 @@ import java.io.File
 import scala.xml.{Node, Unparsed}
 
 import jakarta.servlet.http.HttpServletRequest
-import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{LOG_TYPE, PATH}
@@ -72,11 +71,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
       .getOrElse(defaultBytes)
 
+    // The identifiers below flow both into a filesystem path (logDir, kept raw and guarded by
+    // Utils.isInDirectory in getLog) and into the query string of the generated /log requests
+    // (params). URL-encode the query-string copy so request-supplied values cannot inject extra
+    // parameters or truncate the request.
     val (logDir, params, pageName) = (appId, executorId, driverId, self) match {
       case (Some(a), Some(e), None, None) =>
-        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e", s"$a/$e")
+        (s"${workDir.getPath}/$a/$e/",
+          s"appId=${UIUtils.encodeLogParam(a)}&executorId=${UIUtils.encodeLogParam(e)}", s"$a/$e")
       case (None, None, Some(d), None) =>
-        (s"${workDir.getPath}/$d/", s"driverId=$d", d)
+        (s"${workDir.getPath}/$d/", s"driverId=${UIUtils.encodeLogParam(d)}", d)
       case (None, None, None, Some(_)) =>
         (s"${sys.env.getOrElse("SPARK_LOG_DIR", workDir.getPath)}/", "self", "worker")
       case _ =>
@@ -106,12 +110,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         End of Log
       </div>
 
-    val logParams = "?%s&logType=%s".format(params, logType)
-    // The query string carries request-supplied values into an inline script literal, so encode
-    // it for a JavaScript string context before embedding it via Unparsed below.
-    val jsOnload = "window.onload = " +
-      s"initLogPage('${StringEscapeUtils.escapeEcmaScript(logParams)}', " +
-      s"$curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+    val logParams = "?%s&logType=%s".format(params, UIUtils.encodeLogParam(logType))
+    val jsOnload = UIUtils.logPageOnloadScript(
+      logParams, curLogLength, startByte, endByte, logLength, byteLength)
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
