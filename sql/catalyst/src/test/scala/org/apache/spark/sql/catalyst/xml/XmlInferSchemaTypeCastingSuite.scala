@@ -155,11 +155,13 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferFrom("2024-01-15T10:00:00", DateType) == TimestampType)
   }
 
-  test("date is inferred regardless of preferDate") {
-    Seq("true", "false").foreach { preferDate =>
-      val inferSchema = newInferSchema(Map("preferDate" -> preferDate))
-      assert(inferSchema.inferFrom("2024-01-15", NullType) == DateType,
-        s"expected DateType with preferDate=$preferDate")
-    }
+  test("preferDate gates date inference (consistent with CSV)") {
+    // preferDate controls whether date inference is attempted, matching CSVInferSchema: when true
+    // a bare date infers as DateType; when false date inference is skipped and the value falls
+    // through to timestamp inference.
+    assert(newInferSchema(Map("preferDate" -> "true"))
+      .inferFrom("2024-01-15", NullType) == DateType)
+    assert(newInferSchema(Map("preferDate" -> "false"))
+      .inferFrom("2024-01-15", NullType) == TimestampType)
   }
 }
