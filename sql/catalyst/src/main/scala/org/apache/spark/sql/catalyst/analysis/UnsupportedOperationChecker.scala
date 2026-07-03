@@ -690,21 +690,6 @@ object UnsupportedOperationChecker extends Logging {
   }
 
   private def checkForStreamStreamJoinWatermark(join: Join): Unit = {
-    // TODO(SPARK-57843 follow-up): Stream-stream joins with nanosecond event-time columns
-    //  are not yet supported because SymmetricHashJoinStateManager.extractEventTimeFn reads
-    //  event time via getLong assuming microsecond precision.
-    val allOutput = join.left.output ++ join.right.output
-    val nanoWatermarkInJoin = allOutput.exists { a =>
-      a.metadata.contains(EventTimeWatermark.delayKey) &&
-        a.dataType.isInstanceOf[AnyTimestampNanoType]
-    }
-    if (nanoWatermarkInJoin) {
-      throwError(
-        "Stream-stream joins do not yet support nanosecond-precision event-time columns " +
-          "(SPARK-57843). Use a microsecond-precision timestamp type for the watermark " +
-          "column instead.")(join)
-    }
-
     val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(join)
 
     // Check if the nullable side has a watermark, and there's a range condition which

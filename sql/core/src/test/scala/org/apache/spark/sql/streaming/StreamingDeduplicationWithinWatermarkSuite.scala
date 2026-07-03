@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.{timestamp_nanos, timestamp_seconds}
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{LongType, StringType, StructType, TimestampNTZNanosType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
@@ -332,5 +333,53 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       CheckNewAnswer(),
       assertNumStateRows(total = 2, updated = 0)
     )
+  }
+
+  test("SPARK-57843: dropDuplicatesWithinWatermark with NTZ nanosecond-precision event-time") {
+    // Same as the LTZ-nanos test above but using TimestampNTZNanosType for the event-time
+    // column. Verifies that the NTZ nanos path through watermark extraction and dedup
+    // expiration state works correctly.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val inputData = MemoryStream[(String, Long)]
+      val result = inputData.toDS()
+        .withColumn("eventTime", timestamp_nanos($"_2").cast(TimestampNTZNanosType(9)))
+        .withWatermark("eventTime", "10 seconds")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1")
+
+      testStream(result, Append)(
+        // "a" at 17s, "b" at 22s, "c" at 21s (nanos). Watermark -> max(17,22,21) - 10 = 12s.
+        AddData(inputData,
+          ("a", 17L * 1000000000L),
+          ("b", 22L * 1000000000L),
+          ("c", 21L * 1000000000L)),
+        CheckNewAnswer("a", "b", "c"),
+        assertNumStateRows(total = 3, updated = 3),
+
+        // Duplicate "a" at 16s. Should not emit (within watermark, key exists).
+        AddData(inputData, ("a", 16L * 1000000000L)),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 3, updated = 0),
+
+        // "a" at 11s: older than watermark (12s), should be dropped as late.
+        AddData(inputData, ("a", 11L * 1000000000L)),
+        CheckNewAnswer(),
+        assertNumStateRows(total = 3, updated = 0, droppedByWatermark = 1),
+
+        // "d" at 35s. Watermark advances to 25s.
+        // "a" expiresAt = 17+10=27s > 25 (kept), "b" expiresAt = 22+10=32s > 25 (kept),
+        // "c" expiresAt = 21+10=31s > 25 (kept). All kept.
+        AddData(inputData, ("d", 35L * 1000000000L)),
+        CheckNewAnswer("d"),
+        assertNumStateRows(total = 4, updated = 1),
+
+        // "e" at 55s. Watermark advances to 45s.
+        // "a" expiresAt=27 <= 45 (evicted), "b" expiresAt=32 <= 45 (evicted),
+        // "c" expiresAt=31 <= 45 (evicted), "d" expiresAt=45 <= 45 (evicted).
+        AddData(inputData, ("e", 55L * 1000000000L)),
+        CheckNewAnswer("e"),
+        assertNumStateRows(total = 1, updated = 1)
+      )
+    }
   }
 }
