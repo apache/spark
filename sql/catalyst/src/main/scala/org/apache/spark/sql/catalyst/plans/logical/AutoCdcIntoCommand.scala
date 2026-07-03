@@ -34,8 +34,9 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *
  * @param targetTable    The target table to apply changes into, as an `UnresolvedIdentifier`.
  *                       Exposed as the node's left child.
- * @param source         The source relation providing the change events. Always a STREAM(...)
- *                       source (marked as a streaming read). Exposed as the node's right child.
+ * @param source         The source relation providing the change events, parsed from a general
+ *                       `relationPrimary` (typically a STREAM(...) source marked as a streaming
+ *                       read). Exposed as the node's right child.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  *                        When absent, all source rows are treated as upserts.

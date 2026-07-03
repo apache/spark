@@ -842,8 +842,9 @@ case class CreateStreamingTable(
  * @param partitioning   Column-based partitioning for the streaming table.
  * @param tableSpec      Additional table specs.
  * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
- * @param source         The source relation providing the change events. Always a STREAM(...)
- *                       source (marked as a streaming read). Exposed as the node's right child.
+ * @param source         The source relation providing the change events, parsed from a general
+ *                       `relationPrimary` (typically a STREAM(...) source marked as a streaming
+ *                       read). Exposed as the node's right child.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
  * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.

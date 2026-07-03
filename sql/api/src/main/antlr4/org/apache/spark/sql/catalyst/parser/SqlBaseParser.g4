@@ -761,15 +761,11 @@ autoCdcBody
     ;
 
 autoCdcParameters
-    : FROM source=autoCdcSource
+    : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
         autoCdcDeleteClause?
         autoCdcSequenceByClause
         autoCdcColumnsClause?
-    ;
-
-autoCdcSource
-    : STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
     ;
 
 autoCdcDeleteClause

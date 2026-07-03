@@ -1378,7 +1378,16 @@ class AstBuilder extends DataTypeAstBuilder
 
   protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
     withOrigin(params) {
-      val source = resolveAutoCdcSource(params.source)
+      // The source is parsed as a general `relationPrimary` to allow richer streaming queries
+      // (e.g. streaming TVFs, or a STREAM(...) source with options and watermark). It must still
+      // read from a streaming source; a batch relation is not a valid AUTO CDC source.
+      val source = plan(params.source)
+      if (!source.isStreaming) {
+        withOrigin(params.source) {
+          operationNotAllowed(
+            "AUTO CDC source must be a streaming query, e.g. STREAM(<table>).", params.source)
+        }
+      }
       val keys = visitIdentifierSeq(params.keys).map(UnresolvedAttribute.quoted)
       val deleteCondition = Option(params.autoCdcDeleteClause())
         .map(c => expression(c.deleteCondition))
@@ -1401,17 +1410,6 @@ class AstBuilder extends DataTypeAstBuilder
         sequencing = sequencing,
         includeColumns = includeColumns,
         excludeColumns = excludeColumns)
-    }
-
-  /**
-   * Resolve the AUTO CDC source, which is a STREAM(multipartIdentifier). It is returned as an
-   * [[UnresolvedRelation]] marked as a streaming read via the `isStreaming` flag.
-   */
-  protected def resolveAutoCdcSource(ctx: AutoCdcSourceContext): UnresolvedRelation =
-    withOrigin(ctx) {
-      val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-      createUnresolvedRelation(
-        ctx, ident, optionsClause = None, writePrivileges = Set.empty, isStreaming = true)
     }
 
   /**

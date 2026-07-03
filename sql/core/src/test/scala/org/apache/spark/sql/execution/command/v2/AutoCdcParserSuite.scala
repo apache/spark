@@ -18,14 +18,19 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.analysis.{
-  AnalysisTest, UnresolvedAttribute, UnresolvedIdentifier, UnresolvedRelation}
+  AnalysisTest, NamedStreamingRelation, UnresolvedAttribute, UnresolvedIdentifier,
+  UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{
   AutoCdcIntoCommand,
   CreateFlowCommand,
-  CreateStreamingTableAutoCdc
+  CreateStreamingTableAutoCdc,
+  LogicalPlan,
+  SubqueryAlias
 }
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Parser tests for AUTO CDC syntax.
@@ -40,6 +45,16 @@ import org.apache.spark.sql.execution.SparkSqlParser
  */
 class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   protected lazy val parser = new SparkSqlParser()
+
+  /**
+   * Unwrap a `STREAM(...)` AUTO CDC source. Streaming sources are parsed through the general
+   * `relationPrimary` rule, which wraps the streaming read in a [[NamedStreamingRelation]].
+   */
+  private def streamSource(source: LogicalPlan): UnresolvedRelation = {
+    val named = source.asInstanceOf[NamedStreamingRelation]
+    assert(named.isStreaming)
+    named.child.asInstanceOf[UnresolvedRelation]
+  }
 
   // ---------------------------------------------------------------------------
   // CREATE FLOW ... AS AUTO CDC INTO
@@ -58,9 +73,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     val cdc = cmd.flowOperation.asInstanceOf[AutoCdcIntoCommand]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
-    val source = cdc.source.asInstanceOf[UnresolvedRelation]
+    val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("source"))
-    assert(source.isStreaming)
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isEmpty)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
@@ -76,9 +90,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts""".stripMargin)
 
     val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
-    val source = cdc.source.asInstanceOf[UnresolvedRelation]
+    val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
-    assert(source.isStreaming)
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - with COMMENT") {
@@ -198,9 +211,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
     assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
     assert(!cmd.ifNotExists)
-    val source = cmd.source.asInstanceOf[UnresolvedRelation]
+    val source = streamSource(cmd.source)
     assert(source.multipartIdentifier == Seq("source"))
-    assert(source.isStreaming)
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
     assert(cmd.deleteCondition.isEmpty)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
@@ -217,9 +229,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
-    val source = cmd.source.asInstanceOf[UnresolvedRelation]
+    val source = streamSource(cmd.source)
     assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
-    assert(source.isStreaming)
   }
 
   test("CREATE STREAMING TABLE IF NOT EXISTS FLOW AUTO CDC") {
@@ -303,6 +314,114 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.deleteCondition.isDefined)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
     assert(cmd.excludeColumns.get.map(_.name) == Seq("key4"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - PARTITIONED BY is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |PARTITIONED BY (key1)
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (key1)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.partitioning == Seq(IdentityTransform(FieldReference(Seq("key1")))))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - COMMENT is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |COMMENT 'my streaming table'
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.tableSpec.comment == Some("my streaming table"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - TBLPROPERTIES are honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |TBLPROPERTIES ('key' = 'value', 'num' = '1')
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.tableSpec.properties == Map("key" -> "value", "num" -> "1"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - PARTITIONED BY, COMMENT, TBLPROPERTIES combined") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |PARTITIONED BY (key1)
+        |COMMENT 'my streaming table'
+        |TBLPROPERTIES ('key' = 'value')
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (key1)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.partitioning == Seq(IdentityTransform(FieldReference(Seq("key1")))))
+    assert(cmd.tableSpec.comment == Some("my streaming table"))
+    assert(cmd.tableSpec.properties == Map("key" -> "value"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - CLUSTER BY is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |CLUSTER BY (key1)
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (key1)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.partitioning == Seq(ClusterByTransform(Seq(FieldReference(Seq("key1"))))))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - USING provider is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |USING parquet
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.tableSpec.provider == Some("parquet"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - DEFAULT COLLATION is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target
+        |DEFAULT COLLATION UTF8_LCASE
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.tableSpec.collation == Some("UTF8_LCASE"))
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - column list is honored") {
+    val plan = parser.parsePlan(
+      """CREATE STREAMING TABLE target (id INT, name STRING)
+        |FLOW AUTO CDC
+        |FROM STREAM(source)
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
+    assert(cmd.columns.map(_.name) == Seq("id", "name"))
+    assert(cmd.columns.head.dataType == IntegerType)
   }
 
   // ---------------------------------------------------------------------------
@@ -394,10 +513,74 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   }
 
   // ---------------------------------------------------------------------------
-  // Error cases: source must be a STREAM(...)
+  // Source accepts richer streaming queries via relationPrimary
   // ---------------------------------------------------------------------------
 
-  test("CREATE FLOW AS AUTO CDC INTO - source without STREAM is not allowed") {
+  test("CREATE FLOW AS AUTO CDC INTO - STREAM without parentheses is accepted") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val source = streamSource(cdc.source)
+    assert(source.multipartIdentifier == Seq("source"))
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - STREAM source with alias is accepted") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM STREAM(source) AS s
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    assert(cdc.source.isStreaming)
+    val alias = cdc.source.asInstanceOf[SubqueryAlias]
+    assert(alias.alias == "s")
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO - subquery over a STREAM is accepted") {
+    val plan = parser.parsePlan(
+      """CREATE FLOW f AS AUTO CDC INTO target
+        |FROM (SELECT * FROM STREAM changes WHERE operation != 'pre_image')
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin)
+
+    // The subquery wraps the STREAM read in Project/Filter/SubqueryAlias nodes; isStreaming
+    // propagates up through them, so the whole source is recognized as streaming.
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    assert(cdc.source.isStreaming)
+    assert(cdc.source.isInstanceOf[SubqueryAlias])
+  }
+
+  // ---------------------------------------------------------------------------
+  // Error cases: source is a relationPrimary, not a full relation
+  // ---------------------------------------------------------------------------
+
+  test("CREATE FLOW AS AUTO CDC INTO - a join source is not allowed") {
+    // The source is a `relationPrimary`, not a full `relation`, so trailing relation extensions
+    // such as a JOIN are not part of the source and fail to parse (a KEYS clause is expected).
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM STREAM(a) JOIN STREAM(b) ON a.id = b.id
+            |KEYS (id)
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'JOIN'", "hint" -> "")
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Error cases: source must be a streaming query
+  // ---------------------------------------------------------------------------
+
+  test("CREATE FLOW AS AUTO CDC INTO - non-streaming source is not allowed") {
     checkError(
       intercept[ParseException] {
         parser.parsePlan(
@@ -406,13 +589,14 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
             |KEYS (id)
             |SEQUENCE BY ts""".stripMargin)
       },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'source'", "hint" -> "")
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "AUTO CDC source must be a streaming query, e.g. STREAM(<table>)."),
+      queryContext = Array(ExpectedContext("source", 43, 48))
     )
   }
 
-  test("CREATE STREAMING TABLE FLOW AUTO CDC - source without STREAM is not allowed") {
+  test("CREATE STREAMING TABLE FLOW AUTO CDC - non-streaming source is not allowed") {
     checkError(
       intercept[ParseException] {
         parser.parsePlan(
@@ -422,9 +606,10 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
             |KEYS (id)
             |SEQUENCE BY ts""".stripMargin)
       },
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "'source'", "hint" -> "")
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "AUTO CDC source must be a streaming query, e.g. STREAM(<table>)."),
+      queryContext = Array(ExpectedContext("source", 49, 54))
     )
   }
 
