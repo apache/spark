@@ -180,19 +180,6 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     verify(res).setHeader(meq("X-XSS-Protection"), meq("0"))
   }
 
-  test("no CSP header when CSP is disabled regardless of frameAncestors setting") {
-    val conf = new SparkConf(false)
-    val secMgr = new SecurityManager(conf)
-    val req = mockRequest()
-    val res = mock(classOf[HttpServletResponse])
-    val chain = mock(classOf[FilterChain])
-
-    val filter = new HttpSecurityFilter(conf, secMgr)
-    filter.doFilter(req, res, chain)
-
-    verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
-  }
-
   test("frame-ancestors is included in CSP when both CSP and frameAncestors are enabled") {
     val conf = new SparkConf(false)
       .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)

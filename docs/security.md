@@ -348,13 +348,13 @@ The following options control the authentication of Web UIs:
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
   <td><code>SAMEORIGIN</code></td>
-  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. Requires <code>spark.ui.contentSecurityPolicy.enabled=true</code> or <code>spark.ui.contentSecurityPolicy.frameAncestors.enabled=true</code> (the default) to take effect. The <code>X-Frame-Options</code> header is always set to <code>SAMEORIGIN</code> as a fallback for legacy browsers.</td>
+  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. Requires <code>spark.ui.contentSecurityPolicy.enabled=true</code> to take effect. When CSP is disabled, <code>X-Frame-Options: SAMEORIGIN</code> is used regardless of this setting.</td>
   <td>1.6.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.contentSecurityPolicy.frameAncestors.enabled</code></td>
   <td><code>true</code></td>
-  <td>Whether to set the CSP <code>frame-ancestors</code> directive for clickjacking protection, even when the full CSP header (<code>spark.ui.contentSecurityPolicy.enabled</code>) is disabled. When enabled, the <code>frame-ancestors</code> directive is emitted to enforce the <code>spark.ui.allowFramingFrom</code> setting.</td>
+  <td>Whether to include the <code>frame-ancestors</code> directive in the CSP header when <code>spark.ui.contentSecurityPolicy.enabled=true</code>. When enabled, the <code>frame-ancestors</code> directive enforces the <code>spark.ui.allowFramingFrom</code> setting. This setting is ignored when CSP is disabled.</td>
   <td>4.3.0</td>
 </tr>
 <tr>
