@@ -176,7 +176,7 @@ public class OneForOneStreamManagerSuite {
     // ChunkFetchRequest path.
     TransportClient otherApp = Mockito.mock(TransportClient.class);
     Mockito.when(otherApp.getClientId()).thenReturn("app2");
-    Assertions.assertThrows(SecurityException.class,
+    Assert.assertThrows(SecurityException.class,
       () -> manager.checkAuthorization(otherApp, streamChunkId));
 
     // The owning application is allowed.
