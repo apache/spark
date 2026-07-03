@@ -23,8 +23,9 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
-import org.apache.spark.sql.connect.client.arrow.types.ops.TimeTypeConnectOps
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.connect.client.arrow.types.ops.{TimestampLTZNanosTypeConnectOps, TimestampNTZNanosTypeConnectOps, TimeTypeConnectOps}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * Optional type operations for Spark Connect infrastructure.
@@ -97,6 +98,8 @@ object ConnectTypeOps {
   /** DataType-keyed dispatch for proto conversions. */
   def apply(dt: DataType): Option[ConnectTypeOps] = dt match {
     case tt: TimeType => Some(new TimeTypeConnectOps(tt))
+    case ts: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeConnectOps(ts))
+    case ts: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeConnectOps(ts))
     // Add new framework types here
     case _ => None
   }
@@ -108,6 +111,10 @@ object ConnectTypeOps {
     value match {
       case v: java.time.LocalTime =>
         Some(new TimeTypeConnectOps(TimeType()).toLiteralProto(v, builder))
+      case v: TimestampNanosVal =>
+        Some(
+          new TimestampNTZNanosTypeConnectOps(TimestampNTZNanosType())
+            .toLiteralProto(v, builder))
       // Add new framework value types here
       case _ => None
     }
@@ -119,6 +126,10 @@ object ConnectTypeOps {
   private def opsForKindCase(kindCase: proto.DataType.KindCase): Option[ConnectTypeOps] =
     kindCase match {
       case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))
+      case proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS =>
+        Some(new TimestampNTZNanosTypeConnectOps(TimestampNTZNanosType()))
+      case proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS =>
+        Some(new TimestampLTZNanosTypeConnectOps(TimestampLTZNanosType()))
       // Add new framework proto kinds here - single registration for all KindCase lookups
       case _ => None
     }
@@ -142,6 +153,10 @@ object ConnectTypeOps {
       litCase: proto.Expression.Literal.LiteralTypeCase): proto.DataType.KindCase =
     litCase match {
       case proto.Expression.Literal.LiteralTypeCase.TIME => proto.DataType.KindCase.TIME
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ_NANOS =>
+        proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_LTZ_NANOS =>
+        proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS
       // Add new framework literal-to-kind mappings here
       case _ => proto.DataType.KindCase.KIND_NOT_SET
     }

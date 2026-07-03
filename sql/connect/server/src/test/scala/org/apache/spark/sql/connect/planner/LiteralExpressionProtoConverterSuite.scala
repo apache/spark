@@ -17,20 +17,30 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.time.LocalTime
+import java.time.{Instant, LocalDateTime, LocalTime}
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
 import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+
+  private def withTimestampNanosTypesEnabled(enabled: Boolean = true)(f: => Unit): Unit = {
+    val conf = new SQLConf()
+    conf.setConfString(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, enabled.toString)
+    SQLConf.withExistingConf(conf)(f)
+  }
 
   private def toLiteralProto(v: Any): proto.Expression.Literal = {
     LiteralValueProtoConverter
@@ -75,6 +85,186 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     val literalProto = toLiteralProto(LocalTime.of(1, 2, 3), TimeType(3))
     assert(literalProto.getTime.getPrecision == 3)
     assertResult(LocalTime.of(1, 2, 3))(LiteralValueProtoConverter.toScalaValue(literalProto))
+  }
+
+  test("SPARK-57161: timestamp nanos data type proto round-trip") {
+    withTimestampNanosTypesEnabled() {
+      val cases: Seq[(Int => DataType, proto.DataType.KindCase)] = Seq(
+        (p => TimestampNTZNanosType(p), proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS),
+        (p => TimestampLTZNanosType(p), proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS))
+
+      cases.foreach { case (factory, kindCase) =>
+        TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION foreach { p =>
+          val dataType = factory(p)
+          val protoType = DataTypeProtoConverter.toConnectProtoType(dataType)
+          assert(protoType.getKindCase === kindCase)
+          val precision = kindCase match {
+            case proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS =>
+              protoType.getTimestampNtzNanos.getPrecision
+            case proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS =>
+              protoType.getTimestampLtzNanos.getPrecision
+            case _ => fail(s"Unexpected kind case: $kindCase")
+          }
+          assert(precision === p)
+          assert(DataTypeProtoConverter.toCatalystType(protoType) === dataType)
+        }
+      }
+
+      val defaultNtzProto = proto.DataType
+        .newBuilder()
+        .setTimestampNtzNanos(proto.DataType.TimestampNTZNanos.newBuilder().build())
+        .build()
+      val defaultLtzProto = proto.DataType
+        .newBuilder()
+        .setTimestampLtzNanos(proto.DataType.TimestampLTZNanos.newBuilder().build())
+        .build()
+      assert(DataTypeProtoConverter.toCatalystType(defaultNtzProto) === TimestampNTZNanosType())
+      assert(DataTypeProtoConverter.toCatalystType(defaultLtzProto) === TimestampLTZNanosType())
+    }
+  }
+
+  test("SPARK-57161: timestamp nanos literal proto and catalyst value round-trip") {
+    withTimestampNanosTypesEnabled() {
+      val ntzValues = Seq(
+        LocalDateTime.parse("1969-12-31T23:59:59.999999789"),
+        LocalDateTime.parse("1970-01-01T00:00:00.000000999"))
+      val ltzValues = Seq(
+        Instant.parse("1969-12-31T23:59:59.999999789Z"),
+        Instant.parse("1970-01-01T00:00:00.000000999Z"))
+
+      TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION foreach { p =>
+        ntzValues.foreach { value =>
+          val dataType = TimestampNTZNanosType(p)
+          val expected = SparkDateTimeUtils.localDateTimeToTimestampNanos(value, p)
+          val literalProto = toLiteralProto(value, dataType)
+          assert(
+            literalProto.getLiteralTypeCase ===
+              proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ_NANOS)
+          assert(literalProto.getTimestampNtzNanos.getPrecision === p)
+          assert(literalProto.getTimestampNtzNanos.getEpochMicros === expected.epochMicros)
+          assert(
+            literalProto.getTimestampNtzNanos.getNanosWithinMicro ===
+              expected.nanosWithinMicro.toInt)
+          assert(LiteralValueProtoConverter.getDataType(literalProto) === dataType)
+          assert(
+            LiteralValueProtoConverter.toScalaValue(literalProto) ===
+              SparkDateTimeUtils.timestampNanosToLocalDateTime(expected))
+
+          val literal = LiteralExpressionProtoConverter.toCatalystExpression(literalProto)
+          assert(literal.dataType === dataType)
+          assert(literal.value === expected)
+        }
+
+        ltzValues.foreach { value =>
+          val dataType = TimestampLTZNanosType(p)
+          val expected = SparkDateTimeUtils.instantToTimestampNanos(value, p)
+          val literalProto = toLiteralProto(value, dataType)
+          assert(
+            literalProto.getLiteralTypeCase ===
+              proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_LTZ_NANOS)
+          assert(literalProto.getTimestampLtzNanos.getPrecision === p)
+          assert(literalProto.getTimestampLtzNanos.getEpochMicros === expected.epochMicros)
+          assert(
+            literalProto.getTimestampLtzNanos.getNanosWithinMicro ===
+              expected.nanosWithinMicro.toInt)
+          assert(LiteralValueProtoConverter.getDataType(literalProto) === dataType)
+          assert(
+            LiteralValueProtoConverter.toScalaValue(literalProto) ===
+              SparkDateTimeUtils.timestampNanosToInstant(expected))
+
+          val literal = LiteralExpressionProtoConverter.toCatalystExpression(literalProto)
+          assert(literal.dataType === dataType)
+          assert(literal.value === expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57161: schema-less TimestampNanosVal literal defaults to NTZ nanos") {
+    withTimestampNanosTypesEnabled() {
+      val value = TimestampNanosVal.fromParts(-1L, 999.toShort)
+      val literalProto = toLiteralProto(value)
+      assert(
+        literalProto.getLiteralTypeCase ===
+          proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ_NANOS)
+      assert(LiteralValueProtoConverter.getDataType(literalProto) === TimestampNTZNanosType())
+      assert(
+        LiteralValueProtoConverter.toScalaValue(literalProto) ===
+          SparkDateTimeUtils.timestampNanosToLocalDateTime(value))
+    }
+  }
+
+  test("SPARK-57161: timestamp nanos literal compatibility keeps NTZ and LTZ distinct") {
+    withTimestampNanosTypesEnabled() {
+      val ntzLiteralWithLtzType = proto.Expression.Literal
+        .newBuilder()
+        .setTimestampNtzNanos(
+          proto.Expression.Literal.TimestampNTZNanos
+            .newBuilder()
+            .setEpochMicros(0L)
+            .setNanosWithinMicro(1)
+            .setPrecision(TimestampNTZNanosType.DEFAULT_PRECISION)
+            .build())
+        .setDataType(DataTypeProtoConverter.toConnectProtoType(TimestampLTZNanosType()))
+        .build()
+      val ntzError = intercept[InvalidPlanInput] {
+        LiteralValueProtoConverter.getProtoDataType(ntzLiteralWithLtzType)
+      }
+      assert(ntzError.getCondition === "CONNECT_INVALID_PLAN.INCOMPATIBLE_LITERAL_DATA_TYPE")
+
+      val ltzLiteralWithNtzType = proto.Expression.Literal
+        .newBuilder()
+        .setTimestampLtzNanos(
+          proto.Expression.Literal.TimestampLTZNanos
+            .newBuilder()
+            .setEpochMicros(0L)
+            .setNanosWithinMicro(1)
+            .setPrecision(TimestampLTZNanosType.DEFAULT_PRECISION)
+            .build())
+        .setDataType(DataTypeProtoConverter.toConnectProtoType(TimestampNTZNanosType()))
+        .build()
+      val ltzError = intercept[InvalidPlanInput] {
+        LiteralValueProtoConverter.getProtoDataType(ltzLiteralWithNtzType)
+      }
+      assert(ltzError.getCondition === "CONNECT_INVALID_PLAN.INCOMPATIBLE_LITERAL_DATA_TYPE")
+    }
+  }
+
+  test("SPARK-57161: timestamp nanos proto conversion honors the feature flag") {
+    withTimestampNanosTypesEnabled(enabled = false) {
+      val dataTypeProto = proto.DataType
+        .newBuilder()
+        .setTimestampNtzNanos(
+          proto.DataType.TimestampNTZNanos
+            .newBuilder()
+            .setPrecision(TimestampNTZNanosType.DEFAULT_PRECISION)
+            .build())
+        .build()
+      val dataTypeError = intercept[SparkException] {
+        DataTypeProtoConverter.toCatalystType(dataTypeProto)
+      }
+      assert(dataTypeError.getCondition === "FEATURE_NOT_ENABLED")
+
+      val connectProtoError = intercept[SparkException] {
+        DataTypeProtoConverter.toConnectProtoType(TimestampLTZNanosType())
+      }
+      assert(connectProtoError.getCondition === "FEATURE_NOT_ENABLED")
+
+      val literalProto = proto.Expression.Literal
+        .newBuilder()
+        .setTimestampNtzNanos(
+          proto.Expression.Literal.TimestampNTZNanos
+            .newBuilder()
+            .setEpochMicros(0L)
+            .setNanosWithinMicro(1)
+            .setPrecision(TimestampNTZNanosType.DEFAULT_PRECISION)
+            .build())
+        .build()
+      val literalError = intercept[SparkException] {
+        LiteralExpressionProtoConverter.toCatalystExpression(literalProto)
+      }
+      assert(literalError.getCondition === "FEATURE_NOT_ENABLED")
+    }
   }
 
   // The goal of this test is to check that converting a Scala value -> Proto -> Catalyst value

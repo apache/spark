@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtil
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
 import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal}
 
 object LiteralValueProtoConverter {
 
@@ -384,6 +384,7 @@ object LiteralValueProtoConverter {
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Decimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[TimestampNanosVal] => TimestampNTZNanosType()
     case _ if clz.isArray => ArrayType(toDataType(clz.getComponentType))
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
@@ -496,6 +497,14 @@ object LiteralValueProtoConverter {
             proto.DataType.KindCase.YEAR_MONTH_INTERVAL) =>
         true
       case (proto.Expression.Literal.LiteralTypeCase.TIME, proto.DataType.KindCase.TIME) =>
+        true
+      case (
+            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ_NANOS,
+            proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS) =>
+        true
+      case (
+            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_LTZ_NANOS,
+            proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS) =>
         true
       case (proto.Expression.Literal.LiteralTypeCase.ARRAY, proto.DataType.KindCase.ARRAY) =>
         true
