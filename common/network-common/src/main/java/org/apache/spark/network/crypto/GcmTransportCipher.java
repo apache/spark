@@ -123,17 +123,22 @@ public class GcmTransportCipher implements TransportCipher {
             this.ciphertextBuffer.limit(0);
 
             this.bytesToRead = getReadableBytes();
-            // expectedCiphertextSize(P) adds getCiphertextOffset() when counting segments
-            // (fullSegments = (P + getCiphertextOffset()) / plaintextSegmentSize), assuming
-            // the Tink header fills part of segment 0. Because transferTo() writes the header
-            // separately via headerByteBuffer, all P bytes occupy full-capacity segments;
-            // subtracting getCiphertextOffset() cancels that internal addition and gives the
-            // correct count. The function excludes the header from its result, so
-            // getHeaderLength() adds it back for the bytes headerByteBuffer actually writes.
+            int plaintextSegmentSize = aesGcmHkdfStreaming.getPlaintextSegmentSize();
+            int ciphertextSegmentSize = aesGcmHkdfStreaming.getCiphertextSegmentSize();
+            int tagSize = ciphertextSegmentSize - plaintextSegmentSize;
+            long fullSegments = bytesToRead / plaintextSegmentSize;
+            long partialBytes = bytesToRead % plaintextSegmentSize;
+            // encryptedCount covers all bytes written to the wire:
+            //   LENGTH_HEADER_BYTES  – Spark's 8-byte big-endian framing prefix, read by the
+            //                          receiver to know where this message ends in the TCP stream.
+            //   getHeaderLength()    – Tink's streaming header (salt + nonce prefix), written by
+            //                          the encrypter before any ciphertext segments.
+            //   segment bytes        – full segments each padded with a 16-byte GCM auth tag,
+            //                          plus any partial final segment similarly padded.
             this.encryptedCount = LENGTH_HEADER_BYTES
                     + aesGcmHkdfStreaming.getHeaderLength()
-                    + aesGcmHkdfStreaming.expectedCiphertextSize(
-                            bytesToRead - aesGcmHkdfStreaming.getCiphertextOffset());
+                    + fullSegments * ciphertextSegmentSize
+                    + (partialBytes > 0 ? partialBytes + tagSize : 0);
             byte[] lengthAad = Longs.toByteArray(encryptedCount);
             this.encrypter = aesGcmHkdfStreaming.newStreamSegmentEncrypter(lengthAad);
             this.headerByteBuffer = createHeaderByteBuffer();
