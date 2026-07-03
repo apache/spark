@@ -1603,7 +1603,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sparkConf = new SparkConf()
       .set(MEMORY_OFFHEAP_ENABLED, true)
     val expected =
-      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
+      s"${MEMORY_OFFHEAP_SIZE.key} must be at least 1MiB when ${MEMORY_OFFHEAP_ENABLED.key} == true"
     val message = intercept[IllegalArgumentException] {
       Utils.executorOffHeapMemorySizeAsMb(sparkConf)
     }.getMessage
