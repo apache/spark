@@ -134,6 +134,12 @@ public class GetCrossReferenceOperation extends MetadataOperation {
         String cmdStr = "catalog : " + parentCatalogName
             + ", parentSchema : " + parentSchemaName + ", parentTable : " + parentTableName
             + ", foreignSchema : " + foreignSchemaName + ", foreignTable : " + foreignTableName;
+        if (privObjs.isEmpty()) {
+          // Neither table is specified, so the request cannot be scoped to any privilege object;
+          // reject it instead of skipping the authorization check.
+          throw new HiveSQLException(
+              "Access denied: neither parent nor foreign table specified. " + cmdStr);
+        }
         authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
       }
      ForeignKeysRequest fkReq = new ForeignKeysRequest(parentSchemaName, parentTableName, foreignSchemaName, foreignTableName);

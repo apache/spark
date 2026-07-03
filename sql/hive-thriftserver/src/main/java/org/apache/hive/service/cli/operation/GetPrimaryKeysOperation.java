@@ -80,10 +80,15 @@ public class GetPrimaryKeysOperation extends MetadataOperation {
     try {
       IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
       if (isAuthV2Enabled()) {
-        List<HivePrivilegeObject> privObjs = Collections.singletonList(
-            new HivePrivilegeObject(HivePrivilegeObjectType.TABLE_OR_VIEW, schemaName, tableName));
         String cmdStr = "catalog : " + catalogName + ", schema : " + schemaName
             + ", table : " + tableName;
+        if (tableName == null) {
+          // The request cannot be scoped to a privilege object without a table name; reject it
+          // instead of skipping the authorization check.
+          throw new HiveSQLException("Access denied: no table specified. " + cmdStr);
+        }
+        List<HivePrivilegeObject> privObjs = Collections.singletonList(
+            new HivePrivilegeObject(HivePrivilegeObjectType.TABLE_OR_VIEW, schemaName, tableName));
         authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
       }
       PrimaryKeysRequest sqlReq = new PrimaryKeysRequest(schemaName, tableName);
