@@ -28,8 +28,8 @@ import org.apache.spark.sql.connect.service.SparkConnectService
 /**
  * Provides a [[SparkSession connect.SparkSession]] backed by an in-process gRPC server. Extends
  * [[sql.SparkSessionBinder sql.SparkSessionBinder]] (which creates a
- * [[org.apache.spark.sql.classic.SparkSession classic.SparkSession]] and SparkContext), then layers
- * a Connect client session on top by starting the gRPC service in-process.
+ * [[org.apache.spark.sql.classic.SparkSession classic.SparkSession]] and SparkContext), then
+ * layers a Connect client session on top by starting the gRPC service in-process.
  */
 trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
 
