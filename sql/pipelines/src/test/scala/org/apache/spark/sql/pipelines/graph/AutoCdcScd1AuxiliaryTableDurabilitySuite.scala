@@ -203,7 +203,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val updateCtx = TestPipelineUpdateContext(spark, ctx.toDataflowGraph, storageRoot)
     updateCtx.pipelineExecution.dryRunPipeline()
 
-    assert(spark.catalog.tableExists(auxTableNameFor("target")))
+    assert(!spark.catalog.tableExists(auxTableNameFor("target")))
   }
 
   test("if the AutoCDC auxiliary table is dropped between runs, it is transparently " +
