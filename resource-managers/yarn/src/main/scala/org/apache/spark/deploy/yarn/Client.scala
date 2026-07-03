@@ -709,8 +709,8 @@ private[spark] class Client(
               log"libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
-          val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
-            new File(Utils.getLocalDir(sparkConf)))
+          val jarsArchive = Files.createTempFile(
+            Paths.get(Utils.getLocalDir(sparkConf)), LOCALIZED_LIB_DIR, ".zip").toFile
           val jarsStream = new ZipOutputStream(new FileOutputStream(jarsArchive))
 
           try {
@@ -897,8 +897,8 @@ private[spark] class Client(
       }
     }
 
-    val confArchive = File.createTempFile(LOCALIZED_CONF_DIR, ".zip",
-      new File(Utils.getLocalDir(sparkConf)))
+    val confArchive = Files.createTempFile(
+      Paths.get(Utils.getLocalDir(sparkConf)), LOCALIZED_CONF_DIR, ".zip").toFile
     val confStream = new ZipOutputStream(new FileOutputStream(confArchive))
 
     logDebug(s"Creating an archive with the config files for distribution at $confArchive.")

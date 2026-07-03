@@ -502,8 +502,8 @@ private[spark] object Utils
       in: InputStream,
       destFile: File,
       fileOverwrite: Boolean): Unit = {
-    val tempFile = File.createTempFile("fetchFileTemp", null,
-      new File(destFile.getParentFile.getAbsolutePath))
+    val tempFile = Files.createTempFile(
+      new File(destFile.getParentFile.getAbsolutePath).toPath, "fetchFileTemp", null).toFile
     logInfo(log"Fetching ${MDC(LogKeys.URL, url)} to ${MDC(FILE_ABSOLUTE_PATH, tempFile)}")
 
     try {

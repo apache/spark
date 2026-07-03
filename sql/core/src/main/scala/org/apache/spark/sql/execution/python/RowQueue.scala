@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
+import java.nio.file.Files
 
 import com.google.common.io.Closeables
 
@@ -221,7 +222,7 @@ private[python] case class HybridRowQueue(
   }
 
   private def createDiskQueue(): RowQueue = {
-    DiskRowQueue(File.createTempFile("buffer", "", tempDir), numFields, serMgr)
+    DiskRowQueue(Files.createTempFile(tempDir.toPath, "buffer", "").toFile, numFields, serMgr)
   }
 
   private def createNewQueue(required: Long): RowQueue = {
