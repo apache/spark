@@ -974,7 +974,7 @@ SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
 -- !query schema
 struct<months_between(CAST(1997-02-28 10:30:00.000000500 UTC AS TIMESTAMP_LTZ(9)), CAST(1996-10-30 00:00:00.000000000 UTC AS TIMESTAMP_LTZ(9)), false):double>
 -- !query output
-3.949596774193735
+3.9495967741935485
 
 
 -- !query

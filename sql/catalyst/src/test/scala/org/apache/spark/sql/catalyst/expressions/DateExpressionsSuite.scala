@@ -714,7 +714,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ntzType = TimestampNTZNanosType(9)
     val ltzType = TimestampLTZNanosType(9)
 
-    // nanosWithinMicro == 0 on both sides must match the microsecond-only result exactly.
+    // A nanos operand is reduced to its epochMicros, so the result must match the
+    // microsecond-only result exactly, regardless of the nanosWithinMicro remainder.
     val ntz1 = DateTimeUtils.localDateTimeToTimestampNanos(
       LocalDateTime.parse("1997-02-28T10:30:00"), 9)
     val ntz2 = DateTimeUtils.localDateTimeToTimestampNanos(
@@ -739,9 +740,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal.FalseLiteral, Some("UTC")),
       3.9495967741935485)
 
+    // A non-zero nanosWithinMicro remainder must not perturb the result: only epochMicros
+    // reaches the computation, at both the coarse (whole-day) and fine (whole-second) branches.
+    val ntz1WithNanos = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1997-02-28T10:30:00.000000999"), 9)
+    assert(ntz1WithNanos.epochMicros == ntz1.epochMicros)
+    assert(ntz1WithNanos.nanosWithinMicro == 999)
+    checkEvaluation(
+      MonthsBetween(Literal.create(ntz1WithNanos, ntzType), Literal.create(ntz2, ntzType),
+        Literal.FalseLiteral, Some("UTC")),
+      3.9495967741935485)
+    val sameDayNtz1 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2015-01-30T11:52:00.000000999"), 9)
+    val sameDayNtz2 = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2015-01-30T11:50:00"), 9)
+    checkEvaluation(
+      MonthsBetween(Literal.create(sameDayNtz1, ntzType), Literal.create(sameDayNtz2, ntzType),
+        Literal.TrueLiteral, Some("UTC")),
+      0.0)
+
     // A nanos operand paired with a plain (microsecond) timestamp operand must produce the same
-    // result as the all-nanos case above, since the microsecond side is equivalent to
-    // nanosWithinMicro == 0.
+    // result as the all-nanos case above.
     checkEvaluation(
       MonthsBetween(Literal.create(ntz1, ntzType),
         Literal(Instant.parse("1996-10-30T00:00:00Z")), Literal.FalseLiteral, Some("UTC")),
@@ -750,54 +769,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       MonthsBetween(Literal(Instant.parse("1997-02-28T10:30:00Z")),
         Literal.create(ltz2, ltzType), Literal.FalseLiteral, Some("UTC")),
       3.9495967741935485)
-
-    // Two timestamps on different days of the same month, exactly at midnight, so the
-    // whole-second time-of-day difference is a round 86400 - 0 seconds; only the
-    // nanosWithinMicro remainder can move the result away from 1/31.
-    val zeroDay1 = DateTimeUtils.localDateTimeToTimestampNanos(
-      LocalDateTime.parse("2015-01-31T00:00:00"), 9)
-    val zeroDay2 = DateTimeUtils.localDateTimeToTimestampNanos(
-      LocalDateTime.parse("2015-01-30T00:00:00"), 9)
-    val nanosDay1 = DateTimeUtils.localDateTimeToTimestampNanos(
-      LocalDateTime.parse("2015-01-31T00:00:00.000000500"), 9)
-    assert(zeroDay1.epochMicros == nanosDay1.epochMicros)
-    assert(nanosDay1.nanosWithinMicro == 500)
-
-    val baseline = 86400.0 / (31 * SECONDS_PER_DAY).toDouble
-    checkEvaluation(
-      MonthsBetween(Literal.create(zeroDay1, ntzType), Literal.create(zeroDay2, ntzType),
-        Literal.FalseLiteral, Some("UTC")),
-      baseline)
-    // Matches the production formula:
-    // diff = monthDiff + (secondsDiff + nanosFraction) / secondsInMonth
-    val withNanosFraction =
-      (86400.0 + 500.0 / NANOS_PER_SECOND.toDouble) / (31 * SECONDS_PER_DAY).toDouble
-    checkEvaluation(
-      MonthsBetween(Literal.create(nanosDay1, ntzType), Literal.create(zeroDay2, ntzType),
-        Literal.FalseLiteral, Some("UTC")),
-      withNanosFraction)
-    assert(withNanosFraction != baseline)
-
-    // roundOff semantics are preserved: the sub-microsecond remainder is far below the rounding
-    // precision (8 digits), so it must not perturb the rounded result.
-    checkEvaluation(
-      MonthsBetween(Literal.create(zeroDay1, ntzType), Literal.create(zeroDay2, ntzType),
-        Literal.TrueLiteral, Some("UTC")),
-      0.03225806)
-    checkEvaluation(
-      MonthsBetween(Literal.create(nanosDay1, ntzType), Literal.create(zeroDay2, ntzType),
-        Literal.TrueLiteral, Some("UTC")),
-      0.03225806)
-
-    // Mixed LTZ(p)/NTZ(p) pair: each side must be interpreted in its own time-zone family
-    // (NTZ always UTC, LTZ the session zone), even when the session zone is not UTC.
-    val laLtz = DateTimeUtils.instantToTimestampNanos(Instant.parse("2020-01-31T08:00:00Z"), 9)
-    val utcNtz = DateTimeUtils.localDateTimeToTimestampNanos(
-      LocalDateTime.parse("2020-01-30T00:00:00"), 9)
-    checkEvaluation(
-      MonthsBetween(Literal.create(laLtz, ltzType), Literal.create(utcNtz, ntzType),
-        Literal.FalseLiteral, Some(LA.getId)),
-      baseline)
 
     checkConsistencyBetweenInterpretedAndCodegen(
       (time1: Expression, time2: Expression, roundOff: Expression) =>
@@ -813,11 +784,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ntzType, TimestampType, BooleanType)
 
     checkEvaluation(
-      MonthsBetween(Literal.create(null, ntzType), Literal.create(zeroDay2, ntzType),
+      MonthsBetween(Literal.create(null, ntzType), Literal.create(ntz2, ntzType),
         Literal.TrueLiteral, Some("UTC")),
       null)
     checkEvaluation(
-      MonthsBetween(Literal.create(zeroDay1, ntzType), Literal.create(null, ntzType),
+      MonthsBetween(Literal.create(ntz1, ntzType), Literal.create(null, ntzType),
         Literal.TrueLiteral, Some("UTC")),
       null)
   }

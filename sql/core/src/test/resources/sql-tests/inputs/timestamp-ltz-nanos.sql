@@ -239,21 +239,19 @@ SELECT timestamp_nanos(1.0D);
 -- NULL input.
 SELECT timestamp_nanos(CAST(NULL AS BIGINT));
 
--- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_LTZ. Matches the
--- microsecond-only result when nanosWithinMicro is 0 on both sides, and the sub-microsecond
--- remainder contributes an additional (far smaller than roundOff's 8-digit precision) fraction of
--- a month otherwise.
+-- SPARK-57819: months_between over nanosecond-precision TIMESTAMP_LTZ. A nanos operand is
+-- reduced to its epochMicros, so the result always matches the microsecond-only result and the
+-- nanosWithinMicro remainder never affects it.
 SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
     TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC');
 SELECT months_between(TIMESTAMP_LTZ '1997-02-28 10:30:00 UTC',
     TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC', false);
 SELECT months_between('1997-02-28 10:30:00.000000000 UTC' :: timestamp_ltz(9),
     '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false);
--- Same pair, with a non-zero nanosWithinMicro remainder on one side: the roundOff=false result
--- diverges from the remainder=0 case above only in the far decimal digits.
+-- Same pair, with a non-zero nanosWithinMicro remainder on one side: the result is unchanged
+-- from the remainder=0 case above.
 SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
     '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9), false);
--- roundOff (default true) rounds the sub-microsecond remainder away.
 SELECT months_between('1997-02-28 10:30:00.000000500 UTC' :: timestamp_ltz(9),
     '1996-10-30 00:00:00.000000000 UTC' :: timestamp_ltz(9));
 -- A nanos operand paired with a plain (microsecond) TIMESTAMP_LTZ operand.

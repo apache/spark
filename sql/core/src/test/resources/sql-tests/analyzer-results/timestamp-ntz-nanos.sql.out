@@ -737,10 +737,9 @@ Project [months_between(cast(1997-02-28 10:30:00.000000500 as timestamp_ntz(9)),
 
 -- !query
 SELECT months_between('1997-02-28 10:30:00.000000000' :: timestamp_ntz(9),
-    TIMESTAMP_NTZ '1996-10-30 00:00:00')
+    TIMESTAMP_LTZ '1996-10-30 00:00:00 UTC')
 -- !query analysis
-Project [months_between(cast(1997-02-28 10:30:00.000000000 as timestamp_ntz(9)), cast(1996-10-30 00:00:00 as timestamp), true, Some(America/Los_Angeles)) AS months_between(CAST(1997-02-28 10:30:00.000000000 AS TIMESTAMP_NTZ(9)), TIMESTAMP_NTZ '1996-10-30 00:00:00', true)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

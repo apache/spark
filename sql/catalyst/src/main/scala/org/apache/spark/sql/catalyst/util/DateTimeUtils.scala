@@ -439,35 +439,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       micros1: Long,
       micros2: Long,
       roundOff: Boolean,
-      zoneId: ZoneId): Double = monthsBetween0(micros1, micros2, 0, 0, roundOff, zoneId, zoneId)
-
-  /**
-   * Returns number of months between nanosecond-precision timestamps `ts1` and `ts2`, matching
-   * [[monthsBetween(Long, Long, Boolean, ZoneId)]] when `nanosWithinMicro` is 0 on both sides, and
-   * additionally folding in the sub-microsecond remainder as extra fractional-second time-of-day
-   * when the two timestamps fall on different days of the month. `zoneId1`/`zoneId2` are resolved
-   * independently per side (UTC for the TIMESTAMP_NTZ(p) family, the session zone otherwise) so
-   * that mixed LTZ(p)/NTZ(p) pairs are each interpreted in their own wall-clock semantics.
-   */
-  def monthsBetween(
-      ts1: TimestampNanosVal,
-      ts2: TimestampNanosVal,
-      roundOff: Boolean,
-      zoneId1: ZoneId,
-      zoneId2: ZoneId): Double = monthsBetween0(
-    ts1.epochMicros, ts2.epochMicros, ts1.nanosWithinMicro, ts2.nanosWithinMicro,
-    roundOff, zoneId1, zoneId2)
-
-  private def monthsBetween0(
-      micros1: Long,
-      micros2: Long,
-      nanosWithinMicro1: Int,
-      nanosWithinMicro2: Int,
-      roundOff: Boolean,
-      zoneId1: ZoneId,
-      zoneId2: ZoneId): Double = {
-    val date1 = microsToDays(micros1, zoneId1)
-    val date2 = microsToDays(micros2, zoneId2)
+      zoneId: ZoneId): Double = {
+    val date1 = microsToDays(micros1, zoneId)
+    val date2 = microsToDays(micros2, zoneId)
     val (year1, monthInYear1, dayInMonth1, daysToMonthEnd1) = splitDate(date1)
     val (year2, monthInYear2, dayInMonth2, daysToMonthEnd2) = splitDate(date2)
 
@@ -481,14 +455,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
     // using milliseconds can cause precision loss with more than 8 digits
     // we follow Hive's implementation which uses seconds
-    val secondsInDay1 = MICROSECONDS.toSeconds(micros1 - daysToMicros(date1, zoneId1))
-    val secondsInDay2 = MICROSECONDS.toSeconds(micros2 - daysToMicros(date2, zoneId2))
+    val secondsInDay1 = MICROSECONDS.toSeconds(micros1 - daysToMicros(date1, zoneId))
+    val secondsInDay2 = MICROSECONDS.toSeconds(micros2 - daysToMicros(date2, zoneId))
     val secondsDiff = (dayInMonth1 - dayInMonth2) * SECONDS_PER_DAY + secondsInDay1 - secondsInDay2
-    // The nanosWithinMicro remainder (0-999 on each side) contributes an additional
-    // sub-microsecond fraction of a second, on top of the whole-second time-of-day diff above.
-    val nanosFraction = (nanosWithinMicro1 - nanosWithinMicro2).toDouble / NANOS_PER_SECOND
     val secondsInMonth = DAYS.toSeconds(31)
-    val diff = monthDiff + (secondsDiff + nanosFraction) / secondsInMonth.toDouble
+    val diff = monthDiff + secondsDiff / secondsInMonth.toDouble
     if (roundOff) {
       // rounding to 8 digits
       math.round(diff * 1e8) / 1e8
