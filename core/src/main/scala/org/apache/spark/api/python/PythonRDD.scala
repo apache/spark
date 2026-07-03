@@ -21,6 +21,7 @@ import java.io._
 import java.net._
 import java.nio.channels.{Channels, SocketChannel}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.mutable
@@ -826,7 +827,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     if (!diskBlockManager.containsBlock(blockId)) {
       Utils.tryOrIOException {
         val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
-        val file = File.createTempFile("broadcast", "", dir)
+        val file = Files.createTempFile(dir.toPath, "broadcast", "").toFile
         val out = new FileOutputStream(file)
         Utils.tryWithSafeFinally {
           val size = Utils.copyStream(in, out)
