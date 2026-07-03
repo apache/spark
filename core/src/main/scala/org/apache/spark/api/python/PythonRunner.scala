@@ -409,6 +409,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       handle: Option[ProcessHandle],
       context: TaskContext): DataInputStream = {
     // Switch the channel to blocking mode for true full-duplex I/O.
+    // The channel is left in blocking mode after the task completes; with worker reuse
+    // enabled the worker is returned to the idle pool, so PythonWorkerFactory.create()
+    // normalizes it back to non-blocking before handing it to the next task
+    // (SPARK-57931). Without that, a later task on the non-pipelined selector path would
+    // NPE on worker.selector because refresh() only opens a selector in non-blocking mode.
     // Must close the selector first because configureBlocking() fails
     // if the channel is registered with a selector (IllegalBlockingModeException).
     if (worker.selectionKey != null) {
