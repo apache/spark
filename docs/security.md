@@ -766,12 +766,14 @@ Security.
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
-  <td><code>1; mode=block</code></td>
+  <td><code>0</code></td>
   <td>
-    Value for HTTP X-XSS-Protection response header. You can choose appropriate value
-    from below:
+    Value for HTTP X-XSS-Protection response header. The default is <code>0</code> which
+    disables the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and
+    Edge, and was never implemented in Firefox. In browsers that still support it (Safari),
+    it can introduce side-channel vulnerabilities. Use Content-Security-Policy instead.
     <ul>
-      <li><code>0</code> (Disables XSS filtering)</li>
+      <li><code>0</code> (Disables XSS filtering. Recommended.)</li>
       <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected,
         the browser will sanitize the page.)</li>
       <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering
