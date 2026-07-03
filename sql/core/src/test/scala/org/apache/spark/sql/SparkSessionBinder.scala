@@ -114,8 +114,8 @@ trait SparkSessionBinderBase
    * The classic [[SparkSession]] this binder is bound to. The per-test lifecycle hooks operate on
    * it (e.g. `DebugFilesystem`, cache clearing) via its classic-only APIs, which the abstract
    * [[spark]] does not expose (the connect binder narrows `spark` to a connect session). By default
-   * this is the session created in [[beforeAll]]. Suites that bind their session outside `beforeAll`
-   * -- e.g. a fresh per-test instance under `OneInstancePerTest`, where `beforeAll` /
+   * this is the session created in [[beforeAll]]. Suites that bind their session outside
+   * `beforeAll` -- e.g. a fresh per-test instance under `OneInstancePerTest`, where `beforeAll` /
    * [[initializeSession]] never run and `_spark` stays `null` -- override this to return their own
    * session so the inherited hooks act on the live session.
    */
