@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -78,6 +78,18 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     Seq(
       (s"CREATE $datasetSqlSyntax table1 PARTITIONED BY (a) AS SELECT * FROM input",
         Seq(IdentityTransform(FieldReference(Seq("a"))))),
+      (s"CREATE $datasetSqlSyntax table1 AS SELECT * FROM input", Seq.empty)
+    ).foreach { case (query, partitioning) =>
+      val plan = parser.parsePlan(query)
+      val cmd = plan.asInstanceOf[CreatePipelineDatasetAsSelect]
+      assert(cmd.partitioning == partitioning)
+    }
+  }
+
+  test("Clustering is correctly parsed") {
+    Seq(
+      (s"CREATE $datasetSqlSyntax table1 CLUSTER BY (a) AS SELECT * FROM input",
+        Seq(ClusterByTransform(Seq(FieldReference(Seq("a")))))),
       (s"CREATE $datasetSqlSyntax table1 AS SELECT * FROM input", Seq.empty)
     ).foreach { case (query, partitioning) =>
       val plan = parser.parsePlan(query)
