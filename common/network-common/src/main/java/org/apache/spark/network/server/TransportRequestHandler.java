@@ -137,6 +137,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
     ManagedBuffer buf;
     try {
+      streamManager.checkAuthorization(reverseClient, req.streamId);
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
       logger.error(String.format(

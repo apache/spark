@@ -178,6 +178,14 @@ public class OneForOneStreamManager extends StreamManager {
   }
 
   @Override
+  public void checkAuthorization(TransportClient client, String streamChunkId) {
+    // StreamRequest addresses the same registered streams as ChunkFetchRequest, via a
+    // "streamId_chunkIndex" string. Authorize on the underlying stream id so that this path
+    // enforces the same per-application ownership check as the chunk-fetch path.
+    checkAuthorization(client, parseStreamChunkId(streamChunkId).getLeft());
+  }
+
+  @Override
   public void chunkBeingSent(long streamId) {
     StreamState streamState = streams.get(streamId);
     if (streamState != null) {
