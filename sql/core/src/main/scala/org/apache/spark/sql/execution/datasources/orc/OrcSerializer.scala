@@ -27,8 +27,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * A serializer to serialize Spark rows to ORC structs.
@@ -107,7 +107,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType | _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType =>
+    case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>
@@ -155,19 +155,9 @@ class OrcSerializer(dataSchema: StructType) {
       val result = new OrcTimestamp(ts.getTime)
       result.setNanos(ts.getNanos)
       result
-    case t: TimestampLTZNanosType => (getter, ordinal) =>
-      val v = getter.get(ordinal, t).asInstanceOf[TimestampNanosVal]
-      val instant = DateTimeUtils.timestampNanosToInstant(v)
-      val result = new OrcTimestamp(instant.toEpochMilli)
-      result.setNanos(instant.getNano)
-      result
-    case t: TimestampNTZNanosType => (getter, ordinal) =>
-      val v = getter.get(ordinal, t).asInstanceOf[TimestampNanosVal]
-      val localDateTime = DateTimeUtils.timestampNanosToLocalDateTime(v)
-      val ts = java.sql.Timestamp.valueOf(localDateTime)
-      val result = new OrcTimestamp(ts.getTime)
-      result.setNanos(ts.getNanos)
-      result
+
+    // Framework types (TimeType, nanosecond timestamps) provide their own ORC value writer.
+    case dt if OrcTypeOps(dt).isDefined => OrcTypeOps(dt).get.makeSerializer(reuseObj)
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.execution.datasources.orc.types.ops.OrcTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -126,7 +127,7 @@ class OrcDeserializer(
       case IntegerType | _: YearMonthIntervalType => (ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[IntWritable].get)
 
-      case LongType | _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType =>
+      case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
         (ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[LongWritable].get)
 
       case FloatType => (ordinal, value) =>
@@ -149,16 +150,11 @@ class OrcDeserializer(
 
       case TimestampType => (ordinal, value) =>
         updater.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(value.asInstanceOf[OrcTimestamp]))
-      case t: TimestampLTZNanosType => (ordinal, value) =>
-        val ts = value.asInstanceOf[OrcTimestamp]
-        val instant = ts.toInstant
-        updater.set(ordinal, DateTimeUtils.instantToTimestampNanos(instant, t.precision))
-      case t: TimestampNTZNanosType => (ordinal, value) =>
-        val ts = value.asInstanceOf[OrcTimestamp]
-        val localDateTime = ts.toLocalDateTime
-        updater.set(
-          ordinal,
-          DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, t.precision))
+
+      // Framework types (TimeType, nanosecond timestamps) provide their own ORC row reader. The
+      // setter callbacks decouple the ops sub-package from the sealed CatalystDataUpdater trait.
+      case dt if OrcTypeOps(dt).isDefined =>
+        OrcTypeOps(dt).get.makeDeserializer(updater.setLong, updater.set)
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)
