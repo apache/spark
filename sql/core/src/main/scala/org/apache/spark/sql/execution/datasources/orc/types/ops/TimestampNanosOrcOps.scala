@@ -42,7 +42,8 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  */
 case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps {
 
-  // Was: OrcUtils.getOrcSchemaString  `case _: TimestampLTZNanosType => "timestamp with local time zone"`
+  // Was: OrcUtils.getOrcSchemaString
+  // `case _: TimestampLTZNanosType => "timestamp with local time zone"`
   override def orcSchemaString: String = "timestamp with local time zone"
 
   // Was: OrcUtils.orcTypeDescription  `case t: TimestampLTZNanosType => ... TIMESTAMP_INSTANT ...`

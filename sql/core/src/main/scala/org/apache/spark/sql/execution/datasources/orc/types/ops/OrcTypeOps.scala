@@ -37,7 +37,8 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *     nanosecond-timestamp category, so framework types map onto an existing physical ORC
  *     category and round-trip the true Spark type via the CATALYST_TYPE_ATTRIBUTE_NAME attribute
  *     (stamped uniformly by the caller, so the ops only chooses the category).
- *   - Value write (serialize): Catalyst value -> ORC WritableComparable (OrcSerializer.newConverter)
+ *   - Value write (serialize): Catalyst value -> ORC WritableComparable
+ *     (OrcSerializer.newConverter)
  *   - Row-based read (deserialize): ORC WritableComparable -> Catalyst value
  *     (OrcDeserializer.newWriter)
  *   - Predicate pushdown: PredicateLeaf.Type mapping + literal casting (OrcFilters)
