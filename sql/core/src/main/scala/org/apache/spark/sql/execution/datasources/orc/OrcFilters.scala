@@ -180,7 +180,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
       IntervalUtils.durationToMicros(value.asInstanceOf[Duration])
     // Framework types (e.g. TimeType) cast their own filter literals; the default is identity, so
     // non-framework types and non-matching values fall through unchanged.
-    case dt if OrcTypeOps(dt).isDefined => OrcTypeOps(dt).get.castFilterLiteral(value)
+    case OrcTypeOps(ops) => ops.castFilterLiteral(value)
     case _ => value
   }
 

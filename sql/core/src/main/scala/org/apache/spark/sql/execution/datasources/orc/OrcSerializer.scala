@@ -157,7 +157,7 @@ class OrcSerializer(dataSchema: StructType) {
       result
 
     // Framework types (TimeType, nanosecond timestamps) provide their own ORC value writer.
-    case dt if OrcTypeOps(dt).isDefined => OrcTypeOps(dt).get.makeSerializer(reuseObj)
+    case OrcTypeOps(ops) => ops.makeSerializer(reuseObj)
 
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)

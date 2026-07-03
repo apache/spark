@@ -153,8 +153,8 @@ class OrcDeserializer(
 
       // Framework types (TimeType, nanosecond timestamps) provide their own ORC row reader. The
       // setter callbacks decouple the ops sub-package from the sealed CatalystDataUpdater trait.
-      case dt if OrcTypeOps(dt).isDefined =>
-        OrcTypeOps(dt).get.makeDeserializer(updater.setLong, updater.set)
+      case OrcTypeOps(ops) =>
+        ops.makeDeserializer(updater.setLong, updater.set)
 
       case DecimalType.Fixed(precision, scale) => (ordinal, value) =>
         val v = OrcShimUtils.getDecimal(value)

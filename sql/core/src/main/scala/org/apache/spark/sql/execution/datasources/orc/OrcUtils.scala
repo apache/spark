@@ -352,8 +352,8 @@ object OrcUtils extends Logging {
         // Framework types (TimeType, nanosecond timestamps) supply their own ORC category; the
         // CATALYST_TYPE_ATTRIBUTE_NAME is stamped uniformly here so the true Spark type
         // round-trips on read.
-        case _ if OrcTypeOps(dt).isDefined =>
-          val typeDesc = new TypeDescription(OrcTypeOps(dt).get.orcCategory)
+        case OrcTypeOps(ops) =>
+          val typeDesc = new TypeDescription(ops.orcCategory)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, dt.typeName)
           Some(typeDesc)
         case _: StringType =>

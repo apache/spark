@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *     ORC TypeDescription category (OrcUtils.orcTypeDescription). ORC has no native TIME /
  *     nanosecond-timestamp category, so framework types map onto an existing physical ORC
  *     category and round-trip the true Spark type via the CATALYST_TYPE_ATTRIBUTE_NAME attribute
- *     (stamped uniformly by the caller, so ops only choose the category).
+ *     (stamped uniformly by the caller, so the ops only chooses the category).
  *   - Value write (serialize): Catalyst value -> ORC WritableComparable (OrcSerializer.newConverter)
  *   - Row-based read (deserialize): ORC WritableComparable -> Catalyst value
  *     (OrcDeserializer.newWriter)
@@ -83,8 +83,8 @@ private[orc] trait OrcTypeOps extends Serializable {
 
   /**
    * The ORC TypeDescription category for this type (OrcUtils.orcTypeDescription). The caller
-   * stamps CATALYST_TYPE_ATTRIBUTE_NAME = sparkType.typeName onto the returned descriptor, so ops
-   * only choose the physical category.
+   * stamps CATALYST_TYPE_ATTRIBUTE_NAME = sparkType.typeName onto the returned descriptor, so the
+   * ops only chooses the physical category.
    */
   def orcCategory: TypeDescription.Category
 
@@ -153,4 +153,15 @@ private[orc] object OrcTypeOps {
     // Add new types here - single registration point
     case _ => None
   }
+
+  /**
+   * Extractor so a `dataType match` arm can bind the ops in a single lookup:
+   * {{{
+   *   case OrcTypeOps(ops) => ops.method(...)
+   * }}}
+   * Delegates to apply(); returning the same Option keeps the registry the single source of truth
+   * and avoids the double lookup of a `case _ if OrcTypeOps(dt).isDefined => OrcTypeOps(dt).get`
+   * guard.
+   */
+  def unapply(dt: DataType): Option[OrcTypeOps] = apply(dt)
 }

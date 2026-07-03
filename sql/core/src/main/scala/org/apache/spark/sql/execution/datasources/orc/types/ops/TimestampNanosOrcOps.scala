@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * ORC operations for TimestampLTZNanosType (nanosecond precision, with time zone).
  *
  * Stored in ORC as the TIMESTAMP_INSTANT category (matching TIMESTAMP with local time zone). The
- * internal TimestampNanosVal is converted through java.time.Instant on both directions; the true
+ * internal TimestampNanosVal is converted through java.time.Instant in both directions; the true
  * Spark type and precision are recovered on read from the CATALYST_TYPE_ATTRIBUTE_NAME attribute.
  * ORC does not reuse the OrcTimestamp object (the conversion is already expensive), so the
  * serializer runs with reuse disabled regardless of the reuseObj hint.
@@ -74,7 +74,7 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
  * ORC operations for TimestampNTZNanosType (nanosecond precision, without time zone).
  *
  * Stored in ORC as the TIMESTAMP category. The internal TimestampNanosVal is converted through
- * java.time.LocalDateTime on both directions; the true Spark type and precision are recovered on
+ * java.time.LocalDateTime in both directions; the true Spark type and precision are recovered on
  * read from the CATALYST_TYPE_ATTRIBUTE_NAME attribute. As with the LTZ variant, the OrcTimestamp
  * object is not reused.
  *
