@@ -129,9 +129,24 @@ trait ConstraintHelper {
   private def replaceConstraints(
       constraints: ExpressionSet,
       source: Expression,
-      destination: Expression): ExpressionSet = constraints.map(_ transform {
-    case e: Expression if e.semanticEquals(source) => destination
-  })
+      destination: Expression): ExpressionSet = {
+    if (isBinaryStable(source.dataType)) {
+      constraints.map(_ transform {
+        case e: Expression if e.semanticEquals(source) => destination
+      })
+    } else {
+      constraints.map(_ transform {
+        case b: BinaryComparison if sameCollationOperand(b, source) =>
+          b.withNewChildren(b.children.map { c =>
+            if (c.semanticEquals(source)) destination else c
+          })
+      })
+    }
+  }
+
+  private def sameCollationOperand(b: BinaryComparison, source: Expression): Boolean =
+    (b.left.semanticEquals(source) || b.right.semanticEquals(source)) &&
+      b.left.dataType == source.dataType && b.right.dataType == source.dataType
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
