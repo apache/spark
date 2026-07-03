@@ -1495,11 +1495,34 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        default = branch_names[0]
-        picked = cherry_pick(
-            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
-        )
-        post_merge_comment(pr_num, picked)
+
+        # Loop like the normal-merge path so a backport can fan out to multiple branches in
+        # one run, with a per-branch confirmation prompt before each pick. merged_refs starts
+        # with target_ref (the branch the commit was originally merged into, never re-picked)
+        # and doubles as the already_picked set; remaining_branches walks the candidates so the
+        # default advances past branches already picked this run.
+        remaining_branches = [b for b in branch_names if b != target_ref]
+        merged_refs = [target_ref]
+        merged_commits = []
+        pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
+        while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            picked = cherry_pick(
+                pr_num,
+                merge_hash,
+                default,
+                branch_names,
+                target_ref,
+                already_picked=tuple(merged_refs),
+            )
+            picked_refs = [ref for ref, _ in picked]
+            merged_refs = merged_refs + picked_refs
+            merged_commits = merged_commits + picked
+            for b in picked_refs:
+                if b in remaining_branches:
+                    remaining_branches.remove(b)
+
+        post_merge_comment(pr_num, merged_commits)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
