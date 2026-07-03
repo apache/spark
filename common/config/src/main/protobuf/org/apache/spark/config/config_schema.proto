@@ -79,7 +79,8 @@ message ConfigEntry {
   // The default value as a string representation
   optional string default_value = 3;
 
-  // The default value to use during testing, if different from default_value
+  // The default value to use during testing, if different from default_value.
+  // Requires default_value to be set, since it only overrides the production default in tests.
   optional string test_default = 4;
 
   // [Required] The scope of the config (CLUSTER or SESSION).

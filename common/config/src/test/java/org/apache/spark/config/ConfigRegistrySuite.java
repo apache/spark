@@ -110,6 +110,14 @@ public class ConfigRegistrySuite {
             " for key '" + config.getKey() + "' in " + file);
       }
 
+      // A test_default only overrides default_value in test environments, so it requires a
+      // default_value to override. Otherwise the entry would have a default under test but none
+      // in production, diverging its shape between the two.
+      if (config.hasTestDefault() && !config.hasDefaultValue()) {
+        fail("test_default requires default_value" +
+            " for key '" + config.getKey() + "' in " + file);
+      }
+
       // Validate alphabetical ordering
       String key = config.getKey();
       if (previousKey != null && key.compareTo(previousKey) < 0) {
@@ -338,6 +346,16 @@ public class ConfigRegistrySuite {
     assertTrue(error.getMessage().contains("Missing required fields"));
     assertTrue(error.getMessage().contains("mutability"));
     assertTrue(error.getMessage().contains("spark.test.missing.mutability"));
+    assertTrue(error.getMessage().contains(file));
+  }
+
+  @Test
+  public void testValidationTestDefaultWithoutDefault() {
+    String file = "org/apache/spark/config/invalid_testdefault_without_default.textproto";
+    Throwable error = assertThrows(Throwable.class,
+        () -> validateConfigsInOneFile(file));
+    assertTrue(error.getMessage().contains("test_default requires default_value"));
+    assertTrue(error.getMessage().contains("spark.test.testdefault.without.default"));
     assertTrue(error.getMessage().contains(file));
   }
 

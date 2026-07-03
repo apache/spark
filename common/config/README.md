@@ -47,6 +47,8 @@ configs {
 **Notes**:
 - See `config_schema.proto` for field details and requirements
 - Configs within each file must be ordered alphabetically by key
+- A config that sets `test_default` must also set `default_value` (a test-only override needs a
+  production default to override); this is validated at load time
 - These constraints are validated by tests
 
 ### Step 3: Register the Config File (if new)

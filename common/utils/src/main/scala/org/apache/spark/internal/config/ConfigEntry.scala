@@ -316,7 +316,9 @@ private[spark] class ProtoBackedConfigEntry[T](
   override def defaultValueString: String =
     defaultValue.map(stringConverter).getOrElse(ConfigEntry.UNDEFINED)
 
-  override def defaultValue: Option[T] = {
+  // The default is derived from immutable proto fields (and the fixed testing flag), so convert it
+  // once and cache rather than re-parsing the string on every default-fallback read.
+  private lazy val cachedDefaultValue: Option[T] = {
     val defaultStrOpt = if (SparkEnvUtils.isTesting && protoEntry.hasTestDefault) {
       Some(protoEntry.getTestDefault)
     } else if (protoEntry.hasDefaultValue) {
@@ -326,6 +328,8 @@ private[spark] class ProtoBackedConfigEntry[T](
     }
     defaultStrOpt.map(valueConverter)
   }
+
+  override def defaultValue: Option[T] = cachedDefaultValue
 
   override def readFrom(reader: ConfigReader): T = {
     readString(reader).map(valueConverter).getOrElse(defaultValue.get)
@@ -401,7 +405,12 @@ private[spark] object ConfigEntry {
   def registerEntry(entry: ConfigEntry[_]): Unit = {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
     if (existing != null) {
-      // Only allow overwriting proto-backed configs (enhancement pattern)
+      // A key registered twice is normally a bug (typo or accidental duplicate), so we fail loudly.
+      // The one exception is the enhancement pattern: a proto-backed config is registered eagerly at
+      // object init, then a Scala entry built via `buildConfFromConfigFile` (e.g. to add
+      // `checkValue`) may intentionally replace it. We allow the overwrite only when the existing
+      // entry is proto-backed; this deliberately trades the duplicate-detection net for that key,
+      // so the Scala side must still reference a key that is genuinely defined in a .textproto file.
       require(existing.isInstanceOf[ProtoBackedBase],
         s"Config entry ${entry.key} already registered!")
       knownConfigs.put(entry.key, entry)
@@ -439,8 +448,16 @@ private[spark] object ConfigEntry {
 
   private def createProtoBackedConfigEntry(
       protoEntry: ProtoConfigEntry): ConfigEntry[_] = {
-    val hasDefault = protoEntry.hasDefaultValue ||
-      (SparkEnvUtils.isTesting && protoEntry.hasTestDefault)
+    // `test_default` only overrides `default_value` in test environments; a config that sets
+    // `test_default` without `default_value` would be a has-default entry under test but an
+    // optional entry in production, diverging the entry's shape (and `buildConfFromConfigFile`'s
+    // success/failure) between the two. Reject it here so the misconfiguration fails consistently.
+    require(!protoEntry.hasTestDefault || protoEntry.hasDefaultValue,
+      s"Config entry ${protoEntry.getKey} sets test_default without default_value; " +
+        "a config with a test default must also declare a default value.")
+    // With the invariant above, `test_default` implies `default_value`, so having a default is
+    // equivalent to having a `default_value` in every environment.
+    val hasDefault = protoEntry.hasDefaultValue
     protoEntry.getValueType match {
       case ValueType.VALUE_TYPE_BOOL =>
         createTypedEntry[Boolean](protoEntry, hasDefault, _.toBoolean, _.toString)
