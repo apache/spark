@@ -58,7 +58,7 @@ for gen_rst_dir in gen_rst_dirs:
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
-needs_sphinx = '1.2'
+needs_sphinx = '8.2'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -120,8 +120,8 @@ source_suffix = '.rst'
 # The encoding of source files.
 #source_encoding = 'utf-8-sig'
 
-# The master toctree document.
-master_doc = 'index'
+# The root toctree document.
+root_doc = 'index'
 
 # General information about the project.
 project = 'PySpark'
