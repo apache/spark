@@ -231,47 +231,91 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   // code that `GenerateUnsafeProjection` emits for the corresponding data type.
 
   public void writeNullable(int ordinal, boolean value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, byte value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, short value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, int value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, long value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, float value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, double value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, UTF8String value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, BinaryView value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, byte[] value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, VariantVal value, boolean isNull) {
-    if (isNull) { setNullAt(ordinal); } else { write(ordinal, value); }
+    if (isNull) {
+      setNullAt(ordinal);
+    } else {
+      write(ordinal, value);
+    }
   }
 
   public void writeNullable(int ordinal, CalendarInterval value, boolean isNull) {
