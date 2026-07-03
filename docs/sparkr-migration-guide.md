@@ -26,6 +26,10 @@ Note that this migration guide describes the items specific to SparkR.
 Many items of SQL migration can be applied when migrating SparkR to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.html).
 
+## Upgrading from SparkR 4.0 to 4.3
+
+ - In Spark 4.1, `TimeType` support was added. But SparkR does not support `TimeType` and creating or collecting `TimeType` column would raise an error.
+
 ## Upgrading from SparkR 3.5 to 4.0
 
  - In Spark 4.0, SparkR is deprecated and will be removed in a future version.
