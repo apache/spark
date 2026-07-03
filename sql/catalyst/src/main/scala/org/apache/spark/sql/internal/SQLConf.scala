@@ -7000,6 +7000,7 @@ object SQLConf {
         "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
         "table names fails at parse time.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
