@@ -199,9 +199,7 @@ class TimeOpsTestsMixin:
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
         # Verify null handling in astype(str)
-        pser_with_null = pd.Series(
-            [datetime.time(10, 0, 0), None, datetime.time(14, 0, 0)]
-        )
+        pser_with_null = pd.Series([datetime.time(10, 0, 0), None, datetime.time(14, 0, 0)])
         psser_with_null = ps.from_pandas(pser_with_null)
         self.assert_eq(pser_with_null.astype(str), psser_with_null.astype(str))
 
