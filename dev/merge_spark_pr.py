@@ -450,7 +450,7 @@ def post_merge_comment(pr_num, merged_commits):
         "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
         for ref, commit_hash in merged_commits
     ]
-    body = "**Merge summary** (posted by `merge_spark_pr.py`):\n" + "\n".join(lines)
+    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
     print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
     if not GITHUB_OAUTH_KEY:
         print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
@@ -560,7 +560,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name)[:8]
+    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
@@ -594,7 +594,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
+    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
@@ -1562,24 +1562,28 @@ def main():
     # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
     remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-        default = remaining_branches[0] if remaining_branches else branch_names[0]
-        picked = cherry_pick(
-            pr_num,
-            merge_hash,
-            default,
-            branch_names,
-            target_ref,
-            already_picked=tuple(merged_refs),
-        )
-        picked_refs = [ref for ref, _ in picked]
-        merged_refs = merged_refs + picked_refs
-        merged_commits = merged_commits + picked
-        for b in picked_refs:
-            if b in remaining_branches:
-                remaining_branches.remove(b)
-
-    post_merge_comment(pr_num, merged_commits)
+    # Always record the merge summary for what actually landed, even if a later
+    # cherry-pick is aborted or cancelled: the merge into the target branch has
+    # already been pushed, so cancelling a backport must not drop that line.
+    try:
+        while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            picked = cherry_pick(
+                pr_num,
+                merge_hash,
+                default,
+                branch_names,
+                target_ref,
+                already_picked=tuple(merged_refs),
+            )
+            picked_refs = [ref for ref, _ in picked]
+            merged_refs = merged_refs + picked_refs
+            merged_commits = merged_commits + picked
+            for b in picked_refs:
+                if b in remaining_branches:
+                    remaining_branches.remove(b)
+    finally:
+        post_merge_comment(pr_num, merged_commits)
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     continue_maybe("Would you like to update an associated JIRA?")

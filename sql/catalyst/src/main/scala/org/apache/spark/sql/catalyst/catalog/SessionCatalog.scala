@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
+import org.apache.spark.sql.catalyst.catalog.SQLFunction.{padArgumentsWithDefaults, parseDefault}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
@@ -1933,16 +1933,7 @@ class SessionCatalog(
         // function name as a qualifier. E.G.:
         // `create function foo(a int) returns int return foo.a`
         val qualifier = Seq(funcName)
-        val paddedInput = input ++
-          param.takeRight(paramSize - input.size).map { p =>
-            val defaultExpr = p.getDefault()
-            if (defaultExpr.isDefined) {
-              Cast(parseDefault(defaultExpr.get, parser), p.dataType)
-            } else {
-              throw QueryCompilationErrors.wrongNumArgsError(
-                name, paramSize.toString, input.size)
-            }
-          }
+        val paddedInput = padArgumentsWithDefaults(input, param, name, parser)
 
         val funcInputMetadata = new MetadataBuilder()
           .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)

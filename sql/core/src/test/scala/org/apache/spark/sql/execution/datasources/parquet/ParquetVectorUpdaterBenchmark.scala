@@ -45,7 +45,7 @@ import org.apache.spark.sql.types._
  *      (Boolean, Byte, Short, Integer, Long, Float, Double, Binary).
  *   B. Type-converting Updaters -- per-row read+convert+write loops.
  *      `IntegerToLong`, `IntegerToDouble`, `FloatToDouble`, `DateToTimestampNTZ`,
- *      `DowncastLong`, `LongAsNanos`.
+ *      `DowncastLong`, `TimeVectorUpdater`.
  *   C. Rebase Updaters -- date/timestamp legacy-calendar rebase variants.
  *      `IntegerWithRebase` (DATE), `LongWithRebase` (TIMESTAMP_MICROS),
  *      `LongAsMicros`, `DateToTimestampNTZWithRebase`, `LongAsMicrosRebase`.
@@ -264,7 +264,7 @@ object ParquetVectorUpdaterBenchmark extends BenchmarkBase {
       TimestampNTZType,
       descriptor(PrimitiveTypeName.INT32, LogicalTypeAnnotation.dateType()),
       longVec, intBytes)
-    addReadValuesCase(benchmark, "LongAsNanosUpdater (TimeType)",
+    addReadValuesCase(benchmark, "TimeVectorUpdater (TimeType)",
       TimeType(),
       descriptor(PrimitiveTypeName.INT64,
         LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MICROS)),
