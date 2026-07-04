@@ -911,6 +911,69 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57821: date_trunc on nanosecond timestamps") {
+    withDefaultTimeZone(UTC) {
+      Seq(7, 8, 9).foreach { p =>
+        // Full 9-digit fraction floored to precision p by the carrier builders.
+        val ntz = DateTimeUtils.localDateTimeToTimestampNanos(
+          LocalDateTime.parse("2015-07-22T05:30:06.123456789"), precision = p)
+        val ltz = DateTimeUtils.instantToTimestampNanos(
+          Instant.parse("2015-07-22T05:30:06.123456789Z"), precision = p)
+
+        def ntzExpected(s: String): TimestampNanosVal =
+          DateTimeUtils.localDateTimeToTimestampNanos(LocalDateTime.parse(s), precision = p)
+        def ltzExpected(s: String): TimestampNanosVal =
+          DateTimeUtils.instantToTimestampNanos(Instant.parse(s), precision = p)
+
+        // (fmt, NTZ-expected-localdatetime, LTZ-expected-instant). Every unit zeroes the
+        // whole fraction (incl. nanosWithinMicro); MICROSECOND keeps epochMicros only.
+        val cases = Seq(
+          ("YEAR",        "2015-01-01T00:00:00",        "2015-01-01T00:00:00Z"),
+          ("QUARTER",     "2015-07-01T00:00:00",        "2015-07-01T00:00:00Z"),
+          ("MONTH",       "2015-07-01T00:00:00",        "2015-07-01T00:00:00Z"),
+          ("WEEK",        "2015-07-20T00:00:00",        "2015-07-20T00:00:00Z"),
+          ("DAY",         "2015-07-22T00:00:00",        "2015-07-22T00:00:00Z"),
+          ("HOUR",        "2015-07-22T05:00:00",        "2015-07-22T05:00:00Z"),
+          ("MINUTE",      "2015-07-22T05:30:00",        "2015-07-22T05:30:00Z"),
+          ("SECOND",      "2015-07-22T05:30:06",        "2015-07-22T05:30:06Z"),
+          ("MILLISECOND", "2015-07-22T05:30:06.123",    "2015-07-22T05:30:06.123Z"),
+          ("MICROSECOND", "2015-07-22T05:30:06.123456", "2015-07-22T05:30:06.123456Z"))
+
+        cases.foreach { case (fmt, ntzExp, ltzExp) =>
+          checkEvaluation(
+            TruncTimestamp(Literal.create(fmt, StringType),
+              Literal.create(ntz, TimestampNTZNanosType(p)), UTC_OPT),
+            ntzExpected(ntzExp))
+          checkEvaluation(
+            TruncTimestamp(Literal.create(fmt, StringType),
+              Literal.create(ltz, TimestampLTZNanosType(p)), UTC_OPT),
+            ltzExpected(ltzExp))
+          // nanosWithinMicro is always zeroed.
+          assert(ntzExpected(ntzExp).nanosWithinMicro == 0)
+        }
+
+        // NTZ stays NTZ, LTZ stays LTZ.
+        assert(TruncTimestamp(Literal("DAY"), Literal.create(ntz, TimestampNTZNanosType(p)),
+          UTC_OPT).dataType == TimestampNTZNanosType(p))
+        assert(TruncTimestamp(Literal("DAY"), Literal.create(ltz, TimestampLTZNanosType(p)),
+          UTC_OPT).dataType == TimestampLTZNanosType(p))
+
+        // Unsupported / null format => null.
+        checkEvaluation(
+          TruncTimestamp(Literal.create("INVALID", StringType),
+            Literal.create(ntz, TimestampNTZNanosType(p)), UTC_OPT), null)
+
+        // eval / codegen parity.
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (fmt: Expression, ts: Expression) => TruncTimestamp(fmt, ts, UTC_OPT),
+          StringType, TimestampNTZNanosType(p))
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (fmt: Expression, ts: Expression) => TruncTimestamp(fmt, ts, UTC_OPT),
+          StringType, TimestampLTZNanosType(p))
+      }
+    }
+  }
+
   test("unsupported fmt fields for trunc/date_trunc results null") {
     Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { field =>
       testTruncDate(Date.valueOf("2000-03-08"), field, null)
