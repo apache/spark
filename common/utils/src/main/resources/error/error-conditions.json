@@ -8402,6 +8402,36 @@
           "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
+      "PIPELINE_DATASET_BUCKETING" : {
+        "message" : [
+          "Bucketing in a CREATE <pipelineDatasetType> statement. Remove the bucket specification from the statement."
+        ]
+      },
+      "PIPELINE_DATASET_COLUMN_CONSTRAINTS" : {
+        "message" : [
+          "Column constraints in a CREATE <pipelineDatasetType> statement. Remove the CHECK, UNIQUE, PRIMARY KEY and FOREIGN KEY constraints from the statement."
+        ]
+      },
+      "PIPELINE_DATASET_HIVE_SERDE" : {
+        "message" : [
+          "Hive SerDe format options in a CREATE <pipelineDatasetType> statement."
+        ]
+      },
+      "PIPELINE_DATASET_LOCATION" : {
+        "message" : [
+          "The LOCATION clause in a CREATE <pipelineDatasetType> statement. The storage location for a pipeline dataset is managed by the pipeline itself."
+        ]
+      },
+      "PIPELINE_DATASET_OPTIONS" : {
+        "message" : [
+          "The OPTIONS clause in a CREATE <pipelineDatasetType> statement. Remove the OPTIONS list from the statement."
+        ]
+      },
+      "PIPELINE_DATASET_STORED_AS" : {
+        "message" : [
+          "The STORED AS clause in a CREATE <pipelineDatasetType> statement. Use the Data Source based USING clause instead."
+        ]
+      },
       "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
         "message" : [
           "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."

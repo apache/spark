@@ -1590,9 +1590,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse((Nil, Nil))
 
     if (colConstraints.nonEmpty) {
-      throw operationNotAllowed("Pipeline datasets do not currently support column constraints. " +
-        "Please remove any CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
-        "dataset.", ctx)
+      throw QueryParsingErrors.pipelineDatasetColumnConstraintsError(syntaxTypeErrorStr, ctx)
     }
 
     val (partTransforms, partCols, bucketSpec,
@@ -1607,25 +1605,18 @@ class SparkSqlAstBuilder extends AstBuilder {
     // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
     // are not set.
     if (bucketSpec.isDefined) {
-      throw operationNotAllowed(s"Bucketing is not supported for CREATE $syntaxTypeErrorStr " +
-        "statements. Please remove any bucket spec specified in the statement.", ctx)
+      throw QueryParsingErrors.pipelineDatasetBucketingError(syntaxTypeErrorStr, ctx)
     }
     if (options.options.nonEmpty) {
-      throw operationNotAllowed(s"Options are not supported for CREATE $syntaxTypeErrorStr " +
-        "statements. Please remove any OPTIONS lists specified in the statement.", ctx)
+      throw QueryParsingErrors.pipelineDatasetOptionsError(syntaxTypeErrorStr, ctx)
     }
     serdeInfoOpt.map(serdeInfo => if (serdeInfo.storedAs.nonEmpty) {
-      throw operationNotAllowed(s"The STORED AS syntax is not supported for CREATE " +
-        s"$syntaxTypeErrorStr statements. Consider using the Data Source based USING clause "
-        + "instead.", ctx)
+      throw QueryParsingErrors.pipelineDatasetStoredAsError(syntaxTypeErrorStr, ctx)
     } else {
-      throw operationNotAllowed(s"Hive SerDe format options are not supported for CREATE " +
-        s"$syntaxTypeErrorStr statements.", ctx)
+      throw QueryParsingErrors.pipelineDatasetHiveSerdeError(syntaxTypeErrorStr, ctx)
     })
     if (location.nonEmpty) {
-      throw operationNotAllowed(s"Specifying location is not supported for CREATE " +
-        s"$syntaxTypeErrorStr statements. The storage location for a pipeline dataset is " +
-        "managed by the pipeline itself.", ctx)
+      throw QueryParsingErrors.pipelineDatasetLocationError(syntaxTypeErrorStr, ctx)
     }
 
     val spec = TableSpec(

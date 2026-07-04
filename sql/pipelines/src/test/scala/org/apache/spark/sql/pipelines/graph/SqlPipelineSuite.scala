@@ -397,7 +397,14 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       )
     }
 
-    assert(ex.getMessage.contains("Specifying location is not supported"))
+    checkError(
+      exception = ex,
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_LOCATION",
+      parameters = Map("pipelineDatasetType" -> "STREAMING TABLE"),
+      queryContext = ex.getQueryContext.map { c =>
+        ExpectedContext(c.objectType(), c.objectName(), c.startIndex(), c.stopIndex(), c.fragment())
+      }
+    )
   }
 
   test("Tables living in arbitrary schemas can be read from pipeline") {

@@ -94,10 +94,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> ("Specifying location is not supported for " +
-        s"CREATE $datasetSqlSyntax statements. The storage location for a pipeline dataset is " +
-        "managed by the pipeline itself.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_LOCATION",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }
@@ -108,10 +106,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> ("Pipeline datasets do not currently support column " +
-        "constraints. Please remove any CHECK, UNIQUE, PK, and FK constraints specified on the " +
-        "pipeline dataset.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_COLUMN_CONSTRAINTS",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }
@@ -134,10 +130,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> ("The STORED AS syntax is not supported for CREATE " +
-        s"$datasetSqlSyntax statements. Consider using the Data Source based USING clause " +
-        "instead.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_STORED_AS",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }
@@ -153,9 +147,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> ("Hive SerDe format options are not supported for CREATE " +
-        s"$datasetSqlSyntax statements.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_HIVE_SERDE",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }
@@ -202,9 +195,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> (s"Bucketing is not supported for CREATE $datasetSqlSyntax " +
-        "statements. Please remove any bucket spec specified in the statement.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_BUCKETING",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }
@@ -217,9 +209,8 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     }
     checkError(
       exception = ex,
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> (s"Options are not supported for CREATE $datasetSqlSyntax " +
-        "statements. Please remove any OPTIONS lists specified in the statement.")),
+      condition = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_OPTIONS",
+      parameters = Map("pipelineDatasetType" -> datasetSqlSyntax),
       queryContext = ex.getQueryContext.map(toExpectedContext)
     )
   }

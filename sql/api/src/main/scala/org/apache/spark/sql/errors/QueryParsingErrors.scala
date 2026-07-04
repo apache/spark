@@ -575,6 +575,60 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def pipelineDatasetBucketingError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_BUCKETING",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
+  def pipelineDatasetColumnConstraintsError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_COLUMN_CONSTRAINTS",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
+  def pipelineDatasetHiveSerdeError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_HIVE_SERDE",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
+  def pipelineDatasetLocationError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_LOCATION",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
+  def pipelineDatasetOptionsError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_OPTIONS",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
+  def pipelineDatasetStoredAsError(
+      pipelineDatasetType: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPELINE_DATASET_STORED_AS",
+      messageParameters = Map("pipelineDatasetType" -> pipelineDatasetType),
+      ctx)
+  }
+
   def tableSampleSystemRepeatableError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
