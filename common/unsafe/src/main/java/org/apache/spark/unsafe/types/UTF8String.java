@@ -21,12 +21,13 @@ import javax.annotation.Nonnull;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -1662,15 +1663,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String[] splitSQL(UTF8String delimiter, int limit) {
     // if delimiter is empty string, skip the regex based splitting directly as regex
     // treats empty string as matching anything, thus use the input directly.
-    if (delimiter.numBytes() == 0) {
+    if (delimiter.numBytes == 0) {
       return new UTF8String[]{this};
-    } else {
-      // we do not treat delimiter as a regex but consider the whole string of delimiter
-      // as the separator to split string. Java String's split, however, only accept
-      // regex as the pattern to split, thus we can quote the delimiter to escape special
-      // characters in the string.
-      return split(Pattern.quote(delimiter.toString()), limit);
     }
+    List<UTF8String> splits = new ArrayList<>();
+    int start = 0;
+    while (limit <= 0 || splits.size() < limit - 1) {
+      int match = find(delimiter, start);
+      if (match < 0) {
+        break;
+      }
+      splits.add(copyUTF8String(start, match - 1));
+      start = match + delimiter.numBytes;
+    }
+    splits.add(copyUTF8String(start, numBytes - 1));
+    return splits.toArray(new UTF8String[0]);
   }
 
   private UTF8String[] split(String delimiter, int limit) {
