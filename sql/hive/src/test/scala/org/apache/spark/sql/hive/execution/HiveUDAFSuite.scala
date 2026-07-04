@@ -100,30 +100,34 @@ class HiveUDAFSuite extends QueryTest
   }
 
   test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
-    withTempView("v") {
-      spark.range(100).createTempView("v")
-      val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
+    // Disable `RemoveRedundantAggregates` so this test can observe the partial+final aggregate
+    // structure and exercise both aggregation buffers of the Hive UDAF.
+    withSQLConf(SQLConf.REMOVE_REDUNDANT_AGGREGATES_ENABLED.key -> "false") {
+      withTempView("v") {
+        spark.range(100).createTempView("v")
+        val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
 
-      val aggs = collect(df.queryExecution.executedPlan) {
-        case agg: ObjectHashAggregateExec => agg
-      }
+        val aggs = collect(df.queryExecution.executedPlan) {
+          case agg: ObjectHashAggregateExec => agg
+        }
 
-      // There should be two aggregate operators, one for partial aggregation, and the other for
-      // global aggregation.
-      assert(aggs.length == 2)
+        // There should be two aggregate operators, one for partial aggregation, and the other for
+        // global aggregation.
+        assert(aggs.length == 2)
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
-      }
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
 
-      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
-        checkAnswer(df, Seq(
-          Row(0, Row(50, 0)),
-          Row(1, Row(50, 0))
-        ))
+        withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+          checkAnswer(df, Seq(
+            Row(0, Row(50, 0)),
+            Row(1, Row(50, 0))
+          ))
+        }
       }
     }
   }
