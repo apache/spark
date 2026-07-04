@@ -406,11 +406,12 @@ private[spark] object ConfigEntry {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
     if (existing != null) {
       // A key registered twice is normally a bug (typo or accidental duplicate), so we fail loudly.
-      // The one exception is the enhancement pattern: a proto-backed config is registered eagerly at
-      // object init, then a Scala entry built via `buildConfFromConfigFile` (e.g. to add
+      // The one exception is the enhancement pattern: a proto-backed config is registered eagerly
+      // at object init, then a Scala entry built via `buildConfFromConfigFile` (e.g. to add
       // `checkValue`) may intentionally replace it. We allow the overwrite only when the existing
       // entry is proto-backed; this deliberately trades the duplicate-detection net for that key,
-      // so the Scala side must still reference a key that is genuinely defined in a .textproto file.
+      // so the Scala side must still reference a key that is genuinely defined in a .textproto
+      // file.
       require(existing.isInstanceOf[ProtoBackedBase],
         s"Config entry ${entry.key} already registered!")
       knownConfigs.put(entry.key, entry)
