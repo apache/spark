@@ -33,6 +33,7 @@ import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -1570,6 +1571,60 @@ class MetastoreDataSourcesSuite extends QueryTest
           StructField("c12", MapType(IntegerType, DayTimeIntervalType(DAY))),
           StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)),
           StructField("c14", TimestampNTZType))))
+    }
+  }
+
+  test("SPARK-57831: nanosecond timestamp columns are stored in Spark-specific format " +
+    "(not Hive compatible)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTable("t") {
+        val logAppender = new LogAppender(
+          "Check that nanosecond timestamp types are reported as Hive incompatible")
+        logAppender.setThreshold(Level.WARN)
+        withLogAppender(logAppender) {
+          sql(
+            """
+              |CREATE TABLE t(
+              |  a TIMESTAMP_NTZ(9),
+              |  b TIMESTAMP_LTZ(9),
+              |  c TIMESTAMP_NTZ(7),
+              |  d TIMESTAMP_LTZ(8)
+              |) USING Parquet""".stripMargin)
+        }
+        // (a) The WARN message lists all four nanos types as Hive incompatible. Their
+        // simpleString is the parameterized typeName (e.g. "timestamp_ntz(9)").
+        val actualMessages = logAppender.loggingEvents
+          .map(_.getMessage.getFormattedMessage)
+          .filter(_.contains("incompatible"))
+        assert(actualMessages.exists(m =>
+          m.contains("timestamp_ntz(9)") && m.contains("timestamp_ltz(9)") &&
+            m.contains("timestamp_ntz(7)") && m.contains("timestamp_ltz(8)")))
+        // (b) Because the types are Hive incompatible, the HMS FieldSchema is the dummy
+        // array<string> and the real schema is persisted in table properties.
+        assert(hiveClient.getTable("default", "t").schema
+          .forall(_.dataType == ArrayType(StringType)))
+        // (c) The reloaded logical schema round-trips back to the real nanos types.
+        assert(sql("SELECT * FROM t").schema ===
+          StructType(Seq(
+            StructField("a", TimestampNTZNanosType(9)),
+            StructField("b", TimestampLTZNanosType(9)),
+            StructField("c", TimestampNTZNanosType(7)),
+            StructField("d", TimestampLTZNanosType(8)))))
+      }
+    }
+  }
+
+  // Note: this is parser/serde round-trip coverage for the nanos type strings; it passes
+  // with or without the isHiveCompatibleDataType change and does not by itself guard the
+  // regression. The load-bearing test is the "stored in Spark-specific format" case above.
+  test("SPARK-57831: nanosecond timestamp FieldSchema round-trips via to/fromHiveColumn") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      for (p <- 7 to 9; dt <- Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))) {
+        val field = StructField("c", dt, nullable = true)
+        val hiveCol = HiveClientImpl.toHiveColumn(field)
+        val back = HiveClientImpl.fromHiveColumn(hiveCol)
+        assert(back.dataType === dt)
+      }
     }
   }
 
