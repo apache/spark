@@ -2631,15 +2631,40 @@ case class ParseToDate(
 
   override def children: Seq[Expression] = left +: format.toSeq
 
+  private def inputTypeForDate: AbstractDataType = {
+    TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      DateType,
+      TimestampType,
+      TimestampNTZType)
+  }
+
   override def inputTypes: Seq[AbstractDataType] = {
     // Note: ideally this function should only take string input, but we allow more types here to
     // be backward compatible.
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true),
-        DateType,
-        TimestampType,
-        TimestampNTZType) +:
-      format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
+    inputTypeForDate +: format.map(_ =>
+      StringTypeWithCollation(supportsTrimCollation = true)).toSeq
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    def timeInput(expression: Expression): Option[Expression] = expression match {
+      // Reject analyzer-inserted casts from TIME, while honoring explicit user-written casts.
+      case cast @ Cast(child, _, _, _)
+          if child.dataType.isInstanceOf[TimeType] && cast.origin == origin =>
+        Some(child)
+      case other if other.dataType.isInstanceOf[TimeType] => Some(other)
+      case _ => None
+    }
+
+    timeInput(left).map { input =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(inputTypeForDate),
+          "inputSql" -> toSQLExpr(input),
+          "inputType" -> toSQLType(input.dataType)))
+    }.getOrElse(super.checkInputDataTypes())
   }
 
   override protected def withNewChildrenInternal(
