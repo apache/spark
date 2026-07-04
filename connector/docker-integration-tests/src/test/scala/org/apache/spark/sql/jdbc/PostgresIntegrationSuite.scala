@@ -724,4 +724,71 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
       checkAnswer(result.orderBy("id"), df.orderBy("id"))
     }
   }
+
+  test("SPARK-57555: Write and read time[] array column round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val schema = StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("times", ArrayType(TimeType(TimeType.DEFAULT_PRECISION)))))
+      val data = Seq(
+        Row(1, Seq(
+          java.time.LocalTime.of(8, 0, 0),
+          java.time.LocalTime.of(12, 30, 0),
+          java.time.LocalTime.of(17, 45, 30, 123456000))),
+        Row(2, Seq(
+          java.time.LocalTime.of(0, 0, 0),
+          java.time.LocalTime.of(23, 59, 59, 999999000))))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_array_roundtrip", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_array_roundtrip", new Properties)
+      assert(result.schema("times").dataType ==
+        ArrayType(TimeType(TimeType.DEFAULT_PRECISION), true))
+      checkAnswer(result.orderBy("id"), df.orderBy("id"))
+    }
+  }
+
+  test("SPARK-57555: Legacy mode reads time/time[] as TimestampType") {
+    withSQLConf(
+        SQLConf.TIME_TYPE_ENABLED.key -> "true",
+        SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      // Scalar time column
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val timeField = df.schema("c36")
+      assert(timeField.dataType == TimestampType || timeField.dataType == TimestampNTZType,
+        s"Expected timestamp type in legacy mode, got ${timeField.dataType}")
+
+      // time[] array column
+      val arrDf = spark.read.jdbc(jdbcUrl, "time_array_table", new Properties)
+      val arrField = arrDf.schema("times")
+      arrField.dataType match {
+        case ArrayType(elementType, _) =>
+          assert(elementType == TimestampType || elementType == TimestampNTZType,
+            s"Expected timestamp element type in legacy mode, got $elementType")
+        case other => fail(s"Expected ArrayType, got $other")
+      }
+    }
+  }
+
+  test("SPARK-57555: Nanosecond TimeType(9) write falls back to bare TIME, reads as TimeType(6)") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // Write a TimeType(9) column - should emit bare TIME (not invalid TIME(9))
+      val schema = StructType(Seq(StructField("t", TimeType(9))))
+      val data = Seq(
+        Row(java.time.LocalTime.of(10, 30, 45, 123456789)),
+        Row(java.time.LocalTime.of(22, 15, 0, 987654321))
+      )
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+
+      // Read back - PostgreSQL TIME max precision is 6, so reads as TimeType(6)
+      val result = spark.read.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+      assert(result.schema("t").dataType == TimeType(6))
+
+      // Values are rounded to microseconds by PostgreSQL (not truncated)
+      val collected = result.collect().map(_.getAs[java.time.LocalTime](0)).sorted
+      assert(collected(0) == java.time.LocalTime.of(10, 30, 45, 123457000))
+      assert(collected(1) == java.time.LocalTime.of(22, 15, 0, 987654000))
+    }
+  }
 }
