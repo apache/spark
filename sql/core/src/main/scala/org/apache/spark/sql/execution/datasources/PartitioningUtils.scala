@@ -562,7 +562,7 @@ object PartitioningUtils extends SQLConfHelper {
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
     case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
     // Timestamp types
-    case dt if AnyTimestampType.acceptsType(dt) =>
+    case dt if AnyTimestampType.acceptsType(dt) || AnyTimestampNanoType.acceptsType(dt) =>
       Try {
         Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId)).eval()
       }.getOrElse {
