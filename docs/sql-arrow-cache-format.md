@@ -243,7 +243,7 @@ You can monitor cache block sizes through the Storage tab in the Spark UI.
 ## Limitations and Considerations
 
 1. **Static Configuration**: Cache serializer must be set before SparkSession creation
-2. **Memory Overhead**: Arrow format has small per-batch overhead
+2. **Memory Overhead**: Arrow format has a small per-batch overhead
 3. **Compatibility**: Cannot mix cache formats - recache needed when switching
 4. **Compression Trade-off**: Higher compression = lower memory but slower reads
 

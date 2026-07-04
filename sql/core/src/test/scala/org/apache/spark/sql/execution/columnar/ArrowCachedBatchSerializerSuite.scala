@@ -26,10 +26,12 @@ import org.apache.arrow.vector.{
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
@@ -37,7 +39,7 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.types.variant.VariantBuilder
-import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, VariantVal}
 import org.apache.spark.util.Utils
 
 /** UDT whose sqlType is Arrow-supported (ArrayType(DoubleType)). */
@@ -1591,6 +1593,50 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("calculateMinMaxTimestampNanos upper bound is never below the actual max value written " +
+      "through the public write path") {
+    // Guard test for a fragility MaxGekk flagged on PR #56334: calculateMinMaxTimestampNanos
+    // floor-truncates its bounds to the column's declared precision (epochNanosToTimestampNanos),
+    // while ArrowColumnVector's read path (decodeEpochNanos) does not truncate. Floor-truncating
+    // the *upper* bound down would be unsound for pruning if a sub-precision value ever reached
+    // the vector. That can't happen today only because every write path that populates a
+    // precision-p nanos-timestamp column already truncates to p before the value reaches the
+    // vector (DateTimeUtils.truncateTimestampNanosToPrecision / makeTimestampNTZNanos), so this
+    // stat's own truncation is a no-op on values it actually sees. This test drives that
+    // guarantee through the public write path (rather than poking a raw untruncated value into
+    // the vector directly, which -- by design -- the current write path can never produce) so a
+    // future write path that stopped pre-truncating would be caught by the upper bound no longer
+    // matching the max value round-tripped back out.
+    val schema = StructType(Seq(StructField("ts", TimestampNTZNanosType(7))))
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, "UTC", false, false)
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+    val arrowWriter = ArrowWriter.create(root)
+    try {
+      // nanosWithinMicro=789 is not a multiple of 100ns, so precision=7 must truncate it away.
+      // truncateTimestampNanosToPrecision is the exact function real write paths call before a
+      // value reaches the vector (see e.g. CAST(... AS TIMESTAMP_NTZ(p))).
+      val untruncated = TimestampNanosVal.fromParts(1577836800123456L, 789.toShort)
+      val value = DateTimeUtils.truncateTimestampNanosToPrecision(untruncated, 7)
+      val row = new GenericInternalRow(Array[Any](value))
+      arrowWriter.write(row)
+      arrowWriter.finish()
+
+      val vector = root.getVector("ts").asInstanceOf[org.apache.arrow.vector.FieldVector]
+      val (_, upper) = ArrowCachedBatchSerializer.calculateMinMaxTimestampNanos(
+        vector, 1, precision = 7)
+      val upperEpochNanos = DateTimeUtils.timestampNanosToEpochNanos(
+        upper.asInstanceOf[TimestampNanosVal])
+      val actualEpochNanos = DateTimeUtils.timestampNanosToEpochNanos(value)
+
+      assert(upperEpochNanos == actualEpochNanos,
+        "the upper bound must match the actual max value written through the public write " +
+          s"path, or pruning could wrongly skip it: got upper=$upperEpochNanos, " +
+          s"actual=$actualEpochNanos")
+    } finally {
+      root.close()
+    }
+  }
+
   test("collectStatistics produces correct min/max bounds for StringType") {
     // StringType in Arrow is stored as VarCharVector (raw UTF-8 bytes). This test covers the
     // two distinct code paths in calculateMinMaxString: binary (UTF8_BINARY) and collation-aware
@@ -2123,8 +2169,10 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     val overflow = new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L)
     val overflowDf = singlePartDf(Seq(overflow), CalendarIntervalType).cache()
     try {
-      val e = intercept[Exception](overflowDf.count())
-      assert(Utils.exceptionString(e).contains("Arrow cache cannot represent a CalendarInterval"),
+      val e = intercept[SparkArithmeticException](overflowDf.count())
+      assert(e.getCondition == "DATETIME_OVERFLOW",
+        s"expected DATETIME_OVERFLOW, got ${e.getCondition}")
+      assert(Utils.exceptionString(e).contains("CalendarInterval"),
         s"expected a clear CalendarInterval overflow message, got: ${Utils.exceptionString(e)}")
     } finally {
       overflowDf.unpersist()
@@ -2136,8 +2184,10 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     val nestedDf =
       singlePartDf(Seq(Seq(overflow)), ArrayType(CalendarIntervalType)).cache()
     try {
-      val e = intercept[Exception](nestedDf.count())
-      assert(Utils.exceptionString(e).contains("Arrow cache cannot represent a CalendarInterval"),
+      val e = intercept[SparkArithmeticException](nestedDf.count())
+      assert(e.getCondition == "DATETIME_OVERFLOW",
+        s"expected DATETIME_OVERFLOW, got ${e.getCondition}")
+      assert(Utils.exceptionString(e).contains("CalendarInterval"),
         s"expected the clear diagnostic for a nested interval, got: ${Utils.exceptionString(e)}")
     } finally {
       nestedDf.unpersist()

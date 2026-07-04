@@ -178,6 +178,14 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
       messageParameters = Map("typeName" -> toSQLType(typeName)))
   }
 
+  def datetimeOverflowError(operation: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map("operation" -> operation),
+      context = Array.empty,
+      summary = "")
+  }
+
   def cannotFindEncoderForTypeError(typeName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "ENCODER_NOT_FOUND",

@@ -61,7 +61,11 @@ import org.apache.spark.util.Utils
  * Configuration options:
  *  - spark.sql.cache.serializer: Set to this class name to enable
  *  - spark.sql.execution.arrow.maxRecordsPerBatch: Max rows per cached batch
+ *  - spark.sql.execution.arrow.maxBytesPerBatch: Max bytes per cached batch
  *  - spark.sql.execution.arrow.compression.codec: Compression (none/zstd/lz4)
+ *  - spark.sql.execution.arrow.compression.zstd.level: zstd compression level
+ *  - spark.sql.execution.arrow.cache.prefetch.enabled: Enable background prefetch of the next
+ *    batch while the current one is being consumed
  *  - spark.sql.inMemoryColumnarStorage.enableVectorizedReader: Enable columnar output
  */
 class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
@@ -247,10 +251,15 @@ private object ArrowCachedBatchSerializer {
         block
       } catch {
         case e: ArithmeticException =>
-          throw SparkException.internalError(
-            "Arrow cache cannot represent a CalendarInterval whose microseconds exceed " +
-              "+/-(Long.MaxValue / 1000): Arrow stores intervals in nanoseconds and the " +
-              s"conversion overflows. Original error: ${e.getMessage}")
+          // Caching a CalendarInterval whose microseconds exceed Arrow's representable range is a
+          // user-facing limitation (the value cannot be losslessly converted), not an internal
+          // invariant violation, so use the same structured DATETIME_OVERFLOW condition the
+          // analogous nanos-timestamp write overflow uses (see
+          // QueryExecutionErrors.timestampNanosEpochNanosOverflowError).
+          throw ExecutionErrors.datetimeOverflowError(
+            "write a CalendarInterval to the Arrow cache: Arrow stores intervals in " +
+              "nanoseconds, so the microseconds component must fit in " +
+              s"+/-(Long.MaxValue / 1000). Original error: ${e.getMessage}")
       }
     }
   }
@@ -671,6 +680,18 @@ private object ArrowCachedBatchSerializer {
     // store epoch nanoseconds as a long; min/max over the longs matches TimestampNanosVal's
     // calendar order. Convert the bounds back to TimestampNanosVal since that is the stat schema's
     // bound type for these columns.
+    //
+    // Note epochNanosToTimestampNanos floor-truncates the sub-microsecond part to `precision`,
+    // while ArrowColumnVector's read path (decodeEpochNanos) does not truncate. Floor-truncating
+    // the *upper* bound down would be unsound for pruning if a value with sub-precision nanos ever
+    // reached this vector. That can't happen today: every write path that populates a
+    // precision-`p` nanos-timestamp column already truncates to `p` (see
+    // DateTimeUtils.truncateTimestampNanosToPrecision / makeTimestampNTZNanos), so the values
+    // this loop sees are always already at-or-below their column's precision and truncation here
+    // is a no-op. But that invariant lives entirely on the write side; if a future write path ever
+    // stopped truncating, this stat could silently under-report the upper bound. See
+    // ArrowCachedBatchSerializerSuite's "calculateMinMaxTimestampNanos upper bound is never below
+    // the actual max value written through the public write path" test for a regression guard.
     var min = Long.MaxValue
     var max = Long.MinValue
     var hasValue = false
@@ -1072,7 +1093,15 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       rowCount: Int,
       schema: Seq[Attribute],
       vectors: Seq[ColumnVector]): ArrowCachedBatch = {
-    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector
+    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector.
+    // This path deliberately does not run withIntervalOverflowTranslation (CalendarInterval) or
+    // any equivalent nanos-timestamp overflow guard: it reuses vectors that came from an
+    // upstream Arrow source (ArrowColumnVector.getValueVector), and those vectors already store
+    // int64 epoch-nanos/nanos-since-epoch values that were written by an ArrowWriter (or
+    // equivalent) that itself enforced the guard. There is no conversion here that can newly
+    // overflow. If a future caller could reach this path with vectors that were populated
+    // without going through the guarded write path, this comment's assumption would need
+    // revisiting.
     val arrowVectors = vectors.map(
       _.asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[
         org.apache.arrow.vector.FieldVector])
@@ -1093,8 +1122,12 @@ private class ColumnarBatchToArrowCachedBatchIterator(
         recordBatch.close()
       }
     } {
-      // Note: We don't close the root here because we don't own the vectors
-      // They are owned by the input ColumnarBatch
+      // Note: We don't close the root here because we don't own the vectors -- they are owned by
+      // the input ColumnarBatch, whose buffers the caller frees via batch.closeIfFreeable() after
+      // this method returns. That is not a use-after-free: serializeBatch/collectStatistics above
+      // already copy everything this method returns (arrowData is a materialized Array[Byte],
+      // stats are plain values) out of the vectors before this method returns, so nothing here
+      // still references the input's buffers once the caller frees them.
     }
   }
 
