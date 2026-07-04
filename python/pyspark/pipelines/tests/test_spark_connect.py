@@ -22,6 +22,9 @@ Tests that run Pipelines against a Spark Connect server.
 import unittest
 
 from pyspark import pipelines as dp
+from pyspark.errors import PySparkTypeError
+from pyspark.pipelines.output import Output
+from pyspark.pipelines.source_code_location import SourceCodeLocation
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
@@ -89,6 +92,20 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
         self.assertIn(
             "INVALID_FLOW_QUERY_TYPE.BATCH_RELATION_FOR_STREAMING_TABLE", str(context.exception)
         )
+
+    def test_register_output_unsupported_dataset_type(self):
+        registry = SparkConnectGraphElementRegistry(self.spark, "test_dataflow_graph_id")
+
+        unsupported_output = Output(
+            name="unsupported",
+            comment=None,
+            source_code_location=SourceCodeLocation(filename="test.py", line_number=1),
+        )
+        with self.assertRaises(PySparkTypeError) as context:
+            registry.register_output(unsupported_output)
+
+        self.assertEqual(context.exception.getCondition(), "UNSUPPORTED_PIPELINES_DATASET_TYPE")
+        self.assertEqual(context.exception.getMessageParameters(), {"dataset_type": "Output"})
 
 
 if __name__ == "__main__":
