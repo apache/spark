@@ -47,8 +47,9 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *   - Vectorized read. ORC's vectorized path (OrcAtomicColumnVector, a Java class) dispatches via
  *     boolean `instanceof` flags set in the constructor plus typed accessor methods
  *     (getTimestampNTZNanos/getTimestampLTZNanos), NOT via an `Ops(dt).map(_.x)` closure. It has
- *     no per-type extension seam analogous to Parquet's getVectorUpdater, so it stays inline. This
- *     mirrors ParquetTypeOps, whose vectorized-read hook was also added only later.
+ *     no per-type extension seam, so it stays inline. This mirrors Parquet, whose vectorized read
+ *     is likewise not routed through ParquetTypeOps (it dispatches on the Spark type inline in
+ *     ParquetVectorUpdaterFactory.getUpdater).
  *   - supportDataType. OrcFileFormat.supportDataType / OrcTable.supportsDataType already admit
  *     every `AtomicType` via `case _: AtomicType => true`, so framework types are supported with
  *     no per-type arm; no gate method is needed (unlike Parquet, whose default differs).
