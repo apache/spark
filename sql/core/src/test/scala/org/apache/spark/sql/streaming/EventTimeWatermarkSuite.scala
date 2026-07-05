@@ -1140,4 +1140,35 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       assertEventStats(min = 25, max = 25, avg = 25, wtrmark = 5)
     )
   }
+
+  test("SPARK-57830: nanos watermark eviction in Update mode") {
+    // Exercises the scalar watermarkLiteral eviction path (LessThanOrEqual over
+    // TimestampNanosVal ordering) which is NOT reached by Complete output mode.
+    // In Update mode, state rows whose key timestamp is at or below the watermark are evicted.
+    val inputData = MemoryStream[Long]
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", timestamp_nanos($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy($"eventTime")
+      .agg(count("*") as Symbol("count"))
+      .select($"count".as[Long])
+
+    testStream(aggWithWatermark, OutputMode.Update)(
+      // Add events at t=10s, t=11s, t=12s (nanos representation)
+      AddData(inputData, 10L * 1000000000L, 11L * 1000000000L, 12L * 1000000000L),
+      CheckNewAnswer(1L, 1L, 1L),
+      assertNumStateRows(3),
+      // Add event at t=25s => watermark advances to 25-10 = 15s
+      // State rows at t=10s,11s,12s are all <= watermark and get evicted.
+      AddData(inputData, 25L * 1000000000L),
+      CheckNewAnswer(1L),
+      assertNumStateRows(1), // only t=25s remains; t=10,11,12 evicted
+      assertNumRowsDroppedByWatermark(0),
+      // Add a late event at t=10s which is below watermark => dropped
+      AddData(inputData, 10L * 1000000000L),
+      CheckNewAnswer(),
+      assertNumStateRows(1),
+      assertNumRowsDroppedByWatermark(1)
+    )
+  }
 }
