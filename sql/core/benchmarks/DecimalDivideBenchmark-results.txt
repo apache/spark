@@ -3,21 +3,21 @@ Decimal division
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 decimal(7,2) / decimal(7,2):              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-a / b (ansi=false)                                 9214           9273          35          1.1         921.4       1.0X
-a / b (ansi=true)                                  9287           9306          19          1.1         928.7       1.0X
-a / 2 (ansi=false)                                 6273           6296          21          1.6         627.3       1.5X
-a / 2 (ansi=true)                                  6257           6262           4          1.6         625.7       1.5X
+a / b (ansi=false)                                 6874           6896          13          1.5         687.4       1.0X
+a / b (ansi=true)                                  6911           6933          23          1.4         691.1       1.0X
+a / 2 (ansi=false)                                 3857           3894          27          2.6         385.7       1.8X
+a / 2 (ansi=true)                                  3864           3873          12          2.6         386.4       1.8X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 decimal(38,18) / decimal(38,18):          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-a / b (ansi=false)                                15889          15898           9          0.6        1588.9       1.0X
-a / b (ansi=true)                                 15872          15896          18          0.6        1587.2       1.0X
-a / 2 (ansi=false)                                 9324           9341          13          1.1         932.4       1.7X
-a / 2 (ansi=true)                                  9307           9345          23          1.1         930.7       1.7X
+a / b (ansi=false)                                13331          13363          52          0.8        1333.1       1.0X
+a / b (ansi=true)                                 13363          13384          24          0.7        1336.3       1.0X
+a / 2 (ansi=false)                                 6863           6874          10          1.5         686.3       1.9X
+a / 2 (ansi=true)                                  6843           6863          15          1.5         684.3       1.9X
 
 
