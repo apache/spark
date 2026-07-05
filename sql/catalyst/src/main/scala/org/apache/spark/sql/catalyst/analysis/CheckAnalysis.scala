@@ -650,14 +650,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case etw: EventTimeWatermark =>
             etw.eventTime.dataType match {
-              // Window-struct: the "end" field may be micros LTZ (TimestampType) or
-              // nanosecond-precision (AnyTimestampNanoType). The nanos path is not yet
-              // reachable (TimeWindow rejects nanos inputs until SPARK-57829), but
-              // accepting it here prevents a spurious analysis failure once window-over-
-              // nanos is enabled.
-              case s: StructType if s.find(_.name == "end").exists(f =>
-                f.dataType == TimestampType ||
-                f.dataType.isInstanceOf[AnyTimestampNanoType]) =>
+              case s: StructType
+                if s.find(_.name == "end").map(_.dataType) == Some(TimestampType) =>
               case _: TimestampType =>
               case _: AnyTimestampNanoType =>
               case _ =>
