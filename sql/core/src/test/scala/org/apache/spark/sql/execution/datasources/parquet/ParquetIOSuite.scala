@@ -133,7 +133,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           val record = new SimpleGroup(schema)
           record.add(0, Binary.fromString(n))
           record.add(1, Binary.fromString(n + n + n))
-          record.add(2, Binary.fromConstantByteArray(Array.fill(16)(n.toByte)))
+          record.add(2, Binary.fromConstantByteArray(Array.fill(16)(n.head.toByte)))
           writer.write(record)
         }
         writer.close()
