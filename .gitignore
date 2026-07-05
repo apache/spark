@@ -101,6 +101,7 @@ unit-tests.log
 work/
 docs/.jekyll-metadata
 docs/.jekyll-cache
+.spark-docs-index/
 
 # For Hive
 TempStatsStore/

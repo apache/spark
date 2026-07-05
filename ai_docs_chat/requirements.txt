@@ -1,0 +1,4 @@
+beautifulsoup4>=4.12.0
+chromadb>=0.5.0
+requests>=2.31.0
+sentence-transformers>=3.0.0
