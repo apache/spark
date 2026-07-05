@@ -35,7 +35,7 @@ import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, Remot
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
 class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with Logging {
@@ -177,6 +177,31 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           q2.stop()
           spark.sql("DROP TABLE my_table")
         }
+      }
+    }
+  }
+
+  test("Streaming table API ignores user-specified schema") {
+    val tableName = "table_with_user_specified_schema"
+    val sinkName = "user_schema_ignored_sink"
+    withTable(tableName) {
+      spark.range(3).write.format("parquet").saveAsTable(tableName)
+
+      // The user-specified `a: Int` is ignored (with a client-side warning); the catalog
+      // table's `id: Long` is used and the query runs end-to-end.
+      val df = spark.readStream
+        .schema(new StructType().add("a", IntegerType))
+        .table(tableName)
+      assert(df.schema === new StructType().add("id", LongType, nullable = false))
+
+      val q = df.writeStream.format("memory").queryName(sinkName).start()
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkAnswer(spark.table(sinkName), Seq(Row(0L), Row(1L), Row(2L)))
+        }
+      } finally {
+        q.stop()
       }
     }
   }

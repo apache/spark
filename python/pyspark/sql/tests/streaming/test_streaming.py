@@ -441,6 +441,15 @@ class StreamingTestsMixin:
                 set([Row(value="aaa"), Row(value="bbb"), Row(value="ccc")]), set(result)
             )
 
+    def test_streaming_read_from_table_with_user_specified_schema(self):
+        with self.table("input_table"):
+            self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
+            # A user-specified schema is ignored by table() (with a warning); the catalog
+            # table's schema is used instead.
+            df = self.spark.readStream.schema("id long").table("input_table")
+            self.assertTrue(df.isStreaming)
+            self.assertEqual(df.schema, StructType([StructField("value", StringType(), True)]))
+
     def test_streaming_write_to_table(self):
         with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()

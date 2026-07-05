@@ -20,6 +20,7 @@ package org.apache.spark.sql.classic
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, NamedStreamingRelation, RelationChanges, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
@@ -39,7 +40,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 @Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession)
-  extends streaming.DataStreamReader {
+  extends streaming.DataStreamReader with Logging {
   /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
@@ -102,6 +103,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    if (userSpecifiedSchema.nonEmpty) {
+      logWarning("DataStreamReader.table() does not support a user-specified schema; the schema " +
+        "set via DataStreamReader.schema(...) is ignored. Remove the schema(...) call.")
+    }
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val unresolved = UnresolvedRelation(
       identifier,

@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.connect.proto.Read.DataSource
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.streaming
@@ -34,7 +35,8 @@ import org.apache.spark.sql.types.StructType
  */
 @Evolving
 final class DataStreamReader private[sql] (sparkSession: SparkSession)
-    extends streaming.DataStreamReader {
+    extends streaming.DataStreamReader
+    with Logging {
 
   private val sourceBuilder = DataSource.newBuilder()
 
@@ -102,6 +104,10 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    if (sourceBuilder.hasSchema) {
+      logWarning("DataStreamReader.table() does not support a user-specified schema; the schema " +
+        "set via DataStreamReader.schema(...) is ignored. Remove the schema(...) call.")
+    }
     sparkSession.newDataFrame { builder =>
       builder.getReadBuilder
         .setIsStreaming(true)

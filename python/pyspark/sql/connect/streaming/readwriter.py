@@ -18,6 +18,7 @@ import json
 import re
 import sys
 import pickle
+import warnings
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
@@ -452,6 +453,11 @@ class DataStreamReader(OptionUtils):
     xml.__doc__ = PySparkDataStreamReader.xml.__doc__
 
     def table(self, tableName: str) -> "DataFrame":
+        if self._schema:
+            warnings.warn(
+                "DataStreamReader.table() does not support a user-specified schema; the schema "
+                "set via DataStreamReader.schema(...) is ignored. Remove the schema(...) call."
+            )
         return self._df(Read(tableName, self._options, is_streaming=True))
 
     table.__doc__ = PySparkDataStreamReader.table.__doc__

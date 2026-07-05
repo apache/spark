@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -82,6 +82,23 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       spark.readStream.table("non_exist_table")
     }
     checkErrorTableNotFound(e, "`non_exist_table`")
+  }
+
+  test("read: user-specified schema is ignored by the table API") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).write.format("parquet").saveAsTable(tblName)
+      // The user-specified `a: Int` is ignored (with a warning); the catalog table's
+      // `id: Long` is used.
+      val df = spark.readStream
+        .schema(new StructType().add("a", IntegerType))
+        .table(tblName)
+      assert(df.schema === new StructType().add("id", LongType, nullable = false))
+      testStream(df)(
+        ProcessAllAvailable(),
+        CheckAnswer(Row(0), Row(1), Row(2))
+      )
+    }
   }
 
   test("read: stream table API with temp view") {
