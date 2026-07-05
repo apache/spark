@@ -6,10 +6,10 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 unsafe projection:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single long                                        1342           1342           0        200.0           5.0       1.0X
-single nullable long                               2380           2393          19        112.8           8.9       0.6X
-7 primitive types                                  7161           7163           3         37.5          26.7       0.2X
-7 nullable primitive types                        10670          10672           3         25.2          39.7       0.1X
+single long                                        1343           1344           2        199.9           5.0       1.0X
+single nullable long                               2380           2394          20        112.8           8.9       0.6X
+7 primitive types                                  7045           7046           1         38.1          26.2       0.2X
+7 nullable primitive types                        11060          11063           3         24.3          41.2       0.1X
 
 
 ================================================================================================
@@ -20,7 +20,7 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 single row with 400 boolean fields:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single row with 400 boolean fields                 6574           6577           4          0.6        1567.4       1.0X
+single row with 400 boolean fields                 6566           6575          12          0.6        1565.5       1.0X
 
 
 ================================================================================================
@@ -31,7 +31,7 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 single row with 400 byte fields:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single row with 400 byte fields                    6745           6745           1          0.6        1608.1       1.0X
+single row with 400 byte fields                    6539           6539           0          0.6        1559.0       1.0X
 
 
 ================================================================================================
@@ -42,7 +42,7 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 single row with 400 short fields:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single row with 400 short fields                   6817           6829          17          0.6        1625.2       1.0X
+single row with 400 short fields                   6445           6455          13          0.7        1536.7       1.0X
 
 
 ================================================================================================
@@ -53,7 +53,7 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 single row with 400 integer fields:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single row with 400 integer fields                 6646           6652           8          0.6        1584.6       1.0X
+single row with 400 integer fields                 6643           6644           1          0.6        1583.8       1.0X
 
 
 ================================================================================================
@@ -64,6 +64,6 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 single row with 400 float fields:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single row with 400 float fields                   6717           6730          19          0.6        1601.4       1.0X
+single row with 400 float fields                   6716           6721           6          0.6        1601.3       1.0X
 
 
