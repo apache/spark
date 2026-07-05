@@ -121,9 +121,8 @@ using [MkDocs](https://www.mkdocs.org/).
 
 To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
 * `SKIP_ERRORDOC=1`: Skip building the unified error documentation.
-* `SKIP_SPARK_BUILD=1`: Skip building Spark.
-    A working Spark build is required for the docs (except the error docs) to build correctly, so set this only if you know you've already built Spark.
-* `SKIP_API=1`: Skip building all the API docs.
+* `SKIP_SPARK_BUILD=1`: Skip building Spark. A working Spark build is required for the docs (except the error docs) to build correctly, so set this only if you know you've already built Spark.
+* `SKIP_API=1`: Skip building all the API docs. This is basically the same as setting all of the skip flags below.
 * `SKIP_SCALADOC=1`: Skip the Scala and Java API docs, which includes building the Unidoc.
 * `SKIP_UNIDOC=1`: Skip building the Unidoc.
 * `SKIP_PYTHONDOC=1`: Skip the Python API docs.
