@@ -197,27 +197,25 @@ private[ops] object TimestampNanosParquetOps {
  * No datetime rebase is applied (TIMESTAMP(NANOS) postdates the proleptic Gregorian switch).
  * No timezone conversion is applied at the storage level.
  *
- * Replaces the former `ParquetVectorUpdaterFactory.TimestampNanosUpdater`, now owned by the
- * type's ops and routed through the types framework's `getVectorUpdater` hook.
+ * Replaces the former `ParquetVectorUpdaterFactory` nanos updater, now owned by the type's ops
+ * ([[TimestampNanosParquetOps]]) and routed through the types framework's `getVectorUpdater`
+ * hook.
  */
 private[ops] class TimestampNanosVectorUpdater(precision: Int) extends ParquetVectorUpdater {
 
-  // Pre-computed truncation divisor for the nanosWithinMicro component.
-  // precision 7 -> divisor 100, precision 8 -> divisor 10, precision 9 -> divisor 1
-  private val nanosTruncationDivisor: Int = precision match {
-    case 7 => 100
-    case 8 => 10
-    case 9 => 1
-    case _ => throw new IllegalArgumentException(
-      s"Invalid nanosecond timestamp precision: $precision")
-  }
+  // Truncation uses the shared DateTimeUtils.truncateNanosWithinMicroToPrecision helper so the
+  // vectorized path stays in lock-step with the row-based reader (epochNanosToTimestampNanos).
+  // We decompose floorDiv/floorMod inline rather than calling epochNanosToTimestampNanos directly
+  // because that method returns a heap-allocated TimestampNanosVal per value, which would add
+  // GC pressure on the hot vectorized decode loop. The truncation itself is a pure Int->Int
+  // operation with no allocation.
 
   private def putTimestampNanos(
       offset: Int, values: WritableColumnVector, epochNanos: Long): Unit = {
     val epochMicros = Math.floorDiv(epochNanos, 1000L)
     val rawNanosWithinMicro = Math.floorMod(epochNanos, 1000L).toInt
     val nanosWithinMicro =
-      ((rawNanosWithinMicro / nanosTruncationDivisor) * nanosTruncationDivisor).toShort
+      DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision).toShort
     values.getChild(0).putLong(offset, epochMicros)
     values.getChild(1).putShort(offset, nanosWithinMicro)
   }
