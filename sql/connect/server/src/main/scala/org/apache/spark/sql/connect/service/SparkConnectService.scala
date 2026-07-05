@@ -467,8 +467,20 @@ object SparkConnectService extends Logging {
 
     started = true
     stopped = false
-    setHealthStatus(ServingStatus.SERVING)
     postSparkConnectServiceStarted()
+  }
+
+  /**
+   * Advertise the service as SERVING for gRPC health checks. Call this only once the SparkContext
+   * is fully initialized: when `start` runs from `DriverPlugin.init` the task scheduler and other
+   * subsystems that query execution needs are not up yet. The plugin path calls this from
+   * `DriverPlugin.registerMetrics` (fired later in initialization); the standalone server calls it
+   * right after `start` returns on an already-built context.
+   */
+  def markServing(): Unit = synchronized {
+    if (started && !stopped) {
+      setHealthStatus(ServingStatus.SERVING)
+    }
   }
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = synchronized {

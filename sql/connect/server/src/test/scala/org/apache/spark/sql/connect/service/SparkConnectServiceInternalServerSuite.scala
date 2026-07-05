@@ -281,6 +281,14 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     try {
       val healthStub = HealthGrpc.newBlockingStub(channel)
 
+      // `start` only brings up the gRPC server; the service is not advertised as SERVING until
+      // the SparkContext is fully initialized (signalled by `markServing`).
+      assert(
+        healthStub.check(HealthCheckRequest.newBuilder().build()).getStatus ==
+          HealthCheckResponse.ServingStatus.NOT_SERVING)
+
+      SparkConnectService.markServing()
+
       val overallStatus = healthStub
         .check(HealthCheckRequest.newBuilder().build())
         .getStatus
@@ -298,6 +306,35 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
       channel.shutdownNow()
       channel.awaitTermination(10, TimeUnit.SECONDS)
       SparkConnectService.stop()
+    }
+  }
+
+  test("The gRPC health check is deferred until the SparkContext is fully initialized " +
+    "when started from the plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(PLUGINS, Seq(classOf[SparkConnectPlugin].getName()))
+      .set(CONNECT_GRPC_BINDING_PORT.key, "0")
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+
+    // The plugin starts the service from `DriverPlugin.init` (before the task scheduler is up)
+    // and flips it to SERVING from `DriverPlugin.registerMetrics`, which runs near the end of the
+    // SparkContext constructor. So by the time the constructor returns it must be SERVING.
+    sc = new SparkContext(conf)
+    assert(SparkConnectService.started)
+
+    val channel = ManagedChannelBuilder
+      .forAddress("localhost", SparkConnectService.server.getPort)
+      .usePlaintext()
+      .build()
+    try {
+      val healthStub = HealthGrpc.newBlockingStub(channel)
+      assert(
+        healthStub.check(HealthCheckRequest.newBuilder().build()).getStatus ==
+          HealthCheckResponse.ServingStatus.SERVING)
+    } finally {
+      channel.shutdownNow()
+      channel.awaitTermination(10, TimeUnit.SECONDS)
     }
   }
 

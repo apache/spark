@@ -49,6 +49,11 @@ class SparkConnectPlugin extends SparkPlugin {
       Map.empty[String, String].asJava
     }
 
+    override def registerMetrics(appId: String, pluginContext: PluginContext): Unit = {
+      // Called after most Spark subsystems are up, so the context can now serve queries.
+      SparkConnectService.markServing()
+    }
+
     override def shutdown(): Unit = {
       SparkConnectService.stop()
     }
