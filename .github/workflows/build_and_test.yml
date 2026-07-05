@@ -1415,6 +1415,7 @@ jobs:
         fi
         export PYSPARK_DRIVER_PYTHON=python3.12
         export PYSPARK_PYTHON=python3.12
+        echo "debug; SKIP flags set:"
         env | grep "^SKIP_"
         cd docs
         bundle exec jekyll build
