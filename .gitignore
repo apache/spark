@@ -141,3 +141,6 @@ tpcds-kit/
 .github/instructions/
 .github/prompts/
 .github/skills/
+
+# For Scalafmt
+.scalafmt.conf
