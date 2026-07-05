@@ -17,12 +17,13 @@
 package org.apache.spark.sql.connect.service
 
 import java.net.ServerSocket
-import java.util.concurrent.{CopyOnWriteArrayList, Semaphore, TimeUnit}
+import java.util.concurrent.{CopyOnWriteArrayList, LinkedBlockingQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable
 
 import io.grpc.ManagedChannelBuilder
 import io.grpc.health.v1.{HealthCheckRequest, HealthCheckResponse, HealthGrpc}
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc
@@ -281,31 +282,51 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     try {
       val healthStub = HealthGrpc.newBlockingStub(channel)
 
-      // `start` only brings up the gRPC server; the service is not advertised as SERVING until
-      // the SparkContext is fully initialized (signalled by `markServing`).
+      def check(service: String): HealthCheckResponse.ServingStatus =
+        healthStub
+          .check(HealthCheckRequest.newBuilder().setService(service).build())
+          .getStatus
+
+      // `start` only brings up the gRPC server; until the SparkContext is fully initialized
+      // (signalled by `markServing`) both the overall and the SparkConnect service are
+      // NOT_SERVING.
+      assert(check("") == HealthCheckResponse.ServingStatus.NOT_SERVING)
       assert(
-        healthStub.check(HealthCheckRequest.newBuilder().build()).getStatus ==
+        check(SparkConnectServiceGrpc.SERVICE_NAME) ==
           HealthCheckResponse.ServingStatus.NOT_SERVING)
 
       SparkConnectService.markServing()
 
-      val overallStatus = healthStub
-        .check(HealthCheckRequest.newBuilder().build())
-        .getStatus
-      assert(overallStatus == HealthCheckResponse.ServingStatus.SERVING)
+      assert(check("") == HealthCheckResponse.ServingStatus.SERVING)
+      assert(
+        check(SparkConnectServiceGrpc.SERVICE_NAME) ==
+          HealthCheckResponse.ServingStatus.SERVING)
 
-      val sparkConnectStatus = healthStub
-        .check(
-          HealthCheckRequest
-            .newBuilder()
-            .setService(SparkConnectServiceGrpc.SERVICE_NAME)
-            .build())
-        .getStatus
-      assert(sparkConnectStatus == HealthCheckResponse.ServingStatus.SERVING)
+      // Watch the overall status to observe the terminal transition on stop(): a unary Check
+      // would race with server shutdown, but the streaming Watch receives the NOT_SERVING push
+      // that stop() emits (via enterTerminalState) before the server is torn down.
+      val statuses = new LinkedBlockingQueue[HealthCheckResponse.ServingStatus]()
+      HealthGrpc
+        .newStub(channel)
+        .watch(
+          HealthCheckRequest.newBuilder().build(),
+          new StreamObserver[HealthCheckResponse] {
+            override def onNext(resp: HealthCheckResponse): Unit = statuses.add(resp.getStatus)
+            override def onError(t: Throwable): Unit = {}
+            override def onCompleted(): Unit = {}
+          })
+      // Watch first replays the current status.
+      assert(statuses.poll(10, TimeUnit.SECONDS) == HealthCheckResponse.ServingStatus.SERVING)
+
+      // Graceful stop so the terminal NOT_SERVING push reaches the watcher before teardown.
+      SparkConnectService.stop(Some(1L), Some(TimeUnit.SECONDS))
+      assert(statuses.poll(10, TimeUnit.SECONDS) == HealthCheckResponse.ServingStatus.NOT_SERVING)
     } finally {
       channel.shutdownNow()
       channel.awaitTermination(10, TimeUnit.SECONDS)
-      SparkConnectService.stop()
+      if (SparkConnectService.started) {
+        SparkConnectService.stop()
+      }
     }
   }
 
