@@ -99,18 +99,20 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     resultSet = null
     resultsExhausted = false
 
-    var df = conn.spark.sql(sql)
-    if (maxRows > 0) {
-      df = df.limit(maxRows)
-    }
-    val sparkResult = df.collectResult()
-    operationId = sparkResult.operationId
-    if (hasResultSet(sparkResult)) {
-      resultSet = new SparkConnectResultSet(sparkResult, this)
-      true
-    } else {
-      sparkResult.close()
-      false
+    JdbcErrorUtils.mapToSQLException {
+      var df = conn.spark.sql(sql)
+      if (maxRows > 0) {
+        df = df.limit(maxRows)
+      }
+      val sparkResult = df.collectResult()
+      operationId = sparkResult.operationId
+      if (hasResultSet(sparkResult)) {
+        resultSet = new SparkConnectResultSet(sparkResult, this)
+        true
+      } else {
+        sparkResult.close()
+        false
+      }
     }
   }
 
