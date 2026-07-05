@@ -122,6 +122,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           """message root {
             |  required FIXED_LEN_BYTE_ARRAY(1) a;
             |  required FIXED_LEN_BYTE_ARRAY(3) b;
+            |  required FIXED_LEN_BYTE_ARRAY(16) c (UUID);
             |}
         """.stripMargin
         val schema = MessageTypeParser.parseMessageType(schemaStr)
@@ -132,6 +133,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
           val record = new SimpleGroup(schema)
           record.add(0, Binary.fromString(n))
           record.add(1, Binary.fromString(n + n + n))
+          record.add(2, Binary.fromConstantByteArray(Array.fill(16)(n.toByte)))
           writer.write(record)
         }
         writer.close()
@@ -143,7 +145,7 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         Seq(true, false).foreach { vectorizedReaderEnabled =>
           readParquetFile(path.toString, vectorizedReaderEnabled) { df =>
             checkAnswer(df, (48 until 58).map(n => // char '0' is 48 in ascii
-              Row(Array(n), Array(n, n, n))))
+              Row(Array(n), Array(n, n, n), Array.fill[Byte](16)(n.toByte))))
           }
         }
       }
