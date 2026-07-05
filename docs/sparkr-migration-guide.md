@@ -28,7 +28,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](sql-migration-guide.
 
 ## Upgrading from SparkR 4.0 to 4.3
 
- - In Spark 4.1, `TimeType` support was added. But SparkR does not support `TimeType` and creating or collecting `TimeType` column would raise an error.
+ - In Spark 4.3, `TimeType` support was added. But SparkR does not support `TimeType` and creating or collecting `TimeType` column would raise an error.
 
 ## Upgrading from SparkR 3.5 to 4.0
 
