@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import java.nio.ByteOrder;
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
@@ -36,6 +38,9 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * `zeroOutNullBytes` before writing new data.
  */
 public final class UnsafeRowWriter extends UnsafeWriter {
+
+  private static final boolean IS_LITTLE_ENDIAN =
+    ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
   private final UnsafeRow row;
 
@@ -135,6 +140,8 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     return startingOffset + nullBitsSize + 8L * ordinal;
   }
 
+  // Boolean keeps the two-store form: converting a boolean to a long requires a conditional,
+  // whose misprediction on unpredictable values costs more than the extra store.
   @Override
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
@@ -142,25 +149,26 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     writeBoolean(offset, value);
   }
 
+  // The methods below write a value narrower than 8 bytes and zero out the rest of the 8-byte
+  // word with a single long store: the value bits must land at the lowest address of the word,
+  // which is the least significant bytes on little-endian and the most significant on big-endian.
+
   @Override
   public void write(int ordinal, byte value) {
-    final long offset = getFieldOffset(ordinal);
-    writeLong(offset, 0L);
-    writeByte(offset, value);
+    final long v = value & 0xFFL;
+    writeLong(getFieldOffset(ordinal), IS_LITTLE_ENDIAN ? v : v << 56);
   }
 
   @Override
   public void write(int ordinal, short value) {
-    final long offset = getFieldOffset(ordinal);
-    writeLong(offset, 0L);
-    writeShort(offset, value);
+    final long v = value & 0xFFFFL;
+    writeLong(getFieldOffset(ordinal), IS_LITTLE_ENDIAN ? v : v << 48);
   }
 
   @Override
   public void write(int ordinal, int value) {
-    final long offset = getFieldOffset(ordinal);
-    writeLong(offset, 0L);
-    writeInt(offset, value);
+    final long v = value & 0xFFFFFFFFL;
+    writeLong(getFieldOffset(ordinal), IS_LITTLE_ENDIAN ? v : v << 32);
   }
 
   @Override
@@ -170,9 +178,8 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
   @Override
   public void write(int ordinal, float value) {
-    final long offset = getFieldOffset(ordinal);
-    writeLong(offset, 0);
-    writeFloat(offset, value);
+    final long v = Float.floatToRawIntBits(value) & 0xFFFFFFFFL;
+    writeLong(getFieldOffset(ordinal), IS_LITTLE_ENDIAN ? v : v << 32);
   }
 
   @Override
