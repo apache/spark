@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
+import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -96,17 +97,118 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
    */
   private def processorWithKeys(
       keys: Seq[String],
-      deleteCondition: Option[Column] = None
+      deleteCondition: Option[Column] = None,
+      trackHistorySelection: Option[ColumnSelection] = None
   ): Scd2BatchProcessor =
     Scd2BatchProcessor(
       changeArgs = ChangeArgs(
         keys = keys.map(UnqualifiedColumnName(_)),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type2,
-        deleteCondition = deleteCondition
+        deleteCondition = deleteCondition,
+        trackHistorySelection = trackHistorySelection
       ),
       resolvedSequencingType = LongType
     )
+
+  // =============== orderChronologicallyPerKeyWindow tests ===============
+
+  test("orderChronologicallyPerKeyWindow sorts both decomposition tails and non-tails by " +
+    "effective recordStartAt ascending") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Three rows at distinct effective recordStartAts. The decomposition tail
+    // (recordStartAt = null, endAt = 10) takes its endAt as its effective ordering sequence,
+    // so the expected per-key window order is 5, tail(10), 15.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v15", 15L, null, Row(15L)),
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(1, "v5", 5L, null, Row(5L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "v5", 5L, null, Row(5L), 1),
+        Row(1, "tail", null, 10L, Row(null), 2),
+        Row(1, "v15", 15L, null, Row(15L), 3)
+      )
+    )
+  }
+
+  test("orderChronologicallyPerKeyWindow tiebreakers: tails before non-tails, then " +
+    "upsert-representing rows before tombstones, when effective recordStartAt ties") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Each key isolates one tiebreaker rule under test. All rows in a partition tie at
+    // effective recordStartAt = 10, so only the tiebreakers determine order.
+    //   key=1: tails-first - tail vs tombstone, tail must come first.
+    //   key=2: upsert-representing-first (open variant)   - open upsert vs tombstone.
+    //   key=3: upsert-representing-first (closed variant) - closed run head vs tombstone.
+    val df = targetTableOf(userSchema)(
+      Row(1, "tomb", 10L, 10L, Row(10L)),
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(2, "tomb", 10L, 10L, Row(10L)),
+      Row(2, "open", 10L, null, Row(10L)),
+      Row(3, "tomb", 10L, 10L, Row(10L)),
+      Row(3, "closed", 10L, 20L, Row(10L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "tail", null, 10L, Row(null), 1),
+        Row(1, "tomb", 10L, 10L, Row(10L), 2),
+        Row(2, "open", 10L, null, Row(10L), 1),
+        Row(2, "tomb", 10L, 10L, Row(10L), 2),
+        Row(3, "closed", 10L, 20L, Row(10L), 1),
+        Row(3, "tomb", 10L, 10L, Row(10L), 2)
+      )
+    )
+  }
+
+  test("orderChronologicallyPerKeyWindow orders rows independently per key") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys with interleaved input order. Each key's window must be sorted independently
+    // by effective recordStartAt - rows from key 2 must not influence row_number positions
+    // of rows for key 1, and vice versa.
+    val df = targetTableOf(userSchema)(
+      Row(1, "k1-15", 15L, null, Row(15L)),
+      Row(2, "k2-7", 7L, null, Row(7L)),
+      Row(1, "k1-5", 5L, null, Row(5L)),
+      Row(2, "k2-3", 3L, null, Row(3L)),
+      Row(1, "k1-10", 10L, null, Row(10L)),
+      Row(2, "k2-20", 20L, null, Row(20L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "k1-5", 5L, null, Row(5L), 1),
+        Row(1, "k1-10", 10L, null, Row(10L), 2),
+        Row(1, "k1-15", 15L, null, Row(15L), 3),
+        Row(2, "k2-3", 3L, null, Row(3L), 1),
+        Row(2, "k2-7", 7L, null, Row(7L), 2),
+        Row(2, "k2-20", 20L, null, Row(20L), 3)
+      )
+    )
+  }
 
   // =============== preprocessMicrobatch tests ===============
 
@@ -1217,4 +1319,1151 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     assert(result.collect().isEmpty)
   }
 
+  // =============== decomposeOutOfOrderRows tests ===============
+
+  test("decomposeOutOfOrderRows passes through open rows, tombstones, and " +
+    "last-in-partition closed rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // None of these rows is eligible for decomposition:
+    //   - "open":  endAt is null, so it is not a closed row
+    //   - "tomb":  startAt == endAt, so it is excluded by the strict `<` closed check
+    //   - "last":  closed, but is the last row in its window partition (no successor)
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 100, 5L, null, Row(5L)),
+      Row(1, "tomb", 200, 10L, 10L, Row(10L)),
+      Row(1, "last", 300, 15L, 25L, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "open", 100, 5L, null, Row(5L)),
+        Row(1, "tomb", 200, 10L, 10L, Row(10L)),
+        Row(1, "last", 300, 15L, 25L, Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows leaves a closed row alone when the next event arrives at " +
+    "exactly its endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Closed [5, 10] would decompose if the successor's recordStartAt were strictly less
+    // than 10. Here the successor lands at exactly 10, which means it doesn't actually
+    // bisect the closed row and therefore shouldn't decompose it.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 42, 5L, 10L, Row(5L)),
+      Row(1, "bob", 99, 10L, null, Row(10L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L, 10L, Row(5L)),
+        Row(1, "bob", 99, 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows splits a bisected row into head + tail, " +
+    "both inheriting parent data") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Closed [5, 30] is bisected by a successor at recordStartAt = 15 (15 < 30). Expected:
+    //   - head: parent with endAt set to null
+    //   - tail: parent with startAt set to null and recordStartAt (in cdcMetadata) set to null
+    //   - successor: passes through
+    // Both head and tail must carry the parent's data columns (value="alice", amount=42)
+    // identically.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 42, 5L, 30L, Row(5L)),
+      Row(1, "bob", 99, 15L, null, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L, null, Row(5L)), // head
+        Row(1, "alice", 42, null, 30L, Row(null)), // tail
+        Row(1, "bob", 99, 15L, null, Row(15L))    // bisecting successor
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows triggers on any kind of bisecting successor") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Three independent keys, each with a closed parent [5, 50] bisected by a successor
+    // of a different kind. All three parents must decompose, regardless of the successor's
+    // own row kind (the bisection check looks only at recordStartAt < parent.endAt).
+    val df = targetTableOf(userSchema)(
+      // Key 1: bisected by an open upsert.
+      Row(1, "alice", 1, 5L, 50L, Row(5L)),
+      Row(1, "bob", 2, 10L, null, Row(10L)),
+
+      // Key 2: bisected by a tombstone.
+      Row(2, "carol", 3, 5L, 50L, Row(5L)),
+      Row(2, "dave", 4, 20L, 20L, Row(20L)),
+
+      // Key 3: bisected by another closed non-tombstone.
+      Row(3, "eve", 5, 5L, 50L, Row(5L)),
+      Row(3, "frank", 6, 30L, 40L, Row(30L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // Key 1.
+        Row(1, "alice", 1, 5L, null, Row(5L)),
+        Row(1, "alice", 1, null, 50L, Row(null)),
+        Row(1, "bob", 2, 10L, null, Row(10L)),
+        // Key 2.
+        Row(2, "carol", 3, 5L, null, Row(5L)),
+        Row(2, "carol", 3, null, 50L, Row(null)),
+        Row(2, "dave", 4, 20L, 20L, Row(20L)),
+        // Key 3.
+        Row(3, "eve", 5, 5L, null, Row(5L)),
+        Row(3, "eve", 5, null, 50L, Row(null)),
+        Row(3, "frank", 6, 30L, 40L, Row(30L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows uses chronological window order, not input order") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Same data as the basic split test but with the input rows shuffled into a
+    // non-chronological order. The window orders rows by effective recordStartAt, so the
+    // result must still recognize that [5, 30] is bisected by the row at recordStartAt = 15.
+    val df = targetTableOf(userSchema)(
+      Row(1, "bob", 99, 15L, null, Row(15L)), // appears first in input
+      Row(1, "alice", 42, 5L, 30L, Row(5L))    // appears last in input but lower in window
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L, null, Row(5L)),
+        Row(1, "alice", 42, null, 30L, Row(null)),
+        Row(1, "bob", 99, 15L, null, Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows isolates per-key partitions") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Key 1 has a bisecting pair. Key 2 only contains a single closed row whose recordStartAt
+    // happens to coincide with key 1's parent. The window partitions by key, so key 1's
+    // bisecting successor must NOT bleed into key 2's partition.
+    val df = targetTableOf(userSchema)(
+      // Key 1: closed [5, 30] bisected by recordStartAt = 15.
+      Row(1, "alice", 42, 5L, 30L, Row(5L)),
+      Row(1, "bob", 99, 15L, null, Row(15L)),
+
+      // Key 2: a single closed [5, 30] with no successor in its own partition.
+      Row(2, "carol", 7, 5L, 30L, Row(5L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // Key 1 decomposes.
+        Row(1, "alice", 42, 5L, null, Row(5L)),
+        Row(1, "alice", 42, null, 30L, Row(null)),
+        Row(1, "bob", 99, 15L, null, Row(15L)),
+        // Key 2 passes through.
+        Row(2, "carol", 7, 5L, 30L, Row(5L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows handles a cascade of consecutive bisected rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // A nested cascade: each closed row (except the innermost) is bisected by the next.
+    // Decomposition decisions are independent and based on each row's immediate successor:
+    //   [5, 30]  bisected by [10, 25]   -> decomposes
+    //   [10, 25] bisected by [15, 20]   -> decomposes
+    //   [15, 20] is the last row        -> passes through
+    val df = targetTableOf(userSchema)(
+      Row(1, "outer", 1, 5L, 30L, Row(5L)),
+      Row(1, "middle", 2, 10L, 25L, Row(10L)),
+      Row(1, "inner", 3, 15L, 20L, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // outer decomposes.
+        Row(1, "outer", 1, 5L, null, Row(5L)),
+        Row(1, "outer", 1, null, 30L, Row(null)),
+        // middle decomposes.
+        Row(1, "middle", 2, 10L, null, Row(10L)),
+        Row(1, "middle", 2, null, 25L, Row(null)),
+        // inner passes through.
+        Row(1, "inner", 3, 15L, 20L, Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows returns empty for empty input") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    val df = targetTableOf(userSchema)()
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    assert(result.collect().isEmpty)
+    assert(result.columns.toSeq == df.columns.toSeq)
+  }
+
+  test("decomposeOutOfOrderRows preserves per-column schema attributes through " +
+    "head + tail decomposition") {
+    val processor = processorWithKeys(Seq("id"))
+
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+
+    val cdcMetadataInnerSchema = new StructType().add(
+      Scd2BatchProcessor.recordStartAtFieldName,
+      LongType,
+      nullable = true,
+      metadata = commentMetadata("inner __RECORD_START_AT")
+    )
+
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
+      .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
+      .add(
+        Scd2BatchProcessor.startAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __START_AT"))
+      .add(
+        Scd2BatchProcessor.endAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __END_AT"))
+      .add(
+        AutoCdcReservedNames.cdcMetadataColName, cdcMetadataInnerSchema, nullable = false,
+        metadata = commentMetadata("framework _cdc_metadata"))
+
+    // Closed [5, 30] bisected by recordStartAt = 15.
+    val df = microbatchOf(schema)(
+      Row(1, "alice", 5L, 30L, Row(5L)),
+      Row(1, "bob", 15L, null, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    // Output schema must match the input field-for-field on name, dataType (which carries
+    // inner-struct field metadata), nullable, and outer metadata.
+    schema.fields.zip(result.schema.fields).foreach { case (in, out) =>
+      assert(in.name == out.name)
+      assert(in.dataType == out.dataType)
+      assert(in.nullable == out.nullable)
+      assert(in.metadata == out.metadata)
+    }
+  }
+
+  // =============== assertWellFormedRowsPostDecomposition tests ===============
+
+  test("assertWellFormedRowsPostDecomposition passes through a dataframe whose rows match all " +
+    "four canonical shapes") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // One row of each canonical shape.
+    //   tombstone:           startAt = endAt = recordStartAt
+    //   open upsert:         endAt is null, startAt and recordStartAt non-null
+    //   closed upsert:       startAt < endAt, recordStartAt non-null
+    //   decomposition tail:  startAt and recordStartAt null, endAt non-null
+    val df = targetTableOf(userSchema)(
+      Row(1, "tomb", 10L, 10L, Row(10L)),
+      Row(2, "open", 20L, null, Row(20L)),
+      Row(3, "closed", 30L, 40L, Row(30L)),
+      Row(4, "tail", null, 50L, Row(null))
+    )
+
+    checkAnswer(
+      df = processor.assertWellFormedRowsPostDecomposition(df, batchId = 0),
+      expectedAnswer = Seq(
+        Row(1, "tomb", 10L, 10L, Row(10L)),
+        Row(2, "open", 20L, null, Row(20L)),
+        Row(3, "closed", 30L, 40L, Row(30L)),
+        Row(4, "tail", null, 50L, Row(null))
+      )
+    )
+  }
+
+  test("assertWellFormedRowsPostDecomposition throws on invalid row shape") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // recordStartAt = null + startAt = 5 + endAt = 10 matches none of the canonical shapes:
+    // the decomposition-tail kind rejects on startAt non-null, while the tombstone, open
+    // upsert, and closed upsert kinds all reject on recordStartAt null.
+    val df = targetTableOf(userSchema)(
+      Row(1, "malformed", 5L, 10L, Row(null))
+    )
+
+    val wrapper = intercept[SparkException] {
+      processor.assertWellFormedRowsPostDecomposition(df, batchId = 0).collect()
+    }
+    assert(wrapper.getCause.isInstanceOf[SparkRuntimeException],
+      s"Expected SparkRuntimeException cause, got ${wrapper.getCause}")
+    val cause = wrapper.getCause.asInstanceOf[SparkRuntimeException]
+    assert(cause.getCondition == "INTERNAL_ERROR")
+    assert(cause.getMessage.contains("post-decomposition"))
+    assert(cause.getMessage.contains(Scd2BatchProcessor.startAtColName))
+    assert(cause.getMessage.contains(Scd2BatchProcessor.endAtColName))
+  }
+
+  test("assertWellFormedRowsPostDecomposition does not introduce extra columns") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 10L, null, Row(10L))
+    )
+
+    val result = processor.assertWellFormedRowsPostDecomposition(df, batchId = 0)
+
+    assert(result.schema == df.schema)
+  }
+
+  // =============== dropRedundantRowsPostDecomposition tests ===============
+
+  test("dropRedundantRowsPostDecomposition passes through events with distinct sequences") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Distinct effective recordStartAts within the dataframe, so no redundancies - identity
+    // transformation expected.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v5", 5L, null, Row(5L)),
+      Row(1, "v10", 10L, null, Row(10L)),
+      Row(1, "v15", 15L, 20L, Row(15L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "v5", 5L, null, Row(5L)),
+        Row(1, "v10", 10L, null, Row(10L)),
+        Row(1, "v15", 15L, 20L, Row(15L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition drops a same-event duplicate") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts tied on effective recordStartAt = 10. The chronologically-leading
+    // copy is dropped; exactly one copy survives. We do not assert which user-data variant
+    // survives because the window's tiebreaker among truly-identical rows is intentionally
+    // undefined.
+    val df = targetTableOf(userSchema)(
+      Row(1, "first", 10L, null, Row(10L)),
+      Row(1, "second", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+    val survivors = result.collect()
+
+    assert(survivors.length == 1)
+    assert(Set("first", "second").contains(survivors.head.getString(1)))
+  }
+
+  test("dropRedundantRowsPostDecomposition drops an open upsert overtaken at the same instant") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Open upsert at recordStartAt=10 followed by a tombstone at the same instant
+    // (effectiveRecordStartAt=10). The upsert opens at an instant the tombstone already
+    // overtakes, leaving it 0-width: it ties with its successor on effective sequence
+    // and is dropped. The tombstone (last in partition) survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "tomb", 10L, 10L, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "tomb", 10L, 10L, Row(10L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition drops a decomposition tail coincident with " +
+    "an incoming event") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Decomposition tail closing at endAt=30 followed by a non-tail event at
+    // recordStartAt=30. Both have effective recordStartAt = 30. The synthetic delete the
+    // tail encodes is already represented by the coincident event, so the leading tail is
+    // dropped. The event survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "tail", null, 30L, Row(null)),
+      Row(1, "event", 30L, null, Row(30L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "event", 30L, null, Row(30L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition preserves rows when the next event arrives at " +
+    "a strictly later instant") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Open upsert at recordStartAt=10 and decomposition tail closing at endAt=30 are each
+    // followed by a row at a strictly later effective sequence. No row ties with its
+    // successor on effective recordStartAt, so the redundancy filter doesn't fire. Every
+    // row survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "next1", 15L, null, Row(15L)),
+      Row(1, "tail", null, 30L, Row(null)),
+      Row(1, "next2", 35L, null, Row(35L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "open", 10L, null, Row(10L)),
+        Row(1, "next1", 15L, null, Row(15L)),
+        Row(1, "tail", null, 30L, Row(null)),
+        Row(1, "next2", 35L, null, Row(35L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition preserves the last row in every per-key partition") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Each key has a single row; LEAD(1) is null at the end of every partition, so the
+    // redundancy filter is vacuous. If per-key isolation were broken, key 1's row would
+    // see key 2's row as its successor and tie on effective sequence; proper partitioning
+    // preserves both.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v10", 10L, null, Row(10L)),
+      Row(2, "v10", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "v10", 10L, null, Row(10L)),
+        Row(2, "v10", 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition cascades across consecutive duplicate rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Three identical open upserts followed by a distinct event. Each adjacent same-effective
+    // pair ties: the chronologically-leading two copies are dropped, leaving exactly one
+    // duplicate plus the distinct event. We don't assert which user-data variant of the
+    // duplicate survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "dup1", 5L, null, Row(5L)),
+      Row(1, "dup2", 5L, null, Row(5L)),
+      Row(1, "dup3", 5L, null, Row(5L)),
+      Row(1, "different", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+    val survivors = result.collect()
+
+    assert(survivors.length == 2)
+    val dupSurvivor = survivors.find(_.getLong(2) == 5L)
+    assert(dupSurvivor.isDefined)
+    assert(Set("dup1", "dup2", "dup3").contains(dupSurvivor.get.getString(1)))
+    assert(survivors.exists(r => r.getString(1) == "different"))
+  }
+
+  test("dropRedundantRowsPostDecomposition: same-class collisions reduce to exactly one row") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Each key encodes one same-class collision at effective recordStartAt = 10. The window
+    // does not sub-order rows within a class, so which row survives is undefined. Hence we only
+    // assert: (a) exactly one row survives per key, and (b) the survivor is indeed one of the
+    // inputs.
+    //   key=1: two open upsert rows
+    //   key=2: open upsert + closed run head (both upsert-representing).
+    //   key=3: two closed run heads (structurally impossible under SCD2 invariants but defensively
+    //          covered).
+    //   key=4: two tombstones.
+    val df = targetTableOf(userSchema)(
+      Row(1, "openA", 10L, null, Row(10L)),
+      Row(1, "openB", 10L, null, Row(10L)),
+      Row(2, "open", 10L, null, Row(10L)),
+      Row(2, "closed", 10L, 20L, Row(10L)),
+      Row(3, "closedA", 10L, 20L, Row(10L)),
+      Row(3, "closedB", 10L, 20L, Row(10L)),
+      Row(4, "tombA", 10L, 10L, Row(10L)),
+      Row(4, "tombB", 10L, 10L, Row(10L))
+    )
+
+    val expectedSurvivorsPerKey: Map[Int, Set[String]] = Map(
+      1 -> Set("openA", "openB"),
+      2 -> Set("open", "closed"),
+      3 -> Set("closedA", "closedB"),
+      4 -> Set("tombA", "tombB")
+    )
+
+    val survivors = processor.dropRedundantRowsPostDecomposition(df).collect()
+    assert(survivors.length == 4)
+
+    expectedSurvivorsPerKey.foreach { case (k, validValues) =>
+      val perKey = survivors.filter(_.getInt(0) == k)
+      assert(perKey.length == 1)
+      assert(validValues.contains(perKey.head.getString(1)))
+    }
+  }
+
+  test("dropRedundantRowsPostDecomposition collapses many rows tied on effective " +
+    "recordStartAt to the trailing one") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // All three rows tie at effectiveRecordStartAt=10. Window tiebreakers order them as
+    // tail (tails-first), open upsert (upsert-representing-first), tombstone. The
+    // redundancy filter then drops every row whose successor shares its effective sequence,
+    // leaving only the trailing tombstone.
+    val df = targetTableOf(userSchema)(
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "tomb", 10L, 10L, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "tomb", 10L, 10L, Row(10L))
+      )
+    )
+  }
+
+  // =============== reconcileStartAndEndAt tests ===============
+
+  test("reconcileStartAndEndAt: a fresh-key run head propagates its startAt to its " +
+    "no-op continuation") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts at recordStartAt=5 and recordStartAt=10 with identical tracked
+    // values. The first row begins a fresh run with startAt=5. The second row, sharing the
+    // tracked value, is a continuation of that run and inherits the run head's startAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a continuation that began before the affected window " +
+    "keeps its earlier run start") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The first row is an aux anchor (startAt < recordStartAt), pulled in as left context
+    // for a run that began at startAt=2. Because the row sits at the front of the window,
+    // its existing startAt encodes the true global run start and must be preserved -
+    // and propagated to the in-window continuation.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 2L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 2L, null, Row(5L)),
+        Row(1, "alice", 2L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tracked-history transition opens a new run anchored " +
+    "at the new value's recordStartAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts that disagree on the tracked column. The transition closes the
+    // first run at the second event's effective recordStartAt and starts a new run whose
+    // startAt is the new event's recordStartAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "bob",   10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  10L,  Row(5L)),
+        Row(1, "bob",   10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a chain of no-op continuations all share a single " +
+    "run start") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Three consecutive open upserts all agreeing on the tracked column form one no-op
+    // run. Every row in the run must end up with the run head's startAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(1, "alice", 15L, null, Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L)),
+        Row(1, "alice", 5L, null, Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: default tracking treats every non-key user column as tracked") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Default `trackHistorySelection` (None) is documented to treat every eligible user
+    // column as tracked. The two rows agree on `name` but disagree on `status`, which
+    // should therefore start a new run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L,  10L,  Row(5L)),
+        Row(1, "alice", "inactive", 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: ExcludeColumns excludes only the listed columns from " +
+    "the tracked set") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("status")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // `status` is excluded from tracking, so the two rows are tracked-equal on the
+    // remaining columns (`name`). They should collapse into a single no-op run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: an empty effective tracked-history set collapses every " +
+    "consecutive upsert pair into one run") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("name"), UnqualifiedColumnName("status"))
+        )
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Both user data columns are excluded, so the effective tracked set is empty. With
+    // nothing to compare, every consecutive upsert pair collapses into a single run -
+    // even when the user-visible data differs on every column.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "bob",   "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "bob",   "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tombstone's startAt and endAt pass through unchanged") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // An open upsert, then a tombstone at recordStartAt=10, then a new open upsert. The
+    // tombstone is not an upsert and must not participate in any run; its startAt/endAt
+    // pass through identically. The bracketing upserts close (10) and reopen (15) around
+    // the tombstone.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, 10L,  Row(10L)),
+      Row(1, "alice", 15L, null, Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  10L,  Row(5L)),
+        Row(1, "alice", 10L, 10L,  Row(10L)),
+        Row(1, "alice", 15L, null, Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a decomposition tail's startAt stays null and its endAt " +
+    "passes through") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A head + tail pair: the head retains the run start while the tail (recordStartAt
+    // null) is excluded from upsert reconciliation. The tail's startAt must stay null
+    // and its endAt must pass through unchanged.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,   30L, Row(5L)),
+        Row(1, "alice", null, 30L, Row(null))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a closed upsert that already closes before the next event " +
+    "keeps its endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 15] is followed by a fresh-value run head at recordStartAt=20.
+    // The closed upsert already ended at 15 - strictly before the next event - so its
+    // endAt is left intact.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  15L,  Row(5L)),
+      Row(1, "bob",   20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  15L,  Row(5L)),
+        Row(1, "bob",   20L, null, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: an open upsert closes at its successor's effective sequence") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // An open upsert at recordStartAt=5 is followed by a tracked-history-different upsert
+    // at recordStartAt=20. The first run head must be closed at 20 because the run ends
+    // there.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "bob",   20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L,  Row(5L)),
+        Row(1, "bob",   20L, null, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tombstone coincident with a row that already closes at the " +
+    "same sequence is preserved for the next transform to drop") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 20] is followed by a tombstone at recordStartAt=20, both
+    // ending at the same sequence. Reconciliation does not collapse them - it leaves
+    // the now-redundant tombstone for the next transform to drop based on the
+    // shape locked in here.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  20L, Row(5L)),
+      Row(1, "alice", 20L, 20L, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "alice", 20L, 20L, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a decomposition tail keeps its null recordStartAt for " +
+    "downstream promotion") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Downstream transforms identify decomposition tails by recordStartAt = null, so
+    // reconciliation must not synthesize a value into the tail's _cdc_metadata.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    val tailRows = result.collect().filter(r => r.isNullAt(2))
+    assert(tailRows.length == 1)
+    val tailCdcMetadata = tailRows.head.getStruct(4)
+    assert(tailCdcMetadata.isNullAt(0))
+  }
+
+  test("reconcileStartAndEndAt preserves the input schema, column metadata, and row count") {
+    val processor = processorWithKeys(Seq("id"))
+
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+
+    val cdcMetadataInnerSchema = new StructType().add(
+      Scd2BatchProcessor.recordStartAtFieldName,
+      LongType,
+      nullable = true,
+      metadata = commentMetadata("inner __RECORD_START_AT")
+    )
+
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
+      .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
+      .add(
+        Scd2BatchProcessor.startAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __START_AT"))
+      .add(
+        Scd2BatchProcessor.endAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __END_AT"))
+      .add(
+        AutoCdcReservedNames.cdcMetadataColName, cdcMetadataInnerSchema, nullable = false,
+        metadata = commentMetadata("framework _cdc_metadata"))
+
+    // Mix of canonical post-decomposition row shapes so we exercise multiple reconciliation
+    // branches under the schema-preservation contract.
+    val df = microbatchOf(schema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null)),
+      Row(1, "alice", 30L,  30L,  Row(30L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    schema.fields.zip(result.schema.fields).foreach { case (in, out) =>
+      assert(in.name == out.name)
+      assert(in.dataType == out.dataType)
+      assert(in.nullable == out.nullable)
+      assert(in.metadata == out.metadata)
+    }
+    assert(result.count() == df.count())
+  }
+
+  test("reconcileStartAndEndAt: a single-event-per-key partition reconciles without " +
+    "referring to neighbors") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys, each with exactly one event - so neither partition has a window predecessor
+    // or successor. Reconciliation must handle the missing neighbors cleanly and pass the
+    // single rows through.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(2, "bob",   10L, 20L,  Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(2, "bob",   10L, 20L,  Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: IncludeColumns selects only the listed columns as tracked") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Only `name` is tracked. Two rows agreeing on name but differing on status are
+    // tracked-equal and should collapse into one run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tracked-history column whose name contains a dot is quoted " +
+    "and matched as a single column, not as a nested field path") {
+    // The backticks make `UnqualifiedColumnName` store the literal field name "user.name".
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`user.name`")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("user.name", StringType)
+      .add("status", StringType)
+
+    // Only the dotted column is tracked. Two rows agreeing on "user.name" but differing on
+    // status are tracked-equal and must collapse into a single run. Without quoting,
+    // `F.col("user.name")` would be parsed as a nested-field access (struct `user`, field
+    // `name`) and fail to resolve.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active", 5L, null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active", 5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: trackHistorySelection referring to an unknown column raises " +
+    "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("does_not_exist")))
+      )
+    )
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, null, Row(5L))
+    )
+
+    val ex = intercept[AnalysisException] {
+      processor.reconcileStartAndEndAt(df)
+    }
+    assert(ex.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
+  }
+
+  test("reconcileStartAndEndAt: null tracked-column values are treated as tracked-equal") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("name", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, null, 5L,  null, Row(5L)),
+      Row(1, null, 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, null, 5L, null, Row(5L)),
+        Row(1, null, 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a no-op continuation followed by a tombstone is absorbed " +
+    "into its run and closed at the tombstone") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(1, "alice", 15L, 15L,  Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(1, "alice", 5L,  15L,  Row(10L)),
+        Row(1, "alice", 15L, 15L,  Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt isolates per-key reconciliation across multiple key partitions") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys, each with a fresh-key run head + tracked-equal continuation. The two
+    // partitions must reconcile independently.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(2, "bob",   20L, null, Row(20L)),
+      Row(2, "bob",   25L, null, Row(25L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(1, "alice", 5L,  null, Row(10L)),
+        Row(2, "bob",   20L, null, Row(20L)),
+        Row(2, "bob",   20L, null, Row(25L))
+      )
+    )
+  }
 }
