@@ -672,11 +672,9 @@ object WatermarkSupport {
     // use the attribute itself.
     val evictionExpression =
       if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-        val structType = watermarkAttribute.dataType.asInstanceOf[StructType]
-        val endFieldType = structType("end").dataType
         LessThanOrEqual(
           GetStructField(watermarkAttribute, 1),
-          watermarkLiteral(optionalWatermarkMs.get, endFieldType))
+          Literal(optionalWatermarkMs.get * 1000))
       } else {
         LessThanOrEqual(
           watermarkAttribute,
