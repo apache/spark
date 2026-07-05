@@ -1171,4 +1171,66 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       assertNumRowsDroppedByWatermark(1)
     )
   }
+
+  test("SPARK-57829: window() over nanos column with watermark eviction") {
+    // Exercises the widened CheckAnalysis struct guard (AnyTimestampNanoType in window end field)
+    // and the statefulOperators endFieldType struct branch (watermarkLiteral with nanos type).
+    val inputData = MemoryStream[Long]
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val windowedAgg = inputData.toDF()
+        .withColumn("eventTime", timestamp_nanos($"value"))
+        .withWatermark("eventTime", "10 seconds")
+        .groupBy(window($"eventTime", "5 seconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
+        .select(
+          $"window".getField("start").cast("string").as[String],
+          $"window".getField("end").cast("string").as[String],
+          $"count".as[Long])
+
+      testStream(windowedAgg)(
+        // Events at t=10s,11s,12s,13s,14s => window [10s,15s); t=15s => window [15s,20s)
+        AddData(inputData,
+          10L * 1000000000L, 11L * 1000000000L, 12L * 1000000000L,
+          13L * 1000000000L, 14L * 1000000000L, 15L * 1000000000L),
+        CheckNewAnswer(),
+        // Event at t=25s => watermark advances to 25-10=15s; window [10s,15s) end <= wm => emitted
+        AddData(inputData, 25L * 1000000000L),
+        CheckNewAnswer(("1970-01-01 00:00:10", "1970-01-01 00:00:15", 5)),
+        assertNumStateRows(2), // [15s,20s) and [25s,30s) remain
+        assertNumRowsDroppedByWatermark(0),
+        // Late event at t=10s => below watermark => dropped
+        AddData(inputData, 10L * 1000000000L),
+        CheckNewAnswer(),
+        assertNumStateRows(2),
+        assertNumRowsDroppedByWatermark(1)
+      )
+    }
+  }
+
+  test("SPARK-57829: window() over nanos preserves nanosecond precision in bounds") {
+    // Verifies that window boundaries retain nanosecond precision (no truncation to micros).
+    val inputData = MemoryStream[Long]
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Use a 100ms window to show sub-microsecond precision in window bounds.
+      // Event at exactly 1.000000001s (1 second + 1 nanosecond).
+      // Window [1.0s, 1.1s) should contain this event.
+      val windowedAgg = inputData.toDF()
+        .withColumn("eventTime", timestamp_nanos($"value"))
+        .withWatermark("eventTime", "1 second")
+        .groupBy(window($"eventTime", "100 milliseconds") as Symbol("window"))
+        .agg(count("*") as Symbol("count"))
+        .select(
+          $"window".getField("start").cast("string").as[String],
+          $"count".as[Long])
+
+      testStream(windowedAgg, OutputMode.Update)(
+        // Event at 1.000000001s (1 nanosecond past 1s) => window [1.0s, 1.1s)
+        AddData(inputData, 1000000001L),
+        CheckNewAnswer(("1970-01-01 00:00:01", 1L)),
+        assertNumStateRows(1)
+      )
+    }
+  }
 }
