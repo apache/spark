@@ -34,8 +34,7 @@ def print_header(text)
 end
 
 def build_spark_if_necessary
-  # If spark has already been compiled on the host, skip here.
-  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+  if ENV['SKIP_SPARK_BUILD'] == '1'
     return
   end
 
@@ -123,12 +122,7 @@ def copy_and_update_java_docs(source, dest, scala_source)
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 end
 
-def build_spark_scala_and_java_docs_if_necessary
-  # If spark's docs has already been compiled on the host, skip here.
-  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
-    return
-  end
-
+def build_unidoc
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
 
@@ -280,7 +274,9 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  build_spark_scala_and_java_docs_if_necessary
+  if not (ENV['SKIP_UNIDOC'] == '1')
+    build_unidoc
+  end
 
   puts "Moving back into docs dir."
   cd("docs")
@@ -348,9 +344,8 @@ end
 def build_error_docs
   print_header "Building error docs."
 
-  if !system("which python3 >/dev/null 2>&1")
-    raise("Missing python3 in your path, stopping error doc generation")
-  end
+  system("command -v python3") \
+  || raise("`python3` is not on your PATH")
 
   system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")

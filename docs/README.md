@@ -120,8 +120,10 @@ using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) an
 using [MkDocs](https://www.mkdocs.org/).
 
 To control what API docs get built, you can set any combination of the following shell variables before you run `bundle exec jekyll build`:
+* `SKIP_SPARK_BUILD=1`: Skip building Spark (e.g. because you've already built it).
 * `SKIP_API=1`: Skip building all the API docs.
-* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs.
+* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs, which includes building the Unidoc.
+* `SKIP_UNIDOC=1`: Skip building the Unidoc.
 * `SKIP_PYTHONDOC=1`: Skip the Python API docs.
 * `SKIP_RDOC=1`: Skip the R API docs.
 * `SKIP_SQLDOC=1`: Skip the SQL API docs.
