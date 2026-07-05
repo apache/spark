@@ -6,18 +6,18 @@ OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 decimal(7,2) / decimal(7,2):              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-a / b (ansi=false)                                 7797           7858          37          1.3         779.7       1.0X
-a / b (ansi=true)                                  7886           7904          18          1.3         788.6       1.0X
-a / 2 (ansi=false)                                 5524           5553          18          1.8         552.4       1.4X
-a / 2 (ansi=true)                                  5476           5500          24          1.8         547.6       1.4X
+a / b (ansi=false)                                 4776           4837          90          2.1         477.6       1.0X
+a / b (ansi=true)                                  4813           4824           9          2.1         481.3       1.0X
+a / 2 (ansi=false)                                 2799           2828          21          3.6         279.9       1.7X
+a / 2 (ansi=true)                                  2739           2764          17          3.7         273.9       1.7X
 
 OpenJDK 64-Bit Server VM 21.0.11+10-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 decimal(38,18) / decimal(38,18):          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-a / b (ansi=false)                                14130          14148          11          0.7        1413.0       1.0X
-a / b (ansi=true)                                 14138          14146           6          0.7        1413.8       1.0X
-a / 2 (ansi=false)                                 8607           8628          27          1.2         860.7       1.6X
-a / 2 (ansi=true)                                  8579           8623          26          1.2         857.9       1.6X
+a / b (ansi=false)                                11056          11066           7          0.9        1105.6       1.0X
+a / b (ansi=true)                                 11067          11100          22          0.9        1106.7       1.0X
+a / 2 (ansi=false)                                 5969           5986          15          1.7         596.9       1.9X
+a / 2 (ansi=true)                                  5975           5984          13          1.7         597.5       1.9X
 
 
