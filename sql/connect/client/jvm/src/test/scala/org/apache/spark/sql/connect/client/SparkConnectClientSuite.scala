@@ -898,6 +898,34 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  test("transport errors preserve the original gRPC status exception as the cause") {
+    val failingService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        responseObserver.onError(
+          Status.UNAVAILABLE.withDescription("injected failure").asRuntimeException())
+      }
+    }
+    server = NettyServerBuilder.forPort(0).addService(failingService).build().start()
+    service = failingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+      .build()
+
+    val ex = intercept[SparkException] {
+      client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+    }
+    // The original StatusRuntimeException must survive as the cause so that callers
+    // can programmatically inspect the gRPC status code instead of parsing the message.
+    assert(ex.getCause.isInstanceOf[StatusRuntimeException])
+    assert(
+      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+        Status.Code.UNAVAILABLE)
+  }
+
   test("analyzePlan with short deadline fires, then succeeds after disabling deadlines") {
     val latch = new CountDownLatch(1)
     val slowService = new DummySparkConnectService {
