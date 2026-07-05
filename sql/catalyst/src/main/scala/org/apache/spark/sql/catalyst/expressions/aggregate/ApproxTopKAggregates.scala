@@ -228,7 +228,8 @@ object ApproxTopK {
     itemType match {
       case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
            _: LongType | _: FloatType | _: DoubleType | _: DateType |
-           _: TimestampType | _: TimestampNTZType | _: StringType | _: DecimalType => true
+           _: TimestampType | _: TimestampNTZType | _: StringType |
+           _: DecimalType | _: TimeType => true
       // BinaryType is not supported now, as ItemsSketch seems cannot count the frequency correctly
       case _ => false
     }
@@ -249,7 +250,7 @@ object ApproxTopK {
         new ItemsSketch[Boolean](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ItemsSketch[Number](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ItemsSketch[Long](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: DoubleType =>
         new ItemsSketch[Double](maxMapSize).asInstanceOf[ItemsSketch[Any]]
@@ -265,7 +266,7 @@ object ApproxTopK {
       case _: BooleanType => new ArrayOfBooleansSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: ByteType | _: ShortType | _: IntegerType | _: FloatType | _: DateType =>
         new ArrayOfNumbersSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: LongType | _: TimestampType | _: TimestampNTZType =>
+      case _: LongType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
         new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: DoubleType =>
         new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
@@ -357,6 +358,8 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case _: TimestampNTZType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
+        case _: TimeType =>
+          sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case st: StringType =>
           val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
           sketch.asInstanceOf[ItemsSketch[String]].update(cKey.toString)
@@ -426,7 +429,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         val item: Any = itemDataType match {
           case _: BooleanType | _: ByteType | _: ShortType | _: IntegerType |
                _: LongType | _: FloatType | _: DoubleType | _: DecimalType |
-               _: DateType | _: TimestampType | _: TimestampNTZType =>
+               _: DateType | _: TimestampType | _: TimestampNTZType | _: TimeType =>
             curFrequentItem.getItem
           case _: StringType =>
             UTF8String.fromString(curFrequentItem.getItem.asInstanceOf[String])
