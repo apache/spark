@@ -4281,20 +4281,55 @@ case class ConvertTimezone(
     Seq(
       StringTypeWithCollation(supportsTrimCollation = true),
       StringTypeWithCollation(supportsTrimCollation = true),
-      TimestampNTZType)
-  override def dataType: DataType = TimestampNTZType
+      TypeCollection(TimestampNTZType, AnyTimestampNanoType))
 
-  override def nullSafeEval(srcTz: Any, tgtTz: Any, micros: Any): Any = {
-    DateTimeUtils.convertTimestampNtzToAnotherTz(
+  // AnyTimestampNanoType covers both LTZ(p) and NTZ(p), but this function is NTZ-only (like the
+  // TimestampNTZType-only micro path above): reject a nanos source that is LTZ(p) rather than
+  // silently reinterpreting it, since a silent LTZ -> NTZ cast would drop the source time zone
+  // without the user asking for it.
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckSuccess if sourceTs.dataType.isInstanceOf[TimestampLTZNanosType] =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(2),
+          "requiredType" -> toSQLType("(timestamp_ntz or timestamp_ntz(p) with p in [7, 9])"),
+          "inputSql" -> toSQLExpr(sourceTs),
+          "inputType" -> toSQLType(sourceTs.dataType)))
+    case result => result
+  }
+
+  private def isTsNanos: Boolean = sourceTs.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // Preserves the exact source precision (7/8/9); AnyTimestampNanoType.defaultConcreteType would
+  // always widen the result to precision 9.
+  override def dataType: DataType = if (isTsNanos) sourceTs.dataType else TimestampNTZType
+
+  override def nullSafeEval(srcTz: Any, tgtTz: Any, ts: Any): Any = {
+    val micros = if (isTsNanos) ts.asInstanceOf[TimestampNanosVal].epochMicros else ts
+    val convertedTs = DateTimeUtils.convertTimestampNtzToAnotherTz(
       srcTz.asInstanceOf[UTF8String].toString,
       tgtTz.asInstanceOf[UTF8String].toString,
       micros.asInstanceOf[Long])
+    if (isTsNanos) {
+      TimestampNanosVal.fromParts(
+        convertedTs, ts.asInstanceOf[TimestampNanosVal].nanosWithinMicro)
+    } else convertedTs
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
-      s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    if (isTsNanos) {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, ts) => {
+        val convertedMicros = s"$dtu.convertTimestampNtzToAnotherTz(" +
+          s"$srcTz.toString(), $tgtTz.toString(), $ts.epochMicros)"
+        s"org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(" +
+          s"$convertedMicros, $ts.nanosWithinMicro)"
+      })
+    } else {
+      defineCodeGen(ctx, ev, (srcTz, tgtTz, micros) =>
+        s"""$dtu.convertTimestampNtzToAnotherTz($srcTz.toString(), $tgtTz.toString(), $micros)""")
+    }
   }
 
   override def prettyName: String = "convert_timezone"

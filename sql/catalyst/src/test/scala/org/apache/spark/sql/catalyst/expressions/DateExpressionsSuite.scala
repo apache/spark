@@ -2210,6 +2210,94 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57818: convert_timezone over nanosecond-precision timestamps") {
+    val ntzType9 = TimestampNTZNanosType(9)
+
+    // The nanosWithinMicro remainder is carried through unchanged by a zone conversion; only the
+    // whole-microsecond part shifts with the zone offset.
+    val srcNanos = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2022-03-27T03:00:00.123456789"), 9)
+    val expectedNanos = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2022-03-27T04:00:00.123456789"), 9)
+    assert(srcNanos.nanosWithinMicro == expectedNanos.nanosWithinMicro)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("Europe/Brussels"),
+        Literal("Europe/Moscow"),
+        Literal.create(srcNanos, ntzType9)),
+      expectedNanos)
+
+    // Pre-epoch values exercise the negative-epoch path. The expected epochMicros is derived from
+    // the already-verified micros-only conversion (SPARK-37552 tests that path); this only checks
+    // that the nanos wiring delegates to it correctly and carries the remainder through unchanged.
+    val preEpochSrc = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("1960-01-01T00:00:00.000000001"), 9)
+    val preEpochExpectedMicros = DateTimeUtils.convertTimestampNtzToAnotherTz(
+      "Europe/Moscow", "Europe/Brussels", preEpochSrc.epochMicros)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("Europe/Moscow"),
+        Literal("Europe/Brussels"),
+        Literal.create(preEpochSrc, ntzType9)),
+      TimestampNanosVal.fromParts(preEpochExpectedMicros, preEpochSrc.nanosWithinMicro))
+
+    // Precision (7/8/9) is preserved on the result; AnyTimestampNanoType.defaultConcreteType
+    // would incorrectly always widen it to 9.
+    Seq(7, 8, 9).foreach { precision =>
+      val ntzType = TimestampNTZNanosType(precision)
+      val src = DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2022-03-27T03:00:00.123456789"), precision)
+      val convertExpr = ConvertTimezone(
+        Literal("Europe/Brussels"), Literal("Europe/Moscow"), Literal.create(src, ntzType))
+      assert(convertExpr.dataType === ntzType)
+    }
+
+    // LTZ(p) nanos values are rejected: this function is NTZ-only, matching the existing
+    // TimestampNTZType-only micro path. Unlike that micro path -- which does implicit-cast a
+    // plain LTZ TimestampType argument down to TimestampNTZType -- a nanos source must not be
+    // silently reinterpreted from LTZ to NTZ, since that would drop the source time zone
+    // information without the user asking for it.
+    val ltzNanos = DateTimeUtils.instantToTimestampNanos(Instant.parse("2022-03-27T03:00:00Z"), 9)
+    val ltzMismatch = ConvertTimezone(
+      Literal("Europe/Brussels"), Literal("Europe/Moscow"),
+      Literal.create(ltzNanos, TimestampLTZNanosType(9)))
+      .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+
+    // NULL handling: a NULL nanosecond timestamp, and NULL zone arguments with a non-NULL
+    // nanosecond timestamp.
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("America/Los_Angeles"),
+        Literal("UTC"),
+        Literal.create(null, ntzType9)),
+      null)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal.create(null, StringType),
+        Literal("UTC"),
+        Literal.create(srcNanos, ntzType9)),
+      null)
+    checkEvaluation(
+      ConvertTimezone(
+        Literal("America/Los_Angeles"),
+        Literal.create(null, StringType),
+        Literal.create(srcNanos, ntzType9)),
+      null)
+
+    outstandingTimezonesIds.foreach { sourceTz =>
+      outstandingTimezonesIds.foreach { targetTz =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (_: Expression, _: Expression, sourceTs: Expression) =>
+            ConvertTimezone(
+              Literal(sourceTz),
+              Literal(targetTz),
+              sourceTs),
+          StringType, StringType, ntzType9)
+      }
+    }
+  }
+
   test("SPARK-38195: add a quantity of interval units to a timestamp") {
     // Check case-insensitivity
     checkEvaluation(
