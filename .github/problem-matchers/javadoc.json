@@ -1,0 +1,16 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "javadoc-doclint",
+      "severity": "error",
+      "pattern": [
+        {
+          "regexp": "^\\[warn\\]\\s+(.+?):(\\d+)(?::\\d+)?:\\s+error:\\s+(.+)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      ]
+    }
+  ]
+}

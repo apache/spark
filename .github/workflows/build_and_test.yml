@@ -1344,6 +1344,8 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
+    - name: Register javadoc problem matcher
+      run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build for branch-3.5 and branch-4.0
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
@@ -1438,6 +1440,8 @@ jobs:
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         bundle exec jekyll build
+    - name: Remove problem matcher
+      run: echo "::remove-matcher owner=javadoc-doclint::"
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site

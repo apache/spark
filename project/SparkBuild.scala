@@ -1790,7 +1790,6 @@ object Unidoc {
         "-tag", "inheritdoc",
         "--ignore-source-errors", "-notree",
         "-Xmaxerrs", "0",
-        "-verbose",
         "-Xdoclint:all", "-Xdoclint:-missing"
       )
     },
