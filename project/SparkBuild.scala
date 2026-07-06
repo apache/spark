@@ -1775,7 +1775,12 @@ object Unidoc {
           .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop"))))
     },
 
-    // This is separate from `-Xmaxerrs` below. The default is 100.
+    // This setting is separate from `-Xmaxerrs` below and just suppresses the _display_ of
+    // errors, not the errors themselves. The default is 100.
+    // We want _all_ errors to show because we have no way to separate real errors in our
+    // source from errors in generated Java files that are ignored. So if some errors are
+    // suppressed here, they will still fail the doc build even though they won't print
+    // an error message indicating the location of the problem.
     (JavaUnidoc / unidoc / maxErrors) := 0,
 
     (JavaUnidoc / unidoc / javacOptions) := {
@@ -1791,6 +1796,7 @@ object Unidoc {
         "-tag", "todo:X",
         "-tag", "groupname:X",
         "-tag", "inheritdoc",
+        "-quiet",
         "--ignore-source-errors", "-notree",
         "-Xmaxerrs", "0",
         "-Xdoclint:all", "-Xdoclint:-missing"
