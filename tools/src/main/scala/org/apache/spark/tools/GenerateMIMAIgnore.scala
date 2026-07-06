@@ -159,6 +159,7 @@ object GenerateMIMAIgnore {
   private def getClasses(packageName: String): Set[String] = {
     val scanResult = new ClassGraph()
       .acceptPackages(packageName)
+      .ignoreClassVisibility()
       .scan()
     try {
       scanResult.getAllClasses.getNames.asScala
