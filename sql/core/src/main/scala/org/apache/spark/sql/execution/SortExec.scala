@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 /**
  * Performs (external) sorting.
@@ -120,10 +119,7 @@ case class SortExec(
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
-      sortTime += NANOSECONDS.toMillis(sorter.getSortTimeNanos)
-      peakMemory += sorter.getPeakMemoryUsage
-      spillSize += metrics.memoryBytesSpilled - spillSizeBefore
-      metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
+      SortExec.recordSortMetrics(sorter, metrics, spillSizeBefore, sortTime, peakMemory, spillSize)
 
       sortedIterator
     }
@@ -174,10 +170,8 @@ case class SortExec(
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $addToSorterFuncName(partitionIndex);
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add($sorterVariable.getSortTimeNanos() / $NANOS_PER_MILLIS);
-       |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
-       |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
-       |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
+       |   org.apache.spark.sql.execution.SortExec.recordSortMetrics(
+       |     $sorterVariable, $metrics, $spillSizeBefore, $sortTime, $peakMemory, $spillSize);
        |   $needToSort = false;
        | }
        |
@@ -211,4 +205,28 @@ case class SortExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SortExec =
     copy(child = newChild)
+}
+
+object SortExec {
+  /**
+   * Records the sort metrics (sort time, peak memory and spill size) for a completed sort. This
+   * is called both by the interpreted path ([[SortExec.doExecute]]) and by the generated code of
+   * [[SortExec.doProduce]], so the type-independent metric bookkeeping is compiled once per JVM
+   * instead of being re-emitted into every SortExec stage's generated code.
+   *
+   * `spillSizeBefore` is the task's spilled-bytes count captured before the rows were fed to the
+   * sorter, so that `spillSize` reflects only this operator's contribution.
+   */
+  def recordSortMetrics(
+      sorter: UnsafeExternalRowSorter,
+      metrics: TaskMetrics,
+      spillSizeBefore: Long,
+      sortTime: SQLMetric,
+      peakMemory: SQLMetric,
+      spillSize: SQLMetric): Unit = {
+    sortTime += NANOSECONDS.toMillis(sorter.getSortTimeNanos)
+    peakMemory += sorter.getPeakMemoryUsage
+    spillSize += metrics.memoryBytesSpilled - spillSizeBefore
+    metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
+  }
 }
