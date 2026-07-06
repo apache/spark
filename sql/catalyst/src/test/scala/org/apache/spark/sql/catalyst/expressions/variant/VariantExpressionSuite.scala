@@ -1442,6 +1442,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("{}")), Literal("$.a[2000000000]"), Literal(1)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
       VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig)),
       "VARIANT_SIZE_LIMIT",
       Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
