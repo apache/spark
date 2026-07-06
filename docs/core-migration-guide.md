@@ -22,6 +22,16 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.2 to 4.3
+
+- Since Spark 4.3, Spark compresses serialized RDD partitions by default. To restore the legacy behavior, you can set `spark.rdd.compress` to `false`.
+
+- Since Spark 4.3, Spark executor pods connect to the driver via the driver pod IP directly instead of the driver's Kubernetes Service. To restore the legacy behavior, you can set `spark.kubernetes.executor.useDriverPodIP` to `false`.
+
+- Since Spark 4.3, Spark sets `allowPrivilegeEscalation` to `false` on the driver and executor containers' security context by default. To restore the legacy behavior, you can set `spark.kubernetes.securityContext.allowPrivilegeEscalation` to `true`.
+
+- Since Spark 4.3, the default value of `spark.ui.xXssProtection` has been changed from `1; mode=block` to `0`. The XSS Auditor has been removed from Chrome and Edge, and was never implemented in Firefox. It can introduce side-channel vulnerabilities in browsers that still support it (Safari). To restore the legacy behavior, you can set `spark.ui.xXssProtection` to `1; mode=block`. For modern XSS protection, consider enabling `spark.ui.contentSecurityPolicy.enabled`.
+
 ## Upgrading from Core 4.1 to 4.2
 
 - Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.

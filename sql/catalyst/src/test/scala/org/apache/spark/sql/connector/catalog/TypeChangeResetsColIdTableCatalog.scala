@@ -23,9 +23,8 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
 
 /**
  * An [[InMemoryTableCatalog]] that assigns fresh column IDs when the
- * column's data type changes. This is the inverse of the default
- * [[InMemoryBaseTable.assignMissingIds]] behavior, which preserves IDs
- * across type changes.
+ * column's data type changes, overriding the default behavior where type
+ * changes preserve the existing column ID.
  *
  * Use this catalog for tests that need a type change to produce a new
  * column ID (e.g., verifying that adding a nested field to a container
@@ -63,6 +62,7 @@ class TypeChangeResetsColIdTableCatalog extends InMemoryTableCatalog {
       alteredTable.constraints,
       id = alteredTable.id)
     tableWithResetIds.alterTableWithData(alteredTable.data, alteredTable.schema)
+    tableWithResetIds.setVersionAndValidatedVersionFrom(alteredTable)
     tables.put(ident, tableWithResetIds)
     tableWithResetIds
   }

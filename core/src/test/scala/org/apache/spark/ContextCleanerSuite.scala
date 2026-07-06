@@ -17,9 +17,6 @@
 
 package org.apache.spark
 
-import java.lang.ref.WeakReference
-import java.util.concurrent.TimeUnit
-
 import scala.collection.mutable.HashSet
 import scala.util.Random
 
@@ -94,18 +91,6 @@ abstract class ContextCleanerSuiteBase(val shuffleManager: Class[_] = classOf[So
     if (Random.nextBoolean()) rdd.persist()
     rdd.count()
     rdd
-  }
-
-  /** Run GC and make sure it actually has run */
-  protected def runGC(): Unit = {
-    val weakRef = new WeakReference(new Object())
-    val startTimeNs = System.nanoTime()
-    System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
-    // Wait until a weak reference object has been GCed
-    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
-      System.gc()
-      Thread.sleep(200)
-    }
   }
 
   protected def cleaner = sc.cleaner.get
@@ -350,6 +335,16 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       case BroadcastBlockId(`taskClosureBroadcastId`, _) => true
       case _ => false
     }, askStorageEndpoints = true).isEmpty)
+  }
+
+  test("SPARK-57873: non-positive spark.cleaner.periodicGC.interval disables periodic GC") {
+    sc.stop()
+    val conf = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("periodicGCDisabled")
+      .set(CLEANER_PERIODIC_GC_INTERVAL.key, "0s")
+    sc = new SparkContext(conf)
+    assert(sc.cleaner.isDefined)
   }
 }
 

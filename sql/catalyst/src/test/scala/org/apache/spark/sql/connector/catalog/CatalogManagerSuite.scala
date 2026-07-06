@@ -41,7 +41,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("CatalogManager should reflect the changes of default catalog") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
@@ -54,7 +54,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("CatalogManager should keep the current catalog once set") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {
       catalogManager.setCurrentCatalog("dummy")
@@ -70,7 +70,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("current namespace should be updated when switching current catalog") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {
       catalogManager.setCurrentCatalog("dummy")
       assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
@@ -95,7 +95,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       CatalogDatabase(
         "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
       ignoreIfExists = false)
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
 
     // If the current catalog is session catalog, setting current namespace actually sets
     // `SessionCatalog.currentDb`.
@@ -186,6 +186,30 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
     }
     assert(e.getMessage.contains("Invalid stored SQL path metadata for view"))
     assert(e.getMessage.contains("default.v_broken"))
+  }
+
+  test("isBuiltinFirstOnPath: SPARK-57758 gate for the built-in function fast-path") {
+    // The function-resolution built-in fast-path is safe (cannot be shadowed) only when
+    // `system.builtin` is the FIRST path entry. The fast-path has no behavioral signature -- the
+    // slow candidate loop yields identical results -- so this pure-predicate test guards the gate
+    // directly: a regression that silently stopped the fast-path from firing (re-introducing the
+    // SPARK-57758 perf regression) or fired it when a catalog precedes `system.builtin`
+    // (re-introducing the precedence bug) would leave the behavioral SQL tests green.
+    val builtin = Seq("system", "builtin")
+    val session = Seq("system", "session")
+    val catalog = Seq("spark_catalog", "some_schema")
+    // Default `sessionOrder` modes `second` / `last` keep `system.builtin` first -> safe.
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, session)))
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin)))
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(builtin, catalog, session)))
+    // Case-insensitive match on the well-known entry.
+    assert(CatalogManager.isBuiltinFirstOnPath(Seq(Seq("System", "Builtin"), session)))
+    // `first` mode (session before builtin) and custom `SET PATH` shapes that place any entry
+    // before `system.builtin` -> not safe.
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(session, builtin)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog, builtin)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq(catalog)))
+    assert(!CatalogManager.isBuiltinFirstOnPath(Seq.empty))
   }
 
   // ---------------------------------------------------------------------------

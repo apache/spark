@@ -20,7 +20,10 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -406,7 +409,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       mem.addData(1, 2)
       registerPersistedView("complete-view", query = dfFlowFunc(Seq(1, 2).toDF("x")))
       registerPersistedView("incremental-view", query = dfFlowFunc(mem.toDF()))
-      registerTable("`complete-table`", query = Option(readFlowFunc("complete-view")))
+      registerTable("`complete-table`", query = Option(readFlowFunc("`complete-view`")))
       registerTable("`incremental-table`")
       registerFlow(
         "`incremental-table`",
@@ -509,6 +512,38 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     assert(g.flow(TableIdentifier("sink_flow")).isInstanceOf[StreamingFlow])
   }
 
+  test("AutoCdcFlow registers and resolves to AutoCdcMergeFlow") {
+    val session = spark
+    import session.implicits._
+
+    val P = new TestGraphRegistrationContext(spark) {
+      val mem = MemoryStream[Int]
+      val cdcEvents = mem.toDF().select($"value" as "id", $"value" as "seq")
+      registerTable("target")
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+    }
+    val g = P.resolveToDataflowGraph()
+    assert(
+      g.flow(fullyQualifiedIdentifier("auto_cdc_flow")).isInstanceOf[AutoCdcMergeFlow]
+    )
+  }
+
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */
   private def verifyFlowSchema(
       pipeline: DataflowGraph,
@@ -527,5 +562,145 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       pipeline.resolvedFlow(identifier).schema == expected,
       s"Flow ${identifier.unquotedString} has the wrong schema"
     )
+  }
+
+  test("per-flow confs are visible to the analyzer but do not leak onto the run session") {
+    val key = "pipelines.test.flowConfIsolation"
+    assert(spark.conf.getOption(key).isEmpty)
+
+    val inputId = TableIdentifier("conf_observer")
+    // (conf the analyzer reads via SQLConf.get, conf on the run session) captured during load().
+    var observed: (Option[String], Option[String]) = null
+    val runSession = spark
+    val observingInput = new Input {
+      override def identifier: TableIdentifier = inputId
+      override def origin: QueryOrigin = QueryOrigin()
+      override def load(asStreaming: Boolean): DataFrame = {
+        observed = (SQLConf.get.getAllConfs.get(key), runSession.conf.getOption(key))
+        runSession.range(1).toDF()
+      }
+    }
+
+    val result = FlowAnalysis
+      .createFlowFunctionFromLogicalPlan(UnresolvedRelation(Seq("conf_observer")))
+      .call(
+        allInputs = Set(inputId),
+        availableInputs = Seq(observingInput),
+        configuration = Map(key -> "flowValue"),
+        queryContext = QueryContext(currentCatalog = None, currentDatabase = None),
+        queryOrigin = QueryOrigin())
+
+    assert(result.dataFrame.isSuccess, s"flow analysis failed: ${result.dataFrame}")
+    assert(observed != null, "input.load was not invoked during analysis")
+    val (analyzerConf, runConf) = observed
+    // The per-flow conf is what the analyzer reads ...
+    assert(analyzerConf.contains("flowValue"))
+    // ... but it must not leak onto the session the pipeline is run from.
+    assert(
+      !runConf.contains("flowValue"),
+      "per-flow conf leaked onto the run session during flow analysis")
+    // ... and nothing is left behind on the run session afterwards.
+    assert(spark.conf.getOption(key).isEmpty)
+  }
+
+  test("per-flow confs stay isolated when flows are resolved in parallel") {
+    val key = "pipelines.test.flowConfIsolation"
+    assert(spark.conf.getOption(key).isEmpty)
+
+    val numFlows = 8
+    val runSession = spark
+    // The conf value each flow's analyzer reads for `key`.
+    val observed = new java.util.concurrent.ConcurrentHashMap[Int, String]()
+    val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+    // Rendezvous so every flow is mid-analysis - its per-flow conf already applied - at the same
+    // time. That is exactly when applying confs to a shared session would let one flow observe
+    // another flow's value.
+    val barrier = new java.util.concurrent.CyclicBarrier(numFlows)
+
+    def observingInput(i: Int): Input = new Input {
+      override def identifier: TableIdentifier = TableIdentifier(s"conf_observer_$i")
+      override def origin: QueryOrigin = QueryOrigin()
+      override def load(asStreaming: Boolean): DataFrame = {
+        barrier.await(60, java.util.concurrent.TimeUnit.SECONDS)
+        observed.put(i, SQLConf.get.getConfString(key, "<unset>"))
+        runSession.range(1).toDF()
+      }
+    }
+
+    val threads = (0 until numFlows).map { i =>
+      val t = new Thread(() => {
+        try {
+          val result = FlowAnalysis
+            .createFlowFunctionFromLogicalPlan(UnresolvedRelation(Seq(s"conf_observer_$i")))
+            .call(
+              allInputs = Set(TableIdentifier(s"conf_observer_$i")),
+              availableInputs = Seq(observingInput(i)),
+              configuration = Map(key -> s"flowValue_$i"),
+              queryContext = QueryContext(currentCatalog = None, currentDatabase = None),
+              queryOrigin = QueryOrigin())
+          result.dataFrame.failed.foreach(errors.add)
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      })
+      t.setName(s"flow-conf-isolation-$i")
+      t.start()
+      t
+    }
+    threads.foreach(_.join(120000))
+
+    assert(errors.isEmpty, s"flow analysis threads failed: ${errors.toArray.mkString(", ")}")
+    assert(
+      observed.size() == numFlows,
+      s"only ${observed.size()} of $numFlows flows recorded a conf")
+    (0 until numFlows).foreach { i =>
+      assert(
+        observed.get(i) == s"flowValue_$i",
+        s"flow $i observed '${observed.get(i)}' instead of its own per-flow conf")
+    }
+    // Nothing leaks onto the run session.
+    assert(spark.conf.getOption(key).isEmpty)
+  }
+
+  test("per-flow confs reach the analyzer through the full resolveToDataflowGraph() path") {
+    val caseSensitiveKey = SQLConf.CASE_SENSITIVE.key
+    // Pin the session default so the test is self-contained under the shared session. The per-flow
+    // override below is applied to the flow's own conf, never to this session conf.
+    withSQLConf(caseSensitiveKey -> "false") {
+      // With case-insensitive resolution `SELECT Foo FROM src` matches the `foo` column. Setting
+      // spark.sql.caseSensitive=true on the consumer flow makes that flow's analysis
+      // case-sensitive, so `Foo` no longer matches `foo`. Driving this through
+      // resolveToDataflowGraph() exercises a per-flow conf on the full resolution path (not just a
+      // direct FlowAnalysis call) and shows it is consumed by Catalyst analysis, not merely stored
+      // where SQLConf.get can read it. Cross-flow isolation under concurrency is covered by the
+      // parallel test above.
+
+      // Baseline: no per-flow conf, so `Foo` matches `foo` and the graph resolves.
+      val resolved = new TestGraphRegistrationContext(spark) {
+        registerPersistedView("src", query = dfFlowFunc(spark.range(1).toDF("foo")))
+        registerPersistedView("consumer", query = sqlFlowFunc(spark, "SELECT Foo FROM src"))
+      }.resolveToDataflowGraph()
+      assert(resolved.resolved, "pipeline should resolve under the default case-insensitive conf")
+
+      // Same query, but the consumer flow sets spark.sql.caseSensitive=true, so `Foo` no longer
+      // matches `foo` and analysis of that flow fails.
+      val unresolved = new TestGraphRegistrationContext(spark) {
+        registerPersistedView("src", query = dfFlowFunc(spark.range(1).toDF("foo")))
+        registerPersistedView(
+          "consumer",
+          query = sqlFlowFunc(spark, "SELECT Foo FROM src"),
+          sqlConf = Map(caseSensitiveKey -> "true"))
+      }.resolveToDataflowGraph()
+      assert(!unresolved.resolved, "case-sensitive consumer flow should fail to resolve")
+      val ex = intercept[UnresolvedPipelineException] {
+        unresolved.validate()
+      }
+      assertAnalysisException(
+        ex.directFailures(fullyQualifiedIdentifier("consumer")),
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+
+      // The per-flow conf must not leak onto the run session.
+      assert(spark.conf.get(caseSensitiveKey) == "false")
+    }
   }
 }

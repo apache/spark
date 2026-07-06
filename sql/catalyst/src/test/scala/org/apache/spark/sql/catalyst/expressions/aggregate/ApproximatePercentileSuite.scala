@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, TimeType}
 import org.apache.spark.util.SizeEstimator
 
 class ApproximatePercentileSuite extends SparkFunSuite {
@@ -133,6 +133,23 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         assert(percentiles.zip(expectedPercentiles)
           .forall(pair => Math.abs(pair._1 - pair._2) < error))
     }
+  }
+
+  test("SPARK-57557: ApproximatePercentile supports TIME type") {
+    // The result type mirrors the input TIME type, preserving precision.
+    assert(new ApproximatePercentile(
+      BoundReference(0, TimeType(), nullable = false), Literal(0.5)).dataType === TimeType())
+    assert(new ApproximatePercentile(
+      BoundReference(0, TimeType(3), nullable = false), Literal(0.5)).dataType === TimeType(3))
+
+    // TIME's internal value is a Long (nanos-of-day); update/merge/eval round-trips it as a Long.
+    val agg = new ApproximatePercentile(
+      BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+    val buffer = agg.createAggregationBuffer()
+    (1L to 1000L).foreach(v => agg.update(buffer, InternalRow(v)))
+    val result = agg.eval(buffer)
+    assert(result.isInstanceOf[Long])
+    assert(Math.abs(result.asInstanceOf[Long] - 500L) < 5L)
   }
 
   test("class ApproximatePercentile, low level interface, update, merge, eval...") {

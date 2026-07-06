@@ -298,9 +298,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         } while (currentBufferIdx < bufEnd
             && currentBuffer[currentBufferIdx] != maxDefLevel);
         int runLen = currentBufferIdx - runStart;
-        for (int k = 0; k < runLen; k++) {
-          nulls.putNull(valueOff + k);
-        }
+        nulls.putNulls(valueOff, runLen);
         valueOff += runLen;
       }
     }
@@ -714,14 +712,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
           updater.readValues(runLen, valueOff, values, valueReader);
         }
       } else {
-        for (int k = 0; k < runLen; k++) {
-          nulls.putNull(valueOff + k);
-        }
+        nulls.putNulls(valueOff, runLen);
       }
       valueOff += runLen;
-      for (int k = 0; k < runLen; k++) {
-        defLevels.putInt(levelIdx + k, runValue);
-      }
+      defLevels.putInts(levelIdx, runLen, runValue);
       levelIdx += runLen;
     }
     state.valueOffset = valueOff;
@@ -1006,11 +1000,15 @@ public final class VectorizedRleValuesReader extends ValuesReader
             this.currentBuffer = new int[this.currentCount];
           }
           currentBufferIdx = 0;
+          // Slice all packed bytes in one call (numGroups groups x bitWidth bytes each)
+          // instead of one slice per group, avoiding per-group ByteBuffer allocation.
+          int totalBytes = numGroups * bitWidth;
+          ByteBuffer packed = in.slice(totalBytes);
+          int pos = packed.position();
           int valueIndex = 0;
           while (valueIndex < this.currentCount) {
-            // values are bit packed 8 at a time, so reading bitWidth will always work
-            ByteBuffer buffer = in.slice(bitWidth);
-            this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
+            this.packer.unpack8Values(packed, pos, this.currentBuffer, valueIndex);
+            pos += bitWidth;
             valueIndex += 8;
           }
         }

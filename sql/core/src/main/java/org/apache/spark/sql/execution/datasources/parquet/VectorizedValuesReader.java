@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.nio.ByteBuffer;
-import java.time.ZoneOffset;
 
-import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
@@ -138,33 +136,24 @@ public interface VectorizedValuesReader {
     }
   }
 
+  void readBinary(int total, WritableColumnVector c, int rowId);
+
   /**
-   * Reads {@code total} INT32 date-day values (days since 1970-01-01, Proleptic Gregorian),
-   * converts each to TimestampNTZ micros at UTC via
-   * {@link DateTimeUtils#daysToMicros(int, java.time.ZoneId)}, and writes them into
-   * {@code c} starting at {@code c[rowId]}. Used by the type-converting updater that
-   * reads parquet INT32 DATE columns into Spark {@code TimestampNTZType} targets in
-   * {@code CORRECTED} datetime-rebase mode. The {@code LEGACY}/{@code EXCEPTION} rebase
-   * variants are out of scope for this method.
+   * Reads {@code total} fixed-length byte arrays of exactly {@code len} bytes each into
+   * {@code c} starting at {@code c[rowId]}. Unlike {@link #readBinary(int, WritableColumnVector,
+   * int)} which reads length-prefixed variable-length BYTE_ARRAY values, this method reads
+   * FIXED_LEN_BYTE_ARRAY data where each value is exactly {@code len} raw bytes with no
+   * length prefix in the encoded stream.
    *
-   * <p>The default implementation is a per-row loop that calls
-   * {@code DateTimeUtils.daysToMicros} per element; it is algorithmically equivalent to
-   * the legacy per-row Updater path but the per-element conversion call dominates the
-   * loop, so the speedup from overriding this method is more modest than for the pure
-   * primitive-cast siblings ({@link #readIntegersAsLongs}, {@link #readIntegersAsDoubles}).
-   * Subclasses backed by contiguous bulk storage (e.g. PLAIN encoding via
-   * {@link VectorizedPlainValuesReader}) should override to read source bytes once and run
-   * a tight in-method conversion loop, avoiding {@code total} virtual dispatches on
-   * {@link #readInteger()}. Readers without an override preserve correctness but gain no
-   * speedup.
+   * <p>The default implementation falls back to a per-row loop calling
+   * {@link #readBinary(int)} for each value; subclasses may override for better performance.
    */
-  default void readIntegersAsTimestampMicros(int total, WritableColumnVector c, int rowId) {
-    for (int i = 0; i < total; i += 1) {
-      c.putLong(rowId + i, DateTimeUtils.daysToMicros(readInteger(), ZoneOffset.UTC));
+  default void readFixedLenByteArray(int total, int len, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i++) {
+      c.putByteArray(rowId + i, readBinary(len).getBytesUnsafe());
     }
   }
 
-  void readBinary(int total, WritableColumnVector c, int rowId);
   void readGeometry(int total, WritableColumnVector c, int rowId);
   void readGeography(int total, WritableColumnVector c, int rowId);
 

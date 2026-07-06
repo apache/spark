@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -186,6 +187,21 @@ final class MutableAny extends MutableValue {
   }
 }
 
+final class MutableTimestampNanos extends MutableValue {
+  var value: TimestampNanosVal = _
+  override def boxed: Any = if (isNull) null else value
+  override def update(v: Any): Unit = {
+    isNull = false
+    value = v.asInstanceOf[TimestampNanosVal]
+  }
+  override def copy(): MutableTimestampNanos = {
+    val newCopy = new MutableTimestampNanos
+    newCopy.isNull = isNull
+    newCopy.value = value
+    newCopy
+  }
+}
+
 /**
  * A row type that holds an array specialized container objects, of type [[MutableValue]], chosen
  * based on the dataTypes of each column.  The intent is to decrease garbage when modifying the
@@ -203,7 +219,7 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
     // We use INT for DATE and YearMonthIntervalType internally
     case IntegerType | DateType | _: YearMonthIntervalType => new MutableInt
     // We use Long for Timestamp, Timestamp without time zone and DayTimeInterval internally
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
       new MutableLong
     case FloatType => new MutableFloat
     case DoubleType => new MutableDouble

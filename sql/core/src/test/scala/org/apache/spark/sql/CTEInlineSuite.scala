@@ -261,6 +261,73 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("SPARK-56921: plan normalization handles nested CTEs under union") {
+    withTempView("input", "common") {
+      Seq((1, 1, 10), (1, 2, 20), (2, 1, 30))
+        .toDF("a", "b", "value")
+        .createOrReplaceTempView("input")
+
+      sql(
+        s"""with cte_common as (
+           |  select a, b, sum(value) as value
+           |  from input
+           |  group by a, b
+           |)
+           |select * from cte_common
+         """.stripMargin).createOrReplaceTempView("common")
+
+      val left = sql(
+        s"""with cte_a as (
+           |  select a, sum(value) as value
+           |  from common
+           |  group by a
+           |)
+           |select a as id, value from cte_a
+         """.stripMargin)
+
+      val right = sql(
+        s"""with cte_b as (
+           |  select b, sum(value) as value
+           |  from common
+           |  group by b
+           |)
+           |select b as id, value from cte_b
+         """.stripMargin)
+
+      checkAnswer(
+        left.union(right),
+        Row(1, 30) :: Row(2, 30) :: Row(1, 40) :: Row(2, 20) :: Nil)
+    }
+  }
+
+  test("SPARK-56921: plan normalization preserves recursive CTE loop refs") {
+    val df = sql(
+      s"""with recursive t(n) as (
+         |  select 1
+         |  union all
+         |  select n + 1 from t where n < 3
+         |)
+         |select * from t
+       """.stripMargin)
+
+    val normalized = df.queryExecution.normalized
+    val unionLoops = normalized.collect { case unionLoop: UnionLoop => unionLoop }
+
+    assert(unionLoops.nonEmpty, "Recursive CTE should normalize with a UnionLoop.")
+    unionLoops.foreach { unionLoop =>
+      val unionLoopRefs = unionLoop.recursion.collect {
+        case unionLoopRef: UnionLoopRef => unionLoopRef
+      }
+
+      assert(unionLoopRefs.nonEmpty, "Recursive CTE should normalize with a UnionLoopRef.")
+      assert(
+        unionLoopRefs.forall(_.loopId == unionLoop.id),
+        "UnionLoopRef loop IDs should match the normalized UnionLoop ID.")
+    }
+
+    checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
+
   test("SPARK-36447: invalid nested CTEs") {
     withTempView("t") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")

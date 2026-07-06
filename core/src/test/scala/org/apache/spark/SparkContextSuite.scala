@@ -1481,6 +1481,26 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }.getMessage
     assert(m.contains("Number of cores to allocate for each task should be positive."))
   }
+
+  test("SPARK-57867: Driver should not reserve off-heap memory in non-local mode") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local-cluster[1,1,1024]")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
+    sc = new SparkContext(conf)
+    assert(sc.env.memoryManager.maxOffHeapStorageMemory === 0)
+  }
+
+  test("SPARK-57867: Driver should reserve off-heap memory in local mode") {
+    val conf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, 5L * 1024 * 1024)
+    sc = new SparkContext(conf)
+    assert(sc.env.memoryManager.maxOffHeapStorageMemory > 0)
+  }
 }
 
 object SparkContextSuite {

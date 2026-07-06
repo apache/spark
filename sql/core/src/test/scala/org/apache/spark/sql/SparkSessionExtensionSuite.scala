@@ -132,6 +132,12 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-57194: inject pre operator optimization rule") {
+    withSession(Seq(_.injectPreOperatorOptimizationRule(MyRule))) { session =>
+      assert(session.sessionState.optimizer.preOperatorOptimizationRules.contains(MyRule(session)))
+    }
+  }
+
   test("inject spark planner strategy") {
     withSession(Seq(_.injectPlannerStrategy(MySparkStrategy))) { session =>
       assert(session.sessionState.planner.strategies.contains(MySparkStrategy(session)))

@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -667,11 +668,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("variant_get path") {
     def checkInvalidPath(path: String): Unit = {
-      checkErrorInExpression[SparkRuntimeException](
-        variantGet("0", path, IntegerType),
-        "INVALID_VARIANT_GET_PATH",
-        Map("path" -> path, "functionName" -> "`variant_get`")
-      )
+      for ((expr, fn) <- Seq(
+          variantGet("0", path, IntegerType) -> "`variant_get`",
+          tryVariantGet("0", path, IntegerType) -> "`try_variant_get`")) {
+        checkErrorInExpression[SparkRuntimeException](
+          expr,
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> path, "functionName" -> fn)
+        )
+      }
     }
 
     testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3[0]", IntegerType, 4)
@@ -679,11 +684,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off nonascii
     testVariantGet("""{"你好": {"世界": "hello"}}""", """$['你好']["世界"]""", StringType, "hello")
     // scalastyle:on nonascii
+    testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
+    checkInvalidPath("$[2147483648]")
+    checkInvalidPath("$[4294967296]")
     checkInvalidPath("""$['"]""")
 
     checkInvalidPath("$[\"\"\"]")
@@ -1199,5 +1207,123 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Null input.
     checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
+  }
+
+  test("variant_delete") {
+    def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantDelete(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"b":2}""")
+    checkDelete("""{"a": 1}""", Seq("$.missing"), """{"a":1}""")
+    checkDelete("[1, 2, 3]", Seq("$[1]"), "[1,3]")
+    checkDelete("[1, 2, 3]", Seq("$[10]"), "[1,2,3]")
+
+    // Cascading deletes propagate state across paths.
+    checkDelete("[1, 2, 3]", Seq("$[0]", "$[0]", "$[0]"), "[]")
+    checkDelete("""{"a":[1,2,3]}""", Seq("$.a[0]", "$.a[0]", "$.a[0]"), """{"a":[]}""")
+
+    checkDelete("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b"), """{"a":{"c":2}}""")
+    checkDelete("""[{"b": 1, "c": 2}]""", Seq("$[0].b"), """[{"c":2}]""")
+
+    // Empty containers are preserved; the parent is never collapsed to NULL.
+    checkDelete("""{"a": 1}""", Seq("$.a"), "{}")
+    checkDelete("[1]", Seq("$[0]"), "[]")
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a.b"), """{"a":{}}""")
+    checkDelete("""{"a": []}""", Seq("$.a[0]"), """{"a":[]}""")
+
+    checkDelete(
+      """{"a": {"b": {"c": {"d": 1}}}}""",
+      Seq("$.a.b.c.d"),
+      """{"a":{"b":{"c":{}}}}""")
+
+    checkDelete("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[10,30]}""")
+    checkDelete(
+      """{"a": [{"b": 1, "c": 2}, {"b": 3}]}""",
+      Seq("$.a[0].b"),
+      """{"a":[{"c":2},{"b":3}]}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2}""", Seq("""$["a"]"""), """{"b":2}""")
+
+    // Pure deep-array nesting: only `ArrayIndexSegment`s, never visits the `OBJECT` branch.
+    checkDelete("[[[1, 2, 3]]]", Seq("$[0][0][1]"), "[[[1,3]]]")
+    checkDelete("[[10, 20], [30, 40]]", Seq("$[0][1]"), "[[10],[30,40]]")
+
+    // All three key notations (`.k`, `['k']`, `["k"]`) alternating within a single path.
+    checkDelete(
+      """{"a": {"b": {"c": 1, "d": 2}}}""",
+      Seq("""$['a'].b["c"]"""),
+      """{"a":{"b":{"d":2}}}""")
+
+    checkDelete("""{"": 1, "a": 2}""", Seq("$['']"), """{"a":2}""")
+    checkDelete("""{"?": 1, "a": 2}""", Seq("$['?']"), """{"a":2}""")
+    checkDelete(
+      """{"key with spaces": 1, "a": 2}""", Seq("$['key with spaces']"), """{"a":2}""")
+    checkDelete("""{"fb:testid": 1, "a": 2}""", Seq("$.fb:testid"), """{"a":2}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"b":2}""")
+
+    // After a deletion empties the parent, a subsequent nested path is a silent no-op.
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a", "$.a.b"), "{}")
+
+    // Type mismatches between segment and value are silent no-ops.
+    checkDelete("""{"a": 5}""", Seq("$.a.b"), """{"a":5}""")
+    checkDelete("[1, 2, 3]", Seq("$.a"), "[1,2,3]")
+    checkDelete("""{"a": 1}""", Seq("$[0]"), """{"a":1}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq[String](null), """{"a":1,"b":2}""")
+
+    // All literal-NULL paths: `flatMap` leaves `pathArgs` empty; input is returned unchanged.
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, null, null), """{"a":1,"b":2}""")
+
+    checkDelete("""{"a": null, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("[null, 1, null]", Seq("$[0]"), "[1,null]")
+
+    // Mixed literal + dynamic path exercises both `ParsedDeletePath` and `DynamicDeletePath`
+    // arms of `eval` in a single call.
+    val mixedLitDyn = VariantDelete(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"b":2}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(
+        Cast(VariantDelete(Seq(Literal.create(null, VariantType), Literal("$.a"))), StringType)),
+      null)
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("$")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal(".a")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> ".a", "functionName" -> "`variant_delete`"))
+
+    for (path <- Seq("$[2147483648]", "$[4294967296]")) {
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(
+          VariantDelete(Seq(Literal(parseJson("[1, 2, 3]")), Literal(path)))),
+        "INVALID_VARIANT_PATH",
+        Map("path" -> path, "functionName" -> "`variant_delete`"))
+    }
+
+    val noPaths = VariantDelete(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
+    }
   }
 }

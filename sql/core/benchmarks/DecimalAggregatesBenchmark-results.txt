@@ -3,36 +3,36 @@ DecimalAggregates SUM widened-cast peel (Aggregate)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 A1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3068           3095          35          3.3         306.8       1.0X
-widened cast, peel off                             3396           3410          19          2.9         339.6       0.9X
-widened cast, peel on                              3107           3115          10          3.2         310.7       1.0X
+native (no cast, rule on)                          2814           2840          22          3.6         281.4       1.0X
+widened cast, peel off                             3042           3052           7          3.3         304.2       0.9X
+widened cast, peel on                              2740           2764          26          3.6         274.0       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 A2 p=7 s=2 p'=17:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3104           3120          23          3.2         310.4       1.0X
-widened cast, peel off                             3386           3407          27          3.0         338.6       0.9X
-widened cast, peel on                              3094           3106          17          3.2         309.4       1.0X
+native (no cast, rule on)                          2721           2728           4          3.7         272.1       1.0X
+widened cast, peel off                             3033           3061          18          3.3         303.3       0.9X
+widened cast, peel on                              2792           2799           7          3.6         279.2       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 A3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3039           3053          21          3.3         303.9       1.0X
-widened cast, peel off                             3336           3340           5          3.0         333.6       0.9X
-widened cast, peel on                              3034           3048          14          3.3         303.4       1.0X
+native (no cast, rule on)                          2843           2864          34          3.5         284.3       1.0X
+widened cast, peel off                             3103           3119          19          3.2         310.3       0.9X
+widened cast, peel on                              2852           2859           7          3.5         285.2       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 A4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3037           3049          16          3.3         303.7       1.0X
-widened cast, peel off                             3324           3340          16          3.0         332.4       0.9X
-widened cast, peel on                              3027           3031           4          3.3         302.7       1.0X
+native (no cast, rule on)                          2852           2863           9          3.5         285.2       1.0X
+widened cast, peel off                             3138           3143           8          3.2         313.8       0.9X
+widened cast, peel on                              2814           2823           8          3.6         281.4       1.0X
 
 
 ================================================================================================
@@ -40,35 +40,109 @@ DecimalAggregates AVG widened-cast peel (Aggregate)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 B1 p=7 s=2 p'=8:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3038           3041           2          3.3         303.8       1.0X
-widened cast, peel off                             3274           3283          18          3.1         327.4       0.9X
-widened cast, peel on                              3056           3074          15          3.3         305.6       1.0X
+native (no cast, rule on)                          2777           2787          10          3.6         277.7       1.0X
+widened cast, peel off                             3019           3033          18          3.3         301.9       0.9X
+widened cast, peel on                              2781           2799          33          3.6         278.1       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
-B2 p=7 s=2 p'=12:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+AMD EPYC 7763 64-Core Processor
+B2 p=7 s=2 p'=11:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3029           3033           3          3.3         302.9       1.0X
-widened cast, peel off                             3288           3291           2          3.0         328.8       0.9X
-widened cast, peel on                              3031           3036           6          3.3         303.1       1.0X
+native (no cast, rule on)                          2808           2818           9          3.6         280.8       1.0X
+widened cast, peel off                             3067           3121          34          3.3         306.7       0.9X
+widened cast, peel on                              2776           2785          16          3.6         277.6       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
+AMD EPYC 7763 64-Core Processor
 B3 p=5 s=0 p'=6:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3022           3030           5          3.3         302.2       1.0X
-widened cast, peel off                             3275           3307          28          3.1         327.5       0.9X
-widened cast, peel on                              3025           3028           3          3.3         302.5       1.0X
+native (no cast, rule on)                          2837           2857          16          3.5         283.7       1.0X
+widened cast, peel off                             3087           3100          21          3.2         308.7       0.9X
+widened cast, peel on                              2834           2846          18          3.5         283.4       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 9V74 80-Core Processor
-B4 p=5 s=0 p'=15:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+AMD EPYC 7763 64-Core Processor
+B4 p=5 s=0 p'=11:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-native (no cast, rule on)                          3024           3039          21          3.3         302.4       1.0X
-widened cast, peel off                             3279           3298          17          3.1         327.9       0.9X
-widened cast, peel on                              3016           3023           6          3.3         301.6       1.0X
+native (no cast, rule on)                          2850           2856           7          3.5         285.0       1.0X
+widened cast, peel off                             3107           3113           6          3.2         310.7       0.9X
+widened cast, peel on                              2831           2841          14          3.5         283.1       1.0X
+
+
+================================================================================================
+DecimalAggregates MIN widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+C1 p=10 s=2 p'=18:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3880           3888          13          2.6         388.0       1.0X
+widened cast, peel off                             3974           4008          20          2.5         397.4       1.0X
+widened cast, peel on                              3920           3934           8          2.6         392.0       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+C2 p=10 s=2 p'=28:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3877           3887          11          2.6         387.7       1.0X
+widened cast, peel off                             3959           3978          20          2.5         395.9       1.0X
+widened cast, peel on                              3880           3951          40          2.6         388.0       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+C3 p=18 s=2 p'=28:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3632           3651          14          2.8         363.2       1.0X
+widened cast, peel off                             3623           3637          15          2.8         362.3       1.0X
+widened cast, peel on                              3609           3621          14          2.8         360.9       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+C4 p=10 s=2 p'=38:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3849           3855          10          2.6         384.9       1.0X
+widened cast, peel off                             3856           3873          10          2.6         385.6       1.0X
+widened cast, peel on                              3835           3846           8          2.6         383.5       1.0X
+
+
+================================================================================================
+DecimalAggregates MAX widened-cast peel (Aggregate)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+D1 p=10 s=2 p'=18:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3810           3832          13          2.6         381.0       1.0X
+widened cast, peel off                             3854           3875          34          2.6         385.4       1.0X
+widened cast, peel on                              3785           3821          36          2.6         378.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+D2 p=10 s=2 p'=28:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3830           3833           3          2.6         383.0       1.0X
+widened cast, peel off                             3908           3910           3          2.6         390.8       1.0X
+widened cast, peel on                              3808           3845          21          2.6         380.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+D3 p=18 s=2 p'=28:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3611           3628          19          2.8         361.1       1.0X
+widened cast, peel off                             3664           3685          18          2.7         366.4       1.0X
+widened cast, peel on                              3620           3628           9          2.8         362.0       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 7763 64-Core Processor
+D4 p=10 s=2 p'=38:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+native (no cast, rule on)                          3831           3844          12          2.6         383.1       1.0X
+widened cast, peel off                             3904           3919          10          2.6         390.4       1.0X
+widened cast, peel on                              3792           3816          24          2.6         379.2       1.0X
 
 

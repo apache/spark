@@ -105,6 +105,7 @@ jobs:
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_install=`./dev/is-changed.py -m pyspark-install`
+          pyspark_connect_old_client="$pyspark"
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -135,10 +136,10 @@ jobs:
             buf=true
             ui=true
             docs=true
-            java17=true
             java25=true
           else
             pyspark_install=false
+            pyspark_connect_old_client=false
             pandas=false
             yarn=false
             kubernetes=false
@@ -148,21 +149,22 @@ jobs:
             buf=false
             ui=false
             docs=false
-            java17=false
             java25=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
               \"build\": \"$build\",
+              \"build-core-utils\": \"$build_core_utils\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
+              \"pyspark-connect-old-client\": \"$pyspark_connect_old_client\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
               \"lint\" : \"true\",
-              \"java17\" : \"$java17\",
               \"java25\" : \"$java25\",
               \"docs\" : \"$docs\",
               \"yarn\" : \"$yarn\",
@@ -283,16 +285,15 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, avro, utils, utils-java,
-            network-common, network-shuffle, repl, launcher,
-            examples, sketch, variant
+            core, unsafe, kvstore, utils, utils-java,
+            network-common, network-shuffle, sketch, variant, launcher
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines
+            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -336,6 +337,10 @@ jobs:
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
+          # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
+          # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
+          # full-build workflows that set only "build": "true" keep running this entry).
+          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
@@ -370,16 +375,17 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -408,7 +414,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -416,8 +422,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -439,7 +445,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: |
@@ -447,20 +453,20 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
     - name: Upload yarn app log files
       if: ${{ !success() && contains(matrix.modules, 'yarn') }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test/data/"
@@ -568,7 +574,10 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
-        fromJson(needs.precondition.outputs.required).sparkr == 'true')
+        fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
+        fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -600,16 +609,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Cache Coursier local repository
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          precompile-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -619,18 +628,18 @@ jobs:
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
           -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
-          -Pdocker-integration-tests -Pvolcano \
+          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
       run: |
         find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
-          | tar --null -czf compile-artifact.tar.gz -T -
-        ls -lh compile-artifact.tar.gz
+          | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
+        ls -lh compile-artifact.tar.zst
     - name: Upload compile artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
-        path: compile-artifact.tar.gz
+        path: compile-artifact.tar.zst
         retention-days: 1
         if-no-files-found: error
 
@@ -662,6 +671,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-connect-old-client
+          - >-
             pyspark-install
           - >-
             pyspark-pandas
@@ -679,6 +690,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
@@ -726,16 +738,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          pyspark-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -760,7 +772,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -768,11 +780,12 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
@@ -789,6 +802,41 @@ jobs:
           # For branch-3.5 and below, it uses the default Python versions.
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
+    - name: Run tests for old client
+      env:
+        SPARK_TESTING: 1
+        SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
+        SPARK_CONNECT_TESTING_REMOTE: sc://localhost
+      if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
+      run: |
+        # Build Spark
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        else
+          ./build/sbt -Phive Test/package
+        fi
+
+        # Make less noisy
+        cp conf/log4j2.properties.template conf/log4j2.properties
+        sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
+
+        # Start a Spark Connect server for local
+        PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+          --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
+          --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`" \
+          --conf spark.sql.execution.arrow.pyspark.validateSchema.enabled=false \
+          --conf spark.sql.execution.pandas.convertToArrowArraySafely=false
+
+        # Checkout to branch-4.0 to use the tests in branch-4.0.
+        cd ..
+        git clone --single-branch --branch branch-4.0 https://github.com/apache/spark.git spark-4.0
+        cd spark-4.0
+
+        # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
+        # Run branch-4.0 tests
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+        # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
@@ -812,7 +860,7 @@ jobs:
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: |
@@ -820,7 +868,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -828,7 +876,7 @@ jobs:
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
@@ -876,16 +924,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          sparkr-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -897,7 +945,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -905,8 +953,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -921,7 +969,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -929,7 +977,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
@@ -1027,23 +1075,23 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1059,6 +1107,33 @@ jobs:
       run: ./dev/mima
     - name: Scala linter
       run: ./dev/lint-scala
+    # The config binding policy exceptions file lists pre-existing configs that were created before
+    # the binding policy was introduced. It must never grow: new configs must declare a binding
+    # policy via .withBindingPolicy() instead of being added to the exceptions file. This step fails
+    # if a PR adds entries to the file. It only runs on forks because PR builds run there, and the
+    # diff against apache/spark master is exactly the PR's change.
+    - name: Config binding policy exceptions check
+      if: github.repository != 'apache/spark'
+      run: |
+        EXCEPTIONS_FILE="sql/hive/src/test/resources/conf/binding-policy-exceptions/configs-without-binding-policy-exceptions"
+        if [ ! -f "$EXCEPTIONS_FILE" ]; then
+          echo "$EXCEPTIONS_FILE does not exist on this branch, skipping."
+          exit 0
+        fi
+        ADDED_ENTRIES=$(git diff "$APACHE_SPARK_REF" HEAD -- "$EXCEPTIONS_FILE" | grep '^+' | grep -v '^+++' || true)
+        if [ -n "$ADDED_ENTRIES" ]; then
+          echo "ERROR: This PR adds the following entries to $EXCEPTIONS_FILE:"
+          echo "$ADDED_ENTRIES"
+          echo ""
+          echo "This file is a frozen list of configs that predate the binding policy, and new"
+          echo "entries must not be added to it. Instead, declare a binding policy when building"
+          echo "the config entry, e.g."
+          echo "  .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED/NOT_APPLICABLE)"
+          echo "See the scaladoc of org.apache.spark.internal.config.ConfigBindingPolicy for the"
+          echo "semantics of each policy and how to choose one."
+          exit 1
+        fi
+        echo "No new entries added to the binding policy exceptions file."
     - name: Scala structured logging check
       if: hashFiles('dev/structured_logging_style.py') != ''
       shell: 'script -q -e -c "bash {0}"'
@@ -1081,7 +1156,7 @@ jobs:
       run: |
         # SPARK-45212: Copy from https://github.com/apache/spark/blob/555c8def51e5951c7bf5165a332795e9e330ec9d/.github/workflows/build_and_test.yml#L631-L638
         # Should delete this section after SPARK 3.5 EOL.
-        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==26.3.1'
+        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: List Python packages
       shell: 'script -q -e -c "bash {0}"'
@@ -1149,24 +1224,6 @@ jobs:
     - name: R linter
       run: ./dev/lint-r
 
-  java17:
-    needs: [precondition]
-    if: fromJson(needs.precondition.outputs.required).java17 == 'true'
-    name: Java 17 build with Maven
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-    - uses: actions/checkout@v6
-    - uses: actions/setup-java@v5
-      with:
-        distribution: zulu
-        java-version: 17
-    - name: Build with Maven
-      run: |
-        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
-        export MAVEN_CLI_OPTS="--no-transfer-progress"
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl clean install
-
   java25:
     needs: [precondition]
     if: fromJson(needs.precondition.outputs.required).java25 == 'true'
@@ -1226,23 +1283,23 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1386,7 +1443,7 @@ jobs:
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       if: github.repository != 'apache/spark'
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: site
         path: site.tar.bz2
@@ -1394,8 +1451,8 @@ jobs:
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1421,27 +1478,41 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          tpcds-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+        key: tpcds-${{ runner.os }}-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v6
@@ -1484,7 +1555,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1492,21 +1563,21 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1539,28 +1610,46 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+          build-${{ runner.os }}-
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docker-integration-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1568,21 +1657,21 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Test Summary
       if: always()
-      uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86 # v2
+      uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2.6
       with:
         paths: |
           **/target/test-reports/*.xml
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   k8s-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1607,16 +1696,16 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
+            build-${{ runner.os }}-
+      - name: Restore Coursier local repository
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            k8s-integration-coursier-
+            coursier-${{ runner.os }}-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
@@ -1627,6 +1716,20 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
+      - name: Download precompiled artifact
+        id: download-precompiled
+        if: needs.precompile.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+      - name: Extract precompiled artifact
+        id: extract-precompiled
+        if: steps.download-precompiled.outcome == 'success'
+        continue-on-error: true
+        run: |
+          zstd -dc compile-artifact.tar.zst | tar -xf -
+          rm compile-artifact.tar.zst
       - name: Install R
         run: |
           sudo apt update
@@ -1662,7 +1765,7 @@ jobs:
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"

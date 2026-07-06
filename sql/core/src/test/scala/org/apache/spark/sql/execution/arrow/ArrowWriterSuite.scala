@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{Geography => InternalGeography, Geome
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized._
-import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.MaybeNull
 
 class ArrowWriterSuite extends SparkFunSuite {
@@ -61,8 +61,8 @@ class ArrowWriterSuite extends SparkFunSuite {
 
       val dataModified = data.map { datum =>
         dt match {
-          case _: GeometryType => datum.asInstanceOf[GeometryVal].getBytes
-          case _: GeographyType => datum.asInstanceOf[GeographyVal].getBytes
+          case _: GeometryType => datum.asInstanceOf[BinaryView].getBytes
+          case _: GeographyType => datum.asInstanceOf[BinaryView].getBytes
           case _ => datum
         }
       }
@@ -89,8 +89,8 @@ class ArrowWriterSuite extends SparkFunSuite {
             case _: YearMonthIntervalType => reader.getInt(rowId)
             case _: DayTimeIntervalType => reader.getLong(rowId)
             case CalendarIntervalType => reader.getInterval(rowId)
-            case _: GeometryType => reader.getGeometry(rowId).getBytes
-            case _: GeographyType => reader.getGeography(rowId).getBytes
+            case _: GeometryType => reader.getBinaryView(rowId).getBytes
+            case _: GeographyType => reader.getBinaryView(rowId).getBytes
           }
           assert(value === datum)
       }
@@ -105,15 +105,23 @@ class ArrowWriterSuite extends SparkFunSuite {
     }
 
     val geographies = wkbs.map(x => InternalGeography.fromWkb(x, 4326).getValue)
+    val geographies4267 = wkbs.map(x => InternalGeography.fromWkb(x, 4267).getValue)
+    val geographies4269 = wkbs.map(x => InternalGeography.fromWkb(x, 4269).getValue)
     val geometries = wkbs.map(x => InternalGeometry.fromWkb(x, 0).getValue)
     val mixedGeometries = wkbs.zip(Seq(0, 4326)).map {
       case (g, srid) => InternalGeometry.fromWkb(g, srid).getValue
     }
+    val mixedGeographies = wkbs.zip(Seq(4267, 4269)).map {
+      case (g, srid) => InternalGeography.fromWkb(g, srid).getValue
+    }
 
     check(GeometryType(0), geometries)
     check(GeographyType(4326), geographies)
+    check(GeographyType(4267), geographies4267)
+    check(GeographyType(4269), geographies4269)
     check(GeometryType("ANY"), mixedGeometries)
     check(GeographyType("ANY"), geographies)
+    check(GeographyType("ANY"), mixedGeographies)
     check(BooleanType, Seq(true, null, false))
     check(ByteType, Seq(1.toByte, 2.toByte, null, 4.toByte))
     check(ShortType, Seq(1.toShort, 2.toShort, null, 4.toShort))
@@ -142,6 +150,73 @@ class ArrowWriterSuite extends SparkFunSuite {
         new CalendarInterval(-11, -22, -33),
         null))
     check(new YearUDT, Seq(2020, 2021, null, 2022))
+  }
+
+  test("timestamp nanos round-trip") {
+    // Decompose an int64 epoch-nanoseconds value into the (epochMicros, nanosWithinMicro) pair,
+    // matching how the Arrow reader reconstructs it.
+    def fromEpochNanos(nanos: Long): TimestampNanosVal =
+      TimestampNanosVal.fromParts(Math.floorDiv(nanos, 1000L), Math.floorMod(nanos, 1000L).toShort)
+
+    val values = Seq(
+      TimestampNanosVal.fromParts(0L, 0.toShort),
+      TimestampNanosVal.fromParts(0L, 999.toShort),
+      TimestampNanosVal.fromParts(1234567L, 7.toShort),
+      // pre-epoch instant with a sub-microsecond remainder
+      TimestampNanosVal.fromParts(-1234567L, 13.toShort),
+      // large positive/negative epoch-nanoseconds within the representable range
+      fromEpochNanos(9000000000000000000L),
+      fromEpochNanos(-9000000000000000000L))
+
+    def check(dt: DataType, timeZoneId: String): Unit = {
+      val schema = new StructType().add("value", dt, nullable = true)
+      val writer = ArrowWriter.create(schema, timeZoneId)
+      assert(writer.schema === schema)
+      // Append a trailing null to exercise the null path.
+      (values.map(Option(_)) :+ None).foreach { v =>
+        writer.write(InternalRow(v.orNull))
+      }
+      writer.finish()
+
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      values.zipWithIndex.foreach { case (v, rowId) =>
+        val got = dt match {
+          case _: TimestampNTZNanosType => reader.getTimestampNTZNanos(rowId)
+          case _: TimestampLTZNanosType => reader.getTimestampLTZNanos(rowId)
+        }
+        assert(got.epochMicros === v.epochMicros)
+        assert(got.nanosWithinMicro === v.nanosWithinMicro)
+      }
+      assert(reader.isNullAt(values.length))
+      writer.root.close()
+    }
+
+    check(TimestampNTZNanosType(9), null)
+    check(TimestampLTZNanosType(9), "UTC")
+    // The value path packs the full nanosecond value regardless of the column precision (precision
+    // is carried in the Arrow field metadata, not the value), so p=7 round-trips identically to
+    // p=9; exercising it guards the value path against a future precision-enforcing change.
+    check(TimestampNTZNanosType(7), null)
+    check(TimestampLTZNanosType(7), "UTC")
+  }
+
+  test("timestamp nanos out of range raises DATETIME_OVERFLOW") {
+    def check(dt: DataType, timeZoneId: String): Unit = {
+      val schema = new StructType().add("value", dt, nullable = true)
+      val writer = ArrowWriter.create(schema, timeZoneId)
+      // epochMicros past the int64 epoch-nanosecond range overflows when packed, but still
+      // renders as a valid Instant/LocalDateTime in the error message.
+      val tooLarge = TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort)
+      val e = intercept[SparkArithmeticException] {
+        writer.write(InternalRow(tooLarge))
+      }
+      assert(e.getCondition === "DATETIME_OVERFLOW")
+      assert(e.getMessage.contains("Arrow INT64"))
+      writer.root.close()
+    }
+
+    check(TimestampNTZNanosType(9), null)
+    check(TimestampLTZNanosType(9), "UTC")
   }
 
   test("nested geographies") {
@@ -175,27 +250,27 @@ class ArrowWriterSuite extends SparkFunSuite {
           assert(expectedStruct.getInt(0) === actualStruct.getInt(0))
           assert(expectedStruct.getInt(2) === actualStruct.getInt(2))
 
-          if (expectedStruct.getGeography(1) == null ||
-            actualStruct.getGeography(1) == null) {
-            assert(expectedStruct.getGeography(1) == null && actualStruct.getGeography(1) == null)
+          if (expectedStruct.getBinaryView(1) == null ||
+            actualStruct.getBinaryView(1) == null) {
+            assert(expectedStruct.getBinaryView(1) == null && actualStruct.getBinaryView(1) == null)
           } else {
-            assert(expectedStruct.getGeography(1).getBytes ===
-              actualStruct.getGeography(1).getBytes)
+            assert(expectedStruct.getBinaryView(1).getBytes ===
+              actualStruct.getBinaryView(1).getBytes)
           }
-          if (expectedStruct.getGeography(3) == null ||
-            actualStruct.getGeography(3) == null) {
-            assert(expectedStruct.getGeography(3) == null && actualStruct.getGeography(3) == null)
+          if (expectedStruct.getBinaryView(3) == null ||
+            actualStruct.getBinaryView(3) == null) {
+            assert(expectedStruct.getBinaryView(3) == null && actualStruct.getBinaryView(3) == null)
           } else {
-            assert(expectedStruct.getGeography(3).getBytes ===
-              actualStruct.getGeography(3).getBytes)
+            assert(expectedStruct.getBinaryView(3).getBytes ===
+              actualStruct.getBinaryView(3).getBytes)
           }
 
           if (datum.getArray(1) == null ||
             internalRow.getArray(1) == null) {
             assert(internalRow.getArray(1) == null && datum.getArray(1) == null)
           } else {
-            internalRow.getArray(1).toSeq[GeographyVal](GeographyType(4326))
-              .zip(datum.getArray(1).toSeq[GeographyVal](GeographyType(4326))).foreach {
+            internalRow.getArray(1).toSeq[BinaryView](GeographyType(4326))
+              .zip(datum.getArray(1).toSeq[BinaryView](GeographyType(4326))).foreach {
                 case (actual, expected) =>
                   assert(actual.getBytes === expected.getBytes)
               }
@@ -207,8 +282,8 @@ class ArrowWriterSuite extends SparkFunSuite {
           } else {
             assert(internalRow.getMap(2).keyArray().toSeq(StringType) ===
               datum.getMap(2).keyArray().toSeq(StringType))
-            internalRow.getMap(2).valueArray().toSeq[GeographyVal](GeographyType("ANY"))
-              .zip(datum.getMap(2).valueArray().toSeq[GeographyVal](GeographyType("ANY"))).foreach {
+            internalRow.getMap(2).valueArray().toSeq[BinaryView](GeographyType("ANY"))
+              .zip(datum.getMap(2).valueArray().toSeq[BinaryView](GeographyType("ANY"))).foreach {
                 case (actual, expected) =>
                   assert((actual == null && expected == null) ||
                     actual.getBytes === expected.getBytes)
@@ -293,27 +368,27 @@ class ArrowWriterSuite extends SparkFunSuite {
           assert(expectedStruct.getInt(0) === actualStruct.getInt(0))
           assert(expectedStruct.getInt(2) === actualStruct.getInt(2))
 
-          if (expectedStruct.getGeometry(1) == null ||
-            actualStruct.getGeometry(1) == null) {
-            assert(expectedStruct.getGeometry(1) == null && actualStruct.getGeometry(1) == null)
+          if (expectedStruct.getBinaryView(1) == null ||
+            actualStruct.getBinaryView(1) == null) {
+            assert(expectedStruct.getBinaryView(1) == null && actualStruct.getBinaryView(1) == null)
           } else {
-            assert(expectedStruct.getGeometry(1).getBytes ===
-              actualStruct.getGeometry(1).getBytes)
+            assert(expectedStruct.getBinaryView(1).getBytes ===
+              actualStruct.getBinaryView(1).getBytes)
           }
-          if (expectedStruct.getGeometry(3) == null ||
-            actualStruct.getGeometry(3) == null) {
-            assert(expectedStruct.getGeometry(3) == null && actualStruct.getGeometry(3) == null)
+          if (expectedStruct.getBinaryView(3) == null ||
+            actualStruct.getBinaryView(3) == null) {
+            assert(expectedStruct.getBinaryView(3) == null && actualStruct.getBinaryView(3) == null)
           } else {
-            assert(expectedStruct.getGeometry(3).getBytes ===
-              actualStruct.getGeometry(3).getBytes)
+            assert(expectedStruct.getBinaryView(3).getBytes ===
+              actualStruct.getBinaryView(3).getBytes)
           }
 
           if (datum.getArray(1) == null ||
             internalRow.getArray(1) == null) {
             assert(internalRow.getArray(1) == null && datum.getArray(1) == null)
           } else {
-            internalRow.getArray(1).toSeq[GeometryVal](GeometryType(0))
-              .zip(datum.getArray(1).toSeq[GeometryVal](GeometryType(0))).foreach {
+            internalRow.getArray(1).toSeq[BinaryView](GeometryType(0))
+              .zip(datum.getArray(1).toSeq[BinaryView](GeometryType(0))).foreach {
                 case (actual, expected) =>
                   assert(actual.getBytes === expected.getBytes)
               }
@@ -325,8 +400,8 @@ class ArrowWriterSuite extends SparkFunSuite {
           } else {
             assert(internalRow.getMap(2).keyArray().toSeq(StringType) ===
               datum.getMap(2).keyArray().toSeq(StringType))
-            internalRow.getMap(2).valueArray().toSeq[GeometryVal](GeometryType("ANY"))
-              .zip(datum.getMap(2).valueArray().toSeq[GeometryVal](GeometryType("ANY"))).foreach {
+            internalRow.getMap(2).valueArray().toSeq[BinaryView](GeometryType("ANY"))
+              .zip(datum.getMap(2).valueArray().toSeq[BinaryView](GeometryType("ANY"))).foreach {
                 case (actual, expected) =>
                   assert((actual == null && expected == null) ||
                     actual.getBytes === expected.getBytes)

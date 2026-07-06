@@ -63,6 +63,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     ArrayType,
+    MapType,
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
@@ -1974,7 +1975,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
@@ -2203,6 +2204,19 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 
 
 is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
+
+
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function("variant_delete", _to_col(v), *cols)
+
+
+variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -2612,8 +2626,21 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
-    return _invoke_function("instr", _to_col(str), lit(substr))
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 instr.__doc__ = pysparkfuncs.instr.__doc__
@@ -2701,6 +2728,13 @@ def levenshtein(
 
 
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
+
+
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
+
+
+jaro_winkler_similarity.__doc__ = pysparkfuncs.jaro_winkler_similarity.__doc__
 
 
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
@@ -2814,9 +2848,26 @@ regexp_extract_all.__doc__ = pysparkfuncs.regexp_extract_all.__doc__
 
 
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    string: "ColumnOrName",
+    pattern: Union[str, Column],
+    replacement: Union[str, Column],
+    position: Optional[Union[int, Column]] = None,
 ) -> Column:
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    if position is None:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+        )
+    else:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+            lit(position),
+        )
 
 
 regexp_replace.__doc__ = pysparkfuncs.regexp_replace.__doc__
@@ -3493,6 +3544,13 @@ def unix_millis(col: "ColumnOrName") -> Column:
 unix_millis.__doc__ = pysparkfuncs.unix_millis.__doc__
 
 
+def unix_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("unix_nanos", col)
+
+
+unix_nanos.__doc__ = pysparkfuncs.unix_nanos.__doc__
+
+
 def unix_seconds(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("unix_seconds", col)
 
@@ -3728,6 +3786,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+timestamp_nanos.__doc__ = pysparkfuncs.timestamp_nanos.__doc__
 
 
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
@@ -5550,6 +5615,64 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
+
+
+# ---------------------- Vector Functions ----------------------
+
+
+def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_cosine_similarity", left, right)
+
+
+vector_cosine_similarity.__doc__ = pysparkfuncs.vector_cosine_similarity.__doc__
+
+
+def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_inner_product", left, right)
+
+
+vector_inner_product.__doc__ = pysparkfuncs.vector_inner_product.__doc__
+
+
+def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_l2_distance", left, right)
+
+
+vector_l2_distance.__doc__ = pysparkfuncs.vector_l2_distance.__doc__
+
+
+def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_norm", vector)
+    else:
+        return _invoke_function_over_columns("vector_norm", vector, degree)
+
+
+vector_norm.__doc__ = pysparkfuncs.vector_norm.__doc__
+
+
+def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_normalize", vector)
+    else:
+        return _invoke_function_over_columns("vector_normalize", vector, degree)
+
+
+vector_normalize.__doc__ = pysparkfuncs.vector_normalize.__doc__
+
+
+def vector_avg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_avg", col)
+
+
+vector_avg.__doc__ = pysparkfuncs.vector_avg.__doc__
+
+
+def vector_sum(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_sum", col)
+
+
+vector_sum.__doc__ = pysparkfuncs.vector_sum.__doc__
 
 
 def _test() -> None:

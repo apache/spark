@@ -465,3 +465,92 @@ org.apache.spark.SparkDateTimeException
     "fragment" : "cast(\"Unparseable\" as date)"
   } ]
 }
+
+
+-- !query
+select to_time("24", "HH")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIME",
+  "sqlState" : "22010",
+  "messageParameters" : {
+    "format" : "'HH'",
+    "input" : "'24'"
+  }
+}
+
+
+-- !query
+select to_time("12:60", "HH:mm")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIME",
+  "sqlState" : "22010",
+  "messageParameters" : {
+    "format" : "'HH:mm'",
+    "input" : "'12:60'"
+  }
+}
+
+
+-- !query
+select to_time("12:00:60", "HH:mm:ss")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIME",
+  "sqlState" : "22010",
+  "messageParameters" : {
+    "format" : "'HH:mm:ss'",
+    "input" : "'12:00:60'"
+  }
+}
+
+
+-- !query
+select to_time("Unparseable", "HH:mm:ss")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIME",
+  "sqlState" : "22010",
+  "messageParameters" : {
+    "format" : "'HH:mm:ss'",
+    "input" : "'Unparseable'"
+  }
+}
+
+
+-- !query
+select cast("Unparseable" as time)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'Unparseable'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIME(6)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(\"Unparseable\" as time)"
+  } ]
+}

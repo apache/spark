@@ -19,7 +19,8 @@ package org.apache.spark.sql.util
 
 import java.time.ZoneId
 
-import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.types.TimeUnit
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
@@ -84,6 +85,115 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtripWithTz("Asia/Tokyo")
     roundtripWithTz("UTC")
     roundtripWithTz(LA.getId)
+  }
+
+  test("timestamp nanos") {
+    // NTZ is zone-independent (null Arrow timezone); precision preserved via field metadata.
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType().add("value", TimestampNTZNanosType(p))
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, null, true, false)
+      val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
+      assert(fieldType.getUnit === TimeUnit.NANOSECOND)
+      assert(fieldType.getTimezone === null)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    // LTZ is zone-aware: it requires a non-null session time zone; precision preserved.
+    def roundtripLtz(timeZoneId: String): Unit = {
+      Seq(7, 8, 9).foreach { p =>
+        val schema = new StructType().add("value", TimestampLTZNanosType(p))
+        val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId, true, false)
+        val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
+        assert(fieldType.getUnit === TimeUnit.NANOSECOND)
+        assert(fieldType.getTimezone === timeZoneId)
+        assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+      }
+    }
+    roundtripLtz(ZoneId.systemDefault().getId)
+    roundtripLtz("Asia/Tokyo")
+    roundtripLtz("UTC")
+    roundtripLtz(LA.getId)
+
+    // LTZ without a time zone is an error, mirroring TimestampType.
+    checkError(
+      exception = intercept[SparkException] {
+        ArrowUtils.toArrowSchema(
+          new StructType().add("value", TimestampLTZNanosType(9)), null, true, false)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Missing timezoneId where it is mandatory."))
+
+    // Fallback: a nanosecond Arrow timestamp without precision metadata maps to canonical p=9.
+    def nanosField(timeZoneId: String): Field = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Timestamp(TimeUnit.NANOSECOND, timeZoneId), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(ArrowUtils.fromArrowField(nanosField(null)) === TimestampNTZNanosType(9))
+    assert(ArrowUtils.fromArrowField(nanosField("UTC")) === TimestampLTZNanosType(9))
+
+    // Fallback also covers a present-but-invalid precision key (out of [7, 9] or non-numeric):
+    // the value is unusable, so the type maps to the canonical p=9 just like the no-metadata case.
+    def nanosFieldWithPrecision(timeZoneId: String, precision: String): Field = new Field(
+      "value",
+      new FieldType(
+        true,
+        new ArrowType.Timestamp(TimeUnit.NANOSECOND, timeZoneId),
+        null,
+        java.util.Collections.singletonMap("SPARK::timestampNanos::precision", precision)),
+      java.util.Collections.emptyList[Field]())
+    assert(
+      ArrowUtils.fromArrowField(nanosFieldWithPrecision(null, "5")) === TimestampNTZNanosType(9))
+    assert(
+      ArrowUtils.fromArrowField(nanosFieldWithPrecision("UTC", "x")) === TimestampLTZNanosType(9))
+
+    // The precision metadata key does not leak into the reconstructed column Metadata.
+    val md = new MetadataBuilder().putString("city", "beijing").build()
+    val schemaWithMeta =
+      new StructType().add("value", TimestampNTZNanosType(7), nullable = true, md)
+    assert(ArrowUtils.fromArrowSchema(
+      ArrowUtils.toArrowSchema(schemaWithMeta, null, true, false)) === schemaWithMeta)
+  }
+
+  test("time") {
+    // Arrow's Time type has no precision field, so TIME(p) precision is preserved via field
+    // metadata; the Arrow type itself stays Time(NANOSECOND, 64).
+    Seq(0, 3, 6, 7, 9).foreach { p =>
+      val schema = new StructType().add("value", TimeType(p))
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, null, true, false)
+      val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Time]
+      assert(fieldType.getUnit === TimeUnit.NANOSECOND)
+      assert(fieldType.getBitWidth === 8 * 8)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    // Fallback: a nanosecond Arrow time without precision metadata maps to canonical TIME(6).
+    def timeField: Field = new Field(
+      "value",
+      new FieldType(true, new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8), null, null),
+      java.util.Collections.emptyList[Field]())
+    assert(ArrowUtils.fromArrowField(timeField) === TimeType(TimeType.MICROS_PRECISION))
+
+    // Fallback also covers a present-but-invalid precision key (out of [0, 9] or non-numeric):
+    // the value is unusable, so the type maps to the canonical TIME(6) just like the no-metadata
+    // case.
+    def timeFieldWithPrecision(precision: String): Field = new Field(
+      "value",
+      new FieldType(
+        true,
+        new ArrowType.Time(TimeUnit.NANOSECOND, 8 * 8),
+        null,
+        java.util.Collections.singletonMap("SPARK::time::precision", precision)),
+      java.util.Collections.emptyList[Field]())
+    val micros = TimeType(TimeType.MICROS_PRECISION)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("-1")) === micros)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("10")) === micros)
+    assert(ArrowUtils.fromArrowField(timeFieldWithPrecision("x")) === micros)
+
+    // The precision metadata key does not leak into the reconstructed column Metadata.
+    val md = new MetadataBuilder().putString("city", "beijing").build()
+    val schemaWithMeta = new StructType().add("value", TimeType(3), nullable = true, md)
+    assert(ArrowUtils.fromArrowSchema(
+      ArrowUtils.toArrowSchema(schemaWithMeta, null, true, false)) === schemaWithMeta)
   }
 
   test("array") {

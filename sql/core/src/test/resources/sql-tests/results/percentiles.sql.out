@@ -1188,3 +1188,34 @@ SET spark.sql.legacy.percentileDiscCalculation = false
 struct<key:string,value:string>
 -- !query output
 spark.sql.legacy.percentileDiscCalculation	false
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW aggr_time AS SELECT * FROM VALUES
+  (TIME '00:00:00'), (TIME '06:00:00'), (TIME '12:00:00'), (TIME '18:00:00')
+AS aggr_time(t)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT
+  median(t),
+  percentile(t, 0.5),
+  percentile_cont(0.5) WITHIN GROUP (ORDER BY t),
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY t)
+FROM aggr_time
+-- !query schema
+struct<median(t):time(6),percentile(t, 0.5, 1):time(6),percentile_cont(0.5) WITHIN GROUP (ORDER BY t):time(6),percentile_disc(0.5) WITHIN GROUP (ORDER BY t):time(6)>
+-- !query output
+09:00:00	09:00:00	09:00:00	06:00:00
+
+
+-- !query
+SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time
+-- !query schema
+struct<percentile_approx(t, array(0.25, 0.5, 0.75), 10000):array<time(6)>>
+-- !query output
+[00:00:00,06:00:00,12:00:00]

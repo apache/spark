@@ -43,6 +43,7 @@ import re
 import subprocess
 import sys
 import traceback
+from typing import List
 from urllib.request import urlopen
 from urllib.request import Request
 from urllib.error import HTTPError
@@ -80,11 +81,17 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
+GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
 BRANCH_PREFIX = "PR_TOOL"
+# Set to a truthy value to skip the check that compares this script against apache/spark master.
+# Intended for committers iterating on the merge script itself, where a local diff is expected.
+SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
+# Path of this script relative to the repo root, used to fetch the canonical copy from master.
+MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 
 def semver_branch_rank(name):
@@ -321,6 +328,61 @@ def bold_input(prompt) -> str:
     return input("\033[1m%s\033[0m" % prompt)
 
 
+def get_input(prompt, options, bold=True, ignore_case=True):
+    """
+    Get input from the user until a valid answer is provided.
+
+    Args:
+        prompt: The prompt to display to the user.
+        options:
+            * A dictionary of "option: accepted answer" to choose from.
+            * A list of options.
+            * A regex pattern.
+        bold: Whether to use bold formatting for the prompt.
+        ignore_case: Whether to ignore case when comparing the answer to the options.
+
+    Returns:
+        If options is provided - the valid answer from the user.
+        If regex is provided
+            * If no group is specified - the whole matched string.
+            * If one group is specified - the first group.
+            * If multiple groups are specified - a tuple of the groups.
+    """
+
+    # Normalize options
+    if isinstance(options, (list, tuple)):
+        options = {option: [option] for option in options}
+
+    if isinstance(options, dict):
+        for option, acceptable_answer in options.items():
+            if ignore_case:
+                options[option] = [answer.lower() for answer in acceptable_answer]
+
+    while True:
+        if bold:
+            answer = bold_input(prompt)
+        else:
+            answer = input(prompt)
+
+        answer = answer.strip()
+        if ignore_case:
+            answer = answer.lower()
+
+        if isinstance(options, str):
+            if (m := re.match(options, answer)) is not None:
+                groups = m.groups()
+                if len(groups) == 0:
+                    return m.group(0)
+                if len(groups) == 1:
+                    return groups[0]
+                else:
+                    return groups
+        else:
+            for option, acceptable_answer in options.items():
+                if answer in acceptable_answer:
+                    return option
+
+
 def get_json(url):
     try:
         request = Request(url)
@@ -345,6 +407,57 @@ def get_json(url):
         sys.exit(-1)
 
 
+def close_pr(pr_num):
+    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"state": "closed"}).encode("utf-8")
+    request = Request(url, data=data, method="PATCH")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
+
+
+def comment_pr(pr_num, body):
+    url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"body": body}).encode("utf-8")
+    request = Request(url, data=data, method="POST")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
+
+
+def post_merge_comment(pr_num, merged_commits):
+    """Post a comment on the PR recording every branch the change landed on and a
+    link to the resulting commit, so the merge is traceable from the PR page.
+
+    ``merged_commits`` is an ordered list of (branch, commit_hash) pairs, the merge
+    sink first followed by each cherry-pick target.
+    """
+    if not merged_commits:
+        return
+    lines = [
+        "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
+        for ref, commit_hash in merged_commits
+    ]
+    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
+    print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
+    if not GITHUB_OAUTH_KEY:
+        print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
+        return
+    comment_pr(pr_num, body)
+
+
 def fail(msg):
     print_error(msg)
     clean_up()
@@ -360,8 +473,7 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt, cherry=False):
-    result = bold_input("%s (y/N): " % prompt)
-    if result.lower() != "y":
+    if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
             try:
                 run_cmd("git cherry-pick --abort")
@@ -448,18 +560,18 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name)[:8]
+    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
     return merge_hash
 
 
-def cherry_pick(pr_num, merge_hash, default_branch):
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
+def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+    """Cherry-pick `merge_hash` onto `pick_ref` and push.
 
+    Returns the (pushed ref, pushed commit hash) pair.
+    """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
@@ -480,15 +592,98 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     try:
         run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, pick_branch_name, pick_ref))
     except Exception as e:
-        clean_up()
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
+    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
-    return pick_ref
+    return pick_ref, pick_hash
+
+
+def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
+    """Return the sibling branch-M.x if Upstream-First should prompt, else None.
+
+    The policy only applies when the PR was merged into master: that's the only case
+    where the committer can type branch-M.N at the cherry-pick prompt and bypass the
+    rolling branch-M.x. When the PR was opened against branch-M.x the merge itself
+    lands there (nothing to bypass), and when it was opened against branch-M.N the
+    author already chose per-branch scope.
+
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    'branch-4.x'
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"],
+    ...                         ("branch-4.x",))
+    >>> _upstream_first_sibling("master", "branch-4.x", ["branch-4.x"], ())
+    >>> _upstream_first_sibling("master", "branch-4.99", ["branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.x", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.2", "branch-3.5", ["branch-4.x", "branch-3.5"], ())
+    """
+    if target_ref != "master":
+        return None
+    m = re.match(r"^branch-(\d+)\.(\d+)$", pick_ref)
+    if not m:
+        return None
+    candidate = "branch-%s.x" % m.group(1)
+    if candidate in branch_names and candidate not in already_picked:
+        return candidate
+    return None
+
+
+def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+    """Prompt for a target branch and cherry-pick `merge_hash` onto it.
+
+    Enforces the Upstream-First policy (see header comment) via
+    `_upstream_first_sibling`: when the PR was merged into master and the committer
+    types a branch-M.N target while branch-M.x is also a known release branch AND
+    has not already received this commit, prompt to confirm whether to pick into
+    BOTH (the policy-compliant default) or branch-M.N only (treated as a
+    maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
+    picked into, so the main loop can advance its remaining-branches list correctly
+    and record each backport commit for the merge comment.
+    """
+    while True:
+        pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
+        if pick_ref == "":
+            pick_ref = default_branch
+        if pick_ref in branch_names:
+            break
+        valid_branches = ", ".join(branch_names)
+        print_error(
+            f"'{pick_ref}' is not a known release branch. "
+            f"Valid branches: {valid_branches}. Please try again."
+        )
+
+    sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
+    if sibling_x is not None:
+        print()
+        print("=" * 80)
+        print(
+            "Upstream-First policy: non-bugfix commits on %s should also land on %s."
+            % (pick_ref, sibling_x)
+        )
+        print(
+            "If this is a %s-only maintenance bugfix, you may pick %s alone." % (pick_ref, pick_ref)
+        )
+        print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
+        print("=" * 80)
+        choice = get_input(
+            f"Pick into [b]oth {sibling_x} + {pick_ref} / [o]nly {pick_ref} / [a]bort (default: both): ",
+            {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
+        )
+        if choice == "b":
+            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
+            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
+            return [picked_x, picked_n]
+        elif choice == "o":
+            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        elif choice == "a":
+            fail("Aborted by user at Upstream-First policy prompt.")
+        else:
+            fail("Unrecognized choice %r; aborting." % choice)
+
+    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
 
 
 def print_jira_issue_summary(issue):
@@ -498,13 +693,91 @@ def print_jira_issue_summary(issue):
         assignee = assignee.displayName
     assignee = "Assignee\t%s\n" % assignee
     status = "Status\t\t%s\n" % issue.fields.status.name
+    components = "Components\t%s\n" % [x.name for x in issue.fields.components]
     url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
     target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
     fix_versions = ""
     if len(issue.fields.fixVersions) > 0:
         fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
-    print("%s%s%s%s%s%s" % (summary, assignee, status, url, target_versions, fix_versions))
+    print(
+        "%s%s%s%s%s%s%s"
+        % (summary, assignee, status, components, url, target_versions, fix_versions)
+    )
+
+
+def jira_components_from_title_tags(tags):
+    """Canonical SPARK JIRA component names implied by PR-title component tags.
+
+    Each tag is resolved through the component registry; a tag that maps to a
+    JIRA component contributes that component's canonical name, whether primary
+    or not (e.g. [SQL] -> "SQL", [TEST] -> "Tests"). Tags that are not JIRA
+    components (status markers like [FOLLOWUP]/[MINOR], version tags like [4.X],
+    or unknown tags) contribute nothing. Aliases normalize to the canonical
+    name. The result preserves input order and is de-duplicated.
+
+    >>> jira_components_from_title_tags(["SQL", "CORE"])
+    ['SQL', 'Spark Core']
+    >>> jira_components_from_title_tags(["PYTHON", "DOCS"])
+    ['PySpark', 'Documentation']
+    >>> jira_components_from_title_tags(["SQL", "TEST"])
+    ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
+    ['SQL']
+    >>> jira_components_from_title_tags(["SQL", "SQL"])
+    ['SQL']
+    """
+    names = []
+    for tag in tags:
+        c = Component.find(tag)
+        if c is not None and c.jira_name:
+            names.append(c.jira_name)
+    return list(dict.fromkeys(names))
+
+
+def reconcile_jira_components(issue, title_components):
+    """Prompt to sync JIRA components when they differ from the PR title.
+
+    ``title_components`` is the list of normalized PR-title component tags (e.g.
+    ["SQL", "TEST"]). Every tag that maps to a JIRA component -- primary or not,
+    e.g. [SQL] -> "SQL" and [TEST] -> "Tests" -- is reconciled; tags with no JIRA
+    component ([MINOR], [FOLLOWUP], version tags, unknown tags) are dropped. The
+    mapped names are compared, as a set, against the issue's current components.
+    On a mismatch, offer to overwrite JIRA with the PR title's components, append
+    them to the existing ones, or keep JIRA unchanged (the default).
+    """
+    title_jira_components = jira_components_from_title_tags(title_components)
+    if not title_jira_components:
+        return
+    current = [c.name for c in issue.fields.components]
+    if set(current) == set(title_jira_components):
+        return
+
+    print()
+    print("=" * 80)
+    print("PR title components differ from JIRA %s:" % issue.key)
+    print("  PR title: %s" % ", ".join(title_jira_components))
+    print("  JIRA:     %s" % (", ".join(current) if current else "(none)"))
+    print("=" * 80)
+    choice = get_input(
+        "[o]verwrite JIRA with PR title / [a]ppend PR title to JIRA / [k]eep JIRA as is "
+        "(default: keep): ",
+        {"o": ["o", "overwrite"], "a": ["a", "append"], "k": ["k", "keep", ""]},
+    )
+    if choice == "k":
+        print("Keeping JIRA %s components unchanged." % issue.key)
+        return
+    if choice == "o":
+        new_names = list(title_jira_components)
+    elif choice == "a":
+        # Append the PR title's components, keeping the existing ones first.
+        new_names = list(dict.fromkeys(current + title_jira_components))
+
+    try:
+        issue.update(fields={"components": [{"name": n} for n in new_names]})
+        print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+    except Exception as e:
+        print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -521,7 +794,7 @@ def get_jira_issue(prompt, default_jira_id=""):
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
             return None
-        if bold_input("Check if the JIRA information is as expected (y/N): ").lower() == "y":
+        if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
             return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
@@ -530,13 +803,15 @@ def get_jira_issue(prompt, default_jira_id=""):
         return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
+def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
     issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
 
     if issue.fields.assignee is None:
         choose_jira_assignee(issue)
+
+    reconcile_jira_components(issue, title_components)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -676,86 +951,282 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment):
+def resolve_jira_issues(title, merge_branches, comment, title_components=()):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment)
+        resolve_jira_issue(merge_branches, comment, title_components=title_components)
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id)
+        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
 
 
-def standardize_jira_ref(text):
+class Component:
+    """A Spark PR-title tag, paired with its canonical JIRA component name.
+
+    ``jira_name`` is the canonical name of the SPARK JIRA component (e.g.
+    "Documentation"); empty for status markers like [MINOR] that are not
+    JIRA components but are still recognized in PR titles.
+
+    ``tag`` is the preferred PR-title abbreviation (uppercase, no brackets,
+    e.g. "DOC"). ``aliases`` lists other accepted spellings that resolve to
+    the same component (e.g. "DOCS", "DOCUMENTATION" -> "DOC").
+
+    ``primary`` marks components whose presence alone satisfies the merge-time
+    requirement. Non-primary JIRA components (e.g. [TEST], [SHUFFLE], [DEPLOY])
+    remain recognized — they normalize and pass through validation — but
+    they must be paired with a primary tag (e.g. [SQL][TEST]). Status
+    markers are never primary. [WIP] is intentionally absent from the
+    registry: a WIP PR should be aborted at the earlier WIP warning, not
+    merged.
     """
-    Standardize the [SPARK-XXXXX] [MODULE] prefix
-    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to
-    "[SPARK-XXX][MLLIB] Issue"
 
-    >>> standardize_jira_ref(
-    ...     "[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
-    '[SPARK-5821][SQL] ParquetRelation2 CTAS should check if delete is successful'
-    >>> standardize_jira_ref(
-    ...     "[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
-    '[SPARK-4123][PROJECT INFRA][WIP] Show new dependencies added in pull requests'
-    >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
-    '[SPARK-5954][MLLIB] Top by key'
-    >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
-    '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
-    >>> standardize_jira_ref(
-    ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
-    '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
-    >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
-    '[SPARK-1146][WIP] Vagrant support for Spark'
-    >>> standardize_jira_ref(
-    ...     "SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
-    '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
-    >>> standardize_jira_ref(
-    ...     "[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
-    '[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.'
-    >>> standardize_jira_ref(
-    ...     'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"')
-    'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"'
-    >>> standardize_jira_ref("Additional information for users building from source code")
-    'Additional information for users building from source code'
+    def __init__(self, tag, aliases=(), primary=False, jira_name=""):
+        self.tag = tag
+        self.aliases = frozenset(aliases)
+        self.primary = primary
+        self.jira_name = jira_name
+
+    def matches(self, token):
+        return token == self.tag or token in self.aliases
+
+    @classmethod
+    def find(cls, token):
+        """Return the Component matching ``token`` (case-insensitive), or None."""
+        if token is None:
+            return None
+        token = token.strip().upper()
+        for c in COMPONENTS:
+            if c.matches(token):
+                return c
+        return None
+
+
+# Full SPARK JIRA component list (sorted alphabetically by tag), followed
+# by status markers. Keep in sync with the components in JIRA — fetch the
+# current list with:
+#   curl -s https://issues.apache.org/jira/rest/api/2/project/SPARK/components
+# A `primary=True` marker indicates the tag alone satisfies the merge-time
+# component requirement; non-primary JIRA components must be paired with a
+# primary one (e.g. [SQL][TEST], [CORE][SHUFFLE]). Status
+# markers leave `jira_name` empty.
+COMPONENTS = (
+    Component("BLOCK_MANAGER", jira_name="Block Manager"),
+    Component("BUILD", primary=True, jira_name="Build"),
+    Component("CONNECT", primary=True, jira_name="Connect"),
+    Component("CORE", ("SPARK_CORE",), primary=True, jira_name="Spark Core"),
+    Component("DEPLOY", jira_name="Deploy"),
+    Component("DOC", ("DOCS", "DOCUMENTATION"), primary=True, jira_name="Documentation"),
+    Component("DOCKER", primary=True, jira_name="Spark Docker"),
+    Component("EC2", jira_name="EC2"),
+    Component("EXAMPLE", ("EXAMPLES",), jira_name="Examples"),
+    Component("GRAPHX", primary=True, jira_name="GraphX"),
+    Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
+    Component("IO", jira_name="Input/Output"),
+    Component("JAVA", ("JAVA_API", "JAVAAPI"), jira_name="Java API"),
+    Component("K8S", ("KUBERNETES",), primary=True, jira_name="Kubernetes"),
+    Component("MESOS", jira_name="Mesos"),
+    Component("ML", primary=True, jira_name="ML"),
+    Component("MLLIB", primary=True, jira_name="MLlib"),
+    Component("OPTIMIZER", jira_name="Optimizer"),
+    Component("PROTOBUF", jira_name="Protobuf"),
+    Component("PS", primary=True, jira_name="Pandas API on Spark"),
+    Component("PYTHON", ("PYSPARK",), primary=True, jira_name="PySpark"),
+    Component("R", ("SPARKR",), primary=True, jira_name="R"),
+    Component("REPL", ("SHELL", "SPARK_SHELL"), jira_name="Spark Shell"),
+    Component("SCHEDULER", jira_name="Scheduler"),
+    Component("SDP", ("PIPELINES",), primary=True, jira_name="Declarative Pipelines"),
+    Component("SECURITY", primary=True, jira_name="Security"),
+    Component("SHUFFLE", jira_name="Shuffle"),
+    Component("SQL", primary=True, jira_name="SQL"),
+    Component("SS", primary=True, jira_name="Structured Streaming"),
+    Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
+    Component("SUBMIT", jira_name="Spark Submit"),
+    Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
+    Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
+    Component("WINDOWS", primary=True, jira_name="Windows"),
+    Component("YARN", primary=True, jira_name="YARN"),
+    # Status markers — recognized in PR titles, but not JIRA components.
+    Component("FOLLOWUP", ("FOLLOW-UP",)),
+    Component("MINOR"),
+    Component("TRIVIAL"),
+)
+
+
+_BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9._-]+)\s*\]")
+_SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
+_VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
+_LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
+
+
+class Title:
+    """Structured PR title: SPARK refs, component tags, and body.
+
+    ``leading``    — SPARK-NNNNN IDs and [MINOR]/[TRIVIAL] markers, in order.
+    ``components`` — all other bracket tags, in order.
+    ``text``       — body text following the bracket sequence.
+
+    >>> t = Title.parse("[SPARK-1234][SQL] Fix something")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], ['SQL'], 'Fix something')
+    >>> str(t)
+    '[SPARK-1234][SQL] Fix something'
+    >>> t = Title.parse("[SPARK-1234][SQL][FOLLOWUP] Fix something")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], ['SQL', 'FOLLOWUP'], 'Fix something')
+    >>> str(t)
+    '[SPARK-1234][SQL][FOLLOWUP] Fix something'
+    >>> t = Title.parse("[SPARK-1234]")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], [], '')
+    >>> str(t)
+    '[SPARK-1234]'
     """
-    jira_refs = []
-    components = []
 
-    # If this is a Revert PR, no need to process any further
-    if text.startswith('Revert "') and text.endswith('"'):
-        return text
+    def __init__(
+        self,
+        leading: List[str],
+        components: List[str],
+        text: str,
+    ) -> None:
+        self.leading = leading
+        self.components = components
+        self.text = text
 
-    # If the string is compliant, no need to process any further
-    if re.search(r"^\[SPARK-[0-9]{3,6}\](\[[A-Z0-9_\s,]+\] )+\S+", text):
-        return text
+    @classmethod
+    def parse(cls, raw: str) -> "Title":
+        """Parse a PR title string into a :class:`Title`.
 
-    # Extract JIRA ref(s):
-    pattern = re.compile(r"(SPARK[-\s]*[0-9]{3,6})+", re.IGNORECASE)
-    for ref in pattern.findall(text):
-        # Add brackets, replace spaces with a dash, & convert to uppercase
-        jira_refs.append("[" + re.sub(r"\s+", "-", ref.upper()) + "]")
-        text = text.replace(ref, "")
+        A title must open with a leading tag ([SPARK-NNNNN], [MINOR], or
+        [TRIVIAL]); otherwise :exc:`ValueError` is raised.  Subsequent bracket
+        tokens (spaces trimmed, separated by optional whitespace) go to
+        ``components``.  The remainder is ``text``.
 
-    # Extract spark component(s):
-    # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
-    pattern = re.compile(r"(\[[\w\s,.-]+\])", re.IGNORECASE)
-    for component in pattern.findall(text):
-        components.append(component.upper())
-        text = text.replace(component, "")
+        >>> t = Title.parse("[SPARK-1234][SQL][TESTS] Fix something")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'TESTS'], 'Fix something')
+        >>> t = Title.parse("  [ SPARK-1234 ]  [ SQL ] [  TESTS  ]   Fix something")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'TESTS'], 'Fix something')
+        >>> t = Title.parse("[SPARK-1234 ][ sql ][ followup ] Fix")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'FOLLOWUP'], 'Fix')
+        >>> str(t)
+        '[SPARK-1234][SQL][FOLLOWUP] Fix'
+        >>> Title.parse("[MINOR] Fix typo").leading
+        ['MINOR']
+        >>> t = Title.parse("[spark-1234][sql][followup] Fix")
+        >>> t.leading, t.components
+        (['SPARK-1234'], ['SQL', 'FOLLOWUP'])
+        >>> Title.parse("[SPARK-1234][SPARK-5678][SQL] Fix").leading
+        ['SPARK-1234', 'SPARK-5678']
+        >>> Title.parse("[SPARK-1234][4.X][SQL] Fix").components
+        ['4.X', 'SQL']
+        >>> Title.parse("[SPARK-1234][SQL][4.2] Fix").components
+        ['SQL', '4.2']
+        >>> Title.parse("[SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: '[SQL] Fix'
+        >>> Title.parse("No brackets")
+        Traceback (most recent call last):
+            ...
+        ValueError: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'No brackets'
+        >>> Title.parse("[SPARK-1234][SQL][SPARK-123] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN] tags must all appear before other tags: '[SPARK-1234][SQL][SPARK-123] Fix'
+        >>> Title.parse("[SPARK-1234][MINOR][SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist
+        >>> Title.parse("[MINOR][TRIVIAL][SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist
+        """
+        leading: List[str] = []
+        components: List[str] = []
 
-    # Cleanup any remaining symbols:
-    pattern = re.compile(r"^\W+(.*)", re.IGNORECASE)
-    if pattern.search(text) is not None:
-        text = pattern.search(text).groups()[0]
+        raw = raw.strip()
+        m0 = _BRACKET_TAG_RE.match(raw)
+        first = m0.group(1).upper() if m0 else ""
+        if not (_SPARK_ID_RE.match(first) or first in _LEADING_TAGS):
+            raise ValueError("title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw)
 
-    # Assemble full text (JIRA ref(s), module(s), remaining text)
-    clean_text = "".join(jira_refs).strip() + "".join(components).strip() + " " + text.strip()
+        past_leading = False
+        pos = 0
+        while pos < len(raw):
+            m = _BRACKET_TAG_RE.match(raw, pos)
+            if not m:
+                break
+            tag = m.group(1).upper()
+            if _SPARK_ID_RE.match(tag):
+                if past_leading:
+                    raise ValueError(
+                        "[SPARK-NNNNN] tags must all appear before other tags: %r" % raw
+                    )
+                leading.append(tag)
+            elif tag in _LEADING_TAGS:
+                leading.append(tag)
+            else:
+                components.append(tag)
+                past_leading = True
+            pos = m.end()
+            while pos < len(raw) and raw[pos] == " ":
+                pos += 1
 
-    # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were
-    # included
-    clean_text = re.sub(r"\s+", " ", clean_text.strip())
+        text = raw[pos:].lstrip()
+        markers = [t for t in leading if t in _LEADING_TAGS]
+        if len(markers) > 1 or (markers and len(leading) > len(markers)):
+            raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
+        return cls(leading, components, text)
 
-    return clean_text
+    def __str__(self) -> str:
+        parts = "".join("[%s]" % t for t in self.leading)
+        parts += "".join("[%s]" % c for c in self.components)
+        if not self.text:
+            return parts
+        return parts + (" " if parts else "") + self.text
+
+
+def prompt_for_components():
+    """
+    Prompt the committer for component(s) when the PR title lacks a primary
+    component. Each entered token is normalized via Component.find
+    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
+    passed through as-is. Re-prompts until at least one entered token resolves
+    to a primary Component (one with primary=True). Returns an uppercase list
+    of tags in insertion order.
+    """
+    print("PR title is missing a primary [COMPONENT] tag.")
+    print("Primary components (one of these is required):")
+    primary = [c for c in COMPONENTS if c.primary]
+    width = max(len(c.tag) for c in primary)
+    for c in primary:
+        print("  [%s]%s - %s" % (c.tag, " " * (width - len(c.tag)), c.jira_name))
+    while True:
+        raw = bold_input(
+            "Enter comma-separated component(s) to insert into the title (e.g. CORE,SQL): "
+        )
+        components = []
+        has_primary = False
+        for token in raw.split(","):
+            t = token.strip().upper()
+            if t:
+                c = Component.find(t)
+                if c is not None and c.primary:
+                    has_primary = True
+                components.append(c.tag if c else t)
+        if not components:
+            print_error("Component(s) cannot be empty. Please enter at least one.")
+            continue
+        if not has_primary:
+            print_error(
+                "At least one component must be a primary tag (see list above). "
+                "Got: %s" % ", ".join(components)
+            )
+            continue
+        return components
 
 
 def get_current_ref():
@@ -768,13 +1239,15 @@ def get_current_ref():
 
 
 def initialize_jira():
+    # JIRA access is mandatory: a successful merge must resolve the associated ticket. Bail out
+    # early -- before any git work -- if a prerequisite is missing, rather than silently merging
+    # and leaving the JIRA open (which is easy to miss and tedious to reconcile after the fact).
     global asf_jira
     asf_jira = None
     jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:
-        print_error("ERROR finding jira library. Run 'pip3 install jira' to install.")
-        continue_maybe("Continue without jira?")
+        fail("ERROR finding jira library. Run 'pip3 install jira' to install, then retry.")
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(
             jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
@@ -803,11 +1276,69 @@ def initialize_jira():
             timeout=(JIRA_CONNECT_TIMEOUT, 30),
         )
     else:
-        print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
-        continue_maybe("Continue without jira?")
+        fail(
+            "Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set. Configure JIRA "
+            "credentials (a personal access token is recommended) and retry. See "
+            "https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens."
+        )
+
+
+def check_script_up_to_date():
+    # Running a stale merge script can silently reintroduce already-fixed behavior (e.g. skipping
+    # JIRA resolution). Rather than download the whole file, ask GitHub only for the latest commit
+    # on master that touched this script (a small response) and fail if that commit is not already
+    # in the local history -- i.e. the committer is missing an upstream update. Being ahead of
+    # master (branched from it) is fine and does not trip the check. Best-effort: if master cannot
+    # be reached we warn and proceed rather than block merges on a transient network/rate error.
+    if SKIP_VERSION_CHECK:
+        print("SKIP_VERSION_CHECK is set; not verifying this script against master.")
+        return
+
+    url = "%s/commits?path=%s&sha=master&per_page=1" % (GITHUB_API_BASE, MERGE_SCRIPT_REPO_PATH)
+    try:
+        request = Request(url)
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        commits = json.load(urlopen(request))
+    except Exception as e:
+        print_error(
+            "Could not check %s against master (%s). Proceeding with the local copy."
+            % (MERGE_SCRIPT_REPO_PATH, e)
+        )
+        return
+    if not commits:
+        return
+    latest_sha = commits[0]["sha"]
+
+    # `git merge-base --is-ancestor` exits 0 when latest_sha is reachable from HEAD (we have it),
+    # nonzero when it is missing (stale) or unknown locally (never fetched).
+    try:
+        subprocess.check_call(
+            ["git", "merge-base", "--is-ancestor", latest_sha, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    except subprocess.CalledProcessError:
+        pass
+
+    fail(
+        "Your local %s is out of date: apache/spark master has a newer revision (%s) that is not "
+        "in your local history. Update it before merging, e.g.:\n"
+        "    git fetch %s master && git checkout %s/master -- %s\n"
+        "then re-run. Set SKIP_VERSION_CHECK=1 to bypass (e.g. when changing this script itself)."
+        % (
+            MERGE_SCRIPT_REPO_PATH,
+            latest_sha[:12],
+            PUSH_REMOTE_NAME,
+            PUSH_REMOTE_NAME,
+            MERGE_SCRIPT_REPO_PATH,
+        )
+    )
 
 
 def main():
+    check_script_up_to_date()
     initialize_jira()
     global original_head
 
@@ -817,10 +1348,9 @@ def main():
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
-    branch_iter = iter(branch_names)
 
     if len(sys.argv) == 1:
-        pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
+        pr_num = get_input("Which pull request would you like to merge? (e.g. 34): ", r"^\d+$")
     else:
         pr_num = sys.argv[1]
         print("Start to merge pull request #%s" % (pr_num))
@@ -828,28 +1358,67 @@ def main():
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
+    title = pr["title"]
 
-    # Warn if the PR is WIP
-    if "[WIP]" in pr["title"]:
-        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
-        continue_maybe(msg)
+    # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
+    if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
+        fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
 
-    # Decide whether to use the modified title or not
-    modified_title = standardize_jira_ref(pr["title"]).rstrip(".")
-    if modified_title != pr["title"]:
-        print("I've re-written the title as follows to match the standard format:")
-        print("Original: %s" % pr["title"])
-        print("Modified: %s" % modified_title)
-        result = bold_input("Would you like to use the modified title? (y/N): ")
-        if result.lower() == "y":
-            title = modified_title
-            print("Using modified title:")
-        else:
-            title = pr["title"]
-            print("Using original title:")
-        print(title)
-    else:
-        title = pr["title"]
+    # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
+    is_revert_pr = title.startswith('Revert "') and title.endswith('"')
+    # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
+    is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
+
+    # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
+    # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
+    title_components: List[str] = []
+
+    # Revert and Reapply PRs keep their title verbatim.
+    if not (is_revert_pr or is_reapply_pr):
+        # Parse; fail on a malformed title.
+        try:
+            parsed = Title.parse(title)
+        except ValueError as e:
+            fail("Malformed PR title: %s" % e)
+
+        # Normalize component tags via the registry and track primary.
+        components = []
+        has_primary = False
+        for tag in parsed.components:
+            c = Component.find(tag)
+            if c is not None and c.primary:
+                has_primary = True
+            components.append(c.tag if c is not None else tag)
+        if not has_primary:
+            new_tags = prompt_for_components()
+            components = new_tags + components
+
+        # Deduplicate tags in insertion order.
+        components = list(dict.fromkeys(components))
+
+        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
+        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
+        if versions:
+            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
+            components = versions + others
+
+        # Move FOLLOWUP to the last tag.
+        non_followup = [t for t in components if t != "FOLLOWUP"]
+        if len(non_followup) < len(components):
+            components = non_followup + ["FOLLOWUP"]
+
+        # Warn about tags that are neither known components nor version tags.
+        unknown = [
+            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+        ]
+        if unknown:
+            print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
+
+        parsed.components = components
+        title_components = list(parsed.components)
+        title = str(parsed)
+        if title != pr["title"]:
+            print("Normalized title: %s" % title)
 
     body = pr["body"]
     if body is None:
@@ -860,8 +1429,7 @@ def main():
         print(modified_body)
         print("=" * 80)
         print("I've removed the comments from PR template like the above:")
-        result = bold_input("Would you like to use the modified body? (y/N): ")
-        if result.lower() == "y":
+        if get_input("Would you like to use the modified body? (y/N): ", ["y", "n", ""]) == "y":
             body = modified_body
             print("Using modified body:")
         else:
@@ -927,7 +1495,11 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
+        default = branch_names[0]
+        picked = cherry_pick(
+            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
+        )
+        post_merge_comment(pr_num, picked)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -937,13 +1509,31 @@ def main():
         )
         continue_maybe(msg)
 
-    if asf_jira is not None:
-        jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
-        for jira_id in jira_ids:
-            try:
-                print_jira_issue_summary(asf_jira.issue(jira_id))
-            except Exception:
-                print_error("Unable to fetch summary of %s" % jira_id)
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+    # Collect every offender so the committer sees the full list in one shot rather than
+    # discovering them one-by-one across repeated merge attempts.
+    blocking_issue_types = {"Epic", "Umbrella"}
+    blockers = []
+    for jira_id in jira_ids:
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception:
+            print_error("Unable to fetch summary of %s" % jira_id)
+            continue
+        print_jira_issue_summary(issue)
+        issue_type = issue.fields.issuetype.name
+        if issue_type in blocking_issue_types:
+            blockers.append((jira_id, issue_type))
+    if blockers:
+        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+        fail(
+            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+            "tickets and MUST not be resolved by a single PR. File "
+            "Sub-task(s) under %s and update the PR title to reference "
+            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+        )
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -953,22 +1543,56 @@ def main():
 
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
-    pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
-        merged_refs = merged_refs + [
-            cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
-        ]
+    # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
+    # then each cherry-pick target as it is picked.
+    merged_commits = [(target_ref, merge_hash)]
 
-    if asf_jira is not None:
-        continue_maybe("Would you like to update an associated JIRA?")
-        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-            pr_num,
-            GITHUB_BASE,
-            pr_num,
-        )
-        resolve_jira_issues(title, merged_refs, jira_comment)
-    else:
-        print("Exiting without trying to close the associated JIRA.")
+    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
+    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
+    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
+    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+    if pr_state != "closed":
+        print("PR #%s is still open after push; closing it explicitly." % pr_num)
+        close_pr(pr_num)
+
+    # Walk a mutable remaining-branches list so the next default correctly skips any
+    # branches already picked, including branches consumed by the Upstream-First two-branch
+    # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
+    # merged_refs doubles as the already_picked set passed to cherry_pick: it starts with
+    # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
+    remaining_branches = [b for b in branch_names if b != target_ref]
+    pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
+    # Always record the merge summary for what actually landed, even if a later
+    # cherry-pick is aborted or cancelled: the merge into the target branch has
+    # already been pushed, so cancelling a backport must not drop that line.
+    try:
+        while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            picked = cherry_pick(
+                pr_num,
+                merge_hash,
+                default,
+                branch_names,
+                target_ref,
+                already_picked=tuple(merged_refs),
+            )
+            picked_refs = [ref for ref, _ in picked]
+            merged_refs = merged_refs + picked_refs
+            merged_commits = merged_commits + picked
+            for b in picked_refs:
+                if b in remaining_branches:
+                    remaining_branches.remove(b)
+    finally:
+        post_merge_comment(pr_num, merged_commits)
+
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    continue_maybe("Would you like to update an associated JIRA?")
+    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+        pr_num,
+        GITHUB_BASE,
+        pr_num,
+    )
+    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
 
 
 if __name__ == "__main__":

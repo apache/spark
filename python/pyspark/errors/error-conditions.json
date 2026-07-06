@@ -417,7 +417,7 @@
   },
   "INVALID_MULTIPLE_ARGUMENT_CONDITIONS": {
     "message": [
-      "[{arg_names}] cannot be <condition>."
+      "[<arg_names>] cannot be <condition>."
     ]
   },
   "INVALID_NDARRAY_DIMENSION": {

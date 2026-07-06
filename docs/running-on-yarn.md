@@ -33,7 +33,7 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
-Apache Hadoop does not support Java 17 as of 3.4.1, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
+Apache Hadoop supports Java 17 since 3.5.0, while Apache Spark requires at least Java 17 since 4.0.0. When running on a YARN cluster whose Hadoop version is older than 3.5.0, a different JDK should be configured for Spark applications.
 Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
@@ -538,6 +538,15 @@ To use a custom metrics.properties for the application master and executors, upd
   running against earlier versions, this property will be ignored.
   </td>
   <td>1.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.oomKill.enabled</code></td>
+  <td>true</td>
+  <td>
+  Whether to add `-XX:OnOutOfMemoryError='kill %p'` (or its counterpart on Windows) to executor
+  JVM options.
+  </td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.tags</code></td>

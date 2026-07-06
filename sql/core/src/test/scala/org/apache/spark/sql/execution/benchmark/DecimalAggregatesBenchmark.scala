@@ -46,9 +46,16 @@ import org.apache.spark.sql.types.Decimal
  *     PBT in `DataFrameAggregateSuite`).
  *
  * Sections:
- *   A -- Aggregate SUM widened-cast sweep over (p, s, p') cases.
- *   B -- Aggregate AVG widened-cast sweep (p <= 7 per
- *        AVG_PEEL_MAX_INNER_PRECISION).
+ *   A -- Aggregate SUM widened-cast sweep (`p + 10 <= MAX_LONG_DIGITS`,
+ *        any `pPrime > p` up to 38).
+ *   B -- Aggregate AVG widened-cast sweep (`pPrime + 4 <= MAX_DOUBLE_DIGITS`
+ *        so the rule fires only inside the existing AVG Double-regime
+ *        envelope; wider casts stay on the Decimal-exact path).
+ *   C -- Aggregate MIN widened-cast sweep (no regime guard: the MIN arm
+ *        peels for any `pPrime >= p` same-scale widening; expected
+ *        BigInteger-domain outer (`pPrime > MAX_LONG_DIGITS = 18`) is the
+ *        main saving path per design).
+ *   D -- Aggregate MAX widened-cast sweep (mirrors C).
  *
  * NOTE on Window arm: the optimizer does not extend widened-Cast peel to
  * the Window arm (see DecimalAggregates rule comment) because the analyzer
@@ -56,12 +63,13 @@ import org.apache.spark.sql.types.Decimal
  * not exercise this rule. A Window benchmark belongs with a future
  * plan-layer rewrite, not here.
  *
- * Case design (`p+1` boundary vs `p+10`-class wider) deliberately includes
- * both the minimum widening (one extra digit, e.g. `dec(7,2) -> dec(8,2)`)
- * and a production-canonical wider one (e.g. `dec(7,2) -> dec(17,2)` is the
- * inner-widened-decimal shape in TPC-DS q18) so reviewers see whether
- * widening magnitude matters and whether the canonical shape behaves like
- * the boundary one.
+ * Case design:
+ *   - Section A pairs a `p+1` boundary widening with a `p+10`-class wider
+ *     cast (A2 mirrors the TPC-DS q18 inner-widened-decimal shape), so
+ *     reviewers see whether widening magnitude matters.
+ *   - Section B pairs a `p+1` boundary widening with the `pPrime <= 11`
+ *     upper bound, the widest cast the AVG arm will accept under the
+ *     semantics-preserving guard.
  *
  * Args: aN (Section A/B row count), iters, apl
  * (`spark.sql.decimalOperations.allowPrecisionLoss`; default true).
@@ -106,17 +114,50 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
   /**
    * Aggregate AVG cases: (label, p, s, widened p').
    *
-   * All `p <= 7` per the conservative `AVG_PEEL_MAX_INNER_PRECISION = 7`
-   * guard (see design doc 0001 rev 7 S7.1 -- strict-subset narrowing so
-   * SPARK-37024 Double-regime exposure is NOT amplified by this rule).
-   * Same `p+1` / `p+10` split as Section A. B2 mirrors the canonical
-   * TPC-DS q18 AVG shape.
+   * All `pPrime + 4 <= MAX_DOUBLE_DIGITS = 15`, i.e. `pPrime <= 11` -- the
+   * AVG peel arm only fires inside the existing Double-regime envelope, so
+   * the un-rewritten Decimal-exact path is preserved for wider casts (see
+   * SPARK-56983).
    */
   private val AvgAggCases: Seq[(String, Int, Int, Int)] = Seq(
     ("B1 p=7 s=2 p'=8", 7, 2, 8),    // p+1 boundary
-    ("B2 p=7 s=2 p'=12", 7, 2, 12),  // canonical TPC-DS q18 AVG shape
+    ("B2 p=7 s=2 p'=11", 7, 2, 11),  // pPrime upper bound
     ("B3 p=5 s=0 p'=6", 5, 0, 6),    // p+1 boundary, zero scale
-    ("B4 p=5 s=0 p'=15", 5, 0, 15)   // p+10, zero scale
+    ("B4 p=5 s=0 p'=11", 5, 0, 11)   // pPrime upper bound, zero scale
+  )
+
+  /**
+   * Aggregate MIN cases: (label, p, s, widened p').
+   *
+   * MIN/MAX widened-cast peel has NO regime guard -- it peels for any
+   * `pPrime >= p` same-scale widening (`Optimizer.scala WidenedDecimalChild`).
+   * The main saving path is `pPrime > MAX_LONG_DIGITS = 18`, where the
+   * unrewritten plan would create a BigInteger-domain outer Decimal for
+   * every row, while the rewritten plan compares the inner Long-domain
+   * values and casts only the single aggregate result.
+   *
+   * Coverage:
+   *   - C1: inner Long, outer Long  -- weakest saving (sibling-compatible
+   *         baseline; the row-cast still goes through `changePrecision`
+   *         but stays in Long).
+   *   - C2: inner Long, outer BigInteger -- the main saving regime.
+   *   - C3: inner at Long boundary (p=18), outer BigInteger -- isolates
+   *         the outer-domain cost.
+   *   - C4: inner Long, outer at MAX_PRECISION=38 -- deepest BigInteger.
+   */
+  private val MinAggCases: Seq[(String, Int, Int, Int)] = Seq(
+    ("C1 p=10 s=2 p'=18", 10, 2, 18), // inner Long, outer Long (boundary)
+    ("C2 p=10 s=2 p'=28", 10, 2, 28), // inner Long, outer BigInteger (main saving)
+    ("C3 p=18 s=2 p'=28", 18, 2, 28), // inner Long max, outer BigInteger
+    ("C4 p=10 s=2 p'=38", 10, 2, 38)  // inner Long, outer MAX_PRECISION
+  )
+
+  /** Aggregate MAX cases: mirror C above. */
+  private val MaxAggCases: Seq[(String, Int, Int, Int)] = Seq(
+    ("D1 p=10 s=2 p'=18", 10, 2, 18),
+    ("D2 p=10 s=2 p'=28", 10, 2, 28),
+    ("D3 p=18 s=2 p'=28", 18, 2, 28),
+    ("D4 p=10 s=2 p'=38", 10, 2, 38)
   )
 
   /** Clamp generator to `10^(p-s) - 1` so rand() * bound fits `DECIMAL(p, s)`. */
@@ -195,12 +236,39 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
     runBenchmark("DecimalAggregates AVG widened-cast peel (Aggregate)") {
       AvgAggCases.foreach { case (label, p, s, pPrime) =>
         require(pPrime > p, s"$label: p'=$pPrime must exceed p=$p")
-        require(p <= 7,
-          s"$label: p=$p violates conservative AVG_PEEL_MAX_INNER_PRECISION=7 guard")
+        require(pPrime + 4 <= 15,
+          s"$label: p'=$pPrime violates AVG fast-path guard " +
+            s"pPrime+4<=MAX_DOUBLE_DIGITS=15; rule would not fire")
         setupAggTable(spark, aN, p, s)
         runThreeWay(label, aN,
           nativeSql = "select avg(x) from t",
           widenedSql = s"select avg(cast(x as decimal($pPrime, $s))) from t",
+          iters, apl)
+      }
+    }
+
+    // Section C -- Aggregate MIN widened-cast.
+    runBenchmark("DecimalAggregates MIN widened-cast peel (Aggregate)") {
+      MinAggCases.foreach { case (label, p, s, pPrime) =>
+        require(pPrime >= p, s"$label: p'=$pPrime must be >= p=$p (widening)")
+        require(pPrime <= 38, s"$label: p'=$pPrime exceeds MAX_PRECISION=38")
+        setupAggTable(spark, aN, p, s)
+        runThreeWay(label, aN,
+          nativeSql = "select min(x) from t",
+          widenedSql = s"select min(cast(x as decimal($pPrime, $s))) from t",
+          iters, apl)
+      }
+    }
+
+    // Section D -- Aggregate MAX widened-cast.
+    runBenchmark("DecimalAggregates MAX widened-cast peel (Aggregate)") {
+      MaxAggCases.foreach { case (label, p, s, pPrime) =>
+        require(pPrime >= p, s"$label: p'=$pPrime must be >= p=$p (widening)")
+        require(pPrime <= 38, s"$label: p'=$pPrime exceeds MAX_PRECISION=38")
+        setupAggTable(spark, aN, p, s)
+        runThreeWay(label, aN,
+          nativeSql = "select max(x) from t",
+          widenedSql = s"select max(cast(x as decimal($pPrime, $s))) from t",
           iters, apl)
       }
     }

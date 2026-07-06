@@ -32,6 +32,21 @@ set -x
 SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
+# The Apache LICENSE and NOTICE are copied into the Python and R package
+# directories below so they are bundled into the source distributions. Remove
+# them on exit so a failed build does not leave stray files behind.
+function cleanup_dist_license_files {
+  rm -f "$SPARK_HOME/python/LICENSE" "$SPARK_HOME/python/NOTICE" \
+        "$SPARK_HOME/R/pkg/LICENSE" "$SPARK_HOME/R/pkg/NOTICE"
+  # Restore the SparkR DESCRIPTION if a release build patched it in place (see
+  # the R packaging section). Guards against an interrupted build leaving the
+  # tracked DESCRIPTION modified.
+  if [ -f "$SPARK_HOME/R/DESCRIPTION.orig" ]; then
+    mv -f "$SPARK_HOME/R/DESCRIPTION.orig" "$SPARK_HOME/R/pkg/DESCRIPTION"
+  fi
+}
+trap cleanup_dist_license_files EXIT
+
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
@@ -259,9 +274,39 @@ if [ "$MAKE_PIP" == "true" ]; then
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
+  # Ship the Apache LICENSE and NOTICE inside the PySpark source distributions
+  # (see MANIFEST.in). These are removed again after the sdists are built.
+  #
+  # The classic pyspark sdist bundles the assembly jars (packaging/classic/setup.py
+  # builds a deps/jars symlink farm), so it ships the binary LICENSE/NOTICE that
+  # enumerate the bundled third-party jars' licenses, mirroring the binary
+  # distribution above. The connect and client sdists bundle no jars and ship the
+  # plain source LICENSE/NOTICE.
+  if [ -e "$SPARK_HOME/LICENSE-binary" ]; then
+    cp "$SPARK_HOME/LICENSE-binary" LICENSE
+    cp "$SPARK_HOME/NOTICE-binary" NOTICE
+  else
+    cp "$SPARK_HOME/LICENSE" LICENSE
+    cp "$SPARK_HOME/NOTICE" NOTICE
+  fi
   python3 packaging/classic/setup.py sdist
+
+  cp "$SPARK_HOME/LICENSE" LICENSE
+  cp "$SPARK_HOME/NOTICE" NOTICE
   python3 packaging/connect/setup.py sdist
   python3 packaging/client/setup.py sdist
+  rm -f LICENSE NOTICE
+
+  # Guard against regressions: every PySpark sdist must contain LICENSE and NOTICE
+  # at the package root. The missing files were only caught by a Spark 4.2.0 RC1
+  # vote -1 (SPARK-57393); fail the release build here instead of at vote time.
+  for f in dist/pyspark*.tar.gz; do
+    listing=$(tar tzf "$f")
+    for required in LICENSE NOTICE; do
+      grep -qE "^[^/]+/$required\$" <<< "$listing" || \
+        { echo "ERROR: $f is missing $required at the package root"; exit 1; }
+    done
+  done
   popd > /dev/null
 else
   echo "Skipping building python distribution package"
@@ -272,9 +317,33 @@ if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
   R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
+  # Ship the Apache LICENSE and NOTICE inside the SparkR source package. These
+  # are removed again after the package is built.
+  cp "$SPARK_HOME/LICENSE" pkg/LICENSE
+  cp "$SPARK_HOME/NOTICE" pkg/NOTICE
+  # Reference the bundled LICENSE from DESCRIPTION so `R CMD check --as-cran` does
+  # not emit "File LICENSE is not mentioned in the DESCRIPTION file". The committed
+  # DESCRIPTION is left untouched because SparkR CI runs check-cran.sh without the
+  # LICENSE file present; this edit is transient and restored after the build (and
+  # by the EXIT trap on failure). The backup lives outside pkg/ so R CMD check does
+  # not flag it as a non-standard file. NOTE: the "Non-standard file 'NOTICE'" note
+  # cannot be silenced this way and is expected.
+  cp pkg/DESCRIPTION "$SPARK_HOME/R/DESCRIPTION.orig"
+  sed 's/^License: Apache License (== 2.0)$/License: Apache License (== 2.0) + file LICENSE/' \
+    "$SPARK_HOME/R/DESCRIPTION.orig" > pkg/DESCRIPTION
   # Build source package and run full checks
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
   NO_TESTS=1 "$SPARK_HOME/R/check-cran.sh"
+  mv -f "$SPARK_HOME/R/DESCRIPTION.orig" pkg/DESCRIPTION
+  rm -f pkg/LICENSE pkg/NOTICE
+
+  # Guard against regressions: the SparkR source package must contain LICENSE and
+  # NOTICE at the package root (SPARK-57393).
+  listing=$(tar tzf "SparkR_$R_PACKAGE_VERSION.tar.gz")
+  for required in LICENSE NOTICE; do
+    grep -qE "^[^/]+/$required\$" <<< "$listing" || \
+      { echo "ERROR: SparkR source package is missing $required"; exit 1; }
+  done
 
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
@@ -294,7 +363,11 @@ mkdir "$DISTDIR/conf"
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
-cp -r "$SPARK_HOME/python" "$DISTDIR"
+if command -v git && command -v cpio && git rev-parse --git-dir 2>/dev/null; then
+  git ls-files -z "$SPARK_HOME/python" | cpio -0pdm "$DISTDIR"
+else
+  cp -r "$SPARK_HOME/python" "$DISTDIR"
+fi
 
 # Remove the python distribution from dist/ if we built it
 if [ "$MAKE_PIP" == "true" ]; then

@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
 import java.util.concurrent.atomic.AtomicLong
@@ -75,15 +74,9 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  // Assign column IDs to columns that do not have one.
-  // This simulates connectors that support column identity tracking.
-  private var tableColumns: Array[Column] = initialColumns.map { c =>
-    if (c.id() == null) {
-      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
-    } else {
-      c
-    }
-  }
+  // Assign column IDs to columns that do not have one, including nested struct fields within
+  // arrays and maps. This simulates connectors that support column identity tracking.
+  private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
 
   override def columns(): Array[Column] = tableColumns
 
@@ -95,6 +88,40 @@ abstract class InMemoryBaseTable(
 
   def setVersion(version: String): Unit = {
     tableVersion = version.toInt
+  }
+
+  /**
+   * Copies version and validated version from another table.
+   *
+   * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
+   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
+   * that overrides specific behavior (such as nulling out column IDs). The new
+   * object's version counter starts at 0. Without this call, the version counter
+   * resets every time the catalog creates such a replacement table, breaking the
+   * monotonic-version assumption that downstream consumers rely on (e.g.
+   * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
+   * tests in [[DSv2IncrementallyConstructedQueryTests]]).
+   */
+  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setVersion(sourceTable.version())
+    if (sourceTable.validatedVersion() != null) {
+      setValidatedVersion(sourceTable.validatedVersion())
+    }
+  }
+
+  // Version-aware equality: two tables refer to the same metastore entity at the same state.
+  // Fall back to reference equality when `id()` is null (no metastore identity).
+  override def equals(obj: Any): Boolean = obj match {
+    case other: InMemoryBaseTable =>
+      if (this eq other) true
+      else if (id() == null || other.id() == null) false
+      else id() == other.id() && version() == other.version()
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (id() == null) System.identityHashCode(this)
+    else java.util.Objects.hash(id(), version())
   }
 
   def increaseVersion(): Unit = {
@@ -501,6 +528,7 @@ abstract class InMemoryBaseTable(
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
+      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
     }
@@ -545,7 +573,8 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
-  class InMemoryMicroBatchStream extends MicroBatchStream {
+  class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
+      extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
     override def latestOffset(): Offset =
       new InMemoryTableOffset(InMemoryBaseTable.this.rows.size.toLong)
@@ -554,14 +583,13 @@ abstract class InMemoryBaseTable(
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
     }
-    override def createReaderFactory(): PartitionReaderFactory = { partition =>
-      val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
-      new PartitionReader[InternalRow] {
-        private var idx = -1
-        override def next(): Boolean = { idx += 1; idx < rows.size }
-        override def get(): InternalRow = rows(idx)
-        override def close(): Unit = {}
+    override def createReaderFactory(): PartitionReaderFactory = {
+      val metadataColNames = new mutable.ArrayBuffer[String]()
+      readSchema.foreach {
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
+        case _ =>
       }
+      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -655,7 +683,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new InMemoryMicroBatchStream
+      new InMemoryMicroBatchStream(readSchema, tableSchema)
   }
 
   case class InMemoryBatchScan(
@@ -664,6 +692,12 @@ abstract class InMemoryBaseTable(
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
+
+    // Back-pointer to the table this scan was built against.
+    val table: InMemoryBaseTable = InMemoryBaseTable.this
+
+    // The filters pushed to this scan at build time.
+    var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
@@ -739,10 +773,8 @@ abstract class InMemoryBaseTable(
         val mergedSchema = mergeSchema(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
-        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
         tableColumns = InMemoryBaseTable.assignMissingIds(
-          oldColumns = columns(),
-          newColumns = newColumns)
+          CatalogV2Util.structTypeToV2Columns(mergedSchema))
         writer
       }
 
@@ -875,30 +907,62 @@ abstract class InMemoryBaseTable(
 object InMemoryBaseTable {
   private val columnIdGlobalCounter = new AtomicLong(0)
   def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+  def nextColumnIdString(): String = nextColumnId().toString
 
-  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+  // SQL conf key that enables column ID assignment
+  val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
 
   /**
-   * Preserves column IDs from `oldColumns` when the column name matches,
-   * and assigns new IDs to columns that do not already have one.
+   * Assigns fresh IDs to any top-level column or nested struct field that does not already
+   * have one. Recurses into struct fields within ArrayType and MapType so that every field
+   * at every depth gets an ID.
    *
-   * IDs are preserved across type changes, keeping the same column ID through type
-   * widening and nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides
-   * this behavior for testing scenarios where type changes should produce a new ID.
+   * Existing IDs are preserved: Column -> StructType -> Column round-trip encodes them in
+   * StructField metadata (see StructField.FIELD_ID_METADATA_KEY), so only genuinely new fields
+   * arrive here without an ID.
    */
-  def assignMissingIds(
-      oldColumns: Array[Column],
-      newColumns: Array[Column]): Array[Column] = {
-    newColumns.map { newCol =>
-      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
-        case Some(oldCol) if oldCol.id() != null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
-        case _ if newCol.id() == null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
-        case _ =>
-          newCol
+  def assignMissingIds(columns: Array[Column]): Array[Column] = {
+    if (!SQLConf.get.getConfString(ASSIGN_COLUMN_IDS, "false").toBoolean) return columns
+    columns.map { col =>
+      val impl = col.asInstanceOf[ColumnImpl]
+      val colWithId = if (col.id == null) impl.copy(id = nextColumnIdString()) else impl
+      val updatedType = assignFieldIds(colWithId.dataType)
+      if (updatedType ne colWithId.dataType) {
+        colWithId.copy(dataType = updatedType)
+      } else {
+        colWithId
       }
     }
+  }
+
+  private def assignFieldIds(dataType: DataType): DataType = dataType match {
+    case s: StructType =>
+      val newFields = s.fields.map { field =>
+        val fieldWithId = if (field.id.isEmpty) field.withId(nextColumnIdString()) else field
+        val updatedType = assignFieldIds(fieldWithId.dataType)
+        if (updatedType ne fieldWithId.dataType) {
+          fieldWithId.copy(dataType = updatedType)
+        } else {
+          fieldWithId
+        }
+      }
+      if (newFields.zip(s.fields).forall { case (n, e) => n eq e }) s else StructType(newFields)
+
+    case a: ArrayType =>
+      val updatedElement = assignFieldIds(a.elementType)
+      if (updatedElement ne a.elementType) a.copy(elementType = updatedElement) else a
+
+    case m: MapType =>
+      val updatedKeyType = assignFieldIds(m.keyType)
+      val updatedValueType = assignFieldIds(m.valueType)
+      if ((updatedKeyType ne m.keyType) || (updatedValueType ne m.valueType)) {
+        m.copy(keyType = updatedKeyType, valueType = updatedValueType) }
+      else {
+        m
+      }
+
+    case other =>
+      other
   }
 
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
@@ -952,6 +1016,30 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   override def filesCount(): OptionalLong = OptionalLong.of(100L)
 
   def clear(): Unit = rows.clear()
+}
+
+private class InMemoryMicroBatchReaderFactory(
+    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
+    new PartitionReader[InternalRow] {
+      private var idx = -1
+      override def next(): Boolean = { idx += 1; idx < rows.size }
+      override def get(): InternalRow = {
+        val rawRow = rows(idx)
+        if (metaNames.isEmpty) rawRow
+        else {
+          val metaRow = new GenericInternalRow(metaNames.map {
+            case "index" => idx.asInstanceOf[Any]
+            case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
+            case _ => null
+          })
+          new JoinedRow(rawRow, metaRow)
+        }
+      }
+      override def close(): Unit = {}
+    }
+  }
 }
 
 object BufferedRows {

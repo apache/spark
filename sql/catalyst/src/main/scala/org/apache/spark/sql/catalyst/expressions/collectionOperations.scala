@@ -32,12 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  ARRAYS_ZIP,
-  CONCAT,
-  MAP_FROM_ENTRIES,
-  TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAY_DISTINCT, ARRAY_EXCEPT, ARRAY_INTERSECT, ARRAY_UNION, ARRAYS_OVERLAP, ARRAYS_ZIP, CONCAT, MAP_FROM_ENTRIES, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1809,6 +1804,9 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with Predicate {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_OVERLAP)
+
   override def nullIntolerant: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
@@ -2054,13 +2052,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val startInt = startVal.asInstanceOf[Int]
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
-    val startIndex = if (startInt == 0) {
-      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
-    } else if (startInt < 0) {
-      startInt + arr.numElements()
-    } else {
-      startInt - 1
-    }
+    val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
     if (lengthInt < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
     }
@@ -2077,26 +2069,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     nullSafeCodeGen(ctx, ev, (x, start, length) => {
       val startIdx = ctx.freshName("startIdx")
       val resLength = ctx.freshName("resLength")
-      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+      val utils = classOf[ArrayExpressionUtils].getName
       s"""
-         |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-         |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
-         |} else if ($start < 0) {
-         |  $startIdx = $start + $x.numElements();
-         |} else {
-         |  // arrays in SQL are 1-based instead of 0-based
-         |  $startIdx = $start - 1;
-         |}
-         |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(
-         |    "$prettyName", $length);
-         |} else if ($length > $x.numElements() - $startIdx) {
-         |  $resLength = $x.numElements() - $startIdx;
-         |} else {
-         |  $resLength = $length;
-         |}
+         |${CodeGenerator.JAVA_INT} $startIdx =
+         |  $utils.sliceStartIndex($start, $x.numElements(), "$prettyName");
+         |${CodeGenerator.JAVA_INT} $resLength =
+         |  $utils.sliceLength($length, $x.numElements(), $startIdx, "$prettyName");
          |${genCodeForResult(ctx, ev, x, startIdx, resLength)}
        """.stripMargin
     })
@@ -2310,9 +2288,16 @@ case class ArrayJoin(
         }
       }
     } else {
+      // When array and delimiter are both non-nullable, neither nullSafeExec wrapper above runs,
+      // so reset ev.isNull here. doGenCode initializes ev.isNull to true whenever the expression
+      // is nullable (e.g. a nullable nullReplacement), and without this reset the computed result
+      // would be discarded as NULL. When the expression is non-nullable, ev.isNull is a literal
+      // false and must not be assigned.
+      val resetIsNull = if (nullable) s"${ev.isNull} = false;" else ""
       s"""
          |${arrayGen.code}
          |${delimiterGen.code}
+         |$resetIsNull
          |$resultCode""".stripMargin
     }
   }
@@ -2716,9 +2701,11 @@ case class ElementAt(
   }
 
   private def nullability(elements: Seq[Expression], ordinal: Int): Boolean = {
+    // Widen `ordinal` to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+    // wraps back to a negative value and would bypass the out-of-bounds guard below.
     if (ordinal == 0) {
       false
-    } else if (elements.length < math.abs(ordinal)) {
+    } else if (elements.length < math.abs(ordinal.toLong)) {
       !failOnError
     } else {
       if (ordinal < 0) {
@@ -2743,14 +2730,16 @@ case class ElementAt(
     case _: ArrayType if failOnError =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
-        val idx = ElementAtUtils.resolveArrayIndex(
+        val idx = ArrayExpressionUtils.resolveArrayIndex(
           array.numElements(), ordinal.asInstanceOf[Int], getContextOrNull())
         if (arrayElementNullable && array.isNullAt(idx)) null else array.get(idx, dataType)
       }
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
-        val index = ordinal.asInstanceOf[Int]
+        // Widen the index to Long before `abs` to avoid overflow: `math.abs(Int.MinValue)`
+        // wraps back to a negative value and would bypass this out-of-bounds guard.
+        val index = ordinal.asInstanceOf[Int].toLong
         if (array.numElements() < math.abs(index)) {
           defaultValueOutOfBound match {
             case Some(value) => value.eval()
@@ -2760,9 +2749,9 @@ case class ElementAt(
           val idx = if (index == 0) {
             throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
           } else if (index > 0) {
-            index - 1
+            (index - 1).toInt
           } else {
-            array.numElements() + index
+            (array.numElements() + index).toInt
           }
           if (arrayElementNullable && array.isNullAt(idx)) {
             null
@@ -2783,7 +2772,7 @@ case class ElementAt(
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
           val errorContext = getContextOrNullCode(ctx)
-          val utils = classOf[ElementAtUtils].getName
+          val utils = classOf[ArrayExpressionUtils].getName
           val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
           val body = if (arrayElementNullable) {
             s"""
@@ -2805,9 +2794,10 @@ case class ElementAt(
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
+          val intIndex = ctx.freshName("elementAtIntIndex")
           val nullCheck = if (arrayElementNullable) {
             s"""
-               |if ($eval1.isNullAt($index)) {
+               |if ($eval1.isNullAt($intIndex)) {
                |  ${ev.isNull} = true;
                |} else
              """.stripMargin
@@ -2826,8 +2816,10 @@ case class ElementAt(
             case None => s"${ev.isNull} = true;"
           }
 
+          // Widen the index to long before Math.abs to avoid overflow: Math.abs(Int.MinValue)
+          // wraps back to a negative value and would bypass this out-of-bounds guard.
           s"""
-             |int $index = (int) $eval2;
+             |long $index = (long) $eval2;
              |if ($eval1.numElements() < Math.abs($index)) {
              |  $indexOutOfBoundBranch
              |} else {
@@ -2838,9 +2830,10 @@ case class ElementAt(
              |  } else {
              |    $index += $eval1.numElements();
              |  }
+             |  int $intIndex = (int) $index;
              |  $nullCheck
              |  {
-             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, intIndex)};
              |  }
              |}
            """.stripMargin
@@ -4235,6 +4228,9 @@ trait ArraySetLike {
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_DISTINCT)
+
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -4431,6 +4427,8 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_UNION)
+
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
@@ -4607,6 +4605,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_INTERSECT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck
@@ -4823,7 +4823,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in x but not in y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -4839,6 +4839,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_EXCEPT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck

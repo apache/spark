@@ -2091,7 +2091,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.rdd.compress</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress serialized RDD partitions (e.g. for
     <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
@@ -2224,7 +2224,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.cleaner.periodicGC.interval</code></td>
   <td>30min</td>
   <td>
-    Controls how often to trigger a garbage collection.<br><br>
+    Controls how often to trigger a garbage collection. Setting this to 0 or a negative
+    value disables the periodic garbage collection.<br><br>
     This context cleaner triggers cleanups only when weak references are garbage collected.
     In long-running applications with large driver JVMs, where there is little memory pressure
     on the driver, this may happen very occasionally or not at all. Not cleaning at all may

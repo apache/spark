@@ -253,6 +253,7 @@ def register_definitions(
                         assert module_spec.loader is not None, (
                             f"Module spec has no loader for {file}"
                         )
+                        module.__dict__["spark"] = spark
                         with add_pipeline_analysis_context(
                             spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
                         ):
@@ -324,30 +325,31 @@ def run(
         spark_builder = spark_builder.config(key, value)
 
     spark = spark_builder.getOrCreate()
-
-    log_with_curr_timestamp("Creating dataflow graph...")
-    dataflow_graph_id = create_dataflow_graph(
-        spark,
-        default_catalog=spec.catalog,
-        default_database=spec.database,
-        sql_conf=spec.configuration,
-    )
-
-    log_with_curr_timestamp("Registering graph elements...")
-    registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-    register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
-
-    log_with_curr_timestamp("Starting run...")
-    result_iter = start_run(
-        spark,
-        dataflow_graph_id,
-        full_refresh=full_refresh,
-        full_refresh_all=full_refresh_all,
-        refresh=refresh,
-        dry=dry,
-        storage=spec.storage,
-    )
+    # Stop the session even if graph creation, registration, or the run itself fails, so a failure
+    # after the session is created does not leak it.
     try:
+        log_with_curr_timestamp("Creating dataflow graph...")
+        dataflow_graph_id = create_dataflow_graph(
+            spark,
+            default_catalog=spec.catalog,
+            default_database=spec.database,
+            sql_conf=spec.configuration,
+        )
+
+        log_with_curr_timestamp("Registering graph elements...")
+        registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
+        register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
+
+        log_with_curr_timestamp("Starting run...")
+        result_iter = start_run(
+            spark,
+            dataflow_graph_id,
+            full_refresh=full_refresh,
+            full_refresh_all=full_refresh_all,
+            refresh=refresh,
+            dry=dry,
+            storage=spec.storage,
+        )
         handle_pipeline_events(result_iter)
     finally:
         spark.stop()

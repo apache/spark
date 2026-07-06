@@ -119,6 +119,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       .set(UI_X_XSS_PROTECTION, "xssProtection")
       .set(UI_X_CONTENT_TYPE_OPTIONS, true)
       .set(UI_STRICT_TRANSPORT_SECURITY, "tsec")
+      .set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
@@ -147,6 +148,32 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     ).foreach { case (name, value) =>
       verify(res).setHeader(meq(name), meq(value))
     }
+  }
+
+  test("Content-Security-Policy header is not set by default") {
+    val conf = new SparkConf(false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
+  }
+
+  test("X-XSS-Protection defaults to 0") {
+    val conf = new SparkConf(false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    verify(res).setHeader(meq("X-XSS-Protection"), meq("0"))
   }
 
   test("doAs impersonation") {
@@ -186,7 +213,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
   }
 
   test("CSP nonce is available during chain.doFilter and cleared after") {
-    val conf = new SparkConf(false)
+    val conf = new SparkConf(false).set(UI_CONTENT_SECURITY_POLICY_ENABLED, true)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])

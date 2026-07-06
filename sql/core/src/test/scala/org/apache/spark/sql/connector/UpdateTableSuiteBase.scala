@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
@@ -338,6 +339,49 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 100, "hr") :: Row(2, 100, "hardware") :: Row(3, null, "hr") :: Nil)
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 1)
+  }
+
+  test("metric values are stable across stage retries") {
+    // INJECT_SHUFFLE_FETCH_FAILURES corrupts the partition-0 task of the first successful
+    // attempt of every shuffle map stage, so a downstream stage FetchFails and the producer
+    // re-runs. UPDATE writer-side metrics live on the result stage (`metric.add(N)` at
+    // end-of-task in WritingSparkTask), and ResultStage.findMissingPartitions only re-runs
+    // partitions that haven't successfully completed, so the writer accumulator single-counts;
+    // this test is regression coverage that retries don't break the SLAM-aware `UpdateSummary`.
+    // It does not independently assert that a retry fired (there is no overcounting metric to
+    // observe on the result stage).
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(1, 2).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""UPDATE $tableNameAsString
+               |SET salary = salary + 100
+               |WHERE pk IN (SELECT pk FROM source)
+               |""".stripMargin)
+        }
+
+        checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 2)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 200, "hr"),
+            Row(2, 300, "software"),
+            Row(3, 300, "hr"),
+            Row(4, 400, "software")))
+      }
+    }
   }
 
   test("update nested struct fields") {

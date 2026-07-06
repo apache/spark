@@ -149,6 +149,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[TimestampNanosVal] => TimestampNTZNanosType()
     case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
@@ -172,8 +173,31 @@ object Literal {
       case _: ObjectType => Literal(v, dataType)
       case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
+  }
+
+  /**
+   * The schema-less [[CatalystTypeConverters.convertToCatalyst]] keeps bare external nanosecond
+   * timestamp values (`java.time.LocalDateTime` / `java.time.Instant`, and arrays/maps/structs of
+   * them) on the microsecond converters by design (SPARK-57033). When the declared type contains a
+   * nanosecond timestamp type anywhere, route the value through the schema-driven converter so
+   * external values are converted to the internal `TimestampNanosVal` representation. Values
+   * already in Catalyst internal form (`TimestampNanosVal`, `ArrayData`, `MapData`, `InternalRow`)
+   * and nulls keep using the lenient schema-less path, preserving the behavior of callers such as
+   * `Literal.default` that pass internal values.
+   */
+  private def requiresSchemaAwareNanosConversion(dataType: DataType, v: Any): Boolean = {
+    v != null &&
+      !v.isInstanceOf[TimestampNanosVal] &&
+      !v.isInstanceOf[ArrayData] &&
+      !v.isInstanceOf[MapData] &&
+      !v.isInstanceOf[InternalRow] &&
+      dataType.existsRecursively { t =>
+        t.isInstanceOf[AnyTimestampNanoType]
+      }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
@@ -203,7 +227,6 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
-    case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
     case c: CharType =>
@@ -242,6 +265,8 @@ object Literal {
         case PhysicalBooleanType => v.isInstanceOf[Boolean]
         case PhysicalByteType => v.isInstanceOf[Byte]
         case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
+        case PhysicalTimestampNTZNanosType => v.isInstanceOf[TimestampNanosVal]
+        case PhysicalTimestampLTZNanosType => v.isInstanceOf[TimestampNanosVal]
         case PhysicalIntegerType => v.isInstanceOf[Int]
         case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
         case PhysicalDoubleType => v.isInstanceOf[Double]
@@ -256,8 +281,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
-        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
-        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
+        case _: PhysicalBinaryViewType => v.isInstanceOf[BinaryView]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
@@ -450,6 +474,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
           TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(value.asInstanceOf[Long])
+        case t: TimestampNTZNanosType =>
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+            .formatWithoutTimeZoneNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
+        case t: TimestampLTZNanosType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId)
+            .formatNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
@@ -493,6 +523,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(toString)
       case (l: Long, TimestampType | _: TimeType) => JString(toString)
+      case (_: TimestampNanosVal, _: AnyTimestampNanoType) =>
+        JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -544,16 +576,36 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     }
   }
 
+  private def padToNanosPrecision(ts: String, precision: Int): String = {
+    val dotIdx = ts.indexOf('.')
+    if (dotIdx < 0) {
+      ts + "." + "0" * precision
+    } else {
+      val fracLen = ts.length - dotIdx - 1
+      // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
+      // the value to `precision` digits before formatting, and the fractionFormatter only
+      // strips trailing zeros (never adds digits); the else branch handles fracLen == precision.
+      if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
+    }
+  }
+
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
-    case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: UTF8String, st: StringType) =>
+      // Only render a `collate` clause for an explicit collation (including an explicit
+      // `UTF8_BINARY`). The default `StringType` (the case object) has no explicit collation, so
+      // it must render without a clause and stay distinguishable from an explicitly-collated
+      // string on re-parse (e.g. so that default-collation resolution does not treat an
+      // explicitly-collated literal as eligible for inheriting a default collation).
+      val collateClause =
+        if (DataTypeUtils.isDefaultStringCharOrVarcharType(st)) {
+          ""
+        } else {
+          s" collate ${st.collationName}"
+        }
       // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") +
-        "'" + st.typeName.substring(6)
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'" + collateClause
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
     case (v: Long, LongType) => s"${v}L"
@@ -582,6 +634,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
       s"TIMESTAMP_NTZ '$toString'"
+    // toString strips trailing zeros (display-only); pad back to exactly `precision` digits
+    // here so the SQL literal round-trips correctly through the parser.
+    case (_: TimestampNanosVal, t: TimestampNTZNanosType) =>
+      s"TIMESTAMP_NTZ '${padToNanosPrecision(toString, t.precision)}'"
+    case (_: TimestampNanosVal, t: TimestampLTZNanosType) =>
+      s"TIMESTAMP_LTZ '${padToNanosPrecision(toString, t.precision)}'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${HexFormat.of().withUpperCase().formatHex(v)}'"

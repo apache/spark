@@ -197,6 +197,15 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.generatorOutput.map(_.exprId.id), newGenerate =>
           newGenerate.copy(generatorOutput = newGenerate.generatorOutput.map(_.newInstance())))
 
+    case b: BinBy =>
+      deduplicateAndRenew[BinBy](
+        existingRelations,
+        b,
+        _.producedAttributes.map(_.exprId.id).toSeq,
+        newBinBy => newBinBy.copy(
+          scaledDistributeColumns = newBinBy.scaledDistributeColumns.map(_.newInstance()),
+          appendedAttributes = newBinBy.appendedAttributes.map(_.newInstance())))
+
     case e: Expand =>
       deduplicateAndRenew[Expand](
         existingRelations,
@@ -456,6 +465,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
         val newOutput = oldVersion.generatorOutput.map(_.newInstance())
         val newVersion = oldVersion.copy(generatorOutput = newOutput)
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion: BinBy
+          if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(
+          scaledDistributeColumns = oldVersion.scaledDistributeColumns.map(_.newInstance()),
+          appendedAttributes = oldVersion.appendedAttributes.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 

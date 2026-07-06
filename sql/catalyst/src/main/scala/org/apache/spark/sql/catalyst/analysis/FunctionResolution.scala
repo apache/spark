@@ -83,12 +83,12 @@ class FunctionResolution(
    * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
    * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
    * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
-   * the predicate stays in sync with the lookup loop's actual order.
+   * the predicate stays in sync with the lookup loop's actual order. Uses the consolidated
+   * snapshot helper (SPARK-56939) so the (catalog, namespace, path) triple is observed
+   * atomically.
    */
   def isSessionBeforeBuiltinInPath: Boolean = {
-    val path = catalogManager.sqlResolutionPathEntries(
-      catalogManager.currentCatalog.name(), catalogManager.currentNamespace.toSeq)
-    CatalogManager.systemFunctionKindsFromPath(path).headOption
+    catalogManager.sessionFunctionKindsForUnqualifiedResolution().headOption
       .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
   }
 
@@ -110,10 +110,37 @@ class FunctionResolution(
    * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
    * aligned with relation order.
    */
-  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] =
-    catalogManager.resolutionPathEntriesForAnalysis(
-      AnalysisContext.get.resolutionPathEntries,
-      AnalysisContext.get.catalogAndNamespace)
+  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+    // Per-analysis-pass memo (SPARK-57758): computing the path (reading the live [[CatalogManager]]
+    // and several confs, then allocating `Seq`s) used to run once per [[UnresolvedFunction]], and
+    // under Spark Connect once per node on every re-analysis of the growing plan. The path is
+    // stable within a pass (`SET PATH` / `USE` / conf changes happen between passes, each under a
+    // fresh [[AnalysisContext]]), so it is memoized on the current context, which shares the pass's
+    // lifetime. See [[AnalysisContext.memoizedResolutionPath]] for why this needs no identity key.
+    val context = AnalysisContext.get
+    context.memoizedResolutionPath {
+      catalogManager.resolutionPathEntriesForAnalysis(
+        context.resolutionPathEntries, context.catalogAndNamespace)
+    }
+  }
+
+  /**
+   * True when `system.builtin` is the first entry of the effective resolution path. In that case a
+   * single-part name that resolves to a built-in cannot be shadowed by any earlier entry -- neither
+   * a `system.session` entry (a temporary/session function) nor a catalog/schema entry placed
+   * before `system.builtin` by a custom `SET PATH` -- so the built-in fast-path in
+   * [[resolveFunction]] / [[resolveTableFunction]] cannot change resolution precedence. A miss
+   * still falls through to the full candidate loop, so non-built-in names are unaffected.
+   *
+   * The default `spark.sql.functionResolution.sessionOrder` modes `second` and `last` put
+   * `system.builtin` first; only `first` puts `system.session` before it, where the fast-path is
+   * correctly disabled. Only a custom `SET PATH` can place another entry before `system.builtin`.
+   *
+   * Reads the per-pass memoized path ([[sqlResolutionPathEntriesForAnalysis]]), so the check is
+   * O(1) per [[UnresolvedFunction]].
+   */
+  private def builtinFastPathSafe: Boolean =
+    CatalogManager.isBuiltinFirstOnPath(sqlResolutionPathEntriesForAnalysis)
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
@@ -134,6 +161,12 @@ class FunctionResolution(
   private def resolveFunctionCandidate(
       nameParts: Seq[String],
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
+    // NOTE: the `system.builtin.<name>` case here is the same registry lookup the built-in
+    // fast-path in `resolveFunction` performs directly (both go through
+    // `identifierFromSystemNameParts` / `builtinFunctionIdentifier` ->
+    // `resolveScalarFunctionByIdentifier`). The two must stay equivalent; a change to built-in
+    // scalar resolution has to touch both. `resolveTableFunctionCandidate` / `resolveTableFunction`
+    // mirror this for table functions.
     if (isSystemCatalogQualified(nameParts)) {
       v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
         val expr = v1SessionCatalog.resolveScalarFunctionByIdentifier(
@@ -186,6 +219,23 @@ class FunctionResolution(
           case e: AnalysisException if e.getCondition == "UNRESOLVED_ROUTINE" =>
             // The internal registry throws AnalysisException when the function is not found;
             // fall through to standard resolution.
+        }
+      }
+
+      // Fast-path (SPARK-57758): an unqualified, non-internal name that resolves to a built-in
+      // is by far the common case. When `system.builtin` is the first entry of the effective path,
+      // a built-in hit cannot be shadowed by any earlier entry (a session/temporary function, or a
+      // catalog/schema placed before `system.builtin` via `SET PATH`), so it can be resolved with a
+      // single registry lookup instead of building and iterating the candidate search path. A miss
+      // falls through to the full candidate resolution below. This lookup is equivalent to the
+      // `system.builtin.<name>` branch of `resolveFunctionCandidate`; keep the two in sync.
+      if (unresolvedFunc.nameParts.size == 1 && !unresolvedFunc.isInternal &&
+          builtinFastPathSafe) {
+        val builtin = v1SessionCatalog.resolveScalarFunctionByIdentifier(
+          FunctionRegistry.builtinFunctionIdentifier(unresolvedFunc.nameParts.head),
+          unresolvedFunc.arguments)
+        if (builtin.isDefined) {
+          return validateFunction(builtin.get, unresolvedFunc.arguments.length, unresolvedFunc)
         }
       }
 
@@ -263,6 +313,16 @@ class FunctionResolution(
   def resolveTableFunction(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
+    // Fast-path (SPARK-57758): see `resolveFunction`. Short-circuit a single-part name to a
+    // built-in table function when `system.builtin` is the first entry of the path; a miss
+    // (including a built-in scalar of the same name) falls through to the candidate loop, which
+    // preserves the NOT_A_TABLE_FUNCTION semantics.
+    if (nameParts.size == 1 && builtinFastPathSafe) {
+      val builtin = v1SessionCatalog.resolveTableFunctionByIdentifier(
+        FunctionRegistry.builtinFunctionIdentifier(nameParts.head), arguments)
+      if (builtin.isDefined) return builtin
+    }
+
     val candidates = resolutionCandidates(nameParts)
     for (nameParts <- candidates) {
       resolveTableFunctionCandidate(nameParts, arguments) match {
