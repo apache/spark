@@ -36,9 +36,10 @@ case class CollectMetricsExec(
     child: SparkPlan)
   extends UnaryExecNode {
 
-  private lazy val accumulator: AggregatingAccumulator = {
-    val acc = AggregatingAccumulator(metricExpressions, child.output)
+  private lazy val accumulator: LastAttemptAggregatingAccumulator = {
+    val acc = AggregatingAccumulator.lastAttempt(metricExpressions, child.output)
     acc.register(sparkContext, Option(CollectMetricsExec.ACCUMULATOR_NAME))
+    acc.initializeLastAttemptAccumulator()
     acc
   }
 
@@ -56,7 +57,10 @@ case class CollectMetricsExec(
       .asInstanceOf[InternalRow => Row]
   }
 
-  def collectedMetrics: Row = toRowConverter(accumulator.value)
+  def collectedMetrics: Row = toRowConverter(collectedMetricsRow)
+
+  private def collectedMetricsRow: InternalRow =
+    accumulator.lastAttemptValueForHighestRDDId().getOrElse(accumulator.value)
 
   override def output: Seq[Attribute] = child.output
 
@@ -66,6 +70,7 @@ case class CollectMetricsExec(
 
   override def resetMetrics(): Unit = {
     accumulator.reset()
+    accumulator.resetLastAttemptAccumulator()
     super.resetMetrics()
   }
 
