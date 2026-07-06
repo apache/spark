@@ -398,6 +398,19 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       TimeAddInterval(Literal(LocalTime.of(8, 31)), Literal(Duration.ofMinutes(30))),
       LocalTime.of(8, 31).plusMinutes(30))
+    // SPARK-57853: modulo-24 wrap semantics
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(23, 0)), Literal(Duration.ofHours(2))),
+      LocalTime.of(1, 0))
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(1, 0)), Literal(Duration.ofHours(-3))),
+      LocalTime.of(22, 0))
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(0, 0)), Literal(Duration.ofNanos(-1000))),
+      LocalTime.of(23, 59, 59, 999999000))
+    checkEvaluation(
+      TimeAddInterval(Literal(LocalTime.of(12, 0)), Literal(Duration.ofHours(24))),
+      LocalTime.of(12, 0))
     // Maximum precision of TIME and DAY-TIME INTERVAL
     assert(TimeAddInterval(
       Literal(0L, TimeType(0)),

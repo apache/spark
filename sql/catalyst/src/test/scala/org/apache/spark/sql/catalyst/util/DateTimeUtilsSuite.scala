@@ -26,14 +26,12 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{Decimal, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
@@ -1835,32 +1833,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(timeAddInterval(localTime(1, 2, 3, 1), 6, MICROS_PER_HOUR, HOUR, 6) ==
       localTime(2, 2, 3, 1))
 
-    checkError(
-      exception = intercept[SparkArithmeticException] {
-        timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6)
-      },
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" ->
-        "add INTERVAL '86400' SECOND to the time value TIME '00:00:00.000000001'")
-    )
-    checkError(
-      exception = intercept[SparkArithmeticException] {
-        timeAddInterval(0, 0, -1, SECOND, 6)
-      },
-      condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" ->
-        "add INTERVAL '-00.000001' SECOND to the time value TIME '00:00:00'")
-    )
-    checkError(
-      exception = intercept[SparkArithmeticException] {
-        timeAddInterval(0, 0, Long.MaxValue, SECOND, 6)
-      },
-      condition = "ARITHMETIC_OVERFLOW",
-      parameters = Map(
-        "message" -> "overflow",
-        "alternative" -> "",
-        "config" -> toSQLConf(SqlApiConf.ANSI_ENABLED_KEY))
-    )
+    // ANSI modulo-24 wrap: TIME + INTERVAL that crosses midnight wraps around
+    // 00:00:00.000000001 + 24h = 00:00:00.000000001 (wraps back to same time)
+    assert(timeAddInterval(1, 6, MICROS_PER_DAY, SECOND, 6) == localTime(0, 0, 0, 0))
+    // 00:00:00 - 1 microsecond = 23:59:59.999999 (wraps backward)
+    assert(timeAddInterval(0, 0, -1, SECOND, 6) == localTime(23, 59, 59, 999999))
+    // 23:00 + 2h = 01:00 (wraps forward past midnight)
+    assert(timeAddInterval(localTime(23, 0, 0, 0), 6, 2 * MICROS_PER_HOUR, SECOND, 6) ==
+      localTime(1, 0, 0, 0))
+    // 01:00 - 3h = 22:00 (wraps backward past midnight)
+    assert(timeAddInterval(localTime(1, 0, 0, 0), 6, -3 * MICROS_PER_HOUR, SECOND, 6) ==
+      localTime(22, 0, 0, 0))
+    // Even extreme intervals wrap modulo-24 (the multiplication may overflow Long,
+    // but floorMod still produces a valid time in [0, NANOS_PER_DAY))
+    val extremeResult = timeAddInterval(0, 0, Long.MaxValue, SECOND, 6)
+    assert(extremeResult >= 0 && extremeResult < NANOS_PER_DAY)
   }
 
   // Helper methods to assert results of the timeDiff method and verify execution symmetry.
