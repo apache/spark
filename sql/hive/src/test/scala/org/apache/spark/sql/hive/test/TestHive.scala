@@ -596,8 +596,11 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan,
-    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
-  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
+    refreshPhaseEnabled: Boolean = true)
+  extends QueryExecution(
+    sparkSession, logicalPlan, mode = mode, refreshPhaseEnabled = refreshPhaseEnabled)
+  with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
@@ -675,9 +678,10 @@ private[sql] class TestHiveSessionStateBuilder(
   extends HiveSessionStateBuilder(session, state) {
 
   override def createQueryExecution:
-    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) =>
-        new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan, mode)
+    (LogicalPlan, CommandExecutionMode.Value, Boolean) => QueryExecution =
+      (plan, mode, refreshPhaseEnabled) =>
+        new TestHiveQueryExecution(
+          session.asInstanceOf[TestHiveSparkSession], plan, mode, refreshPhaseEnabled)
 
   override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
