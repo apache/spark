@@ -228,6 +228,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
   protected val pipelinedEnabled: Boolean = conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
   protected val pipelinedQueueDepth: Int = conf.get(PYTHON_UDF_PIPELINED_QUEUE_DEPTH)
+  private val isUnixDomainSock: Boolean = conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
   protected val tracebackWithLocals: Boolean = false
@@ -441,18 +442,28 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
-    // Set socket read timeout for idle timeout detection in pipelined mode.
-    // Always set explicitly (including 0 = no timeout) because reused workers may
-    // retain a stale SO_TIMEOUT from a previous task that had a different setting.
-    worker.channel.socket().setSoTimeout(
-      if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
+    // A Unix domain SocketChannel has no legacy java.net.Socket adapter: SocketChannel.socket()
+    // throws UnsupportedOperationException, and SO_TIMEOUT does not apply to it. So SO_TIMEOUT-based
+    // idle-timeout detection is only available in TCP mode; for UDS we read straight from the
+    // channel (matching sync mode, whose selector-based path also skips SO_TIMEOUT for UDS).
+    if (!isUnixDomainSock) {
+      // Set socket read timeout for idle timeout detection in pipelined mode.
+      // Always set explicitly (including 0 = no timeout) because reused workers may
+      // retain a stale SO_TIMEOUT from a previous task that had a different setting.
+      worker.channel.socket().setSoTimeout(
+        if (idleTimeoutSeconds > 0) idleTimeoutSeconds.toInt * 1000 else 0)
+    }
 
     // Wrap the socket InputStream to handle idle timeout, matching sync mode behavior:
     // - Log warning on each timeout
     // - If killOnIdleTimeout=true: kill worker, then throw PythonWorkerException
     // - If killOnIdleTimeout=false: log only, retry read (continue waiting)
+    // In UDS mode `inner` is a channel-backed stream that blocks (never raises
+    // SocketTimeoutException), so the idle-timeout branch below is simply never taken.
     val socketInput = new InputStream {
-      private val inner = worker.channel.socket().getInputStream
+      private val inner =
+        if (isUnixDomainSock) Channels.newInputStream(worker.channel)
+        else worker.channel.socket().getInputStream
       private var pythonWorkerKilled = false
       override def read(): Int = doRead(() => inner.read())
       override def read(b: Array[Byte], off: Int, len: Int): Int =
