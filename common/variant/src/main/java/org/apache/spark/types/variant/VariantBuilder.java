@@ -688,7 +688,7 @@ public class VariantBuilder {
       finishWritingObject(start, fields);
     } else {
       int index = ((ArrayIndexSegment) seg).index;
-      ArrayList<Integer> offsets = new ArrayList<>(index + 1);
+      ArrayList<Integer> offsets = new ArrayList<>();
       int start = writePos;
       for (int i = 0; i < index; ++i) {
         offsets.add(writePos - start);
