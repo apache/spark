@@ -1775,6 +1775,9 @@ object Unidoc {
           .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop"))))
     },
 
+    // This is separate from `-Xmaxerrs` below. The default is 100.
+    (JavaUnidoc / unidoc / maxErrors) := 0,
+
     (JavaUnidoc / unidoc / javacOptions) := {
       Seq(
         "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",

@@ -5,10 +5,12 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "^\\[warn\\]\\s+(.+?):(\\d+)(?::\\d+)?:\\s+error:\\s+(.+)$",
+          "regexp": "^\\[error\\]\\s+(?!\\S*/target/java/org/apache/spark/)(\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(.+)$",
           "file": 1,
           "line": 2,
-          "message": 3
+          "column": 3,
+          "severity": 4,
+          "message": 5
         }
       ]
     }
