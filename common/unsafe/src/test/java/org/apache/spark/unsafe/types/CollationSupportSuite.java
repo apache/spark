@@ -3895,14 +3895,40 @@ public class CollationSupportSuite {
     assertStringTranslate("𝔸", "𝕒", "x", UTF8_BINARY, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UTF8_LCASE, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UNICODE, "𝔸");
-    assertStringTranslate("𝔸", "𝕒", "x", UNICODE_CI, "x");
+    // Literal U+0000 in `to` is preserved as a one-character replacement, not a deletion.
+    assertStringTranslate("A", "A", "\u0000", UTF8_BINARY, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UTF8_LCASE, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UNICODE, "\u0000");
+    assertStringTranslate("A", "A", "\u0000", UNICODE_CI, "\u0000");
+    // Deletion still applies when `to` is shorter than `from`.
+    assertStringTranslate("ABC", "BC", "X", UTF8_BINARY, "AX");
+    assertStringTranslate("ABC", "BC", "X", UTF8_LCASE, "AX");
+    assertStringTranslate("ABC", "BC", "X", UNICODE, "AX");
+    assertStringTranslate("ABC", "BC", "X", UNICODE_CI, "AX");
+    // Mixed literal U+0000 replacement and deletion within a single call:
+    // A -> U+0000, B -> X, and C, D are deleted (`to` is shorter than `from`).
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UTF8_BINARY, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UTF8_LCASE, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UNICODE, "\u0000" + "X");
+    assertStringTranslate("ABCD", "ABCD", "\u0000" + "X", UNICODE_CI, "\u0000" + "X");
+    // Duplicate key in `from`: the first mapping wins over a later would-be deletion.
+    assertStringTranslate("AB", "AA", "X", UTF8_BINARY, "XB");
+    assertStringTranslate("AB", "AA", "X", UTF8_LCASE, "XB");
+    assertStringTranslate("AB", "AA", "X", UNICODE, "XB");
+    assertStringTranslate("AB", "AA", "X", UNICODE_CI, "XB");
+    // Byte-level check: a literal U+0000 replacement yields exactly one code point / one byte.
+    UTF8String nulResult = CollationSupport.StringTranslate.exec(
+      UTF8String.fromString("A"), buildDict("A", "\u0000"),
+      CollationFactory.collationNameToId(UTF8_BINARY));
+    assertEquals(1, nulResult.numChars());
+    assertEquals(1, nulResult.numBytes());
   }
 
   private Map<String, String> buildDict(String matching, String replace) {
     Map<String, String> dict = new HashMap<>();
     int i = 0, j = 0;
     while (i < matching.length()) {
-      String rep = "\u0000";
+      String rep = "";
       if (j < replace.length()) {
         int repCharCount = Character.charCount(replace.codePointAt(j));
         rep = replace.substring(j, j + repCharCount);

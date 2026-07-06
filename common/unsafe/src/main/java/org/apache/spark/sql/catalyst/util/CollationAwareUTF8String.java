@@ -1002,11 +1002,11 @@ public class CollationAwareUTF8String {
       if (translated == null) {
         // Append the original code point if no translation is found.
         sb.appendCodePoint(codePoint);
-      } else if (!"\0".equals(translated)) {
-        // Append the translated code point if the translation is not the null character.
+      } else if (!translated.isEmpty()) {
+        // Append the translation if it is not the deletion marker (empty string).
         sb.append(translated);
       }
-      // Skip the code point if it maps to the null character.
+      // Skip the code point if it maps to the empty string.
     }
     // Append the last code point if it was buffered.
     if (codePointBuffer != -1) sb.appendCodePoint(codePointBuffer);
@@ -1069,8 +1069,10 @@ public class CollationAwareUTF8String {
         ++charIndex;
       } else {
         // We have found at least one match. Append the match of longest match length to the output.
-        if (!"\0".equals(dict.get(longestMatch))) {
-          sb.append(dict.get(longestMatch));
+        // An empty mapping is the deletion marker, so append nothing in that case.
+        String longestMatchTranslation = dict.get(longestMatch);
+        if (!longestMatchTranslation.isEmpty()) {
+          sb.append(longestMatchTranslation);
         }
         // Skip as many characters as the longest match.
         charIndex += longestMatchLen;

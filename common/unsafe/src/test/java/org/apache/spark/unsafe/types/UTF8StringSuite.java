@@ -522,7 +522,7 @@ public class UTF8StringSuite {
         "r", "1",
         "n", "2",
         "l", "3",
-        "t", "\0"
+        "t", ""
       )));
     assertEquals(
       fromString("translate"),
@@ -530,10 +530,10 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(Map.of(
-        "r", "\0",
-        "n", "\0",
-        "l", "\0",
-        "t", "\0"
+        "r", "",
+        "n", "",
+        "l", "",
+        "t", ""
       )));
     assertEquals(
       fromString("aa世b"),
@@ -541,6 +541,10 @@ public class UTF8StringSuite {
         "花", "a",
         "界", "b"
       )));
+    // A literal U+0000 replacement value is preserved (not treated as deletion).
+    UTF8String withNul = fromString("abc").translate(Map.of("b", "\0"));
+    assertEquals(3, withNul.numChars());
+    assertEquals(fromString("a\0c"), withNul);
   }
 
   @Test
