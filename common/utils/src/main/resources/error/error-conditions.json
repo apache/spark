@@ -5266,7 +5266,7 @@
     "message" : [
       "Input schema <xmlSchema> can only contain STRING as a key type for a MAP."
     ],
-    "sqlState" : "22032"
+    "sqlState" : "2200N"
   },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
