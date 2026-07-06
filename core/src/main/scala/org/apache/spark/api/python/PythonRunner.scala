@@ -222,6 +222,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
+  // Unix domain socket channels have no java.net.Socket adapter, so socket()-based APIs
+  // (setSoTimeout / getInputStream) are unavailable and SO_TIMEOUT-based idle detection
+  // does not apply. See createPipelinedDataIn.
+  private val isUnixDomainSock: Boolean = conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected val tracebackDumpIntervalSeconds: Long =
     conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
   protected val killWorkerOnFlushFailure: Boolean =
@@ -409,6 +413,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       handle: Option[ProcessHandle],
       context: TaskContext): DataInputStream = {
     // Switch the channel to blocking mode for true full-duplex I/O.
+    // The channel is left in blocking mode after the task completes; with worker reuse
+    // enabled the worker is returned to the idle pool, so PythonWorkerFactory.create()
+    // normalizes it back to non-blocking before handing it to the next task
+    // (SPARK-57931). Without that, a later task on the non-pipelined selector path would
+    // NPE on worker.selector because refresh() only opens a selector in non-blocking mode.
     // Must close the selector first because configureBlocking() fails
     // if the channel is registered with a selector (IllegalBlockingModeException).
     if (worker.selectionKey != null) {
@@ -439,6 +448,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         case _: CancellationException | _: ExecutionException | _: InterruptedException =>
           // Expected: cancel(true) raced ahead, or writer exited via _exception path.
       }
+    }
+
+    // Unix domain socket channels expose no java.net.Socket, so socket() throws
+    // UnsupportedOperationException and SO_TIMEOUT-based idle detection is unavailable.
+    // Fall back to reading straight from the channel (no idle timeout), matching how sync
+    // mode also guards its setSoTimeout calls behind !isUnixDomainSock.
+    if (isUnixDomainSock) {
+      return new DataInputStream(
+        new BufferedInputStream(Channels.newInputStream(worker.channel), bufferSize))
     }
 
     // Set socket read timeout for idle timeout detection in pipelined mode.

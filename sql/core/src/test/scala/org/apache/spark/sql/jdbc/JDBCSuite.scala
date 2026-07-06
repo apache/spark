@@ -1291,6 +1291,31 @@ class JDBCSuite extends SharedSparkSession {
       "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
   }
 
+  test("SPARK-56504: JdbcSQLQueryBuilder preserves table sample in pushed join sides") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    val dialect = JdbcDialects.get("jdbc:h2://host:port")
+    val left = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("a"))
+      .withTableSampleClause("TABLESAMPLE SYSTEM (50)")
+    val right = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("b"))
+      .withTableSampleClause("TABLESAMPLE BERNOULLI (25)")
+
+    val query = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withJoin(left, right, "L", "R", Array("a", "b"), "INNER JOIN", "L.a = R.b")
+      .build()
+      .replaceAll("\\s+", " ")
+
+    assert(query.contains("SELECT a FROM test TABLESAMPLE SYSTEM (50)"))
+    assert(query.contains("SELECT b FROM test TABLESAMPLE BERNOULLI (25)"))
+    assert(query.contains("INNER JOIN"))
+    assert(query.contains("ON L.a = R.b"))
+  }
+
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==

@@ -119,10 +119,13 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
-    .doc("Value for HTTP X-XSS-Protection response header")
+    .doc("Value for HTTP X-XSS-Protection response header. The default is '0' which disables " +
+      "the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and Edge, " +
+      "and was never implemented in Firefox. It can introduce side-channel vulnerabilities " +
+      "in browsers that still support it (Safari). Use Content-Security-Policy instead.")
     .version("2.3.0")
     .stringConf
-    .createWithDefaultString("1; mode=block")
+    .createWithDefaultString("0")
 
   val UI_X_CONTENT_TYPE_OPTIONS = ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
     .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
