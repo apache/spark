@@ -343,14 +343,15 @@ class MetricsFailureInjectionSuite
             finalDf
           }
 
-          // The INJECT_SHUFFLE_FETCH_FAILURES machinery corrupts mapper-0 of the first successful
-          // attempt of the shuffle map stage. Whether the downstream reducer observes the resulting
-          // FetchFailed (and thus forces the stage-1 recompute that inflates the raw metric) depends
-          // on task scheduling within the shared SparkContext; across the suite it occasionally does
-          // not fire, leaving stage1Metric at exactly 300 and failing "value > 300" (a ~1/6 flake,
-          // more frequent on slower runners such as macOS arm64). When we require a recompute
-          // (injectFailure = true), re-run the query until the injection actually fires. Each attempt
-          // resets the metrics, so a successful attempt is indistinguishable from a first-try success.
+          // The INJECT_SHUFFLE_FETCH_FAILURES machinery corrupts mapper-0 of the first
+          // successful attempt of the shuffle map stage. Whether the downstream reducer observes
+          // the resulting FetchFailed (and thus forces the stage-1 recompute that inflates the raw
+          // metric) depends on task scheduling within the shared SparkContext; across the suite it
+          // occasionally does not fire, leaving stage1Metric at exactly 300 and failing
+          // "value > 300" (a ~1/6 flake, more frequent on slower runners such as macOS arm64).
+          // When we require a recompute (injectFailure = true), re-run the query until the
+          // injection actually fires. Each attempt resets the metrics, so a successful attempt is
+          // indistinguishable from a first-try success.
           var finalDf = runOnce()
           if (injectFailure) {
             var attempts = 1
