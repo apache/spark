@@ -103,7 +103,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         val df2 = spark.table(testTable)
         val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
           assert(selfJoin.columns.length == 6,
             s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
@@ -133,7 +133,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         val df2 = spark.table(testTable)
         val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
           assert(selfJoin.columns.length == 6,
             s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
@@ -170,7 +170,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(testTable)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves df1 without the dropped column.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
@@ -201,7 +201,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(testTable)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves df1 without the dropped column.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
@@ -250,7 +250,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         val newTableId = catalog.loadTable(testIdent).id
         assert(originTableId != newTableId)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves both sides to the recreated table.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
@@ -295,7 +295,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(nullIdT)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves both sides to the recreated table.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
@@ -340,7 +340,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(nullBothT)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves both sides to the recreated table, so the join
           // sees the row appended after recreate.
           checkAnswer(
@@ -381,7 +381,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(nullIdT)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves both sides with the new column ID.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
@@ -449,7 +449,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df2 = spark.table(testTable)
 
-        if (sessionType == "connect") {
+        if (isConnect) {
           // Connect re-resolves both sides with the new column type.
           checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
