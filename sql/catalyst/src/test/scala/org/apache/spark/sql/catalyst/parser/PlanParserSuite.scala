@@ -2193,6 +2193,62 @@ class PlanParserSuite extends AnalysisTest {
         stop = 38))
   }
 
+  test("at syntax time travel") {
+    def versionPlan(version: String): LogicalPlan = {
+      Project(Seq(UnresolvedStar(None)),
+        RelationTimeTravel(UnresolvedRelation(Seq("a", "b", "c")), None, Some(version)))
+    }
+    assertEqual("SELECT * FROM a.b.c@v123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c@V123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c @v123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c@v'Snapshot123456789'", versionPlan("Snapshot123456789"))
+
+    assertEqual("SELECT * FROM `t@v1`",
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("t@v1"))))
+
+    // A non-time-travel '@' suffix is always a parse error.
+    Seq("SELECT * FROM a@foo", "SELECT * FROM a@", "SELECT * FROM a@v").foreach { q =>
+      assert(intercept[ParseException](parsePlan(q)).getCondition == "PARSE_SYNTAX_ERROR",
+        s"expected PARSE_SYNTAX_ERROR for: $q")
+    }
+
+    // The '@' suffix conflicts with an AS OF clause.
+    checkError(
+      exception = parseException("SELECT * FROM t@v1 VERSION AS OF 2"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "VERSION AS OF 2", start = 19, stop = 33))
+    checkError(
+      exception = parseException("SELECT * FROM t@v1 TIMESTAMP AS OF '2019-01-29'"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "TIMESTAMP AS OF '2019-01-29'", start = 19, stop = 46))
+
+    assert(intercept[ParseException] {
+      parsePlan("INSERT INTO t@v1 VALUES (1)")
+    }.getCondition == "PARSE_SYNTAX_ERROR")
+
+    withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException("SELECT * FROM t@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+        parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+        context = ExpectedContext(fragment = "t@v1", start = 14, stop = 17))
+    }
+  }
+
+  test("parseTemporalTableIdentifier") {
+    assert(parseTemporalTableIdentifier("a.b") ===
+      TemporalIdentifier(Seq("a", "b"), None))
+    assert(parseTemporalTableIdentifier("a.b@v5") ===
+      TemporalIdentifier(Seq("a", "b"), Some("5")))
+    assert(parseTemporalTableIdentifier("`t@v1`") ===
+      TemporalIdentifier(Seq("t@v1"), None))
+    Seq("a.b@x", "a@foo", "a@", "a@v").foreach { s =>
+      intercept[ParseException](parseTemporalTableIdentifier(s))
+    }
+  }
+
   test("CHANGES clause - version range") {
     def changesFromVersion(
         startVersion: String,
