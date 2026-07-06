@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
  * Map abstraction in {@link ColumnVector}.
+ * See also {@link org.apache.spark.deliberately.NoSuchClass}.
  */
 public final class ColumnarMap extends MapData {
   private final ColumnarArray keys;
