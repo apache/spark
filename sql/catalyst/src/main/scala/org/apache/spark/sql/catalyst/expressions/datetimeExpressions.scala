@@ -629,19 +629,36 @@ abstract class IntegralToTimestampBase extends UnaryExpression
 
   protected def upScaleFactor: Long
 
+  protected def inputUnit: String
+
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
   override def dataType: DataType = TimestampType
 
   override def nullSafeEval(input: Any): Any = {
-    Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    try {
+      Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, inputUnit)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (upScaleFactor == 1) {
       defineCodeGen(ctx, ev, c => c)
     } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)")
+      val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+      val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c =>
+        s"""
+           |try {
+           |  ${ev.value} = java.lang.Math.multiplyExact($c, ${upScaleFactor}L);
+           |} catch (java.lang.ArithmeticException e) {
+           |  throw $errors.timestampConstructorOverflowError($c, $dataType, "$inputUnit");
+           |}
+           |""".stripMargin)
     }
   }
 }
@@ -675,10 +692,11 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
   @transient
   private lazy val evalFunc: Any => Any = child.dataType match {
     case _: IntegralType => input =>
-      Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+      withOverflowError(input) {
+        Math.multiplyExact(input.asInstanceOf[Number].longValue(), MICROS_PER_SECOND)
+      }
     case _: DecimalType => input =>
-      val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
-      input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
+      decimalToMicros(input.asInstanceOf[Decimal])
     case _: FloatType => input =>
       val f = input.asInstanceOf[Float]
       if (f.isNaN || f.isInfinite) null else (f.toDouble * MICROS_PER_SECOND).toLong
@@ -687,14 +705,64 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
       if (d.isNaN || d.isInfinite) null else (d * MICROS_PER_SECOND).toLong
   }
 
+  private def withOverflowError(input: Any)(f: => Long): Long = {
+    try {
+      f
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, "seconds")
+    }
+  }
+
+  private def decimalToMicros(input: Decimal): Long = {
+    val operand = new java.math.BigDecimal(MICROS_PER_SECOND)
+    val micros = input.toJavaBigDecimal.multiply(operand)
+    try {
+      micros.longValueExact()
+    } catch {
+      case e: ArithmeticException if isOutsideLongRange(micros) =>
+        throw QueryExecutionErrors.timestampConstructorOverflowError(
+          input, child.dataType, "seconds")
+      case e: ArithmeticException =>
+        throw e
+    }
+  }
+
+  private def isOutsideLongRange(value: java.math.BigDecimal): Boolean = {
+    value.compareTo(java.math.BigDecimal.valueOf(Long.MinValue)) < 0 ||
+      value.compareTo(java.math.BigDecimal.valueOf(Long.MaxValue)) > 0
+  }
+
   override def nullSafeEval(input: Any): Any = evalFunc(input)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
     case _: IntegralType =>
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L)")
+      timestampSecondsCodeGen(ctx, ev) { c =>
+        s"${ev.value} = java.lang.Math.multiplyExact($c, ${MICROS_PER_SECOND}L);"
+      }
     case _: DecimalType =>
       val operand = s"new java.math.BigDecimal($MICROS_PER_SECOND)"
-      defineCodeGen(ctx, ev, c => s"$c.toJavaBigDecimal().multiply($operand).longValueExact()")
+      val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+      val minLong = ctx.addReferenceObj("minLong",
+        java.math.BigDecimal.valueOf(Long.MinValue), classOf[java.math.BigDecimal].getName)
+      val maxLong = ctx.addReferenceObj("maxLong",
+        java.math.BigDecimal.valueOf(Long.MaxValue), classOf[java.math.BigDecimal].getName)
+      val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+      nullSafeCodeGen(ctx, ev, c => {
+        val micros = ctx.freshName("micros")
+        s"""
+           |java.math.BigDecimal $micros = $c.toJavaBigDecimal().multiply($operand);
+           |try {
+           |  ${ev.value} = $micros.longValueExact();
+           |} catch (java.lang.ArithmeticException e) {
+           |  if ($micros.compareTo($minLong) < 0 || $micros.compareTo($maxLong) > 0) {
+           |    throw $errors.timestampConstructorOverflowError($c, $dataType, "seconds");
+           |  }
+           |  throw e;
+           |}
+           |""".stripMargin
+      })
     case other =>
       val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
       nullSafeCodeGen(ctx, ev, c => {
@@ -707,6 +775,22 @@ case class SecondsToTimestamp(child: Expression) extends UnaryExpression
            |}
            |""".stripMargin
       })
+  }
+
+  private def timestampSecondsCodeGen(
+      ctx: CodegenContext,
+      ev: ExprCode)(
+      convert: String => String): ExprCode = {
+    val dataType = ctx.addReferenceObj("dataType", child.dataType, classOf[DataType].getName)
+    val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         |try {
+         |  ${convert(c)}
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw $errors.timestampConstructorOverflowError($c, $dataType, "seconds");
+         |}
+         |""".stripMargin)
   }
 
   override def prettyName: String = "timestamp_seconds"
@@ -731,6 +815,8 @@ case class MillisToTimestamp(child: Expression)
 
   override def upScaleFactor: Long = MICROS_PER_MILLIS
 
+  override def inputUnit: String = "milliseconds"
+
   override def prettyName: String = "timestamp_millis"
 
   override protected def withNewChildInternal(newChild: Expression): MillisToTimestamp =
@@ -752,6 +838,8 @@ case class MicrosToTimestamp(child: Expression)
   extends IntegralToTimestampBase {
 
   override def upScaleFactor: Long = 1L
+
+  override def inputUnit: String = "microseconds"
 
   override def prettyName: String = "timestamp_micros"
 
@@ -1209,7 +1297,7 @@ case class DayName(child: Expression) extends GetDateField with DefaultStringPro
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
   arguments = """
     Arguments:
-      * timestamp - A date/timestamp or string to be converted to the given format.
+      * timestamp - A date, time, timestamp or string to be converted to the given format.
       * fmt - Date/time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid date
               and time format patterns.
   """,
@@ -1217,6 +1305,8 @@ case class DayName(child: Expression) extends GetDateField with DefaultStringPro
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
+      > SELECT _FUNC_(TIME'14:30:45', 'HH:mm:ss');
+       14:30:45
   """,
   group = "datetime_funcs",
   since = "1.5.0")
@@ -2585,7 +2675,7 @@ case class ParseToDate(
        NULL
   """,
   group = "datetime_funcs",
-  since = "4.0.0")
+  since = "4.1.0")
 // scalastyle:on line.size.limit
 object TryToDateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -3028,6 +3118,123 @@ case class MakeTimestampNTZ(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
 
   override def prettyName: String = "make_timestamp_ntz"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a nanosecond-precision `TIMESTAMP_NTZ(precision)` (precision in [7, 9]) from a date and
+ * a local time, preserving the time's sub-microsecond digits up to `precision`. This is the
+ * nanosecond counterpart of [[MakeTimestampNTZ]]. It is an internal expression used by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] to rewrite
+ * `CAST(time AS TIMESTAMP_NTZ(precision))` with a query-stable current date; it is not registered
+ * as a SQL function.
+ */
+case class MakeTimestampNTZNanos(left: Expression, right: Expression, precision: Int)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampNTZNanosType(precision),
+    "makeTimestampNTZNanos",
+    Seq(left, right, Literal(precision)),
+    Seq(left.dataType, right.dataType, IntegerType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ntz_nanos"
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a `TIMESTAMP_LTZ` (micro `TimestampType`) from a date and a local time interpreted in the
+ * session time zone. This is the LTZ counterpart of [[MakeTimestampNTZ]]; because the result is an
+ * absolute instant it is time-zone aware. It is an internal expression used by
+ * [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]] to rewrite
+ * `CAST(time AS TIMESTAMP_LTZ)` with a query-stable current date; it is not registered as a SQL
+ * function.
+ */
+case class MakeTimestampLTZ(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampType,
+    "makeTimestamp",
+    Seq(left, right, Literal.create(zoneId.getId, StringType)),
+    Seq(left.dataType, right.dataType, StringType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ltz"
+
+  // TimeZoneAwareExpression's `final override val nodePatterns` wins in linearization and would
+  // otherwise drop RUNTIME_REPLACEABLE; re-add it via this hook, mirroring the other
+  // RuntimeReplaceable + TimeZoneAwareExpression siblings (e.g. ParseToDate, ParseToTimestamp).
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+    newLeft: Expression, newRight: Expression): Expression = {
+    copy(left = newLeft, right = newRight)
+  }
+}
+
+/**
+ * Creates a nanosecond-precision `TIMESTAMP_LTZ(precision)` (precision in [7, 9]) from a date and a
+ * local time interpreted in the session time zone, preserving the time's sub-microsecond digits up
+ * to `precision`. This is the nanosecond, time-zone aware counterpart of [[MakeTimestampLTZ]]. It
+ * is an internal expression used by [[org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime]]
+ * to rewrite `CAST(time AS TIMESTAMP_LTZ(precision))` with a query-stable current date; it is not
+ * registered as a SQL function.
+ */
+case class MakeTimestampLTZNanos(
+    left: Expression,
+    right: Expression,
+    precision: Int,
+    timeZoneId: Option[String] = None)
+  extends BinaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with TimeZoneAwareExpression {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimestampLTZNanosType(precision),
+    "makeTimestampLTZNanos",
+    Seq(left, right, Literal(precision), Literal.create(zoneId.getId, StringType)),
+    Seq(left.dataType, right.dataType, IntegerType, StringType)
+  )
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, AnyTimeType)
+
+  override def prettyName: String = "make_timestamp_ltz_nanos"
+
+  // See MakeTimestampLTZ: re-add RUNTIME_REPLACEABLE that TimeZoneAwareExpression's final
+  // nodePatterns would otherwise drop in linearization.
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = {
@@ -3757,11 +3964,11 @@ object DatePart {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp or interval source.",
+  usage = "_FUNC_(field, source) - Extracts a part of the date, time, timestamp, or interval source.",
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted, and supported string values are as same as the fields of the equivalent function `EXTRACT`.
-      * source - a date/timestamp or interval column from where `field` should be extracted
+      * source - a date, time, timestamp, or interval column from where `field` should be extracted
   """,
   examples = """
     Examples:
@@ -3781,6 +3988,8 @@ object DatePart {
        11
       > SELECT _FUNC_('MINUTE', INTERVAL '123 23:55:59.002001' DAY TO SECOND);
        55
+      > SELECT _FUNC_('HOUR', TIME'09:08:01.000001');
+       9
   """,
   note = """
     The _FUNC_ function is equivalent to the SQL-standard function `EXTRACT(field FROM source)`

@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
-import java.util.Locale
 import java.util.Objects
 import java.util.OptionalLong
 import java.util.concurrent.atomic.AtomicLong
@@ -75,15 +74,9 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
-  // Assign column IDs to columns that do not have one.
-  // This simulates connectors that support column identity tracking.
-  private var tableColumns: Array[Column] = initialColumns.map { c =>
-    if (c.id() == null) {
-      c.asInstanceOf[ColumnImpl].copy(id = InMemoryBaseTable.nextColumnId().toString)
-    } else {
-      c
-    }
-  }
+  // Assign column IDs to columns that do not have one, including nested struct fields within
+  // arrays and maps. This simulates connectors that support column identity tracking.
+  private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
 
   override def columns(): Array[Column] = tableColumns
 
@@ -780,10 +773,8 @@ abstract class InMemoryBaseTable(
         val mergedSchema = mergeSchema(
           oldType = CatalogV2Util.v2ColumnsToStructType(columns()),
           newType = newSchema)
-        val newColumns = CatalogV2Util.structTypeToV2Columns(mergedSchema)
         tableColumns = InMemoryBaseTable.assignMissingIds(
-          oldColumns = columns(),
-          newColumns = newColumns)
+          CatalogV2Util.structTypeToV2Columns(mergedSchema))
         writer
       }
 
@@ -916,30 +907,62 @@ abstract class InMemoryBaseTable(
 object InMemoryBaseTable {
   private val columnIdGlobalCounter = new AtomicLong(0)
   def nextColumnId(): Long = columnIdGlobalCounter.incrementAndGet()
+  def nextColumnIdString(): String = nextColumnId().toString
 
-  private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
+  // SQL conf key that enables column ID assignment
+  val ASSIGN_COLUMN_IDS = "spark.sql.test.inMemoryTable.assignColumnIds"
 
   /**
-   * Preserves column IDs from `oldColumns` when the column name matches,
-   * and assigns new IDs to columns that do not already have one.
+   * Assigns fresh IDs to any top-level column or nested struct field that does not already
+   * have one. Recurses into struct fields within ArrayType and MapType so that every field
+   * at every depth gets an ID.
    *
-   * IDs are preserved across type changes, keeping the same column ID through type
-   * widening and nested field additions. [[TypeChangeResetsColIdTableCatalog]] overrides
-   * this behavior for testing scenarios where type changes should produce a new ID.
+   * Existing IDs are preserved: Column -> StructType -> Column round-trip encodes them in
+   * StructField metadata (see StructField.FIELD_ID_METADATA_KEY), so only genuinely new fields
+   * arrive here without an ID.
    */
-  def assignMissingIds(
-      oldColumns: Array[Column],
-      newColumns: Array[Column]): Array[Column] = {
-    newColumns.map { newCol =>
-      oldColumns.find(c => normalize(c.name()) == normalize(newCol.name())) match {
-        case Some(oldCol) if oldCol.id() != null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = oldCol.id())
-        case _ if newCol.id() == null =>
-          newCol.asInstanceOf[ColumnImpl].copy(id = nextColumnId().toString)
-        case _ =>
-          newCol
+  def assignMissingIds(columns: Array[Column]): Array[Column] = {
+    if (!SQLConf.get.getConfString(ASSIGN_COLUMN_IDS, "false").toBoolean) return columns
+    columns.map { col =>
+      val impl = col.asInstanceOf[ColumnImpl]
+      val colWithId = if (col.id == null) impl.copy(id = nextColumnIdString()) else impl
+      val updatedType = assignFieldIds(colWithId.dataType)
+      if (updatedType ne colWithId.dataType) {
+        colWithId.copy(dataType = updatedType)
+      } else {
+        colWithId
       }
     }
+  }
+
+  private def assignFieldIds(dataType: DataType): DataType = dataType match {
+    case s: StructType =>
+      val newFields = s.fields.map { field =>
+        val fieldWithId = if (field.id.isEmpty) field.withId(nextColumnIdString()) else field
+        val updatedType = assignFieldIds(fieldWithId.dataType)
+        if (updatedType ne fieldWithId.dataType) {
+          fieldWithId.copy(dataType = updatedType)
+        } else {
+          fieldWithId
+        }
+      }
+      if (newFields.zip(s.fields).forall { case (n, e) => n eq e }) s else StructType(newFields)
+
+    case a: ArrayType =>
+      val updatedElement = assignFieldIds(a.elementType)
+      if (updatedElement ne a.elementType) a.copy(elementType = updatedElement) else a
+
+    case m: MapType =>
+      val updatedKeyType = assignFieldIds(m.keyType)
+      val updatedValueType = assignFieldIds(m.valueType)
+      if ((updatedKeyType ne m.keyType) || (updatedValueType ne m.valueType)) {
+        m.copy(keyType = updatedKeyType, valueType = updatedValueType) }
+      else {
+        m
+      }
+
+    case other =>
+      other
   }
 
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"

@@ -19,15 +19,16 @@ package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.time.ZoneId
 
+import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.Type
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter, ParquetVectorUpdater}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType, TimeType}
+import org.apache.spark.sql.types.{DataType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Optional trait for Parquet storage format integration in the Types Framework.
@@ -40,13 +41,12 @@ import org.apache.spark.sql.types.{DataType, StructType, TimeType}
  *   - Schema conversion: Spark DataType -> Parquet schema type (write path)
  *   - Value write: writing values to Parquet RecordConsumer
  *   - Row-based read: creating Parquet converters for reading into InternalRow
- *   - Type gates: declaring Parquet support (supportDataType) and the vectorized-read
- *     capability flag (isBatchReadSupported)
+ *   - Vectorized read: the batch capability flag (isBatchReadSupported) and the batch
+ *     updater (getVectorUpdater)
+ *   - Type gates: declaring Parquet support (supportDataType)
  *   - Schema clipping: declaring internal struct schema for column pruning
  *
- * NOT yet on the trait (deferred to follow-ups): vectorized-read batch updaters and
- * filter-pushdown predicates. Only the isBatchReadSupported capability gate exists today;
- * the actual vectorized updater and filter predicate hooks are not implemented here.
+ * NOT yet on the trait (deferred to follow-ups): filter-pushdown predicates.
  *
  * DISPATCH PATTERN: Framework FIRST at all integration sites. Each Parquet infrastructure
  * method wraps itself with:
@@ -167,23 +167,6 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    */
   def supportDataType: Boolean = true
 
-  /**
-   * Whether vectorized (batch) reading is supported for this type.
-   * Used by ParquetUtils.isBatchReadSupported. Default is false - types must opt in
-   * by overriding to true. When false, Spark uses the row-based read path (newConverter)
-   * which is always available.
-   *
-   * PRECONDITION: there is no framework vectorized-read hook yet, so returning true is only
-   * safe for a type the legacy Java vectorized path (ParquetVectorUpdaterFactory /
-   * VectorizedColumnReader) already handles. A new type that returns true without that
-   * legacy support would route into a factory that does not recognize it. TimeType is safe
-   * here precisely because the legacy path handles it; until the vectorized integration
-   * (follow-up) lands, other types should leave this false.
-   *
-   * @param sqlConf the active SQL configuration
-   */
-  def isBatchReadSupported(sqlConf: SQLConf): Boolean = false
-
   // ==================== Schema Clipping (Struct-Backed Types) ====================
 
   /**
@@ -200,6 +183,56 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * Primitive types return None (no sub-fields to clip).
    */
   def parquetStructSchema: Option[StructType] = None
+
+  // ==================== Vectorized Read ====================
+
+  /**
+   * Whether vectorized (batch) reading is supported for this type.
+   * Used by ParquetUtils.isBatchReadSupported. Default is false - types must opt in
+   * by overriding to true. When false, Spark uses the row-based read path (newConverter)
+   * which is always available.
+   *
+   * A type that returns true must also supply a batch decoder via [[getVectorUpdater]]
+   * (dispatched from ParquetVectorUpdaterFactory.getUpdater); otherwise the vectorized factory
+   * would not recognize it. TimeType returns true and overrides getVectorUpdater accordingly.
+   *
+   * @param sqlConf the active SQL configuration
+   */
+  def isBatchReadSupported(sqlConf: SQLConf): Boolean = false
+
+  /**
+   * The vectorized (batch) [[ParquetVectorUpdater]] for this type, or None to fall back to the
+   * built-in `ParquetVectorUpdaterFactory`. Dispatched (Spark DataType -> ops) at the top of
+   * `ParquetVectorUpdaterFactory.getUpdater`, before its built-in cases.
+   *
+   * This and [[isBatchReadSupported]] form a two-way contract: returning Some here without also
+   * returning true from isBatchReadSupported leaves the vectorized path unreachable (the row path
+   * is used), while returning true from isBatchReadSupported without supplying an updater here
+   * (and without legacy factory support for the type) routes into a factory that does not
+   * recognize the type. A framework type that opts into vectorized reads must do both.
+   *
+   * @param descriptor the Parquet column descriptor being read
+   */
+  def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = None
+
+  /**
+   * Whether a dictionary-encoded column of this type can be lazily dictionary-decoded on the
+   * vectorized path (the dictionary is attached to the column vector and decoded on read) rather
+   * than eagerly decoding every value up front. Consulted (Spark DataType -> ops) by
+   * `VectorizedColumnReader.isLazyDecodingSupported`.
+   *
+   * Default is false - a type must opt in by overriding to true, matching the opt-in stance of
+   * [[isBatchReadSupported]]. This is deliberately fail-safe: lazy decoding bypasses the
+   * per-value work a vectorized updater ([[getVectorUpdater]]) may do (unit conversion,
+   * truncation, rebasing), so a type that opts into vectorized reads but forgets to opt out of
+   * lazy decoding when it needs per-value processing would silently return wrong results. With a
+   * false default the worst case is a missed lazy-decode optimization, not incorrect data. Types
+   * whose updater is a plain identity copy (no per-value processing) should override to true to
+   * regain the optimization.
+   *
+   * @param descriptor the Parquet column descriptor being read
+   */
+  def supportsLazyDictionaryDecoding(descriptor: ColumnDescriptor): Boolean = false
 }
 
 /**
@@ -220,8 +253,29 @@ private[parquet] object ParquetTypeOps {
   def apply(dt: DataType): Option[ParquetTypeOps] = {
     dt match {
       case tt: TimeType => Some(TimeTypeParquetOps(tt))
+      case t: TimestampLTZNanosType => Some(TimestampLTZNanosParquetOps(t))
+      case t: TimestampNTZNanosType => Some(TimestampNTZNanosParquetOps(t))
       // Add new types here - single registration point
       case _ => None
     }
   }
+
+  /**
+   * Java-friendly entry point for `ParquetVectorUpdaterFactory`: the framework vectorized
+   * updater for `dt`, or null if `dt` is not framework-managed (so the factory falls through
+   * to its built-in updaters).
+   */
+  private[parquet] def getVectorUpdaterOrNull(
+      dt: DataType, descriptor: ColumnDescriptor): ParquetVectorUpdater =
+    apply(dt).flatMap(_.getVectorUpdater(descriptor)).orNull
+
+  /**
+   * Java-friendly entry point for `VectorizedColumnReader`: whether `dt`'s dictionary-encoded
+   * column can be lazily decoded, or null if `dt` is not framework-managed (so the caller keeps
+   * its built-in decision).
+   */
+  private[parquet] def supportsLazyDictionaryDecodingOrNull(
+      dt: DataType, descriptor: ColumnDescriptor): java.lang.Boolean =
+    apply(dt).map(o => java.lang.Boolean.valueOf(o.supportsLazyDictionaryDecoding(descriptor)))
+      .orNull
 }

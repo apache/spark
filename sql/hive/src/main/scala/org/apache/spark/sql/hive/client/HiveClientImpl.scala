@@ -1144,6 +1144,11 @@ private[hive] object HiveClientImpl extends Logging {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
       case e: ParseException =>
+        // Hive's union type (uniontype<...>) is not supported by Spark SQL and makes the parser
+        // fail with a generic message. Detect it and report a clearer error (SPARK-21529).
+        if (hc.getType.toLowerCase(Locale.ROOT).contains("uniontype<")) {
+          throw QueryExecutionErrors.unsupportedHiveTypeError(hc.getType, hc.getName)
+        }
         throw QueryExecutionErrors.cannotRecognizeHiveTypeError(e, typeStr, hc.getName)
     }
   }

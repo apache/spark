@@ -159,6 +159,14 @@ cd "${_CALLING_DIR}"
 # Set any `mvn` options if not already present
 export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
+# Some Maven plugins (e.g. the mvn-scalafmt plugin used by `dev/lint-scala`) resolve their own
+# dependencies through Coursier, which ignores MAVEN_MIRROR_URL and the POM repositories. Bridge
+# MAVEN_MIRROR_URL into COURSIER_REPOSITORIES so mirror-only environments work out of the box.
+# Respect an existing COURSIER_REPOSITORIES if the caller already set one.
+if [ -n "${MAVEN_MIRROR_URL}" ] && [ -z "${COURSIER_REPOSITORIES}" ]; then
+  export COURSIER_REPOSITORIES="ivy2Local|${MAVEN_MIRROR_URL}"
+fi
+
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
 if [ ! -z "${SPARK_LOCAL_HOSTNAME}" ]; then

@@ -26,9 +26,10 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExpressionInfo, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, ExplicitUTF8BinaryStringType, StructType}
 
 /**
@@ -297,6 +298,27 @@ object SQLFunction {
 
   def parseDefault(text: String, parser: ParserInterface): Expression = {
     parser.parseExpression(text)
+  }
+
+  /**
+   * Pads `arguments` with the trailing parameters' declared defaults so the result aligns
+   * one-to-one with `param`'s fields, parsing each default and casting it to the parameter type.
+   * A missing parameter without a default raises [[QueryCompilationErrors.wrongNumArgsError]].
+   */
+  def padArgumentsWithDefaults(
+      arguments: Seq[Expression],
+      param: StructType,
+      functionName: String,
+      parser: ParserInterface): Seq[Expression] = {
+    arguments ++ param.takeRight(param.size - arguments.size).map { field =>
+      field.getDefault() match {
+        case Some(default) =>
+          Cast(parseDefault(default, parser), field.dataType)
+        case None =>
+          throw QueryCompilationErrors.wrongNumArgsError(
+            functionName, param.size.toString, arguments.size)
+      }
+    }
   }
 
   /**

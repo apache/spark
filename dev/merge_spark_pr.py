@@ -81,6 +81,7 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 
 
 GITHUB_BASE = "https://github.com/apache/spark/pull"
+GITHUB_COMMIT_BASE = "https://github.com/apache/spark/commit"
 GITHUB_API_BASE = "https://api.github.com/repos/apache/spark"
 JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
@@ -421,6 +422,42 @@ def close_pr(pr_num):
         return None
 
 
+def comment_pr(pr_num, body):
+    url = "%s/issues/%s/comments" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"body": body}).encode("utf-8")
+    request = Request(url, data=data, method="POST")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to comment on PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
+
+
+def post_merge_comment(pr_num, merged_commits):
+    """Post a comment on the PR recording every branch the change landed on and a
+    link to the resulting commit, so the merge is traceable from the PR page.
+
+    ``merged_commits`` is an ordered list of (branch, commit_hash) pairs, the merge
+    sink first followed by each cherry-pick target.
+    """
+    if not merged_commits:
+        return
+    lines = [
+        "- merged into %s %s/%s" % (ref, GITHUB_COMMIT_BASE, commit_hash)
+        for ref, commit_hash in merged_commits
+    ]
+    body = "**Merge Summary:**\n" + "\n".join(lines) + "\n\n*Posted by `merge_spark_pr.py`*"
+    print("Posting merge comment on PR #%s:\n%s" % (pr_num, body))
+    if not GITHUB_OAUTH_KEY:
+        print_error("GITHUB_OAUTH_KEY is not set; skipping the merge comment.")
+        return
+    comment_pr(pr_num, body)
+
+
 def fail(msg):
     print_error(msg)
     clean_up()
@@ -523,7 +560,7 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         clean_up()
         print_error("Exception while pushing: %s" % e)
 
-    merge_hash = run_cmd("git rev-parse %s" % target_branch_name)[:8]
+    merge_hash = run_cmd("git rev-parse %s" % target_branch_name).strip()
     clean_up()
     print("Pull request #%s merged!" % pr_num)
     print("Merge hash: %s" % merge_hash)
@@ -531,7 +568,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
 
 def _do_cherry_pick(pr_num, merge_hash, pick_ref):
-    """Cherry-pick `merge_hash` onto `pick_ref` and push. Returns the pushed ref."""
+    """Cherry-pick `merge_hash` onto `pick_ref` and push.
+
+    Returns the (pushed ref, pushed commit hash) pair.
+    """
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
@@ -554,12 +594,12 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     except Exception as e:
         fail("Exception while pushing: %s" % e)
 
-    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
+    pick_hash = run_cmd("git rev-parse %s" % pick_branch_name).strip()
     clean_up()
 
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
-    return pick_ref
+    return pick_ref, pick_hash
 
 
 def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
@@ -599,8 +639,9 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     types a branch-M.N target while branch-M.x is also a known release branch AND
     has not already received this commit, prompt to confirm whether to pick into
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
-    maintenance-only bugfix). Returns the list of refs actually picked into, so
-    the main loop can advance its remaining-branches list correctly.
+    maintenance-only bugfix). Returns the list of (ref, commit_hash) pairs actually
+    picked into, so the main loop can advance its remaining-branches list correctly
+    and record each backport commit for the merge comment.
     """
     while True:
         pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
@@ -652,13 +693,91 @@ def print_jira_issue_summary(issue):
         assignee = assignee.displayName
     assignee = "Assignee\t%s\n" % assignee
     status = "Status\t\t%s\n" % issue.fields.status.name
+    components = "Components\t%s\n" % [x.name for x in issue.fields.components]
     url = "Url\t\t%s/%s\n" % (JIRA_BASE, issue.key)
     target_versions = "Affected\t%s\n" % [x.name for x in issue.fields.versions]
     fix_versions = ""
     if len(issue.fields.fixVersions) > 0:
         fix_versions = "Fixed\t\t%s\n" % [x.name for x in issue.fields.fixVersions]
     print("=== JIRA %s ===" % issue.key)
-    print("%s%s%s%s%s%s" % (summary, assignee, status, url, target_versions, fix_versions))
+    print(
+        "%s%s%s%s%s%s%s"
+        % (summary, assignee, status, components, url, target_versions, fix_versions)
+    )
+
+
+def jira_components_from_title_tags(tags):
+    """Canonical SPARK JIRA component names implied by PR-title component tags.
+
+    Each tag is resolved through the component registry; a tag that maps to a
+    JIRA component contributes that component's canonical name, whether primary
+    or not (e.g. [SQL] -> "SQL", [TEST] -> "Tests"). Tags that are not JIRA
+    components (status markers like [FOLLOWUP]/[MINOR], version tags like [4.X],
+    or unknown tags) contribute nothing. Aliases normalize to the canonical
+    name. The result preserves input order and is de-duplicated.
+
+    >>> jira_components_from_title_tags(["SQL", "CORE"])
+    ['SQL', 'Spark Core']
+    >>> jira_components_from_title_tags(["PYTHON", "DOCS"])
+    ['PySpark', 'Documentation']
+    >>> jira_components_from_title_tags(["SQL", "TEST"])
+    ['SQL', 'Tests']
+    >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
+    ['SQL']
+    >>> jira_components_from_title_tags(["SQL", "SQL"])
+    ['SQL']
+    """
+    names = []
+    for tag in tags:
+        c = Component.find(tag)
+        if c is not None and c.jira_name:
+            names.append(c.jira_name)
+    return list(dict.fromkeys(names))
+
+
+def reconcile_jira_components(issue, title_components):
+    """Prompt to sync JIRA components when they differ from the PR title.
+
+    ``title_components`` is the list of normalized PR-title component tags (e.g.
+    ["SQL", "TEST"]). Every tag that maps to a JIRA component -- primary or not,
+    e.g. [SQL] -> "SQL" and [TEST] -> "Tests" -- is reconciled; tags with no JIRA
+    component ([MINOR], [FOLLOWUP], version tags, unknown tags) are dropped. The
+    mapped names are compared, as a set, against the issue's current components.
+    On a mismatch, offer to overwrite JIRA with the PR title's components, append
+    them to the existing ones, or keep JIRA unchanged (the default).
+    """
+    title_jira_components = jira_components_from_title_tags(title_components)
+    if not title_jira_components:
+        return
+    current = [c.name for c in issue.fields.components]
+    if set(current) == set(title_jira_components):
+        return
+
+    print()
+    print("=" * 80)
+    print("PR title components differ from JIRA %s:" % issue.key)
+    print("  PR title: %s" % ", ".join(title_jira_components))
+    print("  JIRA:     %s" % (", ".join(current) if current else "(none)"))
+    print("=" * 80)
+    choice = get_input(
+        "[o]verwrite JIRA with PR title / [a]ppend PR title to JIRA / [k]eep JIRA as is "
+        "(default: keep): ",
+        {"o": ["o", "overwrite"], "a": ["a", "append"], "k": ["k", "keep", ""]},
+    )
+    if choice == "k":
+        print("Keeping JIRA %s components unchanged." % issue.key)
+        return
+    if choice == "o":
+        new_names = list(title_jira_components)
+    elif choice == "a":
+        # Append the PR title's components, keeping the existing ones first.
+        new_names = list(dict.fromkeys(current + title_jira_components))
+
+    try:
+        issue.update(fields={"components": [{"name": n} for n in new_names]})
+        print("Updated JIRA %s components to: %s" % (issue.key, ", ".join(new_names)))
+    except Exception as e:
+        print_error("Failed to update components on JIRA %s: %s" % (issue.key, e))
 
 
 def get_jira_issue(prompt, default_jira_id=""):
@@ -684,13 +803,15 @@ def get_jira_issue(prompt, default_jira_id=""):
         return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
 
 
-def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
+def resolve_jira_issue(merge_branches, comment, default_jira_id="", title_components=()):
     issue = get_jira_issue("Enter a JIRA id", default_jira_id)
     if issue is None:
         return
 
     if issue.fields.assignee is None:
         choose_jira_assignee(issue)
+
+    reconcile_jira_components(issue, title_components)
 
     versions = asf_jira.project_versions("SPARK")
     # Consider only x.y.z, unreleased, unarchived versions
@@ -830,13 +951,13 @@ def assign_issue(issue: int, assignee: str) -> bool:
     return True
 
 
-def resolve_jira_issues(title, merge_branches, comment):
+def resolve_jira_issues(title, merge_branches, comment, title_components=()):
     jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
     if len(jira_ids) == 0:
-        resolve_jira_issue(merge_branches, comment)
+        resolve_jira_issue(merge_branches, comment, title_components=title_components)
     for jira_id in jira_ids:
-        resolve_jira_issue(merge_branches, comment, jira_id)
+        resolve_jira_issue(merge_branches, comment, jira_id, title_components=title_components)
 
 
 class Component:
@@ -1248,6 +1369,10 @@ def main():
     # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
     is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
 
+    # Normalized PR-title component tags, used later to reconcile JIRA components. Empty for
+    # Revert/Reapply PRs, whose titles are kept verbatim and not parsed for components.
+    title_components: List[str] = []
+
     # Revert and Reapply PRs keep their title verbatim.
     if not (is_revert_pr or is_reapply_pr):
         # Parse; fail on a malformed title.
@@ -1290,6 +1415,7 @@ def main():
             print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
 
         parsed.components = components
+        title_components = list(parsed.components)
         title = str(parsed)
         if title != pr["title"]:
             print("Normalized title: %s" % title)
@@ -1370,7 +1496,10 @@ def main():
 
         print("Found commit %s:\n%s" % (merge_hash, message))
         default = branch_names[0]
-        cherry_pick(pr_num, merge_hash, default, branch_names, target_ref, already_picked=())
+        picked = cherry_pick(
+            pr_num, merge_hash, default, branch_names, target_ref, already_picked=()
+        )
+        post_merge_comment(pr_num, picked)
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -1414,6 +1543,10 @@ def main():
 
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
+    # Ordered (branch, commit_hash) pairs for the merge comment: the merge sink first,
+    # then each cherry-pick target as it is picked.
+    merged_commits = [(target_ref, merge_hash)]
+
     # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
     # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
     # PRs), GitHub leaves the PR open, so close it explicitly through the API.
@@ -1429,20 +1562,28 @@ def main():
     # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
     remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
-        default = remaining_branches[0] if remaining_branches else branch_names[0]
-        picked = cherry_pick(
-            pr_num,
-            merge_hash,
-            default,
-            branch_names,
-            target_ref,
-            already_picked=tuple(merged_refs),
-        )
-        merged_refs = merged_refs + picked
-        for b in picked:
-            if b in remaining_branches:
-                remaining_branches.remove(b)
+    # Always record the merge summary for what actually landed, even if a later
+    # cherry-pick is aborted or cancelled: the merge into the target branch has
+    # already been pushed, so cancelling a backport must not drop that line.
+    try:
+        while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
+            default = remaining_branches[0] if remaining_branches else branch_names[0]
+            picked = cherry_pick(
+                pr_num,
+                merge_hash,
+                default,
+                branch_names,
+                target_ref,
+                already_picked=tuple(merged_refs),
+            )
+            picked_refs = [ref for ref, _ in picked]
+            merged_refs = merged_refs + picked_refs
+            merged_commits = merged_commits + picked
+            for b in picked_refs:
+                if b in remaining_branches:
+                    remaining_branches.remove(b)
+    finally:
+        post_merge_comment(pr_num, merged_commits)
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     continue_maybe("Would you like to update an associated JIRA?")
@@ -1451,7 +1592,7 @@ def main():
         GITHUB_BASE,
         pr_num,
     )
-    resolve_jira_issues(title, merged_refs, jira_comment)
+    resolve_jira_issues(title, merged_refs, jira_comment, title_components)
 
 
 if __name__ == "__main__":

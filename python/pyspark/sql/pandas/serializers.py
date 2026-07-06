@@ -127,9 +127,10 @@ class ArrowStreamSerializer(Serializer):
         output batch. Default False.
     """
 
-    def __init__(self, write_start_stream: bool = False) -> None:
+    def __init__(self, write_start_stream: bool = False, flush_per_batch: bool = False) -> None:
         super().__init__()
         self._write_start_stream: bool = write_start_stream
+        self._flush_per_batch: bool = flush_per_batch
 
     def dump_stream(self, iterator: Iterable["pa.RecordBatch"], stream: IO[bytes]) -> None:
         """Optionally prepend START_ARROW_STREAM, then write batches."""
@@ -144,6 +145,10 @@ class ArrowStreamSerializer(Serializer):
                 if writer is None:
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
+                # In pipelined mode, flush after each batch so the JVM can read output
+                # while still sending input, rather than buffering all output.
+                if self._flush_per_batch:
+                    stream.flush()
         finally:
             if writer is not None:
                 writer.close()
@@ -485,62 +490,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
     def __repr__(self):
         return "ArrowStreamPandasUDTFSerializer"
-
-
-# Serializer for SQL_GROUPED_AGG_PANDAS_ITER_UDF
-class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def __init__(
-        self,
-        *,
-        timezone,
-        safecheck,
-        assign_cols_by_name,
-        prefer_int_ext_dtype,
-        int_to_decimal_coercion_enabled,
-    ):
-        super().__init__(
-            timezone=timezone,
-            safecheck=safecheck,
-            assign_cols_by_name=assign_cols_by_name,
-            df_for_struct=False,
-            struct_in_pandas="dict",
-            ndarray_as_list=False,
-            prefer_int_ext_dtype=prefer_int_ext_dtype,
-            arrow_cast=True,
-            input_type=None,
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-        )
-
-    def load_stream(self, stream):
-        """
-        Yield an iterator that produces one tuple of pandas.Series per batch.
-        Each group yields Iterator[Tuple[pd.Series, ...]], allowing UDF to
-        process batches one by one without consuming all batches upfront.
-        """
-        for batches in ArrowStreamGroupSerializer.load_stream(self, stream):
-            # Lazily read and convert Arrow batches to pandas Series one at a time
-            # from the stream. This avoids loading all batches into memory for the group
-            series_iter = map(
-                lambda batch: tuple(
-                    ArrowBatchTransformer.to_pandas(
-                        batch,
-                        timezone=self._timezone,
-                        schema=self._input_type,
-                        struct_in_pandas=self._struct_in_pandas,
-                        ndarray_as_list=self._ndarray_as_list,
-                        prefer_int_ext_dtype=self._prefer_int_ext_dtype,
-                        df_for_struct=self._df_for_struct,
-                    )
-                ),
-                batches,
-            )
-            yield series_iter
-            # Make sure the batches are fully iterated before getting the next group
-            for _ in series_iter:
-                pass
-
-    def __repr__(self):
-        return "ArrowStreamAggPandasUDFSerializer"
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):

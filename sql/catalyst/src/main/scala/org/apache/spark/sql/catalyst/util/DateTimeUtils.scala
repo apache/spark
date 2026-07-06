@@ -318,6 +318,50 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Packs a [[TimestampNanosVal]] (epoch micros + nanos within the micro) into a single int64 of
+   * nanoseconds since the epoch, the representation used by the Arrow nanosecond timestamp vectors
+   * and the Parquet INT64 epoch-nanoseconds physical type. Throws [[ArithmeticException]] when the
+   * value falls outside the int64 epoch-nanosecond range; callers translate that into a
+   * `DATETIME_OVERFLOW` error naming their sink (see
+   * [[org.apache.spark.sql.errors.QueryExecutionErrors.timestampNanosEpochNanosOverflowError]]).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
+    Math.addExact(
+      Math.multiplyExact(value.epochMicros, NANOS_PER_MICROS),
+      value.nanosWithinMicro.toLong)
+  }
+
+  /**
+   * Packs a [[TimestampNanosVal]] into a single int64 of epoch-nanoseconds for a `sink` that uses
+   * that encoding (the Parquet INT64 and Avro `timestamp-nanos` / `local-timestamp-nanos` physical
+   * types), translating the int64 overflow thrown by [[timestampNanosToEpochNanos]] into a
+   * `DATETIME_OVERFLOW` error that names the `sink`. `isNtz` selects how the offending value is
+   * rendered in that error (a zone-less local date-time vs. a UTC instant).
+   */
+  def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean, sink: String): Long = {
+    try {
+      timestampNanosToEpochNanos(value)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.timestampNanosEpochNanosOverflowError(value, isNtz, sink)
+    }
+  }
+
+  /**
+   * Unpacks a single int64 of nanoseconds since the epoch (the representation used by the Arrow
+   * nanosecond timestamp vectors and the Parquet / Avro INT64 epoch-nanoseconds encodings) back
+   * into a [[TimestampNanosVal]], truncating the sub-microsecond digits to the given `precision`
+   * (in [7, 9]). This is the inverse of [[timestampNanosToEpochNanos]]. `floorDiv` / `floorMod`
+   * keep `nanosWithinMicro` in [0, 999] for pre-epoch (negative) values too.
+   */
+  def epochNanosToTimestampNanos(epochNanos: Long, precision: Int): TimestampNanosVal = {
+    val epochMicros = Math.floorDiv(epochNanos, NANOS_PER_MICROS)
+    val rawNanosWithinMicro = Math.floorMod(epochNanos, NANOS_PER_MICROS).toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -986,7 +1030,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
     }
   }
 
@@ -1001,9 +1045,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
       nanos
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
       case e: ArithmeticException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
           new DateTimeException("Overflow in TIME conversion", e))
     }
   }
@@ -1099,6 +1143,23 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Makes a nanosecond-precision timestamp without time zone from a date and a local time,
+   * flooring the combined value to the target `precision` in [7, 9] (see
+   * [[localDateTimeToTimestampNanos]]).
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_NTZ(precision)`.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampNTZNanos(days: Int, nanos: Long, precision: Int): TimestampNanosVal = {
+    localDateTimeToTimestampNanos(
+      LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos)), precision)
+  }
+
+  /**
    * Makes a timestamp from a date and a local time.
    *
    * @param days The number of days since the epoch 1970-01-01.
@@ -1124,6 +1185,42 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def makeTimestamp(days: Int, nanos: Long, timezone: UTF8String): Long = {
     val zoneId = getZoneId(timezone.toString)
     makeTimestamp(days, nanos, zoneId)
+  }
+
+  /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` (precision in [7, 9]) from a date and
+   * a local time interpreted in the time zone `zoneId`, preserving the time's sub-microsecond
+   * digits up to `precision`. This is the nanosecond counterpart of
+   * [[makeTimestamp(days:Int,nanos:Long,zoneId:java\.time\.ZoneId)*]].
+   *
+   * @param days The number of days since the epoch 1970-01-01.
+   *             Negative numbers represent earlier days.
+   * @param nanos The number of nanoseconds within the day since midnight.
+   * @param precision The fractional-second precision of the target `TIMESTAMP_LTZ(precision)`.
+   * @param zoneId The time zone ID at which the operation is performed.
+   * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
+   *         1970-01-01 00:00:00Z.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val ldt = LocalDateTime.of(daysToLocalDate(days), nanosToLocalTime(nanos))
+    instantToTimestampNanos(ldt.atZone(zoneId).toInstant, precision)
+  }
+
+  /**
+   * Makes a nanosecond-precision `TIMESTAMP_LTZ(precision)` from a date and a local time with a
+   * time zone string. Used by the `CAST(time AS TIMESTAMP_LTZ(precision))` rewrite, which embeds
+   * the resolved session time zone as a string literal.
+   */
+  def makeTimestampLTZNanos(
+      days: Int,
+      nanos: Long,
+      precision: Int,
+      timezone: UTF8String): TimestampNanosVal = {
+    makeTimestampLTZNanos(days, nanos, precision, getZoneId(timezone.toString))
   }
 
   /**

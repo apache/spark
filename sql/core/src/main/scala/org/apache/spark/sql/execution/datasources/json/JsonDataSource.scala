@@ -100,7 +100,7 @@ abstract class JsonDataSource extends Serializable with Logging {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions,
       supportsArchiveScan: Boolean): Option[StructType] = {
-    parsedOptions.singleVariantColumn match {
+    parsedOptions.singleVariantColumn.orElse(parsedOptions.explodeEmbeddedArray) match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
         val hasArchive = parsedOptions.archiveFormatEnabled &&
@@ -214,7 +214,9 @@ abstract class JsonDataSource extends Serializable with Logging {
 
 object JsonDataSource {
   def apply(options: JSONOptions): JsonDataSource = {
-    if (options.multiLine) {
+    if (options.explodeEmbeddedArray.isDefined) {
+      EmbeddedArrayJsonDataSource
+    } else if (options.multiLine) {
       MultiLineJsonDataSource
     } else {
       TextInputJsonDataSource

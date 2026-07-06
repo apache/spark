@@ -1860,8 +1860,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test integral input
     testIntegralInput(testIntegralFunc)
     // test overflow
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+    checkErrorInExpression[SparkArithmeticException](
+      SecondsToTimestamp(Literal(Long.MaxValue, LongType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "create a TIMESTAMP from 9223372036854775807L seconds since the epoch"))
 
     def testFractionalInput(input: String): Unit = {
       Seq(input.toFloat, input.toDouble, Decimal(input)).foreach { value =>
@@ -1877,9 +1880,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testFractionalInput("-1.234567")
 
     // test overflow for decimal input
-    checkExceptionInExpression[ArithmeticException](
-      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))), "Overflow"
-    )
+    checkErrorInExpression[SparkArithmeticException](
+      SecondsToTimestamp(Literal(Decimal("9".repeat(38)))),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" -> (
+        "create a TIMESTAMP from 99999999999999999999999999999999999999BD " +
+          "seconds since the epoch")))
     // test truncation error for decimal input
     checkExceptionInExpression[ArithmeticException](
       SecondsToTimestamp(Literal(Decimal("0.1234567"))), "Rounding necessary"
@@ -1914,8 +1920,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // test integral input
     testIntegralInput(testIntegralFunc)
     // test overflow
-    checkExceptionInExpression[ArithmeticException](
-      MillisToTimestamp(Literal(Long.MaxValue, LongType)), EmptyRow, "long overflow")
+    checkErrorInExpression[SparkArithmeticException](
+      MillisToTimestamp(Literal(Long.MaxValue, LongType)),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "create a TIMESTAMP from 9223372036854775807L milliseconds since the epoch"))
   }
 
   test("TIMESTAMP_MICROS") {
@@ -2591,6 +2600,123 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
     checkEvaluation(MakeTimestampNTZ(Literal(null, DateType), Literal(null, TimeType())),
       null)
+  }
+
+  test("SPARK-57618: make nanosecond timestamp_ntz from date and time") {
+    val date = "2025-06-20"
+    val micros = timestampToMicros("2025-06-20T15:20:30.123456", UTC)
+    val timeNanos = Literal.create(localTime(15, 20, 30, 123456, 789), TimeType(9))
+    // Precision 9 preserves all sub-microsecond digits; lower precisions floor them.
+    checkEvaluation(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9),
+      TimestampNanosVal.fromParts(micros, 789.toShort))
+    checkEvaluation(MakeTimestampNTZNanos(dateLit(date), timeNanos, 8),
+      TimestampNanosVal.fromParts(micros, 780.toShort))
+    checkEvaluation(MakeTimestampNTZNanos(dateLit(date), timeNanos, 7),
+      TimestampNanosVal.fromParts(micros, 700.toShort))
+    // Pre-epoch date.
+    val preEpochMicros = timestampToMicros("1969-12-31T23:59:59.123456", UTC)
+    checkEvaluation(
+      MakeTimestampNTZNanos(dateLit("1969-12-31"),
+        Literal.create(localTime(23, 59, 59, 123456, 789), TimeType(9)), 9),
+      TimestampNanosVal.fromParts(preEpochMicros, 789.toShort))
+    // Null inputs propagate to a null result.
+    checkEvaluation(MakeTimestampNTZNanos(Literal(null, DateType), timeNanos, 9), null)
+    checkEvaluation(MakeTimestampNTZNanos(dateLit(date), Literal(null, TimeType(9)), 9), null)
+    // The result type carries the requested nanosecond precision.
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 7).dataType === TimestampNTZNanosType(7))
+    // The precision participates in equality and canonicalization: builders that differ only in
+    // precision are distinct, so two casts to different TIMESTAMP_NTZ(q) are never conflated.
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9) !=
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 7))
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized ==
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized)
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized !=
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 7).canonicalized)
+  }
+
+  test("SPARK-57660: make timestamp_ltz from date and time") {
+    Seq(
+      ("2025-06-20", "15:20:30.123456", "America/Los_Angeles", LA),
+      ("2025-06-20", "15:20:30.123456", "+01:00", CET)
+    ).foreach { case (date, time, tz, zoneId) =>
+      // The local date-time is interpreted in the given zone to produce the instant.
+      checkEvaluation(
+        MakeTimestampLTZ(dateLit(date), timeLit(time), Option(tz)),
+        timestampToMicros(s"${date}T${time}", zoneId))
+    }
+    // Null inputs propagate to a null result.
+    checkEvaluation(
+      MakeTimestampLTZ(Literal(null, DateType), timeLit("15:20:30"), UTC_OPT), null)
+    checkEvaluation(
+      MakeTimestampLTZ(dateLit("2025-06-20"), Literal(null, TimeType()), UTC_OPT), null)
+    // The result type is the micro TIMESTAMP_LTZ (TimestampType).
+    assert(MakeTimestampLTZ(dateLit("2025-06-20"), timeLit("15:20:30"), UTC_OPT).dataType ===
+      TimestampType)
+  }
+
+  test("SPARK-57660: make nanosecond timestamp_ltz from date and time") {
+    val date = "2025-06-20"
+    val timeNanos = Literal.create(localTime(15, 20, 30, 123456, 789), TimeType(9))
+    Seq("America/Los_Angeles" -> LA, "+01:00" -> CET).foreach { case (tz, zoneId) =>
+      val micros = timestampToMicros(s"${date}T15:20:30.123456", zoneId)
+      // Precision 9 preserves all sub-microsecond digits; lower precisions floor them.
+      checkEvaluation(MakeTimestampLTZNanos(dateLit(date), timeNanos, 9, Option(tz)),
+        TimestampNanosVal.fromParts(micros, 789.toShort))
+      checkEvaluation(MakeTimestampLTZNanos(dateLit(date), timeNanos, 8, Option(tz)),
+        TimestampNanosVal.fromParts(micros, 780.toShort))
+      checkEvaluation(MakeTimestampLTZNanos(dateLit(date), timeNanos, 7, Option(tz)),
+        TimestampNanosVal.fromParts(micros, 700.toShort))
+    }
+    // Pre-epoch date.
+    val preEpochMicros = timestampToMicros("1969-12-31T23:59:59.123456", UTC)
+    checkEvaluation(
+      MakeTimestampLTZNanos(dateLit("1969-12-31"),
+        Literal.create(localTime(23, 59, 59, 123456, 789), TimeType(9)), 9, UTC_OPT),
+      TimestampNanosVal.fromParts(preEpochMicros, 789.toShort))
+    // Null inputs propagate to a null result.
+    checkEvaluation(MakeTimestampLTZNanos(Literal(null, DateType), timeNanos, 9, UTC_OPT), null)
+    checkEvaluation(
+      MakeTimestampLTZNanos(dateLit(date), Literal(null, TimeType(9)), 9, UTC_OPT), null)
+    // The result type carries the requested nanosecond precision.
+    assert(MakeTimestampLTZNanos(dateLit(date), timeNanos, 7, UTC_OPT).dataType ===
+      TimestampLTZNanosType(7))
+    // The precision participates in equality and canonicalization: builders that differ only in
+    // precision are distinct, so two casts to different TIMESTAMP_LTZ(q) are never conflated.
+    assert(MakeTimestampLTZNanos(dateLit(date), timeNanos, 9, UTC_OPT) !=
+      MakeTimestampLTZNanos(dateLit(date), timeNanos, 7, UTC_OPT))
+    assert(MakeTimestampLTZNanos(dateLit(date), timeNanos, 9, UTC_OPT).canonicalized ==
+      MakeTimestampLTZNanos(dateLit(date), timeNanos, 9, UTC_OPT).canonicalized)
+    assert(MakeTimestampLTZNanos(dateLit(date), timeNanos, 9, UTC_OPT).canonicalized !=
+      MakeTimestampLTZNanos(dateLit(date), timeNanos, 7, UTC_OPT).canonicalized)
+  }
+
+  test("SPARK-57660: make timestamp_ltz across DST transitions") {
+    // This is the zone-conversion branch of the TIME -> TIMESTAMP_LTZ cast (ComputeCurrentTime
+    // rewrites the cast into these builders). The Cast itself can't be DST-tested deterministically
+    // because it takes the date from CURRENT_DATE, so the gap/overlap behavior is asserted here on
+    // the builders with explicit transition dates.
+    val tz = "America/Los_Angeles"
+    // Spring-forward gap: 2020-03-08 02:30 does not exist in LA; java.time shifts it forward to
+    // 03:30 PDT. The builder must resolve to that instant.
+    val gapInstant = LocalDateTime.of(2020, 3, 8, 3, 30, 0).atZone(LA).toInstant
+    checkEvaluation(
+      MakeTimestampLTZ(dateLit("2020-03-08"), timeLit("02:30:00"), Option(tz)),
+      DateTimeUtils.instantToMicros(gapInstant))
+    // Sub-microsecond digits survive the gap shift.
+    val gapNanoInstant = LocalDateTime.of(2020, 3, 8, 3, 30, 0, 789012000).atZone(LA).toInstant
+    checkEvaluation(
+      MakeTimestampLTZNanos(
+        dateLit("2020-03-08"),
+        Literal.create(localTime(2, 30, 0, 789012, 345), TimeType(9)), 9, Option(tz)),
+      TimestampNanosVal.fromParts(DateTimeUtils.instantToMicros(gapNanoInstant), 345.toShort))
+    // Fall-back overlap: 2020-11-01 01:30 occurs twice in LA; java.time picks the earlier offset
+    // (PDT, UTC-7). Pin the expected instant to that explicit offset so the assertion does not just
+    // mirror the builder's own atZone resolution.
+    val overlapInstant =
+      LocalDateTime.of(2020, 11, 1, 1, 30, 0).atOffset(java.time.ZoneOffset.ofHours(-7)).toInstant
+    checkEvaluation(
+      MakeTimestampLTZ(dateLit("2020-11-01"), timeLit("01:30:00"), Option(tz)),
+      DateTimeUtils.instantToMicros(overlapInstant))
   }
 
   test("SPARK-53113: try to make timestamp from date, time, and timezone") {

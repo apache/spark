@@ -953,7 +953,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 
@@ -967,7 +967,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 

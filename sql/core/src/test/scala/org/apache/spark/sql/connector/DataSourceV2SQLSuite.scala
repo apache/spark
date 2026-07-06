@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -457,6 +457,44 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CreateTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    // Use a non-numeric marker so it can never clash with InMemoryTable's sequential numeric IDs.
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
+    }
+  }
+
   test("CreateTableAsSelect: do not double execute on collect(), take() and other queries") {
     val basicCatalog = catalog("testcat").asTableCatalog
     val atomicCatalog = catalog("testcat_atomic").asTableCatalog
@@ -612,6 +650,44 @@ class DataSourceV2SQLSuiteV1Filter
           spark.internalCreateDataFrame(rdd,
             CatalogV2Util.v2ColumnsToStructType(replacedTable.columns)),
           spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: field IDs in query schema are not propagated to table columns") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    val sourceId = "source-id"
+    val nestedType = new StructType(Array(StructField("value", LongType).withId(sourceId)))
+    val schema = new StructType(Array(
+      StructField("id", LongType).withId(sourceId),
+      StructField("nested", nestedType).withId(sourceId)))
+    val sourceWithIds = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(1L, Row(42L)), Row(2L, Row(43L)))), schema)
+
+    withTempView("source_with_ids") {
+      sourceWithIds.createOrReplaceTempView("source_with_ids")
+      Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+        case (cat, identifier) =>
+          withTable(identifier) {
+            spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT * FROM source_with_ids")
+            val table = cat.loadTable(Identifier.of(Array(), "table_name"))
+            table.columns.foreach { col =>
+              assert(col.metadataInJSON == null)
+              assert(col.id != sourceId)
+              col.dataType match {
+                case s: StructType =>
+                  s.fields.foreach { f =>
+                    assert(f.id.forall(_ != sourceId))
+                  }
+                case _ =>
+              }
+            }
+          }
+      }
     }
   }
 
@@ -1358,8 +1434,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
@@ -3863,6 +3939,92 @@ class DataSourceV2SQLSuiteV1Filter
           start = 40,
           stop = 70))
     }
+  }
+
+  test("time travel with at syntax") {
+    sql("use testcat")
+    val t1 = "testcat.tSnapshot123456789"
+    val t2 = "testcat.t2345678910"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+      sql(s"INSERT INTO $t1 VALUES (1), (2)")
+      sql(s"INSERT INTO $t2 VALUES (3), (4)")
+
+      checkAnswer(sql("SELECT * FROM t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@V2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@v'Snapshot123456789'"), Seq(Row(1), Row(2)))
+      checkAnswer(spark.read.table("t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(spark.table("t@v2345678910"), Seq(Row(3), Row(4)))
+
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 VERSION AS OF 1")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "VERSION AS OF 1", start = 28, stop = 42))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 TIMESTAMP AS OF '2019-01-29'")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "TIMESTAMP AS OF '2019-01-29'", start = 28, stop = 55))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "2345678910").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@v2345678910 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+
+      withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[ParseException] {
+            sql("SELECT * FROM t@v2345678910")
+          },
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+          parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+          context = ExpectedContext(fragment = "t@v2345678910", start = 14, stop = 26))
+        intercept[ParseException](spark.read.table("t@v2345678910"))
+      }
+    }
+
+    intercept[ParseException](sql("SELECT * FROM t@foo"))
+    intercept[ParseException](spark.read.table("t@foo"))
+    withTable("testcat.`weird@v1`") {
+      sql("CREATE TABLE testcat.`weird@v1` (id int) USING foo")
+      sql("INSERT INTO testcat.`weird@v1` VALUES (42)")
+      checkAnswer(sql("SELECT * FROM `weird@v1`"), Row(42))
+      checkAnswer(spark.read.table("`weird@v1`"), Row(42))
+    }
+
+    withTempView("v") {
+      spark.range(1).createOrReplaceTempView("v")
+      checkError(
+        exception = analysisException("SELECT * FROM v@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        sqlState = None,
+        parameters = Map("relationId" -> "`v`"))
+    }
+    checkError(
+      exception = analysisException("WITH x AS (SELECT 1) SELECT * FROM x@v1"),
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      sqlState = None,
+      parameters = Map("relationId" -> "`x`"))
   }
 
   test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {
