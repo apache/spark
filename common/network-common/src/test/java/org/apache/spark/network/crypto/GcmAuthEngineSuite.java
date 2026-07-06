@@ -441,7 +441,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
    * be available rather than performing a partial fill.
    */
   @Test
-  public void testSplitHeader() throws Exception {
+  public void testSplitGcmHeader() throws Exception {
     TransportConf gcmConf = getConf(2, false);
     try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
          AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
@@ -483,6 +483,75 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
 
       decryptionHandler.channelRead(ctx, chunk1);
       // Only a partial header was delivered; no plaintext should be emitted yet.
+      verify(ctx, never()).fireChannelRead(any());
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, chunk2);
+      verify(ctx, atLeastOnce()).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[data.length];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(data.length, offset);
+      assertArrayEquals(data, decrypted);
+    }
+  }
+
+  /**
+   * Verifies that DecryptionHandler correctly handles a GCM message whose 8-byte Spark length
+   * prefix is split across two channelRead() calls. This exercises the partial-fill path in
+   * {@code initializeExpectedLength}: when fewer than 8 bytes of the length prefix arrive,
+   * the method narrows {@code expectedLengthBuffer}'s limit so that {@code readBytes()} does
+   * not throw, accumulates the partial result, and returns {@code false} to signal that the
+   * handler must wait for the rest. The second call completes the prefix and proceeds normally.
+   */
+  @Test
+  public void testSplitLengthPrefix() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      byte[] data = new byte[1024];
+      Arrays.fill(data, (byte) 'Y');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(captor.capture(), eq(promise));
+
+      ByteBuffer ciphertextBuffer = ByteBuffer.allocate((int) captor.getValue().count());
+      captor.getValue().transferTo(new ByteBufferWriteableChannel(ciphertextBuffer), 0);
+      ciphertextBuffer.flip();
+      byte[] ciphertext = new byte[ciphertextBuffer.remaining()];
+      ciphertextBuffer.get(ciphertext);
+
+      // Split in the middle of the 8-byte Spark length prefix:
+      // chunk1 = [4 bytes of length prefix]
+      // chunk2 = [remaining 4 bytes of length prefix][GCM header][ciphertext]
+      int splitPoint = 4;
+      ByteBuf chunk1 = Unpooled.wrappedBuffer(ciphertext, 0, splitPoint);
+      ByteBuf chunk2 = Unpooled.wrappedBuffer(
+              ciphertext, splitPoint, ciphertext.length - splitPoint);
+
+      decryptionHandler.channelRead(ctx, chunk1);
+      // Only a partial length prefix was delivered; no plaintext should be emitted yet.
       verify(ctx, never()).fireChannelRead(any());
 
       ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);

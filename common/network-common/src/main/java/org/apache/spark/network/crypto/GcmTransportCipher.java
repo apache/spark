@@ -510,9 +510,9 @@ public class GcmTransportCipher implements TransportCipher {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             releaseAccumulator();
-            ctx.close();
+            super.exceptionCaught(ctx, cause);
         }
 
         private void releaseAccumulator() {
