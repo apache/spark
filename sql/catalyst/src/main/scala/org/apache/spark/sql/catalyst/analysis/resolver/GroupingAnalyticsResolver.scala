@@ -97,7 +97,11 @@ class GroupingAnalyticsResolver(resolver: Resolver, expressionResolver: Expressi
           case other => other
         }
 
-        transformedAggregate.copy(child = newAggregateChild)
+        val resolvedAggregate = transformedAggregate.copy(child = newAggregateChild)
+        // copy() does not carry tree-node tags, so preserve the grand-total marker set by
+        // GroupingAnalyticsTransformer (used to fold grouping_id() to 0 in HAVING/ORDER BY).
+        resolvedAggregate.copyTagsFrom(transformedAggregate)
+        resolvedAggregate
       case None =>
         aggregate
     }

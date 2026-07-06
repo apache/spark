@@ -54,3 +54,34 @@ Project [c#xL]
          +- Project [k#x]
             +- SubqueryAlias t
                +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query analysis
+Aggregate [spark_grouping_id#xL, _gen_grouping_pos#x], [count(1) AS c#xL, spark_grouping_id#xL AS g#xL]
++- Expand [[k#x, 0, 0], [k#x, 0, 1]], [k#x, spark_grouping_id#xL, _gen_grouping_pos#x]
+   +- Project [k#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}

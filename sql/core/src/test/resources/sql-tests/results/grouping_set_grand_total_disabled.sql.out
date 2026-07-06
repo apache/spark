@@ -38,3 +38,37 @@ SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((
 struct<c:bigint>
 -- !query output
 3
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query schema
+struct<c:bigint,g:bigint>
+-- !query output
+3	0
+3	0
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}

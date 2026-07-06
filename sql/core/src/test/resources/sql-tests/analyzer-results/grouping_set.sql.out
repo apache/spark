@@ -338,6 +338,102 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping_id() = 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping_id()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping(k) = 0
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 72,
+    "stopIndex" : 72,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping(k)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query analysis
+Aggregate [spark_grouping_id#xL, _gen_grouping_pos#x], [count(1) AS c#xL, spark_grouping_id#xL AS g#xL]
++- Expand [[k#x, 0, 0], [k#x, 0, 1]], [k#x, spark_grouping_id#xL, _gen_grouping_pos#x]
+   +- Project [k#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "grouping" : "k#x",
+    "groupingColumns" : ""
+  }
+}
+
+
+-- !query
 CREATE TEMPORARY VIEW grouping_grand_total AS
   SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
 -- !query analysis

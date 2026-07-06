@@ -92,6 +92,26 @@ SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((
 -- grouping() over a grand total references a non-grouping column and is rejected.
 SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (());
 
+-- A grouping function over a plain aggregate with no GROUP BY clause (and no grouping set) is
+-- still rejected, in HAVING and in ORDER BY -- the grand-total lowering must not make these fold.
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping_id() = 0;
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping_id();
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping(k) = 0;
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping(k);
+
+-- GROUP BY GROUPING SETS ((), ()) is a *duplicated* empty grouping set: it is NOT the single-set
+-- grand total, so it stays on the Expand path (with a spark_grouping_id key plus a
+-- _gen_grouping_pos dedup key) and is not lowered to a global aggregate. It emits one row per
+-- empty set (two rows), each with grouping_id() = 0 in the SELECT list. In HAVING/ORDER BY a
+-- grouping function still errors (the last grouping key is _gen_grouping_pos, not
+-- spark_grouping_id), and grouping() over a non-grouping column is rejected. This is unchanged by
+-- the grand-total lowering.
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ());
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0;
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id();
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ());
+
 -- Grand total over a named relation rather than inline data in the query: the grand total reads
 -- FROM a temporary view.
 CREATE TEMPORARY VIEW grouping_grand_total AS

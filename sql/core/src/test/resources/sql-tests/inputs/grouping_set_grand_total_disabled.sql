@@ -19,3 +19,11 @@ SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((
 -- grouping_id() in HAVING/ORDER BY resolves to the Expand spark_grouping_id (value 0).
 SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) HAVING grouping_id() = 0;
 SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) ORDER BY grouping_id();
+
+-- GROUP BY GROUPING SETS ((), ()) is a duplicated empty grouping set that stays on the Expand path
+-- regardless of the flag, so its behavior is identical flag-on and flag-off: two rows in the
+-- SELECT list (grouping_id() = 0 each), and a grouping function in HAVING/ORDER BY still errors.
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ());
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0;
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id();

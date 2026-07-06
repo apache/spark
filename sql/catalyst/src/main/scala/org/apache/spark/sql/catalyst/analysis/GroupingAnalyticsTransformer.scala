@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -31,6 +32,16 @@ import org.apache.spark.sql.types.ByteType
  * into [[Expand]] and [[Aggregate]] operators.
  */
 object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
+
+  /**
+   * Marks an [[Aggregate]] that [[constructGrandTotalAggregate]] produced by lowering a grand-total
+   * `GROUP BY GROUPING SETS (())` (or the equivalent empty `CUBE()`/`ROLLUP()`) to a global
+   * aggregate. Such an aggregate has no grouping expressions, so it is otherwise indistinguishable
+   * from a plain no-`GROUP BY` aggregate; the tag lets [[collectGroupingExpressions]] tell them
+   * apart so a grouping function in HAVING/ORDER BY folds to the constant 0 over the former but is
+   * still rejected over the latter (matching the SELECT-list path).
+   */
+  val GRAND_TOTAL_AGGREGATE_TAG = TreeNodeTag[Unit]("grandTotalAggregate")
 
   /**
    * Transform a grouping analytics operation (CUBE/ROLLUP/GROUPING SETS) into an [[Expand]]
@@ -143,11 +154,12 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
    * flag enabled. The flag is part of the check because with it off the same grand total is
    * lowered via [[Expand]], whose `spark_grouping_id` key must still be referenced.
    *
-   * This keys purely on the collected grouping expressions being empty, so it also matches a
-   * value-equivalent all-empty multi-set [[Expand]] aggregate (e.g. `GROUP BY GROUPING SETS ((),
-   * ())`), whose only grouping key is `spark_grouping_id` and whose every row's grouping id is
-   * likewise 0 (there are no group-by columns). Folding grouping_id() to the constant 0 is correct
-   * for both.
+   * Only the single-empty-grouping-set grand total reaches here with empty grouping expressions:
+   * [[collectGroupingExpressions]] returns empty only for the [[GRAND_TOTAL_AGGREGATE_TAG]]-marked
+   * global aggregate. A multi-empty-set spec such as `GROUP BY GROUPING SETS ((), ())` stays on the
+   * [[Expand]] path with a `spark_grouping_id` key (and, being a duplicated grouping set, a
+   * `_gen_grouping_pos` key), so its collected grouping expressions are non-empty and it is
+   * unaffected by this method.
    */
   def isLoweredToGrandTotalAggregate(groupingExpressions: Seq[Expression]): Boolean = {
     conf.getConf(SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE) &&
@@ -194,11 +206,13 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
         newAlias = newAlias
       ).asInstanceOf[NamedExpression]
     }
-    Aggregate(
+    val aggregate = Aggregate(
       groupingExpressions = Seq.empty,
       aggregateExpressions = aggregations,
       child = child
     )
+    aggregate.setTagValue(GRAND_TOTAL_AGGREGATE_TAG, ())
+    aggregate
   }
 
   /**
@@ -246,10 +260,17 @@ object GroupingAnalyticsTransformer extends SQLConfHelper with AliasHelper {
    *
    * A grand-total `GROUP BY GROUPING SETS (())` is lowered to a global [[Aggregate]] with no
    * grouping expressions (see [[apply]]), so there is no `spark_grouping_id` key and no grouping
-   * columns; return an empty sequence for it.
+   * columns; return an empty sequence for it. That case is recognized by the
+   * [[GRAND_TOTAL_AGGREGATE_TAG]] marker rather than by emptiness alone, so a plain no-`GROUP BY`
+   * aggregate (also empty grouping expressions, but never lowered from a grouping set) still throws
+   * `groupingMustWithGroupingSetsOrCubeOrRollupError`, matching the SELECT-list path where a
+   * leftover grouping function fails `UNSUPPORTED_GROUPING_EXPRESSION` in CheckAnalysis.
    */
   def collectGroupingExpressions(aggregate: Aggregate): Seq[Expression] = {
     if (aggregate.groupingExpressions.isEmpty) {
+      if (aggregate.getTagValue(GRAND_TOTAL_AGGREGATE_TAG).isEmpty) {
+        throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+      }
       Seq.empty
     } else {
       val gid = aggregate.groupingExpressions.last
