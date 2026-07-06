@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
+    libxslt1-dev \
     openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
@@ -70,4 +71,4 @@ RUN mkdir -p /usr/local/pypy/pypy3.10 && \
     ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
     ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib 'lxml==4.9.4'
+RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib lxml
