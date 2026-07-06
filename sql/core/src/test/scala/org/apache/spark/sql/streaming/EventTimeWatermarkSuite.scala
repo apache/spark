@@ -1188,7 +1188,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
           $"window".getField("end").cast("string").as[String],
           $"count".as[Long])
 
-      testStream(windowedAgg)(
+      testStream(windowedAgg, OutputMode.Append)(
         // Events at t=10s,11s,12s,13s,14s => window [10s,15s); t=15s => window [15s,20s)
         AddData(inputData,
           10L * 1000000000L, 11L * 1000000000L, 12L * 1000000000L,
