@@ -88,15 +88,19 @@ public final class Platform {
         Method createMethod = (majorVersion < 26) ?
             cleanerClass.getMethod("create", Object.class, Runnable.class) :
             cleanerClass.getMethod("register", Object.class, Runnable.class);
-        // Accessing jdk.internal.ref.Cleaner should actually fail by default in JDK 9~25,
-        // unfortunately, unless the user has allowed access with something like
-        // --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  If not, we can't use the Cleaner
-        // hack below. It doesn't break, just means the user might run into the default JVM limit
-        // on off-heap memory and increase it or set the flag above. This tests whether it's
-        // available:
+        // Accessing jdk.internal.ref.Cleaner (JDK 9~25) / java.nio.BufferCleaner (JDK 26+)
+        // should actually fail by default, unless the user has allowed access with something like
+        //   --add-opens java.base/jdk.internal.ref=ALL-UNNAMED  (JDK 9~25)
+        //   --add-opens java.base/java.nio=ALL-UNNAMED          (JDK 26+)
+        // If not, we can't use the Cleaner hack below. It doesn't break, just means the user might
+        // run into the default JVM limit on off-heap memory and increase it or set the flag above.
+        // This tests whether it's available:
         try {
-          createMethod.setAccessible(true);
-          createMethod.invoke(null, new Object(), (Runnable) () -> {});
+          if (createMethod.trySetAccessible()) {
+            createMethod.invoke(null, new Object(), (Runnable) () -> {});
+          } else {
+            createMethod = null;
+          }
         } catch (IllegalAccessException e) {
           // Don't throw an exception, but can't log here?
           createMethod = null;
