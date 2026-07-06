@@ -178,11 +178,10 @@ case class HashAggregateExec(
   }
 
   /**
-   * Registers a task-completion hook to close the generated fast hash map. This is called by the
-   * generated Java class so that the close hook is a plain method call on this plan, with the
-   * listener being a lambda in compiled Scala code, rather than an anonymous
-   * `TaskCompletionListener` emitted per fast hash map (one fewer generated inner class per map).
-   * Should be public.
+   * Registers a task-completion hook to close the generated fast hash map, so that the close hook
+   * is a plain method call on this plan, with the listener being a lambda in compiled Scala code,
+   * rather than an anonymous `TaskCompletionListener` emitted per fast hash map (one fewer
+   * generated inner class per map). This is called by the generated Java class, should be public.
    */
   def addFastHashMapCloseHook(fastHashMap: AutoCloseable): Unit = {
     TaskContext.get().addTaskCompletionListener[Unit](_ => fastHashMap.close())
