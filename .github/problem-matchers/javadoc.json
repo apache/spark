@@ -5,7 +5,7 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "^\\[error\\]\\s+(?!\\S*/target/java/org/apache/spark/)(\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(.+)$",
+          "regexp": "^\\[error\\]\\s+(?!\\S*\\/target\\/java\\/org\\/apache\\/spark\\/)(\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(.+)$",
           "file": 1,
           "line": 2,
           "column": 3,
