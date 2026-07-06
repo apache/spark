@@ -1358,7 +1358,6 @@ jobs:
           if [ `./dev/is-changed.py -m $pyspark_modules` = false ]; then export SKIP_PYTHONDOC=1; fi
           if [ `./dev/is-changed.py -m sparkr` = false ]; then export SKIP_RDOC=1; fi
         fi
-        env | grep "^SKIP_"
         cd docs
         bundle exec jekyll build
     - name: Run documentation build for branch-4.2 and branch-4.x (Python 3.12)
@@ -1377,7 +1376,6 @@ jobs:
         fi
         export PYSPARK_DRIVER_PYTHON=python3.12
         export PYSPARK_PYTHON=python3.12
-        env | grep "^SKIP_"
         cd docs
         bundle exec jekyll build
     - name: Run documentation build for branch-4.1
@@ -1396,7 +1394,6 @@ jobs:
         fi
         export PYSPARK_DRIVER_PYTHON=python3.11
         export PYSPARK_PYTHON=python3.11
-        env | grep "^SKIP_"
         cd docs
         bundle exec jekyll build
     - name: Run documentation build
@@ -1415,8 +1412,6 @@ jobs:
         fi
         export PYSPARK_DRIVER_PYTHON=python3.12
         export PYSPARK_PYTHON=python3.12
-        echo "debug; SKIP flags set:"
-        env | grep "^SKIP_"
         cd docs
         bundle exec jekyll build
     - name: Tar documentation
