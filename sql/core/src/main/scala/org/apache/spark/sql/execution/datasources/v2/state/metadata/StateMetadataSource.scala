@@ -25,7 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableProvider}
@@ -83,10 +84,10 @@ class StateMetadataSource extends TableProvider with DataSourceRegister
   override def shortName(): String = "state-metadata"
 
   override def createRelation(
-      sqlContext: org.apache.spark.sql.SQLContext,
-      mode: org.apache.spark.sql.SaveMode,
+      sqlContext: SQLContext,
+      mode: SaveMode,
       parameters: Map[String, String],
-      data: org.apache.spark.sql.DataFrame): BaseRelation = {
+      data: DataFrame): BaseRelation = {
     throw StateDataSourceErrors.writeUnsupported("state-metadata")
   }
 

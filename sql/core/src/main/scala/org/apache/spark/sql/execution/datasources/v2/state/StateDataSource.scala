@@ -25,7 +25,8 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -63,10 +64,10 @@ class StateDataSource extends TableProvider with DataSourceRegister
   override def shortName(): String = "statestore"
 
   override def createRelation(
-      sqlContext: org.apache.spark.sql.SQLContext,
-      mode: org.apache.spark.sql.SaveMode,
+      sqlContext: SQLContext,
+      mode: SaveMode,
       parameters: Map[String, String],
-      data: org.apache.spark.sql.DataFrame): BaseRelation = {
+      data: DataFrame): BaseRelation = {
     throw StateDataSourceErrors.writeUnsupported("statestore")
   }
 

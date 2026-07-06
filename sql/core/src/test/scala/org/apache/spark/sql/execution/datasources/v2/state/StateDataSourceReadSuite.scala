@@ -365,6 +365,24 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         Map("sourceName" -> "state-metadata"))
     }
   }
+
+  test("SPARK-57225: statestore write without valid path throws path-required error first") {
+    // Without a valid path, the source throws StateDataSourceUnspecifiedRequiredOption
+    // before reaching createRelation. This documents the error priority.
+    val df = spark.range(1).toDF()
+    intercept[StateDataSourceUnspecifiedRequiredOption] {
+      df.write.format("statestore").save()
+    }
+  }
+
+  test("SPARK-57225: state-metadata write without valid path still throws STDS_WRITE_UNSUPPORTED") {
+    val df = spark.range(1).toDF()
+    val ex = intercept[StateDataSourceWriteUnsupported] {
+      df.write.format("state-metadata").save()
+    }
+    checkError(ex, "STDS_WRITE_UNSUPPORTED", Some("0A000"),
+      Map("sourceName" -> "state-metadata"))
+  }
 }
 
 /**
