@@ -219,6 +219,110 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(TimestampLTZNanosType(9), "UTC")
   }
 
+  test("timestamp nanos lossless struct round-trip covers the full value domain") {
+    // The default int64 epoch-nanoseconds mapping only covers roughly years 1677-2262 (see the
+    // DATETIME_OVERFLOW test above). The lossless struct representation stores the raw
+    // (epochMicros, nanosWithinMicro) pair, so the full domain of the Spark types (years
+    // 0001-9999) must round-trip -- including values that overflow the default mapping.
+    def losslessWriter(schema: StructType): ArrowWriter = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      ArrowWriter.create(root)
+    }
+
+    val values = Seq(
+      TimestampNanosVal.fromParts(0L, 0.toShort),
+      TimestampNanosVal.fromParts(1234567L, 789.toShort),
+      // pre-epoch instant with a sub-microsecond remainder
+      TimestampNanosVal.fromParts(-1234567L, 13.toShort),
+      // 9999-12-31T23:59:59.999999999: epochNanos would be ~2.5e20, far past Long.MaxValue
+      TimestampNanosVal.fromParts(253402300799999999L, 999.toShort),
+      // 0001-01-01T00:00:00.000000001: epochNanos would be ~-6.2e19, far below Long.MinValue
+      TimestampNanosVal.fromParts(-62135596800000000L, 1.toShort))
+
+    def check(dt: DataType): Unit = {
+      val schema = new StructType().add("value", dt, nullable = true)
+      val writer = losslessWriter(schema)
+      (values.map(Option(_)) :+ None).foreach(v => writer.write(InternalRow(v.orNull)))
+      writer.finish()
+
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      assert(reader.dataType() === dt)
+      values.zipWithIndex.foreach { case (v, rowId) =>
+        val got = dt match {
+          case _: TimestampNTZNanosType => reader.getTimestampNTZNanos(rowId)
+          case _: TimestampLTZNanosType => reader.getTimestampLTZNanos(rowId)
+        }
+        assert(got === v)
+      }
+      assert(reader.isNullAt(values.length))
+      writer.root.close()
+    }
+
+    check(TimestampNTZNanosType(9))
+    check(TimestampLTZNanosType(9))
+    // Precision is schema metadata, not part of the value encoding.
+    check(TimestampNTZNanosType(7))
+    check(TimestampLTZNanosType(7))
+  }
+
+  test("timestamp nanos lossless struct round-trip inside nested types") {
+    val v1 = TimestampNanosVal.fromParts(253402300799999999L, 999.toShort)
+    val v2 = TimestampNanosVal.fromParts(-62135596800000000L, 1.toShort)
+
+    def losslessWriter(schema: StructType): ArrowWriter = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      ArrowWriter.create(root)
+    }
+
+    // array<timestamp_ntz(9)>
+    {
+      val schema = new StructType().add("arr", ArrayType(TimestampNTZNanosType(9)))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(new GenericArrayData(Array[Any](v1, null, v2))))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val arr = reader.getArray(0)
+      assert(arr.numElements() === 3)
+      assert(arr.getTimestampNTZNanos(0) === v1)
+      assert(arr.isNullAt(1))
+      assert(arr.getTimestampNTZNanos(2) === v2)
+      writer.root.close()
+    }
+
+    // struct<ts: timestamp_ltz(9)>
+    {
+      val schema = new StructType()
+        .add("struct", new StructType().add("ts", TimestampLTZNanosType(9)))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(InternalRow(v1)))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      assert(reader.getStruct(0).getTimestampLTZNanos(0) === v1)
+      writer.root.close()
+    }
+
+    // map<int, timestamp_ntz(9)>
+    {
+      val schema = new StructType().add("map", MapType(IntegerType, TimestampNTZNanosType(9)))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(
+        new ArrayBasedMapData(
+          new GenericArrayData(Array[Any](1, 2)),
+          new GenericArrayData(Array[Any](v1, v2)))))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val map = reader.getMap(0)
+      assert(map.numElements() === 2)
+      assert(map.valueArray().getTimestampNTZNanos(0) === v1)
+      assert(map.valueArray().getTimestampNTZNanos(1) === v2)
+      writer.root.close()
+    }
+  }
+
   test("nested geographies") {
     def check(
       dt: StructType,
