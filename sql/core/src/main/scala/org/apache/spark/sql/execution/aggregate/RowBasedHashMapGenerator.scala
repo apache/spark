@@ -130,20 +130,20 @@ class RowBasedHashMapGenerator(
     val createUnsafeRowForKey = groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
       key.dataType match {
         case t: DecimalType =>
-          s"agg_rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
+          s"rowWriter.write(${ordinal}, ${key.name}, ${t.precision}, ${t.scale})"
         case t: DataType =>
           if (!t.isInstanceOf[StringType] && !t.isInstanceOf[CalendarIntervalType] &&
             !CodeGenerator.isPrimitiveType(t)) {
             throw new IllegalArgumentException(s"cannot generate code for unsupported type: $t")
           }
-          s"agg_rowWriter.write(${ordinal}, ${key.name})"
+          s"rowWriter.write(${ordinal}, ${key.name})"
       }
     }.mkString(";\n")
 
     val resetNullBits = if (groupingKeySchema.map(_.nullable).forall(_ == false)) {
       ""
     } else {
-      "agg_rowWriter.zeroOutNullBytes();"
+      "rowWriter.zeroOutNullBytes();"
     }
 
     s"""
@@ -156,7 +156,7 @@ class RowBasedHashMapGenerator(
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
        |      if (numRows < capacity && !isBatchFull) {
-       |        agg_rowWriter.reset();
+       |        rowWriter.reset();
        |        $resetNullBits
        |        ${createUnsafeRowForKey};
        |        return appendCurrentKey(idx);

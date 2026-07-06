@@ -46,7 +46,7 @@ import org.apache.spark.unsafe.Platform;
  */
 public abstract class RowBasedAggregateHashMap implements AutoCloseable {
   // NOTE: these field names are part of the contract with the generated subclass --
-  // RowBasedHashMapGenerator emits code that references them by name (e.g. `agg_rowWriter`,
+  // RowBasedHashMapGenerator emits code that references them by name (e.g. `rowWriter`,
   // `buckets`, `numBuckets`), so renaming one only fails when Janino compiles the generated
   // code at runtime, not at build time.
   protected final RowBasedKeyValueBatch batch;
@@ -59,7 +59,7 @@ public abstract class RowBasedAggregateHashMap implements AutoCloseable {
   protected final long emptyVOff;
   protected final int emptyVLen;
   protected boolean isBatchFull = false;
-  protected final UnsafeRowWriter agg_rowWriter;
+  protected final UnsafeRowWriter rowWriter;
 
   protected RowBasedAggregateHashMap(
       StructType keySchema,
@@ -81,20 +81,20 @@ public abstract class RowBasedAggregateHashMap implements AutoCloseable {
     this.emptyVOff = Platform.BYTE_ARRAY_OFFSET;
     this.emptyVLen = emptyBuffer.length;
 
-    this.agg_rowWriter = new UnsafeRowWriter(numKeyFields, keyVarLenBufferSize);
+    this.rowWriter = new UnsafeRowWriter(numKeyFields, keyVarLenBufferSize);
 
     this.buckets = new int[numBuckets];
     java.util.Arrays.fill(this.buckets, -1);
   }
 
   /**
-   * Appends the key currently staged in {@link #agg_rowWriter} (the generated subclass has already
+   * Appends the key currently staged in {@link #rowWriter} (the generated subclass has already
    * called {@code reset()} and written the typed key columns) together with the empty aggregation
    * buffer, and records the new row's bucket. Returns the value row to aggregate into, or
    * {@code null} when the batch is full.
    */
   protected final UnsafeRow appendCurrentKey(int idx) {
-    UnsafeRow aggResult = agg_rowWriter.getRow();
+    UnsafeRow aggResult = rowWriter.getRow();
     UnsafeRow vRow = batch.appendRow(
       aggResult.getBaseObject(), aggResult.getBaseOffset(), aggResult.getSizeInBytes(),
       emptyVBase, emptyVOff, emptyVLen);
