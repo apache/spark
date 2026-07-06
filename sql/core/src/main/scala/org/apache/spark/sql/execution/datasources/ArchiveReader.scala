@@ -107,6 +107,12 @@ abstract class ArchiveReader(path: Path) {
    * Entry skipping mirrors Spark's file listing: `ignoredPathSegmentRegex` is the effective filter
    * (the `ignoredPathSegmentRegex` data source option), so callers reading with a custom filter
    * must pass its compiled form here for archive entries to be filtered like loose files.
+   *
+   * @param conf Hadoop configuration used to open the archive stream.
+   * @param ignoredPathSegmentRegex the effective path-segment filter (the `ignoredPathSegmentRegex`
+   *                                data source option); entries matching it are skipped.
+   * @param parseEntry turns one entry's `(name, stream)` into an iterator of results.
+   * @return an iterator over the concatenated per-entry results; also [[Closeable]].
    */
   def readEntries[T](
       conf: Configuration,
@@ -187,9 +193,14 @@ abstract class ArchiveReader(path: Path) {
 
   /**
    * Materializes each kept entry to a file under `localDir` as `(entryName, localFile)`, lazily one
-   * at a time -- the [[readEntries]] counterpart for random-access formats (Parquet/ORC footers).
+   * at a time -- for random-access formats (Parquet/ORC footers).
+   *
+   * @param conf Hadoop configuration used to open the archive stream.
+   * @param localDir directory the entry files are written under.
+   * @param entryFilter keeps only entries whose name satisfies it; others are skipped.
+   * @return an iterator yielding each kept entry's `(name, localFile)`.
    */
-  final def localizeEntries(
+  private def localizeEntries(
       conf: Configuration,
       localDir: File,
       entryFilter: String => Boolean = _ => true): Iterator[(String, File)] =
@@ -291,16 +302,24 @@ object ArchiveReader extends Logging {
   }
 
   /**
-   * Reads an archive of random-access files -- the [[readEntries]] counterpart for formats needing
-   * a complete file (Parquet/ORC, Excel). The per-entry [[PartitionedFile]] keeps the
-   * archive's path, so `input_file_name()`/`_metadata` report it.
+   * Reads an archive of random-access files for formats needing a complete file (Parquet/ORC,
+   * Excel): each kept entry is unpacked to a local temp file and `readEntry` is applied to it, and
+   * the per-entry results are concatenated. The per-entry [[PartitionedFile]] keeps the archive's
+   * path, so `input_file_name()`/`_metadata` report it.
+   *
+   * @param file the archive [[PartitionedFile]].
+   * @param conf Hadoop configuration used to open the archive stream.
+   * @param entryFilter keeps only entries whose name satisfies it; others are skipped.
+   * @param tempPrefix name prefix for the temp dir the entries are unpacked into.
+   * @param readEntry reads one unpacked entry (as a [[PartitionedFile]]) into rows.
+   * @return an iterator over the concatenated per-entry rows; also [[Closeable]].
    */
   def readLocalizedEntries(
       file: PartitionedFile,
       conf: Configuration,
       entryFilter: String => Boolean,
       tempPrefix: String)(
-      readOne: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
+      readEntry: PartitionedFile => Iterator[InternalRow]): Iterator[InternalRow] = {
     val tempDir = Utils.createTempDir(Utils.getLocalDir(SparkEnv.get.conf), tempPrefix)
     val entries = ArchiveReader(file.toPath).localizeEntries(conf, tempDir, entryFilter)
 
@@ -332,7 +351,7 @@ object ArchiveReader extends Logging {
           if (entries.hasNext) {
             val (_, entryFile) = entries.next()
             currentFile = entryFile
-            current = readOne(file.copy(
+            current = readEntry(file.copy(
               filePath = SparkPath.fromUri(entryFile.toURI),
               start = 0L,
               length = entryFile.length(),
@@ -376,6 +395,16 @@ object ArchiveReader extends Logging {
   /**
    * Localizes one archive's kept entries and applies `use`. The entries iterator is closed before
    * returning (the driver has no TaskContext), so `use` must consume what it needs first.
+   *
+   * @param archive the archive [[FileStatus]].
+   * @param conf Hadoop configuration used to open the archive stream.
+   * @param tempDir directory the entries are unpacked into.
+   * @param entryFilter keeps only entries whose name satisfies it; others are skipped.
+   * @param ignoreMissingFiles when true, a missing archive is skipped (yields `onSkip`).
+   * @param ignoreCorruptFiles when true, a corrupt archive is skipped (yields `onSkip`).
+   * @param onSkip value returned when the archive is skipped.
+   * @param use consumes the localized entries; must read what it needs before returning.
+   * @return `use`'s result, or `onSkip` when the archive is skipped.
    */
   private[datasources] def withLocalizedArchive[T](
       archive: FileStatus,
@@ -418,8 +447,20 @@ object ArchiveReader extends Logging {
 
   /**
    * Driver-side schema inference for random-access archive formats: `looseInfer` seeds from loose
-   * files; each archive's entries fold in one at a time -- `inferOne` reads one unpacked entry,
+   * files; each archive's entries fold in one at a time -- `inferEntry` reads one unpacked entry,
    * `mergeSchemas` combines it -- deleting each before the next. `mergeSchema` off samples one.
+   *
+   * @param files loose files and archives to infer from.
+   * @param conf Hadoop configuration used to open the archive streams.
+   * @param tempPrefix name prefix for the temp dir entries are unpacked into.
+   * @param entryFilter keeps only entries whose name satisfies it; others are skipped.
+   * @param ignoreMissingFiles when true, a missing archive is skipped.
+   * @param ignoreCorruptFiles when true, a corrupt archive is skipped.
+   * @param mergeSchema when true, merge schemas across all entries; when false, sample one.
+   * @param looseInfer infers the schema of the loose (non-archive) files.
+   * @param inferEntry infers the schema of one unpacked entry.
+   * @param mergeSchemas combines two inferred schemas.
+   * @return the merged schema, or `None` if nothing could be inferred.
    */
   def inferArchiveSchema(
       files: Seq[FileStatus],
@@ -430,7 +471,7 @@ object ArchiveReader extends Logging {
       ignoreCorruptFiles: Boolean,
       mergeSchema: Boolean,
       looseInfer: Seq[FileStatus] => Option[StructType],
-      inferOne: File => Option[StructType],
+      inferEntry: File => Option[StructType],
       mergeSchemas: (StructType, StructType) => StructType): Option[StructType] = {
     val (archives, nonArchives) = files.partition(f => isArchivePath(f.getPath))
     val tempDir = Utils.createTempDir(namePrefix = tempPrefix)
@@ -440,7 +481,7 @@ object ArchiveReader extends Logging {
         onSkip = seed) { entries =>
         var merged = seed
         entries.take(limit).foreach { case (_, file) =>
-          try inferOne(file).foreach(s => merged = Some(merged.fold(s)(mergeSchemas(_, s))))
+          try inferEntry(file).foreach(s => merged = Some(merged.fold(s)(mergeSchemas(_, s))))
           finally file.delete()
         }
         merged
