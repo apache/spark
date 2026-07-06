@@ -676,11 +676,8 @@ case class HashAggregateExec(
          |// Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
          |// aggregation after processing all input rows.
          |if ($unsafeRowBuffer == null) {
-         |  if ($sorterTerm == null) {
-         |    $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-         |  } else {
-         |    $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-         |  }
+         |  $sorterTerm = org.apache.spark.sql.execution.aggregate.HashAggregateExec
+         |    .spillHashMapToSorter($hashMapTerm, $sorterTerm);
          |  $resetCounter
          |  // the hash map had be spilled, it should have enough memory now,
          |  // try to allocate buffer again.
@@ -896,4 +893,26 @@ case class HashAggregateExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): HashAggregateExec =
     copy(child = newChild)
+}
+
+object HashAggregateExec {
+  /**
+   * Spills the in-memory hash map to disk and returns the sorter holding the spilled data. Called
+   * by the generated code of [[HashAggregateExec]] when a buffer cannot be allocated from the hash
+   * map: the first spill destructs the map into a new sorter, and later spills merge into the
+   * existing one. Returning the sorter lets the generated code keep it in a single mutable field.
+   *
+   * Extracting this type-independent spill machinery into a shared helper keeps it compiled once
+   * per JVM instead of being re-emitted into every HashAggregateExec stage's generated code.
+   */
+  def spillHashMapToSorter(
+      hashMap: UnsafeFixedWidthAggregationMap,
+      sorter: UnsafeKVExternalSorter): UnsafeKVExternalSorter = {
+    if (sorter == null) {
+      hashMap.destructAndCreateExternalSorter()
+    } else {
+      sorter.merge(hashMap.destructAndCreateExternalSorter())
+      sorter
+    }
+  }
 }
