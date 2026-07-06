@@ -167,9 +167,24 @@ private[sql] object ArrowUtils {
    * (epochMicros: int64, nanosWithinMicro: int16), mirroring TimestampNanosVal's own layout with
    * no unit conversion. Unlike the default Timestamp(NANOSECOND) mapping, which packs the value
    * into a single int64 of epoch-nanoseconds and therefore only covers roughly years 1677-2262,
-   * this representation covers the full domain of the Spark types (years 0001-9999). It is meant
-   * for internal storage (e.g. the Arrow-based Dataset cache), not for interchange: external Arrow
-   * consumers expect the standard Timestamp(NANOSECOND) encoding.
+   * this representation covers the full domain of the Spark types (years 0001-9999).
+   *
+   * Why two representations exist, permanently: the mismatch is structural. Arrow's timestamp
+   * physical type is fixed at int64 by the Arrow format spec, while the Spark types are defined
+   * over years 0001-9999, so no single Arrow timestamp encoding can serve both goals.
+   *  - Interchange paths (pandas conversion, Arrow UDFs, Connect result sets) must keep the
+   *    standard Timestamp(NANOSECOND) encoding: their consumers only understand that encoding,
+   *    and those consumers' own timestamp domains are equally int64-bound (e.g. pandas
+   *    datetime64[ns]), so the reduced domain is inherent to the destination -- failing loudly at
+   *    write (DATETIME_OVERFLOW) is the correct behavior there, not a limitation of the mapping.
+   *  - Internal storage (e.g. the Arrow-based Dataset cache) is a closed write-then-read-back
+   *    loop with no external consumer, where the only requirement is fidelity to Spark semantics,
+   *    hence this struct.
+   * The choice is made per call site via `losslessTimestampNanos` on `toArrowSchema` /
+   * `toArrowField` (the same pattern as `largeVarTypes`: one Spark type, two Arrow encodings,
+   * selected by the consumer's needs). Only schema construction needs the flag: the struct is
+   * self-describing through its child-field tag, so `fromArrowField`, `ArrowWriter`, and
+   * `ArrowColumnVector` recognize both shapes unconditionally and no mode mismatch is possible.
    */
   private def toTimestampNanosStructField(
       name: String,
@@ -197,7 +212,15 @@ private[sql] object ArrowUtils {
         new Field("nanosWithinMicro", nanosFieldType, Seq.empty[Field].asJava)).asJava)
   }
 
-  /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
+  /**
+   * Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType
+   *
+   * @param losslessTimestampNanos when true, nanosecond timestamps map to the lossless struct
+   *   representation covering their full value domain instead of the standard int64
+   *   Timestamp(NANOSECOND) encoding. Only internal-storage callers with no external Arrow
+   *   consumer (e.g. the Arrow-based Dataset cache) should pass true; interchange paths must
+   *   keep the default. See `toTimestampNanosStructField` for the full rationale.
+   */
   def toArrowField(
       name: String,
       dt: DataType,
@@ -482,6 +505,9 @@ private[sql] object ArrowUtils {
 
   /**
    * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
+   *
+   * @param losslessTimestampNanos see `toArrowField`: opt-in full-domain struct encoding of
+   *   nanosecond timestamps for internal storage; interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,
