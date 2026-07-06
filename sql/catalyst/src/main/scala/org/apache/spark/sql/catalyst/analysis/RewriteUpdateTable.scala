@@ -41,6 +41,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
+          checkNoGeneratedColumns(r, UPDATE)
           val table = buildOperationTable(tbl, UPDATE, CaseInsensitiveStringMap.empty())
           val updateCond = cond.getOrElse(TrueLiteral)
           table.operation match {
