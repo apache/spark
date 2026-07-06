@@ -214,6 +214,25 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * @param descriptor the Parquet column descriptor being read
    */
   def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = None
+
+  /**
+   * Whether a dictionary-encoded column of this type can be lazily dictionary-decoded on the
+   * vectorized path (the dictionary is attached to the column vector and decoded on read) rather
+   * than eagerly decoding every value up front. Consulted (Spark DataType -> ops) by
+   * `VectorizedColumnReader.isLazyDecodingSupported`.
+   *
+   * Default is false - a type must opt in by overriding to true, matching the opt-in stance of
+   * [[isBatchReadSupported]]. This is deliberately fail-safe: lazy decoding bypasses the
+   * per-value work a vectorized updater ([[getVectorUpdater]]) may do (unit conversion,
+   * truncation, rebasing), so a type that opts into vectorized reads but forgets to opt out of
+   * lazy decoding when it needs per-value processing would silently return wrong results. With a
+   * false default the worst case is a missed lazy-decode optimization, not incorrect data. Types
+   * whose updater is a plain identity copy (no per-value processing) should override to true to
+   * regain the optimization.
+   *
+   * @param descriptor the Parquet column descriptor being read
+   */
+  def supportsLazyDictionaryDecoding(descriptor: ColumnDescriptor): Boolean = false
 }
 
 /**
@@ -249,4 +268,14 @@ private[parquet] object ParquetTypeOps {
   private[parquet] def getVectorUpdaterOrNull(
       dt: DataType, descriptor: ColumnDescriptor): ParquetVectorUpdater =
     apply(dt).flatMap(_.getVectorUpdater(descriptor)).orNull
+
+  /**
+   * Java-friendly entry point for `VectorizedColumnReader`: whether `dt`'s dictionary-encoded
+   * column can be lazily decoded, or null if `dt` is not framework-managed (so the caller keeps
+   * its built-in decision).
+   */
+  private[parquet] def supportsLazyDictionaryDecodingOrNull(
+      dt: DataType, descriptor: ColumnDescriptor): java.lang.Boolean =
+    apply(dt).map(o => java.lang.Boolean.valueOf(o.supportsLazyDictionaryDecoding(descriptor)))
+      .orNull
 }

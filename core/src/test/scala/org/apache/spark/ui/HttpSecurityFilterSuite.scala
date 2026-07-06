@@ -163,6 +163,19 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
   }
 
+  test("X-XSS-Protection defaults to 0") {
+    val conf = new SparkConf(false)
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    verify(res).setHeader(meq("X-XSS-Protection"), meq("0"))
+  }
+
   test("doAs impersonation") {
     val conf = new SparkConf(false)
       .set(ACLS_ENABLE, true)

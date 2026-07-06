@@ -122,6 +122,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }
@@ -192,6 +193,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }

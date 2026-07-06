@@ -5440,6 +5440,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GENERATED_COLUMN_ALLOW_NULLABLE_INGEST =
+    buildConf("spark.sql.generatedColumn.allowNullableIngest.enabled")
+      .doc("When true, writing to a table with generated columns allows omitting nullable " +
+        "non-generated columns from the input. Missing nullable columns are filled with null. " +
+        "When false, all non-generated columns must be provided.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()
@@ -7136,6 +7146,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val TIME_TRAVEL_AT_SYNTAX_ENABLED =
+    buildConf("spark.sql.timeTravel.atSyntax.enabled")
+      .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
+        "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
+        "table names fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val OPERATOR_PIPE_SYNTAX_ENABLED =
     buildConf("spark.sql.operatorPipeSyntaxEnabled")
       .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
@@ -8653,6 +8673,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
+
+  def generatedColumnAllowNullableIngest: Boolean =
+    getConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST)
 
   def unionIsResolvedWhenDuplicatesPerChildResolved: Boolean =
     getConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED)
