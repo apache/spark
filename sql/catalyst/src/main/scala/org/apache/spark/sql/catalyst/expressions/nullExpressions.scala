@@ -93,6 +93,7 @@ case class Coalesce(children: Seq[Expression])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val resultType = CodeGenerator.javaType(dataType)
     // Fast path for the common `coalesce(a, b)` where `b` is non-nullable and its evaluation
     // generates no code (a literal or an already-evaluated value), e.g. the `coalesce(sum, 0)`
     // emitted for every SUM/AVG update. The result can never be null and `b` carries a pure
@@ -101,10 +102,9 @@ case class Coalesce(children: Seq[Expression])
     // evaluation: there are no statements of `b` to hoist before the null check.
     val probedEvals: Option[Seq[ExprCode]] =
       if (children.length == 2 && !children(1).nullable) {
-        val first = children(0).genCode(ctx)
+        val first = children.head.genCode(ctx)
         val second = children(1).genCode(ctx)
         if (second.code.isEmpty) {
-          val resultType = CodeGenerator.javaType(dataType)
           return ev.copy(
             code = code"""
                |${first.code}
@@ -134,7 +134,6 @@ case class Coalesce(children: Seq[Expression])
        """.stripMargin
     }
 
-    val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",

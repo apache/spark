@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.Timestamp
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
