@@ -5,7 +5,7 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "\\s+/__w/spark/spark/(\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(reference not found)$",
+          "regexp": "/__w/spark/spark/(\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(reference not found)",
           "file": 1,
           "line": 2,
           "column": 3,
