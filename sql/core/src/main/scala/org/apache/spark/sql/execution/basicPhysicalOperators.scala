@@ -962,7 +962,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
               case a: Attribute if attributeMap.contains(a) => attributeMap(a)
             })
             val isGrouped = mergedKeys.distinct.size == mergedKeys.size
-            KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped)
+            val isNarrowed = partitionings.exists {
+              case k: KeyedPartitioning => k.isNarrowed
+              case _ => false
+            }
+            KeyedPartitioning(mergedExpressions, mergedKeys, isGrouped, isNarrowed)
           case e: Expression =>
             e.transform {
               case a: Attribute if attributeMap.contains(a) => attributeMap(a)

@@ -4377,4 +4377,96 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
+
+  test("SPARK-57881: storage-partitioned join over union: bucket transform partitioning") {
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(bucket(4, "id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        // The union reports a KeyedPartitioning whose expression is the `bucket(4, id)` transform.
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.expressions.length == 1 && kp.expressions.head.isInstanceOf[TransformExpression],
+          "merged KeyedPartitioning carries the bucket transform expression")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: SPJ over the bucket transform")
+        checkAnswer(df,
+          Seq(Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: a union leg is entirely " +
+      "runtime-pruned") {
+    // The merged descriptor is built from each leg's unfiltered `inputPartitions`, while the union
+    // RDD concatenates each leg's `filteredPartitions` (pruned splits kept as `None`). Here dynamic
+    // partition filtering prunes the entire t1 leg (only t3 ids [3, 4] survive), so this guards
+    // that the per-leg partition-count == partitionKeys.length alignment holds under pruning.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      withTable("t1", "t2", "t3") {
+        createTable("t1", cols, partitions)
+        sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+        createTable("t2", cols, partitions)
+        sql("INSERT INTO testcat.ns.t2 VALUES (3, 'b3'), (4, 'b4')")
+        createTable("t3", cols, partitions)
+        sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |WHERE t3.data IN ('c3', 'c4')
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        // The merged descriptor carries the concatenation of both legs' unfiltered keys
+        // ([1, 2] ++ [3, 4]), independent of runtime pruning.
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.numPartitions == 4,
+          "merged descriptor keeps one key per unfiltered physical partition of both legs")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: merged grouped keys match t3")
+
+        // Force execution, then verify the t1 leg is entirely runtime-pruned (all `None`) while
+        // its keys still live in the merged descriptor above.
+        checkAnswer(df, Seq(Row(3, "b3", "c3"), Row(4, "b4", "c4")))
+        val unionScans = collectScans(union)
+        assert(unionScans.exists(_.filteredPartitions.forall(_.isEmpty)),
+          "one union leg must be entirely pruned to None while its keys remain in the descriptor")
+      }
+    }
+  }
 }
