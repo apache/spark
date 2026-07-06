@@ -119,7 +119,10 @@ class ParquetFileFormat
         // The footer reader needs only a path and length (cf. mergeSchemasInParallel).
         val status = new FileStatus(file.length(), false, 0, 0, file.lastModified(), 0, null, null,
           null, new Path(file.toURI))
-        reader(Seq(status), conf, ignoreCorruptFiles, ignoreMissingFiles).headOption
+        // Force the ignore flags off per entry (positional: reader is a function value): a corrupt
+        // entry must throw so inferArchiveSchema skips the whole archive (a corrupt entry condemns
+        // the archive). The archive-granular skip is governed by the real flags passed above.
+        reader(Seq(status), conf, false, false).headOption
       },
       (acc, schema) =>
         try acc.merge(schema, caseSensitive) catch {

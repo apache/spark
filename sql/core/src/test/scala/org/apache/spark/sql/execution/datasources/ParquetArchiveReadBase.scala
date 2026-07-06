@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.nio.file.Files
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.input_file_name
 import org.apache.spark.sql.internal.SQLConf
@@ -128,6 +129,54 @@ trait ParquetArchiveReadBase extends ArchiveReadSuiteBase {
           s"expected the union of entry fields, got $archiveSchema")
         assert(archiveSchema == inferredSchema(Seq(dir.getCanonicalPath), merge),
           s"archive mergeSchema inference diverged from a directory read; got $archiveSchema")
+      }
+    }
+  }
+
+  Seq(true, false).foreach { ignoreCorrupt =>
+    test(s"ignoreCorruptFiles=$ignoreCorrupt: inference skips a corrupt entry's whole archive") {
+      // A corrupt entry condemns its whole archive during inference (no partial ingestion), so the
+      // `extra` column carried by the bad archive's valid sibling entry must not surface. A good
+      // archive is unaffected. mergeSchema=true folds every entry's footer.
+      val merge = Map("mergeSchema" -> "true")
+      val sibling = Seq((3, "Carol", "x")).toDF("id", "name", "extra")
+      withTempDir { dir =>
+        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(sampleDf((1, "Alice"), (2, "Bob")))))
+        writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
+          entryName(0) -> encodeFile(sibling),
+          entryName(1) -> "This is not a valid Parquet file".getBytes("UTF-8")))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+          if (ignoreCorrupt) {
+            assert(inferredSchema(Seq(dir.getCanonicalPath), merge).fieldNames.toSet ==
+              Set("id", "name"),
+              "the whole corrupt archive, including its valid sibling entry, should be skipped")
+          } else {
+            intercept[Exception](inferredSchema(Seq(dir.getCanonicalPath), merge))
+          }
+        }
+      }
+    }
+
+    test(s"ignoreCorruptFiles=$ignoreCorrupt: read skips the rest of an archive at a bad entry") {
+      // The streaming read matches the other formats: entries before the corrupt one are ingested,
+      // then the rest of that archive is skipped (not whole-archive atomic like inference). A
+      // separate good archive is read in full.
+      val alive = sampleDf((1, "Alice"), (2, "Bob"))
+      val beforeCorrupt = sampleDf((3, "Carol"))
+      withTempDir { dir =>
+        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(alive)))
+        writeArchive(new File(dir, s"bad.${archiveExtensions.head}"), Seq(
+          entryName(0) -> encodeFile(beforeCorrupt),
+          entryName(1) -> "This is not a valid Parquet file".getBytes("UTF-8")))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
+          if (ignoreCorrupt) {
+            checkAnswer(read(dir.getCanonicalPath), alive.union(beforeCorrupt))
+          } else {
+            intercept[SparkException](read(dir.getCanonicalPath).collect())
+          }
+        }
       }
     }
   }
