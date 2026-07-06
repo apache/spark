@@ -215,13 +215,50 @@ object DataType {
       .toMap
   }
 
+  /**
+   * Parses an integer type parameter captured from a JSON type name (e.g. the length in
+   * `char(10)`). The capture group is `\d+`, an unbounded digit run, so a value outside the 32-bit
+   * integer range surfaces a proper Spark error instead of a raw `NumberFormatException`. Mirrors
+   * the guard on the parser path in `DataTypeAstBuilder`.
+   */
+  private def parseIntTypeParameterFromJson(
+      text: String,
+      parameter: String,
+      typeName: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.datatypeParameterValueOutOfRangeError(parameter, text, typeName)
+    }
+  }
+
+  /**
+   * Parses the precision captured from a `decimal(p,s)` JSON type name, reusing the dedicated
+   * `DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION` error when the value is outside the 32-bit integer
+   * range.
+   */
+  private def parseDecimalPrecisionFromJson(text: String): Int = {
+    try text.toInt
+    catch {
+      case _: NumberFormatException =>
+        throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
+          text,
+          DecimalType.MAX_PRECISION)
+    }
+  }
+
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
-      case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
-      case CHAR_TYPE(length) => CharType(length.toInt)
-      case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case FIXED_DECIMAL(precision, scale) =>
+        DecimalType(
+          parseDecimalPrecisionFromJson(precision),
+          parseIntTypeParameterFromJson(scale, "scale", "DECIMAL"))
+      case CHAR_TYPE(length) =>
+        CharType(parseIntTypeParameterFromJson(length, "length", "CHAR"))
+      case VARCHAR_TYPE(length) =>
+        VarcharType(parseIntTypeParameterFromJson(length, "length", "VARCHAR"))
       case STRING_WITH_COLLATION(collation) => StringType(collation)
       // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
       // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.

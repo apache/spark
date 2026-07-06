@@ -38,10 +38,16 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   def decimalPrecisionExceedsMaxPrecisionError(
       precision: Int,
       maxPrecision: Int): SparkArithmeticException = {
+    decimalPrecisionExceedsMaxPrecisionError(precision.toString, maxPrecision)
+  }
+
+  def decimalPrecisionExceedsMaxPrecisionError(
+      precision: String,
+      maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
       messageParameters =
-        Map("precision" -> precision.toString, "maxPrecision" -> maxPrecision.toString),
+        Map("precision" -> precision, "maxPrecision" -> maxPrecision.toString),
       context = Array.empty,
       summary = "")
   }
@@ -271,10 +277,41 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
   }
 
   def unsupportedTimePrecisionError(precision: Int): Throwable = {
+    unsupportedTimePrecisionError(precision.toString)
+  }
+
+  def unsupportedTimePrecisionError(precision: String): Throwable = {
     new SparkException(
       errorClass = "UNSUPPORTED_TIME_PRECISION",
-      messageParameters = Map("precision" -> precision.toString),
+      messageParameters = Map("precision" -> precision),
       cause = null)
+  }
+
+  // Raised when an integer type parameter (CHAR/VARCHAR length or DECIMAL scale) is a well-formed
+  // digit sequence outside the range of a 32-bit integer. The grammar accepts an unbounded run of
+  // digits, so this guards the parameter conversion and surfaces a proper error instead of a raw
+  // `NumberFormatException`. DECIMAL precision and TIME precision reuse their own dedicated errors;
+  // GEOMETRY/GEOGRAPHY SRID reuses `ST_INVALID_SRID_VALUE`.
+  def datatypeParameterValueOutOfRangeError(
+      parameter: String,
+      value: String,
+      typeName: String): Throwable = {
+    new SparkException(
+      errorClass = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
+      messageParameters = Map(
+        "parameter" -> parameter,
+        "value" -> value,
+        "type" -> typeName),
+      cause = null)
+  }
+
+  // Raised when a GEOMETRY/GEOGRAPHY SRID literal is a well-formed digit sequence outside the range
+  // of a 32-bit integer. Reuses `ST_INVALID_SRID_VALUE` so an overflowing SRID surfaces the same
+  // error as an in-range but unsupported SRID, instead of a raw `NumberFormatException`.
+  def stInvalidSridValueError(srid: String): Throwable = {
+    new SparkIllegalArgumentException(
+      errorClass = "ST_INVALID_SRID_VALUE",
+      messageParameters = Map("srid" -> srid))
   }
 
   def invalidTimestampPrecisionError(precision: String, typeName: String): Throwable = {

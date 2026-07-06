@@ -2015,6 +2015,12 @@
     ],
     "sqlState" : "42K01"
   },
+  "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE" : {
+    "message" : [
+      "The <parameter> value <value> of the <type> data type is out of the range of a 32-bit integer."
+    ],
+    "sqlState" : "22003"
+  },
   "DATA_SOURCE_ALREADY_EXISTS" : {
     "message" : [
       "Data source '<provider>' already exists. Please choose a different name for the new data source."
