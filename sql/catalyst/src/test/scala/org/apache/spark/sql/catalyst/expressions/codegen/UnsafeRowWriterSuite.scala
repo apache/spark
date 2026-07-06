@@ -73,6 +73,17 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     val intervalRow = intervalWriter.getRow
     assert(intervalRow.isNullAt(0))
     assert(intervalRow.getInterval(1) == interval)
+
+    // TimestampNanosVal: like CalendarInterval, a null write must reserve the fixed 16-byte slot
+    // via write(ordinal, null), which is the reserved-slot contract the codegen setNull relied on.
+    val tsNanosWriter = new UnsafeRowWriter(2)
+    tsNanosWriter.resetRowWriter()
+    tsNanosWriter.writeNullable(0, null.asInstanceOf[TimestampNanosVal], true)
+    val tsNanos = new TimestampNanosVal(1234567L, 89.toShort)
+    tsNanosWriter.writeNullable(1, tsNanos, false)
+    val tsNanosRow = tsNanosWriter.getRow
+    assert(tsNanosRow.isNullAt(0))
+    assert(tsNanosRow.getTimestampNTZNanos(1) == tsNanos)
   }
 
   def checkDecimalSizeInBytes(decimal: Decimal, numBytes: Int): Unit = {
