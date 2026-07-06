@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libwebp-dev \
     libxml2-dev \
+    libxslt1-dev \
     openjdk-17-jdk-headless \
     pkg-config \
     qpdf \
