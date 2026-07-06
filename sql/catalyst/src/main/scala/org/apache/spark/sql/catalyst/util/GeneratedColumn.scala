@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.ColumnDefinition
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Column, Identifier, TableCatalog,
+  TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField, StructType}
 
 /**
  * This object contains utility methods and values for Generated Columns
@@ -37,15 +39,29 @@ object GeneratedColumn {
    * Whether the given `field` is a generated column
    */
   def isGeneratedColumn(field: StructField): Boolean = {
-    field.metadata.contains(GENERATION_EXPRESSION_METADATA_KEY)
+    isGeneratedColumn(field.metadata)
+  }
+
+  /**
+   * Whether the given metadata indicates a generated column
+   */
+  def isGeneratedColumn(metadata: Metadata): Boolean = {
+    metadata.contains(GENERATION_EXPRESSION_METADATA_KEY)
   }
 
   /**
    * Returns the generation expression stored in the column metadata if it exists
    */
   def getGenerationExpression(field: StructField): Option[String] = {
-    if (isGeneratedColumn(field)) {
-      Some(field.metadata.getString(GENERATION_EXPRESSION_METADATA_KEY))
+    getGenerationExpression(field.metadata)
+  }
+
+  /**
+   * Returns the generation expression stored in the metadata if it exists
+   */
+  def getGenerationExpression(metadata: Metadata): Option[String] = {
+    if (isGeneratedColumn(metadata)) {
+      Some(metadata.getString(GENERATION_EXPRESSION_METADATA_KEY))
     } else {
       None
     }
@@ -72,6 +88,48 @@ object GeneratedColumn {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "generated columns")
       }
+    }
+  }
+
+  /**
+   * Whether the table catalog supports Spark auto-filling generated column values and enforcing
+   * generated column constraints during writes (the
+   * [[TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE]] capability). Without it, the
+   * connector is responsible for handling generated column values.
+   */
+  def supportsGeneratedColumnsOnWrite(catalog: Option[CatalogPlugin]): Boolean = {
+    catalog.exists {
+      case tc: TableCatalog =>
+        tc.capabilities().contains(TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE)
+      case _ => false
+    }
+  }
+
+  /**
+   * Whether the catalog supports generated columns on write (see
+   * [[supportsGeneratedColumnsOnWrite]]) and the given columns include at least one generated
+   * column.
+   */
+  def supportsGeneratedColumnsOnWrite(
+      catalog: Option[CatalogPlugin],
+      columns: Array[Column]): Boolean = {
+    supportsGeneratedColumnsOnWrite(catalog) &&
+      columns.exists(_.columnGenerationExpression() != null)
+  }
+
+  /**
+   * Returns an attribute with the generation expression metadata removed.
+   * Used when the catalog does not support auto-filling generated columns on write.
+   */
+  def removeGenerationExpressionMetadata(attr: Attribute): Attribute = {
+    if (isGeneratedColumn(attr.metadata)) {
+      val cleaned = new MetadataBuilder()
+        .withMetadata(attr.metadata)
+        .remove(GENERATION_EXPRESSION_METADATA_KEY)
+        .build()
+      attr.withMetadata(cleaned)
+    } else {
+      attr
     }
   }
 }

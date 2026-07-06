@@ -671,6 +671,12 @@ private[sql] object CatalogV2Util {
     Option(col.id()).foreach { id =>
       f = f.withId(id)
     }
+    Option(col.generationExpression()).foreach { genExpr =>
+      f = f.copy(metadata = new MetadataBuilder()
+        .withMetadata(f.metadata)
+        .putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, genExpr)
+        .build())
+    }
     f
   }
 
