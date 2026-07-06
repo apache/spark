@@ -692,6 +692,10 @@ trait DivModLike extends BinaryArithmetic {
 
   def evalOperation(left: Any, right: Any): Any
 
+  /** Java code computing the decimal result that is fed into the overflow check. */
+  protected def decimalOperation(eval1: String, eval2: String, scale: Int): String =
+    s"$eval1.$decimalMethod($eval2)"
+
   /**
    * Special case handling due to division/remainder by 0 => null or ArithmeticException.
    */
@@ -724,14 +728,14 @@ trait DivModLike extends BinaryArithmetic {
         if (failOnError) {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionExact(
-             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale,
+             |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale,
              |  $errorContextCode);
              |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
              |""".stripMargin
         } else {
           s"""
              |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
-             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale);
+             |  ${decimalOperation(eval1.value, eval2.value, scale)}, $precision, $scale);
              |if ($decimalValue != null) {
              |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
              |} else {
@@ -860,13 +864,18 @@ case class Divide(
     }
   }
 
+  // Dividing directly at the result scale returns the same result as dividing at
+  // `DecimalType.MAX_SCALE + 1` and then rounding to the result scale, but with a single
+  // division that stays in the compact representation when the quotient fits in a Long.
+  override protected def decimalOperation(eval1: String, eval2: String, scale: Int): String =
+    s"$eval1.div($eval2, $scale)"
+
   private lazy val div: (Any, Any) => Any = dataType match {
-    case d @ DecimalType.Fixed(precision, scale) =>
-      val fractional = PhysicalDecimalType(precision, scale).fractional
+    case DecimalType.Fixed(precision, scale) =>
       (l, r) => {
-      val value = fractional.asInstanceOf[Fractional[Any]].div(l, r)
-      checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
-    }
+        val value = l.asInstanceOf[Decimal].div(r.asInstanceOf[Decimal], scale)
+        checkDecimalOverflow(value, precision, scale)
+      }
     case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
   }
 

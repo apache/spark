@@ -242,8 +242,8 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.7.0</kubernetes-client.version>
-    <vertx.version>4.5.26</vertx.version>
+    <kubernetes-client.version>7.8.0</kubernetes-client.version>
+    <vertx.version>4.5.28</vertx.version>
     <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -1114,6 +1114,13 @@
         <groupId>io.grpc</groupId>
         <artifactId>grpc-bom</artifactId>
         <version>${io.grpc.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.fabric8</groupId>
+        <artifactId>kubernetes-client-bom</artifactId>
+        <version>${kubernetes-client.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -1992,6 +1999,11 @@
           <exclusion>
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <!-- javax.xml.stream is provided by the JDK (java.xml module) -->
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

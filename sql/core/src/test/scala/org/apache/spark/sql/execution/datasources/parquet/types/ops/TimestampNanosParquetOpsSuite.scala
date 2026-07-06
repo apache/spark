@@ -24,7 +24,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkArithmeticException, SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.parquet.ParentContainerUpdater
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -118,8 +118,9 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
 
   test("timestampNanosToEpochNanos combines micros and sub-micro nanos") {
     val value = TimestampNanosVal.fromParts(1000000L, 500.toShort)
-    assert(TimestampNanosParquetOps.timestampNanosToEpochNanos(value, isNtz = false) ===
-      1000000L * DateTimeConstants.NANOS_PER_MICROS + 500L)
+    val packed = DateTimeUtils.timestampNanosToEpochNanos(
+      value, isNtz = false, sink = "Parquet INT64")
+    assert(packed === 1000000L * DateTimeConstants.NANOS_PER_MICROS + 500L)
   }
 
   test("timestampNanosToEpochNanos throws DATETIME_OVERFLOW outside the INT64 epoch-nanos range") {
@@ -128,7 +129,7 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     val tooLarge = TimestampNanosVal.fromParts(100000000000000000L, 0.toShort)
     Seq(true, false).foreach { isNtz =>
       val ex = intercept[SparkArithmeticException] {
-        TimestampNanosParquetOps.timestampNanosToEpochNanos(tooLarge, isNtz)
+        DateTimeUtils.timestampNanosToEpochNanos(tooLarge, isNtz, sink = "Parquet INT64")
       }
       assert(ex.getCondition === "DATETIME_OVERFLOW")
     }

@@ -598,14 +598,54 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       catalog: String, schema: String, table: String): ResultSet =
     throw new SQLFeatureNotSupportedException
 
-  override def getPrimaryKeys(catalog: String, schema: String, table: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+  // Spark supports informational PRIMARY KEY constraints on DSv2 tables (SPARK-51207), but the
+  // Spark Connect JDBC client cannot retrieve them in a structured way yet, so return an empty
+  // result set instead of throwing. JDBC clients call this during schema introspection.
+  override def getPrimaryKeys(catalog: String, schema: String, table: String): ResultSet = {
+    conn.checkOpen()
 
-  override def getImportedKeys(catalog: String, schema: String, table: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+    val df = conn.spark.emptyDataFrame
+      .withColumn("TABLE_CAT", lit(""))
+      .withColumn("TABLE_SCHEM", lit(""))
+      .withColumn("TABLE_NAME", lit(""))
+      .withColumn("COLUMN_NAME", lit(""))
+      .withColumn("KEY_SEQ", lit(0.toShort))
+      .withColumn("PK_NAME", lit(""))
+    new SparkConnectResultSet(df.collectResult())
+  }
 
-  override def getExportedKeys(catalog: String, schema: String, table: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+  // getImportedKeys, getExportedKeys and getCrossReference share the JDBC foreign-key result
+  // schema. Spark supports informational FOREIGN KEY constraints on DSv2 tables (SPARK-51207),
+  // but the Spark Connect JDBC client cannot retrieve them in a structured way yet, so they all
+  // return an empty result set instead of throwing.
+  private def emptyForeignKeys: ResultSet = {
+    val df = conn.spark.emptyDataFrame
+      .withColumn("PKTABLE_CAT", lit(""))
+      .withColumn("PKTABLE_SCHEM", lit(""))
+      .withColumn("PKTABLE_NAME", lit(""))
+      .withColumn("PKCOLUMN_NAME", lit(""))
+      .withColumn("FKTABLE_CAT", lit(""))
+      .withColumn("FKTABLE_SCHEM", lit(""))
+      .withColumn("FKTABLE_NAME", lit(""))
+      .withColumn("FKCOLUMN_NAME", lit(""))
+      .withColumn("KEY_SEQ", lit(0.toShort))
+      .withColumn("UPDATE_RULE", lit(0.toShort))
+      .withColumn("DELETE_RULE", lit(0.toShort))
+      .withColumn("FK_NAME", lit(""))
+      .withColumn("PK_NAME", lit(""))
+      .withColumn("DEFERRABILITY", lit(0.toShort))
+    new SparkConnectResultSet(df.collectResult())
+  }
+
+  override def getImportedKeys(catalog: String, schema: String, table: String): ResultSet = {
+    conn.checkOpen()
+    emptyForeignKeys
+  }
+
+  override def getExportedKeys(catalog: String, schema: String, table: String): ResultSet = {
+    conn.checkOpen()
+    emptyForeignKeys
+  }
 
   override def getCrossReference(
       parentCatalog: String,
@@ -613,11 +653,39 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
       parentTable: String,
       foreignCatalog: String,
       foreignSchema: String,
-      foreignTable: String): ResultSet =
-    throw new SQLFeatureNotSupportedException
+      foreignTable: String): ResultSet = {
+    conn.checkOpen()
+    emptyForeignKeys
+  }
 
-  override def getTypeInfo: ResultSet =
-    throw new SQLFeatureNotSupportedException
+  // Static catalog of the Spark SQL atomic types, so JDBC clients can resolve type
+  // information instead of failing on a thrown exception.
+  override def getTypeInfo: ResultSet = {
+    conn.checkOpen()
+
+    val df = TYPE_INFO
+      .toDF(
+        "TYPE_NAME",
+        "DATA_TYPE",
+        "PRECISION",
+        "LITERAL_PREFIX",
+        "LITERAL_SUFFIX",
+        "CREATE_PARAMS",
+        "NULLABLE",
+        "CASE_SENSITIVE",
+        "SEARCHABLE",
+        "UNSIGNED_ATTRIBUTE",
+        "FIXED_PREC_SCALE",
+        "AUTO_INCREMENT",
+        "LOCAL_TYPE_NAME",
+        "MINIMUM_SCALE",
+        "MAXIMUM_SCALE",
+        "SQL_DATA_TYPE",
+        "SQL_DATETIME_SUB",
+        "NUM_PREC_RADIX")
+      .orderBy("DATA_TYPE")
+    new SparkConnectResultSet(df.collectResult())
+  }
 
   override def getIndexInfo(
       catalog: String,
@@ -816,4 +884,83 @@ object SparkConnectDatabaseMetaData {
   )
 
   private[jdbc] val TABLE_TYPES = Seq("TABLE", "VIEW")
+
+  // One row of the java.sql.DatabaseMetaData.getTypeInfo result.
+  private[jdbc] type TypeInfoRow =
+    (
+        String,  // TYPE_NAME
+        Int,     // DATA_TYPE
+        Int,     // PRECISION
+        String,  // LITERAL_PREFIX
+        String,  // LITERAL_SUFFIX
+        String,  // CREATE_PARAMS
+        Short,   // NULLABLE
+        Boolean, // CASE_SENSITIVE
+        Short,   // SEARCHABLE
+        Boolean, // UNSIGNED_ATTRIBUTE
+        Boolean, // FIXED_PREC_SCALE
+        Boolean, // AUTO_INCREMENT
+        String,  // LOCAL_TYPE_NAME
+        Short,   // MINIMUM_SCALE
+        Short,   // MAXIMUM_SCALE
+        Int,     // SQL_DATA_TYPE
+        Int,     // SQL_DATETIME_SUB
+        Integer  // NUM_PREC_RADIX (null for non-numeric types)
+    )
+
+  // Fills the columns that are constant across all Spark atomic types: every type is
+  // nullable and searchable, and none are unsigned, fixed-prec-scale, or auto-increment.
+  // `literalPrefix` is also used as the literal suffix unless `literalSuffix` is given;
+  // BINARY is the exception, whose literals use the hex syntax X'...'.
+  private[jdbc] def typeRow(
+      typeName: String,
+      dataType: Int,
+      precision: Int,
+      literalPrefix: String,
+      createParams: String,
+      caseSensitive: Boolean,
+      minScale: Short,
+      maxScale: Short,
+      numPrecRadix: Integer,
+      literalSuffix: String = null): TypeInfoRow =
+    (
+      typeName,
+      dataType,
+      precision,
+      literalPrefix,
+      if (literalSuffix != null) literalSuffix else literalPrefix,
+      createParams,
+      typeNullable.toShort,
+      caseSensitive,
+      typeSearchable.toShort,
+      false,
+      false,
+      false,
+      null,
+      minScale,
+      maxScale,
+      0,
+      0,
+      numPrecRadix)
+
+  // Static JDBC type metadata for the Spark SQL atomic types, mirroring the
+  // JdbcTypeUtils type-code/precision mapping. Only STRING is case-sensitive.
+  // TIMESTAMP_NTZ is omitted because it maps to the same JDBC type code
+  // (Types.TIMESTAMP) as TIMESTAMP, so the TIMESTAMP row already covers it.
+  // TIME is omitted for now because its maximum PRECISION/scale representation
+  // in getTypeInfo is not yet settled.
+  private[jdbc] val TYPE_INFO: Seq[TypeInfoRow] = Seq(
+    typeRow("BOOLEAN", Types.BOOLEAN, 1, null, null, false, 0, 0, null),
+    typeRow("TINYINT", Types.TINYINT, 3, null, null, false, 0, 0, 10),
+    typeRow("SMALLINT", Types.SMALLINT, 5, null, null, false, 0, 0, 10),
+    typeRow("INT", Types.INTEGER, 10, null, null, false, 0, 0, 10),
+    typeRow("BIGINT", Types.BIGINT, 19, null, null, false, 0, 0, 10),
+    typeRow("FLOAT", Types.FLOAT, 7, null, null, false, 0, 0, 10),
+    typeRow("DOUBLE", Types.DOUBLE, 15, null, null, false, 0, 0, 10),
+    typeRow("DECIMAL", Types.DECIMAL, 38, null, "precision,scale", false, 0, 38, 10),
+    typeRow("STRING", Types.VARCHAR, Int.MaxValue, "'", null, true, 0, 0, null),
+    typeRow("BINARY", Types.VARBINARY, Int.MaxValue, "X'", null, false, 0, 0, null,
+      literalSuffix = "'"),
+    typeRow("DATE", Types.DATE, 10, "'", null, false, 0, 0, null),
+    typeRow("TIMESTAMP", Types.TIMESTAMP, 29, "'", null, false, 0, 6, null))
 }

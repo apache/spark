@@ -41,6 +41,7 @@ object TreePattern extends Enumeration  {
   val BINARY_COMPARISON: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val CAST_TO_TIMESTAMP: Value = Value
   val COALESCE: Value = Value
   val COMMON_EXPR_REF: Value = Value
   val CONCAT: Value = Value

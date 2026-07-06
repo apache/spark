@@ -668,11 +668,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("variant_get path") {
     def checkInvalidPath(path: String): Unit = {
-      checkErrorInExpression[SparkRuntimeException](
-        variantGet("0", path, IntegerType),
-        "INVALID_VARIANT_GET_PATH",
-        Map("path" -> path, "functionName" -> "`variant_get`")
-      )
+      for ((expr, fn) <- Seq(
+          variantGet("0", path, IntegerType) -> "`variant_get`",
+          tryVariantGet("0", path, IntegerType) -> "`try_variant_get`")) {
+        checkErrorInExpression[SparkRuntimeException](
+          expr,
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> path, "functionName" -> fn)
+        )
+      }
     }
 
     testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3[0]", IntegerType, 4)
@@ -680,11 +684,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off nonascii
     testVariantGet("""{"你好": {"世界": "hello"}}""", """$['你好']["世界"]""", StringType, "hello")
     // scalastyle:on nonascii
+    testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
+    checkInvalidPath("$[2147483648]")
+    checkInvalidPath("$[4294967296]")
     checkInvalidPath("""$['"]""")
 
     checkInvalidPath("$[\"\"\"]")
@@ -1305,6 +1312,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal(".a")))),
       "INVALID_VARIANT_PATH",
       Map("path" -> ".a", "functionName" -> "`variant_delete`"))
+
+    for (path <- Seq("$[2147483648]", "$[4294967296]")) {
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(
+          VariantDelete(Seq(Literal(parseJson("[1, 2, 3]")), Literal(path)))),
+        "INVALID_VARIANT_PATH",
+        Map("path" -> path, "functionName" -> "`variant_delete`"))
+    }
 
     val noPaths = VariantDelete(Seq(Literal(parseJson("""{"a": 1}"""))))
     intercept[org.apache.spark.sql.AnalysisException] {

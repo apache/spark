@@ -58,17 +58,19 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("BIN BY is gated off by default") {
-    withTempView("metrics") {
-      createMetricsView()
-      // Gated off, the operator is rejected at analysis with the same UNSUPPORTED_FEATURE.BIN_BY
-      // condition the execution stub raises when enabled.
-      checkError(
-        exception = intercept[SparkThrowable] {
-          spark.sql(binByQuery).queryExecution.assertAnalyzed()
-        },
-        condition = "UNSUPPORTED_FEATURE.BIN_BY",
-        parameters = Map.empty[String, String])
+  test("BIN BY is rejected when the operator is disabled") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "false") {
+      withTempView("metrics") {
+        createMetricsView()
+        // Disabled, the operator is rejected at analysis with the same UNSUPPORTED_FEATURE.BIN_BY
+        // condition the execution stub raises when enabled.
+        checkError(
+          exception = intercept[SparkThrowable] {
+            spark.sql(binByQuery).queryExecution.assertAnalyzed()
+          },
+          condition = "UNSUPPORTED_FEATURE.BIN_BY",
+          parameters = Map.empty[String, String])
+      }
     }
   }
 

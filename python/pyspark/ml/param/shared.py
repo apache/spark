@@ -789,6 +789,29 @@ class HasMaxBlockSizeInMB(Params):
         return self.getOrDefault(self.maxBlockSizeInMB)
 
 
+class HasIntermediateStorageLevel(Params):
+    """
+    Mixin for param intermediateStorageLevel: StorageLevel for intermediate datasets. Cannot be 'NONE'.
+    """
+
+    intermediateStorageLevel: "Param[str]" = Param(
+        Params._dummy(),
+        "intermediateStorageLevel",
+        "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
+        typeConverter=TypeConverters.toString,
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._setDefault(intermediateStorageLevel="MEMORY_AND_DISK")
+
+    def getIntermediateStorageLevel(self) -> str:
+        """
+        Gets the value of intermediateStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.intermediateStorageLevel)
+
+
 class HasNumTrainWorkers(Params):
     """
     Mixin for param numTrainWorkers: number of training workers

@@ -407,7 +407,7 @@ object ParquetUtils extends Logging {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.hasNonNullValue) {
       throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3172",
+        errorClass = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_MIN_MAX",
         messageParameters = Map(
           "filePath" -> filePath,
           "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))
@@ -423,7 +423,7 @@ object ParquetUtils extends Logging {
     val statistics = columnChunkMetaData.get(i).getStatistics
     if (!statistics.isNumNullsSet) {
       throw new SparkUnsupportedOperationException(
-        errorClass = "_LEGACY_ERROR_TEMP_3171",
+        errorClass = "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED.NO_NUM_NULLS",
         messageParameters = Map(
           "filePath" -> filePath,
           "config" -> PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key))

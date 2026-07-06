@@ -498,6 +498,12 @@
     ],
     "sqlState" : "22546"
   },
+  "CANNOT_INSTANTIATE_HIVE_FUNCTION" : {
+    "message" : [
+      "Cannot instantiate the Hive UDF/UDAF/UDTF wrapper class <clazz>. Check that the function arguments and their types are supported."
+    ],
+    "sqlState" : "38000"
+  },
   "CANNOT_INVOKE_IN_TRANSFORMATIONS" : {
     "message" : [
       "Dataset transformations and actions can only be invoked by the driver, not inside of other Dataset transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid because the values transformation and count action cannot be performed inside of the dataset1.map transformation. For more information, see SPARK-28702."
@@ -2122,11 +2128,6 @@
         "message" : [
           ""
         ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "If necessary set <ansiConfig> to \"false\" to bypass this error."
-        ]
       }
     },
     "sqlState" : "22023"
@@ -2252,6 +2253,12 @@
   "DUPLICATE_FLOW_SQL_CONF" : {
     "message" : [
       "Found duplicate sql conf for dataset '<datasetName>': '<key>' is defined by both '<flowName1>' and '<flowName2>'"
+    ],
+    "sqlState" : "42710"
+  },
+  "DUPLICATE_GRAPH_ELEMENT" : {
+    "message" : [
+      "Found duplicate <graphElementType> '<graphElementName>'."
     ],
     "sqlState" : "42710"
   },
@@ -2403,6 +2410,12 @@
     ],
     "sqlState" : "42809"
   },
+  "EXPECT_PERSISTENT_FUNCTION_NOT_TEMP" : {
+    "message" : [
+      "<functionName> is a temporary function. '<operation>' expects a persistent function.<alternative>"
+    ],
+    "sqlState" : "42809"
+  },
   "EXPECT_TABLE_NOT_VIEW" : {
     "message" : [
       "'<operation>' expects a table but <viewName> is a view."
@@ -2438,6 +2451,19 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' DataFrame API reader option is mutually exclusive with the '<option>' DataFrame API option.",
+      "Please remove one of them and then retry the DataFrame operation again."
+    ],
+    "sqlState" : "4274K"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' option can only be used when reading JSON files. It is not supported in <usage>."
+    ],
+    "sqlState" : "0A000"
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
@@ -3805,6 +3831,12 @@
     ],
     "sqlState" : "F0000"
   },
+  "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
+    "message" : [
+      "User specified schema <schema> is invalid when the `explodeEmbeddedArray` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
+    ],
+    "sqlState" : "42613"
+  },
   "INVALID_EXPRESSION_ENCODER" : {
     "message" : [
       "Found an invalid expression encoder. Expects an instance of ExpressionEncoder but got <encoderType>. For more information consult '<docroot>/api/java/index.html?org/apache/spark/sql/Encoder.html'."
@@ -4546,6 +4578,11 @@
           "expects a non-NULL value."
         ]
       },
+      "OCCURRENCE" : {
+        "message" : [
+          "expects a positive integer, but got <actual>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -4606,6 +4643,12 @@
         ]
       }
     },
+    "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_SPEC" : {
+    "message" : [
+      "Partition spec is invalid. <details>."
+    ],
     "sqlState" : "42601"
   },
   "INVALID_PARTITION_VALUE" : {
@@ -5280,6 +5323,12 @@
     },
     "sqlState" : "42000"
   },
+  "JDBC_OBJECT_NOT_SELECTABLE" : {
+    "message" : [
+      "The JDBC object <objectName> cannot be read as a table or view."
+    ],
+    "sqlState" : "42000"
+  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."
@@ -5542,6 +5591,12 @@
     },
     "sqlState" : "0A000"
   },
+  "MISSING_CLAUSES_FOR_OPERATION" : {
+    "message" : [
+      "Missing required clause(s) <clauses> for operation <operation>."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
@@ -5592,7 +5647,7 @@
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
-      "Cannot specify time travel in both the time travel clause and options."
+      "Cannot specify time travel in more than one of: the '@' suffix in the table name, the time travel clause, and the read options."
     ],
     "sqlState" : "42K0E"
   },
@@ -5694,6 +5749,12 @@
       "It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query."
     ],
     "sqlState" : "42607"
+  },
+  "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Nested databases are not supported by v1 session catalog: <namespace>."
+    ],
+    "sqlState" : "42K05"
   },
   "NESTED_EXECUTE_IMMEDIATE" : {
     "message" : [
@@ -6044,6 +6105,24 @@
     ],
     "sqlState" : "42805"
   },
+  "PARQUET_AGGREGATE_PUSH_DOWN_UNSUPPORTED" : {
+    "message" : [
+      "Aggregate push-down is not supported for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
+    ],
+    "subClass" : {
+      "NO_MIN_MAX" : {
+        "message" : [
+          "No min/max value found in the column statistics."
+        ]
+      },
+      "NO_NUM_NULLS" : {
+        "message" : [
+          "The number of nulls is not set in the column statistics."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "PARQUET_CONVERSION_FAILURE" : {
     "message" : [
       "Unable to create a Parquet converter for the data type <dataType> whose Parquet type is <parquetType>."
@@ -6183,6 +6262,12 @@
       "There is a cycle between <flowName> and <inputName>."
     ],
     "sqlState" : "0A000"
+  },
+  "PIPELINE_RUN_FAILED" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "42K0S"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
@@ -6372,6 +6457,18 @@
       "Failed to rename as <sourcePath> was not found."
     ],
     "sqlState" : "42K03"
+  },
+  "RENAME_TABLE_SOURCE_DESTINATION_DATABASE_MISMATCH" : {
+    "message" : [
+      "RENAME TABLE source and destination databases do not match: <db> != <newDb>."
+    ],
+    "sqlState" : "3F000"
+  },
+  "RENAME_TEMP_VIEW_WITH_DATABASE" : {
+    "message" : [
+      "RENAME TEMPORARY VIEW from <oldName> to <newName>: cannot specify database name <db> in the destination table."
+    ],
+    "sqlState" : "42809"
   },
   "REPEATED_CLAUSE" : {
     "message" : [
@@ -8482,6 +8579,11 @@
           "Time travel on the relation: <relationId>."
         ]
       },
+      "TIME_TRAVEL_AT_SYNTAX" : {
+        "message" : [
+          "Time travel using the '@' suffix in table names. Set <config> to true to enable it."
+        ]
+      },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [
           "UDF class with <num> type arguments."
@@ -8549,9 +8651,38 @@
     ],
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_HIVE_FUNCTION_TYPE" : {
+    "message" : [
+      "Unsupported Hive UDF/UDAF/UDTF Java type:"
+    ],
+    "subClass" : {
+      "RAW_LIST" : {
+        "message" : [
+          "raw java.util.List. Spark cannot infer the element type."
+        ]
+      },
+      "RAW_MAP" : {
+        "message" : [
+          "raw java.util.Map. Spark cannot infer the key and value types."
+        ]
+      },
+      "WILDCARD" : {
+        "message" : [
+          "wildcard type parameter. Spark cannot infer a concrete data type for wildcard type parameters, such as List<?> or Map<?, ?>."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
     "message" : [
       "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_HIVE_TYPE" : {
+    "message" : [
+      "Cannot read the Hive type <fieldType> of the column <fieldName> because Spark SQL does not support this data type."
     ],
     "sqlState" : "0A000"
   },
@@ -8622,6 +8753,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK" : {
+    "message" : [
+      "The operation <operation> is not supported for ContinuousMemorySink."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
@@ -9307,11 +9444,6 @@
       "Cannot write into v1 table: <identifier>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1017" : {
-    "message" : [
-      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
@@ -9428,21 +9560,6 @@
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1073" : {
-    "message" : [
-      "RENAME TABLE source and destination databases do not match: '<db>' != '<newDb>'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1074" : {
-    "message" : [
-      "RENAME TEMPORARY VIEW from '<oldName>' to '<newName>': cannot specify database name '<db>' in the destination table."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1076" : {
-    "message" : [
-      "Partition spec is invalid. <details>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1079" : {
     "message" : [
       "Resource Type '<resourceType>' is not supported."
@@ -9533,11 +9650,6 @@
   "_LEGACY_ERROR_TEMP_1123" : {
     "message" : [
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1126" : {
-    "message" : [
-      "Nested databases are not supported by v1 session catalog: <catalog>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1127" : {
@@ -11296,11 +11408,6 @@
       "Unable to infer the schema. The schema specification is required to create the table <tableName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3084" : {
-    "message" : [
-      "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -11319,21 +11426,6 @@
   "_LEGACY_ERROR_TEMP_3089" : {
     "message" : [
       "Corrupted <typeName> in catalog: <numCols> parts expected, but part <index> is missing."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3090" : {
-    "message" : [
-      "Raw list type in java is unsupported because Spark cannot infer the element type."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3091" : {
-    "message" : [
-      "Raw map type in java is unsupported because Spark cannot infer key and value types."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3092" : {
-    "message" : [
-      "Collection types with wildcards (e.g. List<?> or Map<?, ?>) are unsupported because Spark cannot infer the data type for these type parameters."
     ]
   },
   "_LEGACY_ERROR_TEMP_3093" : {
@@ -11511,16 +11603,6 @@
       "SortAggregate code-gen does not support grouping keys"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3171" : {
-    "message" : [
-      "Number of nulls not set for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3172" : {
-    "message" : [
-      "No min/max found for Parquet file <filePath>. Set SQLConf <config> to false and execute again."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3173" : {
     "message" : [
       "Cannot specify 'USING index_type' in 'CREATE INDEX'"
@@ -11609,11 +11691,6 @@
   "_LEGACY_ERROR_TEMP_3191" : {
     "message" : [
       "Dictionary encoding does not support String"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3192" : {
-    "message" : [
-      "Datatype not supported <dt>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3198" : {

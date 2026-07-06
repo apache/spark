@@ -55,7 +55,7 @@ import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.PartitionOffsetWithIndex
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.{Clock, ErrorNotifier, Utils}
 
 class MicroBatchExecution(
     sparkSession: SparkSession,

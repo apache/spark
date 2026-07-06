@@ -700,7 +700,10 @@ object SQLConf {
       .doc("When statistics are not available or configured not to be used, this config will be " +
         "used as the fallback filter ratio for computing the data size of the partitioned table " +
         "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
-        "subquery as the pruning filter if broadcast reuse is not applicable.")
+        "subquery as the pruning filter if broadcast reuse is not applicable. This fallback " +
+        "ratio only applies when the filtering side has a selective predicate; a materialized " +
+        "filtering side without one obtains dynamic partition pruning through broadcast reuse " +
+        "only.")
       .version("3.0.0")
       .doubleConf
       .createWithDefault(0.5)
@@ -2727,11 +2730,8 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, a supported data source can read tar archives (.tar, .tar.gz, .tgz): " +
-      "each archive is read as a single split and its entries are streamed through that data " +
-      "source's parser (never unpacked to disk), as if the entries were separate files, both " +
-      "during scan and schema inference. The CSV, JSON, and text data sources support " +
-      "reading archives.")
+    .doc("When true, supported file-based data sources can read archive files, reading each " +
+      "archive's entries as if they were separate files, during both scan and schema inference.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
@@ -5440,6 +5440,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GENERATED_COLUMN_ALLOW_NULLABLE_INGEST =
+    buildConf("spark.sql.generatedColumn.allowNullableIngest.enabled")
+      .doc("When true, writing to a table with generated columns allows omitting nullable " +
+        "non-generated columns from the input. Missing nullable columns are filled with null. " +
+        "When false, all non-generated columns must be provided.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()
@@ -5498,6 +5508,30 @@ object SQLConf {
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")
+
+  val STRUCT_PREDICATE_DECOMPOSE_ENABLED =
+    buildConf("spark.sql.sources.structPredicateDecompose.enabled")
+      .doc("When true, struct equality predicates (= and <=>) are decomposed into " +
+        "field-level equality predicates for filter pushdown to data sources. The " +
+        "decomposed predicates are pushed as additional hints for data skipping (e.g. " +
+        "Parquet row-group filtering). The original struct predicate is always retained " +
+        "as a post-scan filter for correctness.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS =
+    buildConf("spark.sql.sources.structPredicateDecompose.maxFields")
+      .internal()
+      .doc("The maximum number of leaf fields a struct type may have for its equality " +
+        "predicates to be decomposed into field-level predicates for pushdown. Structs " +
+        "exceeding this limit are not decomposed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The threshold must be positive.")
+      .createWithDefault(100)
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -6286,6 +6320,19 @@ object SQLConf {
         "can be converted to TimestampNTZType when JDBC read option preferTimestampNTZ is " +
         "true; otherwise, converted to TimestampType regardless of preferTimestampNTZ.")
       .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_JDBC_TIME_MAPPING_ENABLED =
+    buildConf("spark.sql.legacy.jdbc.timeMapping.enabled")
+      .internal()
+      .doc("When true, JDBC TIME columns are read as TimestampType (the legacy behavior), even " +
+        "when spark.sql.timeType.enabled is true. This is an escape hatch for workloads that " +
+        "rely on the old TIME-to-timestamp mapping. When false, JDBC TIME columns are read as " +
+        "TimeType if spark.sql.timeType.enabled is true. Has no effect when " +
+        "spark.sql.timeType.enabled is false.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -7099,6 +7146,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val TIME_TRAVEL_AT_SYNTAX_ENABLED =
+    buildConf("spark.sql.timeTravel.atSyntax.enabled")
+      .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
+        "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
+        "table names fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val OPERATOR_PIPE_SYNTAX_ENABLED =
     buildConf("spark.sql.operatorPipeSyntaxEnabled")
       .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
@@ -7521,6 +7578,21 @@ object SQLConf {
         "option."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING =
+    buildConf("spark.sql.xml.schemaInference.incrementalTypeCasting.enabled")
+      .internal()
+      .doc(
+        "When true (default), XML schema inference refines the type inferred for each field " +
+        "incrementally: each value is parsed starting from the type inferred for that field so " +
+        "far, rather than probing every candidate type from scratch. This avoids redundant parse " +
+        "attempts once a field has widened to a broader type. This matches the incremental " +
+        "inference already used by the CSV datasource. Set to false to restore the legacy " +
+        "behavior of inferring each value independently and merging afterwards.")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
@@ -8156,6 +8228,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
+  def legacyJdbcTimeMappingEnabled: Boolean =
+    getConf(LEGACY_JDBC_TIME_MAPPING_ENABLED)
+
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value =
     getConf(SQLConf.LEGACY_TIME_PARSER_POLICY)
 
@@ -8599,6 +8674,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
+  def generatedColumnAllowNullableIngest: Boolean =
+    getConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST)
+
   def unionIsResolvedWhenDuplicatesPerChildResolved: Boolean =
     getConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED)
 
@@ -8729,6 +8807,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
+
+  def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
+
+  def structPredicateDecomposeMaxFields: Int = getConf(STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
@@ -8904,6 +8986,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def xmlVariantRespectInferSchema: Boolean =
     getConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA)
+
+  def xmlSchemaInferenceIncrementalTypeCasting: Boolean =
+    getConf(SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING)
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)

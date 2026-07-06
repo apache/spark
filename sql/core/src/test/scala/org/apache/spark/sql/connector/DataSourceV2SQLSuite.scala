@@ -1434,8 +1434,8 @@ class DataSourceV2SQLSuiteV1Filter
   test("ShowViews: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     checkError(
       exception = analysisException("SHOW VIEWS FROM a.b"),
-      condition = "_LEGACY_ERROR_TEMP_1126",
-      parameters = Map("catalog" -> "a.b"))
+      condition = "NESTED_DATABASE_UNSUPPORTED_BY_V1_SESSION_CATALOG",
+      parameters = Map("namespace" -> "`a`.`b`"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
@@ -3939,6 +3939,92 @@ class DataSourceV2SQLSuiteV1Filter
           start = 40,
           stop = 70))
     }
+  }
+
+  test("time travel with at syntax") {
+    sql("use testcat")
+    val t1 = "testcat.tSnapshot123456789"
+    val t2 = "testcat.t2345678910"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id int) USING foo")
+      sql(s"CREATE TABLE $t2 (id int) USING foo")
+      sql(s"INSERT INTO $t1 VALUES (1), (2)")
+      sql(s"INSERT INTO $t2 VALUES (3), (4)")
+
+      checkAnswer(sql("SELECT * FROM t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@V2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(sql("SELECT * FROM t@v'Snapshot123456789'"), Seq(Row(1), Row(2)))
+      checkAnswer(spark.read.table("t@v2345678910"), Seq(Row(3), Row(4)))
+      checkAnswer(spark.table("t@v2345678910"), Seq(Row(3), Row(4)))
+
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 VERSION AS OF 1")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(fragment = "VERSION AS OF 1", start = 28, stop = 42))
+      checkError(
+        exception = intercept[ParseException] {
+          sql("SELECT * FROM t@v2345678910 TIMESTAMP AS OF '2019-01-29'")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty,
+        context = ExpectedContext(
+          fragment = "TIMESTAMP AS OF '2019-01-29'", start = 28, stop = 55))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("versionAsOf", "2345678910").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.option("timestampAsOf", "2019-01-29").table("t@v2345678910").collect()
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT * FROM t@v2345678910 WITH ('timestampAsOf' = '2019-01-29')")
+        },
+        condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+        parameters = Map.empty)
+
+      withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[ParseException] {
+            sql("SELECT * FROM t@v2345678910")
+          },
+          condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+          parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+          context = ExpectedContext(fragment = "t@v2345678910", start = 14, stop = 26))
+        intercept[ParseException](spark.read.table("t@v2345678910"))
+      }
+    }
+
+    intercept[ParseException](sql("SELECT * FROM t@foo"))
+    intercept[ParseException](spark.read.table("t@foo"))
+    withTable("testcat.`weird@v1`") {
+      sql("CREATE TABLE testcat.`weird@v1` (id int) USING foo")
+      sql("INSERT INTO testcat.`weird@v1` VALUES (42)")
+      checkAnswer(sql("SELECT * FROM `weird@v1`"), Row(42))
+      checkAnswer(spark.read.table("`weird@v1`"), Row(42))
+    }
+
+    withTempView("v") {
+      spark.range(1).createOrReplaceTempView("v")
+      checkError(
+        exception = analysisException("SELECT * FROM v@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+        sqlState = None,
+        parameters = Map("relationId" -> "`v`"))
+    }
+    checkError(
+      exception = analysisException("WITH x AS (SELECT 1) SELECT * FROM x@v1"),
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      sqlState = None,
+      parameters = Map("relationId" -> "`x`"))
   }
 
   test("SPARK-37827: put build-in properties into V1Table.properties to adapt v2 command") {

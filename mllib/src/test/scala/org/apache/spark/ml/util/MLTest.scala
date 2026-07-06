@@ -196,7 +196,11 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     model.transform(dataset).select(model.getFeaturesCol, model.getRawPredictionCol)
       .collect().foreach {
       case Row(features: Vector, rawPrediction: Vector) =>
-        assert(rawPrediction === model.predictRaw(features))
+        // Compare with a tight tolerance rather than exact equality: the DataFrame
+        // `transform` path and the scalar `predictRaw` path can round differently in the
+        // last ULP on some platforms (e.g. arm64 macOS, where native BLAS diverges from
+        // JVM scalar math), which broke the MacOS-26 lane while Linux stayed bit-identical.
+        assertVectorsAlmostEqual(rawPrediction, model.predictRaw(features))
     }
   }
 
@@ -206,7 +210,22 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     model.transform(dataset).select(model.getFeaturesCol, model.getProbabilityCol)
       .collect().foreach {
       case Row(features: Vector, probPrediction: Vector) =>
-        assert(probPrediction === model.predictProbability(features))
+        assertVectorsAlmostEqual(probPrediction, model.predictProbability(features))
+    }
+  }
+
+  /**
+   * Asserts two prediction vectors are equal up to a tight absolute tolerance. Used instead of
+   * exact `===` so that last-ULP rounding differences between the DataFrame `transform` path and
+   * the scalar `predict*` path (observed on arm64 macOS) do not fail the tests, while any real
+   * discrepancy is still caught.
+   */
+  private def assertVectorsAlmostEqual(actual: Vector, expected: Vector): Unit = {
+    assert(actual.size === expected.size,
+      s"vector sizes differ: ${actual.size} vs ${expected.size}")
+    actual.toArray.zip(expected.toArray).zipWithIndex.foreach { case ((a, e), i) =>
+      assert(math.abs(a - e) <= 1e-9,
+        s"prediction vectors differ at index $i: $a vs $e (actual=$actual, expected=$expected)")
     }
   }
 

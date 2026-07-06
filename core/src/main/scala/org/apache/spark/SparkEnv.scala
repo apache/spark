@@ -347,10 +347,17 @@ class SparkEnv (
     }
   }
 
-  private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
+  private[spark] def initializeMemoryManager(
+      numUsableCores: Int,
+      offHeapAllowed: Boolean = true): Unit = {
     Preconditions.checkState(null == memoryManager,
       "Memory manager already initialized to %s", _memoryManager)
-    _memoryManager = UnifiedMemoryManager(conf, numUsableCores)
+    val memoryManagerConf = if (offHeapAllowed) {
+      conf
+    } else {
+      conf.clone.set(MEMORY_OFFHEAP_ENABLED, false).set(MEMORY_OFFHEAP_SIZE, 0L)
+    }
+    _memoryManager = UnifiedMemoryManager(memoryManagerConf, numUsableCores)
   }
 }
 

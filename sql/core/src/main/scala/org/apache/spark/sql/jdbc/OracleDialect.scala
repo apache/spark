@@ -54,6 +54,13 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       e.getMessage.contains("ORA-39165")
   }
 
+  override def isNotSelectableObjectException(e: SQLException): Boolean = {
+    // ORA-04044: object is not a table (e.g. a synonym to a procedure/function/package).
+    e.getMessage.contains("ORA-04044") ||
+      // ORA-04063: object is invalid (e.g. a view over a dropped base table).
+      e.getMessage.contains("ORA-04063")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
 
     override def visitExtract(extract: Extract): String = {

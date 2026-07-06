@@ -29,7 +29,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
 import org.apache.hadoop.io.{BooleanWritable, ByteWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, ShortWritable, WritableComparable}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.orc.{BooleanColumnStatistics, ColumnStatistics, DateColumnStatistics, DoubleColumnStatistics, IntegerColumnStatistics, OrcConf, OrcFile, Reader, TypeDescription, Writer}
+import org.apache.orc.mapred.{OrcInputFormat => OrcMapredInputFormat, OrcStruct}
+import org.apache.orc.mapreduce.OrcMapreduceRecordReader
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -503,6 +506,10 @@ object OrcUtils extends Logging {
             case ShortType => new ShortWritable(value.toShort)
             case IntegerType => new IntWritable(value.toInt)
             case LongType => new LongWritable(value)
+            // ORC stores TIME as LONG (nanos-of-day), so its stats are
+            // IntegerColumnStatistics. OrcDeserializer converts the LongWritable
+            // back to the Spark TimeType.
+            case _: TimeType => new LongWritable(value)
             case _ => throw new IllegalArgumentException(
               s"getMinMaxFromColumnStatistics should not take type $dataType " +
               "for IntegerColumnStatistics")
@@ -573,5 +580,23 @@ object OrcUtils extends Logging {
     } else {
       resultRow
     }
+  }
+
+  def createOrcMapreduceRecordReader(
+      filePath: Path,
+      conf: Configuration,
+      fileSplit: FileSplit,
+      readerOptions: OrcFile.ReaderOptions): OrcMapreduceRecordReader[OrcStruct] = {
+    val fs = filePath.getFileSystem(conf)
+    val orcReader = OrcFile.createReader(
+      filePath,
+      OrcFile.readerOptions(conf)
+        .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
+        .filesystem(fs)
+        .orcTail(readerOptions.getOrcTail))
+    val options = OrcMapredInputFormat
+      .buildOptions(conf, orcReader, fileSplit.getStart, fileSplit.getLength)
+      .useSelected(true)
+    new OrcMapreduceRecordReader[OrcStruct](orcReader, options)
   }
 }

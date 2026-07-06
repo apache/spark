@@ -17,31 +17,21 @@
 # under the License.
 #
 
-name: "Build / Python-only (branch-3.5)"
+# This is a placeholder. Python 3.9 is not built on master, which targets newer
+# Python versions. The file exists here only so that the README build status
+# badge, which resolves a workflow by its path on the default branch, renders
+# for the branches that still run it (e.g. branch-3.5). The actual build is
+# defined in the same file on those branches.
+
+name: "Build / Python-only (Python 3.9)"
 
 on:
-  schedule:
-    - cron: '0 11 */4 * *'
   workflow_dispatch:
 
 jobs:
-  run-build:
-    permissions:
-      packages: write
-    name: Run
-    uses: ./.github/workflows/build_and_test.yml
+  noop:
     if: github.repository == 'apache/spark'
-    with:
-      java: 8
-      branch: branch-3.5
-      hadoop: hadoop3
-      envs: >-
-        {
-          "PYSPARK_IMAGE_TO_TEST": "",
-          "PYTHON_TO_TEST": ""
-        }
-      jobs: >-
-        {
-          "pyspark": "true",
-          "pyspark-pandas": "true"
-        }
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "Python 3.9 is not built on this branch. See branches that still support it (e.g. branch-3.5)."

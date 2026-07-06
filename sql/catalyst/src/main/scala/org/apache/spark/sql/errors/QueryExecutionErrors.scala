@@ -303,18 +303,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = Some(e))
   }
 
-  def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
-    new SparkDateTimeException(
-      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
-      messageParameters = Map(
-        "rangeMessage" -> e.getMessage,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
-      context = Array.empty,
-      summary = "",
-      cause = Some(e))
-  }
-
-  def ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e: Throwable): SparkDateTimeException = {
+  def ansiDateTimeArgumentOutOfRange(e: Throwable): SparkDateTimeException = {
     new SparkDateTimeException(
       errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
       messageParameters = Map("rangeMessage" -> e.getMessage),
@@ -1707,6 +1696,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
+  def unsupportedHiveTypeError(fieldType: String, fieldName: String): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_TYPE",
+      messageParameters = Map(
+        "fieldType" -> toSQLType(fieldType),
+        "fieldName" -> toSQLId(fieldName)))
+  }
   def getTablesByTypeUnsupportedByHiveVersionError(): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION")
@@ -2654,6 +2650,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def timestampConstructorOverflowError(
+      value: Any,
+      valueType: DataType,
+      unit: String): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"create a TIMESTAMP from ${toSQLValue(value, valueType)} $unit since the epoch"),
+      context = Array.empty,
+      summary = "")
+  }
+
   def timeAddIntervalOverflowError(
       time: Long,
       timePrecision: Int,
@@ -3441,5 +3450,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkIllegalArgumentException(
       errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
       messageParameters = Map("length" -> length.toString))
+  }
+
+  def invalidOccurrenceError(functionName: String, occurrence: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> occurrence.toString
+      )
+    )
   }
 }

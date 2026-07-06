@@ -15,16 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming.runtime
+package org.apache.spark.util
 
 import java.util.concurrent.atomic.AtomicReference
 
 import org.apache.spark.internal.Logging
 
 /**
- * Class to notify of any errors that might have occurred out of band
+ * Captures an error raised out of band (e.g. on a Netty event-loop or other background thread) so
+ * the owning task / driver thread can surface it at a safe point.
+ *
+ * A background thread records the first error via [[markError]] rather than failing the task
+ * directly; the owning thread polls [[throwErrorIfExists]] (or [[getError]]) at a safe point and
+ * re-throws on its own thread. This avoids a race where calling `TaskContext.markTaskFailed` from
+ * a background thread can run concurrently with the task thread's `markTaskCompleted` and silently
+ * skip completion listeners (including cleanup), leading to thread leaks.
+ *
+ * Shared by the streaming shuffle and the streaming-query async checkpointing paths.
  */
-class ErrorNotifier extends Logging {
+private[spark] class ErrorNotifier extends Logging {
 
   private val error = new AtomicReference[Throwable]
 
@@ -34,7 +43,7 @@ class ErrorNotifier extends Logging {
    */
   def markError(th: Throwable): Unit = {
     if (error.compareAndSet(null, th)) {
-      logError("A fatal error has occurred.", th)
+      logError(log"A fatal error has occurred.", th)
     } else {
       // Attach subsequent errors as suppressed so they're not silently lost.
       val existing = error.get()

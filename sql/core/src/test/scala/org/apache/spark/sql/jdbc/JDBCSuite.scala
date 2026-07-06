@@ -768,6 +768,32 @@ class JDBCSuite extends SharedSparkSession {
     assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
   }
 
+  test("SPARK-57555: legacy.jdbc.timeMapping escape hatch keeps TIME as TimestampType") {
+    // The escape hatch forces the legacy TIME-to-timestamp mapping even when the TIME type is
+    // enabled, so workloads relying on the old behavior are not silently broken.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType === TimestampType)
+    }
+    // Sanity check: without the escape hatch the column is read as TimeType.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    }
+    // The escape hatch has no effect when the TIME type is disabled: the column is read as
+    // TimestampType regardless of the escape hatch.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "false",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType === TimestampType)
+    }
+  }
+
   test("SPARK-57555: JDBC TIME write round-trip") {
     val url = urlWithUserAndPass
     val tableName = "TEST.TIME_ROUNDTRIP"
@@ -1261,6 +1287,31 @@ class JDBCSuite extends SharedSparkSession {
         .build()
         .trim() ==
       "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
+  }
+
+  test("SPARK-56504: JdbcSQLQueryBuilder preserves table sample in pushed join sides") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    val dialect = JdbcDialects.get("jdbc:h2://host:port")
+    val left = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("a"))
+      .withTableSampleClause("TABLESAMPLE SYSTEM (50)")
+    val right = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("b"))
+      .withTableSampleClause("TABLESAMPLE BERNOULLI (25)")
+
+    val query = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withJoin(left, right, "L", "R", Array("a", "b"), "INNER JOIN", "L.a = R.b")
+      .build()
+      .replaceAll("\\s+", " ")
+
+    assert(query.contains("SELECT a FROM test TABLESAMPLE SYSTEM (50)"))
+    assert(query.contains("SELECT b FROM test TABLESAMPLE BERNOULLI (25)"))
+    assert(query.contains("INNER JOIN"))
+    assert(query.contains("ON L.a = R.b"))
   }
 
   test("MsSqlServerDialect jdbc type mapping") {

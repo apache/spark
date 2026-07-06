@@ -708,6 +708,11 @@ class AstBuilder extends DataTypeAstBuilder
     visitMultipartIdentifier(ctx.multipartIdentifier)
   }
 
+  override def visitSingleTemporalTableIdentifier(
+      ctx: SingleTemporalTableIdentifierContext): TemporalIdentifier = withOrigin(ctx) {
+    visitTemporalTableIdentifier(ctx.temporalTableIdentifier)
+  }
+
   override def visitSinglePathElementList(
       ctx: SinglePathElementListContext): Seq[PathElement] = withOrigin(ctx) {
     ctx.pathElement().asScala.map(visitPathElement).toSeq
@@ -2684,11 +2689,54 @@ class AstBuilder extends DataTypeAstBuilder
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
-    val table = mayApplyAliasPlan(
-      ctx.tableAlias, relation.optionalMap(ctx.temporalClause)(withTimeTravel))
+    val ttCtx = ctx.temporalTableIdentifierReference
+    val relation = createUnresolvedRelation(ttCtx.identifierReference, Option(ctx.optionsClause))
+    val withTimeTravelSpec = withTableTimeTravel(relation, ttCtx, ctx.temporalClause)
+    val table = mayApplyAliasPlan(ctx.tableAlias, withTimeTravelSpec)
     val sample = table.optionalMap(ctx.sample)(withSample)
     sample.optionalMap(ctx.watermarkClause)(withWatermark)
+  }
+
+  /**
+   * Applies the table-name '@' time travel suffix and/or the `AS OF` clause to `relation`.
+   */
+  private def withTableTimeTravel(
+      relation: LogicalPlan,
+      ttCtx: TemporalTableIdentifierReferenceContext,
+      clause: TemporalClauseContext): LogicalPlan = {
+    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.version)
+    val hasAtSpec = atTimestamp.isDefined || atVersion.isDefined
+    if (hasAtSpec && clause != null) {
+      withOrigin(clause) {
+        throw QueryParsingErrors.multipleTimeTravelSpec(clause)
+      }
+    }
+    val withAtSpec =
+      if (hasAtSpec) RelationTimeTravel(relation, atTimestamp, atVersion) else relation
+    withAtSpec.optionalMap(clause)(withTimeTravel)
+  }
+
+  override def visitTemporalTableIdentifier(
+      ctx: TemporalTableIdentifierContext): TemporalIdentifier = withOrigin(ctx) {
+    val (_, version) = temporalSpec(ctx, ctx.version)
+    TemporalIdentifier(visitMultipartIdentifier(ctx.id), version)
+  }
+
+  /**
+   * Extract the optional '@v<version>' time travel suffix of a table identifier.
+   */
+  private def temporalSpec(
+      ctx: ParserRuleContext,
+      versionCtx: VersionContext): (Option[Expression], Option[String]) = {
+    if (versionCtx == null) {
+      (None, None)
+    } else {
+      if (!conf.getConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED)) {
+        throw QueryParsingErrors.timeTravelAtSyntaxDisabled(
+          SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key, ctx)
+      }
+      (None, visitVersion(versionCtx))
+    }
   }
 
   override def visitVersion(ctx: VersionContext): Option[String] = {
