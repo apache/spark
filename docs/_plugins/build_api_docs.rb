@@ -354,7 +354,7 @@ end
 def build_error_docs
   print_header "Building error docs"
 
-  system("command -v python3") \
+  system("python3 --version") \
   || raise("`python3` is not on your PATH")
 
   system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
