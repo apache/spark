@@ -217,9 +217,9 @@ object DataType {
 
   /**
    * Parses an integer type parameter captured from a JSON type name (e.g. the length in
-   * `char(10)`). The capture group is `\d+`, an unbounded digit run, so a value outside the 32-bit
-   * integer range surfaces a proper Spark error instead of a raw `NumberFormatException`. Mirrors
-   * the guard on the parser path in `DataTypeAstBuilder`.
+   * `char(10)`). The capture group is `\d+`, an unbounded digit run, so a value outside the
+   * 32-bit integer range surfaces a proper Spark error instead of a raw `NumberFormatException`.
+   * Mirrors the guard on the parser path in `DataTypeAstBuilder`.
    */
   private def parseIntTypeParameterFromJson(
       text: String,

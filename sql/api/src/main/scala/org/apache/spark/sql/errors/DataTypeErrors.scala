@@ -46,8 +46,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       maxPrecision: Int): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
-      messageParameters =
-        Map("precision" -> precision, "maxPrecision" -> maxPrecision.toString),
+      messageParameters = Map("precision" -> precision, "maxPrecision" -> maxPrecision.toString),
       context = Array.empty,
       summary = "")
   }
@@ -298,10 +297,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       typeName: String): Throwable = {
     new SparkException(
       errorClass = "DATATYPE_PARAMETER_VALUE_OUT_OF_RANGE",
-      messageParameters = Map(
-        "parameter" -> parameter,
-        "value" -> value,
-        "type" -> typeName),
+      messageParameters = Map("parameter" -> parameter, "value" -> value, "type" -> typeName),
       cause = null)
   }
 
