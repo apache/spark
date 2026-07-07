@@ -26,7 +26,7 @@ on:
   # scheduled rebuild, the cache goes stale between Dockerfile changes
   # and every commit on every PR spends ~50 minutes building base images!
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: '0 4 * * *'
   # Run jobs when a commit is merged
   push:
     branches:
