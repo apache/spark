@@ -139,7 +139,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
  * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter with HasRegParam
-  with HasCheckpointInterval with HasSeed {
+  with HasCheckpointInterval with HasSeed with HasIntermediateStorageLevel {
 
   /**
    * Param for rank of the matrix factorization (positive).
@@ -216,20 +216,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNonnegative: Boolean = $(nonnegative)
 
   /**
-   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
-   * `StorageLevel`. Cannot be "NONE".
-   * Default: "MEMORY_AND_DISK".
-   *
-   * @group expertParam
-   */
-  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
-    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
-
-  /** @group expertGetParam */
-  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
-
-  /**
    * Param for StorageLevel for ALS model factors. Pass in a string representation of
    * `StorageLevel`.
    * Default: "MEMORY_AND_DISK".
@@ -246,7 +232,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(),
     finalStorageLevel -> StorageLevelMapper.MEMORY_AND_DISK.name(), coldStartStrategy -> "nan")
 
   /**
