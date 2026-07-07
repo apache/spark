@@ -8414,7 +8414,7 @@
       },
       "PIPELINE_DATASET_HIVE_SERDE" : {
         "message" : [
-          "Hive SerDe format options in a CREATE <pipelineDatasetType> statement."
+          "Hive SerDe format options in a CREATE <pipelineDatasetType> statement. Use the USING clause or a non-SerDe format instead."
         ]
       },
       "PIPELINE_DATASET_LOCATION" : {
