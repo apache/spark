@@ -29,6 +29,14 @@ output while the producer stage is still running.
   property is a binding part of the scheduler contract, not an advisory hint.
 - The property is set during **physical planning** (an execution concern, not a logical-plan one)
   and carried into the `ShuffleDependency` the `DAGScheduler` reads at stage-creation time.
+- It is also the **per-dependency selector** for the shuffle implementation: the shuffle layer maps a
+  pipelined dependency to an incremental `ShuffleManager` and everything else to the default, so one
+  job with both regular and pipelined groups uses the right implementation for each — selected
+  per-dependency, not per-job. The scheduler construct stays generic; the shuffle implementation
+  stays pluggable.
+  - For example, an additional conf (e.g. `spark.shuffle.manager.incremental`) can be introduced to
+    specify the incremental shuffle implementation used for pipelined shuffle dependencies, alongside
+    the existing `spark.shuffle.manager` for the default.
 
 A **regular shuffle dependency (RSD)** is an ordinary shuffle dependency: its output must be fully
 materialized before any consumer reads it.
@@ -74,10 +82,14 @@ not — i.e. a normal materialized parent of the group.
 - **Group readiness.** A group is ready to be admitted when every external input of the group (its
   regular materialized parents) is available — the same precondition a normal stage has today, lifted
   to the group. Pipelined parents inside the group impose no readiness precondition.
-- **Gang admission (all-or-nothing).** A group is admitted only if the cluster can currently run all
-  tasks of all member stages **concurrently**; admission then submits every member stage at once.
-  There is no partial admission — a group is never left with some members running while others wait
-  on slots the running members occupy.
+- **Gang admission (all-or-nothing).** A pipelined group is admitted only if the cluster can currently
+  run all tasks of all member stages **concurrently**; admission then submits every member stage at
+  once. There is no partial admission — a pipelined group is never left with some members running
+  while others wait on slots the running members occupy.
+  - *A non-pipelined (singleton) group is unaffected:* it is admitted exactly as a normal stage is
+    today — submitted when its parents are available, filling slots incrementally, with no all-at-once
+    requirement. Gang admission applies only to a group of two or more stages connected by pipelined
+    edges.
 - **Slot check.** The group's aggregate concurrent-task demand — the sum of `numTasks` over member
   stages — is compared against the number of available slots in the cluster (a slot is one task's
   worth of capacity, so this is the maximum number of tasks that can run at once). If the group
