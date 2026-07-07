@@ -49,6 +49,7 @@ import org.apache.spark.util.ErrorNotifier
 class StreamingShuffleServerHandler(
     onTerminationAckReceived: (Int, Long) => Unit,
     shuffleId: Int,
+    // One reader per reduce partition, so this equals the writer's numPartitions.
     numReaders: Int,
     val context: TaskContext,
     errorNotifier: ErrorNotifier) extends RpcHandler with TaskContextAwareLogging {
@@ -80,7 +81,7 @@ class StreamingShuffleServerHandler(
           throw new IllegalArgumentException(
             s"Unexpected message type in ShuffleServerHandler: " +
               s"${shuffleMessage.messageType()}"
-          );
+          )
       }
     } catch {
       case (ex: Throwable) =>

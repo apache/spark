@@ -75,6 +75,18 @@ class StreamingShuffleWriter[K, V](
     s"Streaming shuffle writer memory budget ($MAX_BUFFER_BYTES bytes) is invalid for " +
       s"$numPartitions partitions; increase ${STREAMING_SHUFFLE_WRITER_MAX_MEMORY.key} or " +
       "reduce the number of partitions.")
+  // The per-partition floor (2 buffers per partition) can exceed the configured writerMaxMemory
+  // when the partition count is high; surface the effective budget so operators can see that the
+  // limit they set is not the one in force.
+  if (numPartitions.toLong * BUFFER_SIZE * 2 >
+      conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong - TOTAL_TCPBUF_BYTES) {
+    logWarning(log"Streaming shuffle writer effective memory budget " +
+      log"${MDC(LogKeys.MAX_MEMORY_SIZE, Utils.bytesToString(MAX_BUFFER_BYTES))} exceeds the " +
+      log"configured ${MDC(LogKeys.CONFIG, STREAMING_SHUFFLE_WRITER_MAX_MEMORY.key)}=" +
+      log"${MDC(LogKeys.MEMORY_SIZE, Utils.bytesToString(
+        conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong))} because the per-partition " +
+      log"minimum for ${MDC(LogKeys.NUM_PARTITIONS, numPartitions)} partitions takes precedence.")
+  }
   private val CHECKSUM_ENABLED = conf.get(STREAMING_SHUFFLE_CHECKSUM_ENABLED)
 
   // Helper objects.
@@ -107,6 +119,10 @@ class StreamingShuffleWriter[K, V](
 
   private val allocatedBufferBytesSemaphore: Semaphore = new Semaphore(MAX_BUFFER_BYTES.toInt)
 
+  // Data payloads use a dedicated direct-buffer free-list (bufferPool) of fixed BUFFER_SIZE
+  // buffers so full-size send buffers can be recycled across the task; the small, variable-size
+  // message envelopes instead use the server's pooled allocator (see ShardState.send). The two
+  // allocation paths are intentionally separate.
   private[streaming] val bufferPool = new LinkedBlockingDeque[ByteBuf]()
 
   setShuffleIdForLogging(streamingShuffleHandle.shuffleId)
@@ -140,6 +156,10 @@ class StreamingShuffleWriter[K, V](
     val tracker = SparkEnv.get.streamingShuffleOutputTracker.get
     val taskLocation =
       StreamingShuffleTaskLocation(SparkEnv.get.executorId, hostname, server.getPort)
+    // The Boolean return is intentionally not acted on: a false means the shuffle was
+    // (concurrently) unregistered, which the tracker already logs a warning for. That only
+    // happens while the shuffle is being torn down, in which case this writer task is going
+    // away too, so there is nothing useful to do here.
     tracker.registerShuffleWriterTask(streamingShuffleHandle.shuffleId, mapId, taskLocation)
     logInfo(log"Created shuffle server for writer ${MDC(LogKeys.SHUFFLE_WRITER_ID,
       shuffleWriterId)} at ${MDC(LogKeys.TASK_LOCATION, taskLocation)}" +
@@ -300,7 +320,12 @@ class StreamingShuffleWriter[K, V](
     // No-op: the streaming shuffle lifecycle is handled elsewhere. write() blocks until all
     // readers ack termination on the normal path, and the task-completion listener
     // (cleanupResources) closes the server and releases buffers on both success and failure.
-    // Streaming shuffle does not rely on map output status, so just return a placeholder.
+    //
+    // Streaming shuffle readers locate writers through StreamingShuffleOutputTracker and pull
+    // data directly over Netty; they never consult MapStatus block sizes, and streaming shuffle
+    // has no standard block-fetch fallback path. This MapStatus is therefore only a placeholder
+    // to satisfy the ShuffleWriter contract and the DAGScheduler / MapOutputTracker bookkeeping;
+    // its all-zero partition lengths are never read by any reducer.
     Some(MapStatus(
       SparkEnv.get.blockManager.shuffleServerId,
       Array.fill(numPartitions)(0L),
@@ -369,6 +394,10 @@ class StreamingShuffleWriter[K, V](
   }
 
   private def newBuffer(): TimestampedBuffer = {
+    // Back-pressure is accounted per network buffer (BUFFER_SIZE permits each), not by exact
+    // byte size, so this bounds in-flight memory only on a best-effort basis: a single
+    // serialized row larger than BUFFER_SIZE (rows are not split across buffers, see write())
+    // grows its buffer past BUFFER_SIZE and thus exceeds the tracked budget.
     if (!allocatedBufferBytesSemaphore.tryAcquire(BUFFER_SIZE, 10, TimeUnit.MICROSECONDS)) {
       shards.foreach(_.send())
       while (!allocatedBufferBytesSemaphore.tryAcquire(BUFFER_SIZE, 10, TimeUnit.MILLISECONDS)) {
@@ -439,7 +468,14 @@ class StreamingShuffleWriter[K, V](
       shards.foreach(_.close())
       logInfo(log"StreamingShuffleWriter finished writing data and termination messages for " +
         log"shuffle writer ${MDC(LogKeys.SHUFFLE_WRITER_ID, shuffleWriterId)}. Shutting down now.")
-      // Wait for all termination acks to ensure readers correctly received all the data we sent.
+      // Wait for all termination acks. This has no wall-clock timeout by design, and that is
+      // deliberate for correctness: a term-ack is the writer's only confirmation that a reader
+      // received every message through the final sequence number (validated in
+      // onTerminationAckReceived), so finishing write() without all acks would risk marking the
+      // map task successful while a reader is silently missing data. The loop instead exits only
+      // on all-acks, on an ErrorNotifier error surfaced by throwErrorIfExists(), or on task
+      // cancellation. A reader that dies fails its own reduce task, which restarts the query and
+      // tears down this writer too, so writer-side reader-liveness detection is unnecessary.
       while (!allAcksReceived.await(1, TimeUnit.MILLISECONDS)) {
         throwErrorIfExists()
       }
