@@ -290,7 +290,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
    * Verifies that the same DecryptionHandler instance correctly decodes multiple independent
    * GCM-encrypted messages sent over the same channel. This is the regression test for the
    * bug where DecryptionHandler.completed was never reset, causing every message after the
-   * first to be silently dropped — which manifested as YARN container launch failures.
+   * first to be silently dropped - which manifested as YARN container launch failures.
    */
   @Test
   public void testMultipleMessages() throws Exception {
@@ -607,7 +607,7 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
 
       // plaintextSegmentSize = CIPHERTEXT_BUFFER_SIZE - TAG_SIZE = 32768 - 16 = 32752
       // getCiphertextOffset() = 24 (Tink streaming header, written separately by transferTo)
-      // Buggy range: P in (32728, 32752] — test lower boundary, midpoint, and upper boundary.
+      // Buggy range: P in (32728, 32752] - test lower boundary, midpoint, and upper boundary.
       int plaintextSegmentSize = GcmTransportCipher.CIPHERTEXT_BUFFER_SIZE - 16;
       int[] plaintextSizes = {
           plaintextSegmentSize - 23, // 32729: one above the lower boundary
