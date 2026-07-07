@@ -129,11 +129,11 @@ public class GcmTransportCipher implements TransportCipher {
             long fullSegments = bytesToRead / plaintextSegmentSize;
             long partialBytes = bytesToRead % plaintextSegmentSize;
             // encryptedCount covers all bytes written to the wire:
-            //   LENGTH_HEADER_BYTES  – Spark's 8-byte big-endian framing prefix, read by the
+            //   LENGTH_HEADER_BYTES  - Spark's 8-byte big-endian framing prefix, read by the
             //                          receiver to know where this message ends in the TCP stream.
-            //   getHeaderLength()    – Tink's streaming header (salt + nonce prefix), written by
+            //   getHeaderLength()    - Tink's streaming header (salt + nonce prefix), written by
             //                          the encrypter before any ciphertext segments.
-            //   segment bytes        – full segments each padded with a 16-byte GCM auth tag,
+            //   segment bytes        - full segments each padded with a 16-byte GCM auth tag,
             //                          plus any partial final segment similarly padded.
             this.encryptedCount = LENGTH_HEADER_BYTES
                     + aesGcmHkdfStreaming.getHeaderLength()
@@ -308,7 +308,7 @@ public class GcmTransportCipher implements TransportCipher {
         // ctx.fireChannelRead() fires when the message is complete, reducing N EventLoop
         // callbacks (one per 32 KB segment) to 1. This prevents the EventLoop from being
         // monopolised by large messages, which would starve other channels sharing the
-        // thread (including the executor–driver heartbeat channel) under concurrent shuffle
+        // thread (including the executor-driver heartbeat channel) under concurrent shuffle
         // load. Null between messages; ownership is transferred to downstream on
         // fireChannelRead().
         private CompositeByteBuf plaintextAccumulator = null;
