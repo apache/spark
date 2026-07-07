@@ -806,6 +806,33 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57960: (H2|Postgres)Dialect escape a single quote in indexExists table/schema name") {
+    // indexExists also embeds the table (and, for H2, schema) name as a SQL string literal, so a
+    // single quote in the identifier must be escaped too, consistent with the index-name escaping.
+    val ident = Identifier.of(Array("sch'ema"), "ta'ble")
+    Seq(
+      "jdbc:h2:mem:testdb0" -> Seq("TABLE_SCHEMA = 'sch''ema'", "TABLE_NAME = 'ta''ble'"),
+      "jdbc:postgresql://127.0.0.1/db" -> Seq("tablename = 'ta''ble'")
+    ).foreach { case (jdbcUrl, expectedClauses) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "idx", ident, options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      expectedClauses.foreach { expectedClause =>
+        assert(sqlCaptor.getValue.contains(expectedClause),
+          s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+      }
+    }
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
