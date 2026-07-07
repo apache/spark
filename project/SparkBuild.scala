@@ -1282,7 +1282,7 @@ object DependencyOverrides {
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val grpcVersion = sys.props.get("io.grpc.version").getOrElse("1.76.0")
   lazy val grpcDeps = Bom.dependencies("io.grpc" % "grpc-bom" % grpcVersion)
-  lazy val k8sClientVersion = sys.props.get("kubernetes-client.version").getOrElse("7.7.0")
+  lazy val k8sClientVersion = sys.props.get("kubernetes-client.version").getOrElse("7.8.0")
   lazy val k8sClientDeps = Bom.dependencies("io.fabric8" % "kubernetes-client-bom" % k8sClientVersion)
   lazy val settings = jacksonDeps ++ grpcDeps ++ k8sClientDeps ++ Seq(
     dependencyOverrides ++= {

@@ -45,7 +45,7 @@ if (
     os.chdir(Path(__file__).parent.parent.parent.absolute())
 
 try:
-    exec(open("pyspark/version.py").read())
+    exec(open("pyspark/version.py", encoding="utf-8").read())
 except IOError:
     print(
         "Failed to load PySpark version file for packaging. You must be in Spark's python dir.",
@@ -258,7 +258,7 @@ try:
     # will search for SPARK_HOME with Python.
     scripts.append("pyspark/find_spark_home.py")
 
-    with open("README.md") as f:
+    with open("README.md", encoding="utf-8") as f:
         long_description = f.read()
 
     setup(

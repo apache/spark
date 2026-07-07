@@ -878,6 +878,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def multipleTimeTravelSpec(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_TIME_TRAVEL_SPEC",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def timeTravelAtSyntaxDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
+      ctx)
+  }
+
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
