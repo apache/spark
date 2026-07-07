@@ -1256,6 +1256,7 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
+      ACTIONS_RUNNER_DEBUG: true
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1346,6 +1347,7 @@ jobs:
         bundle install --retry=100
     - name: Register javadoc problem matcher
       run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
+    - run: echo "$GITHUB_WORKSPACE"
     - name: Run documentation build for branch-3.5 and branch-4.0
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
