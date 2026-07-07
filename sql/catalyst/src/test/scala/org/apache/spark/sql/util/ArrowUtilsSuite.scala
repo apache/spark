@@ -19,7 +19,7 @@ package org.apache.spark.sql.util
 
 import java.time.ZoneId
 
-import org.apache.arrow.vector.types.TimeUnit
+import org.apache.arrow.vector.types.{IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
@@ -157,7 +157,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
   test("timestamp nanos lossless struct") {
     def losslessRoundtrip(schema: StructType, timeZoneId: String = null): Unit = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, timeZoneId, true, false, losslessTimestampNanos = true)
+        ArrowUtils.toArrowSchema(schema, timeZoneId, true, false, losslessInternalTypes = true)
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
     }
 
@@ -167,7 +167,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
       Seq[DataType](TimestampNTZNanosType(p), TimestampLTZNanosType(p)).foreach { dt =>
         val schema = new StructType().add("value", dt)
         val arrowSchema =
-          ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+          ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
         val field = arrowSchema.findField("value")
         assert(field.getType === ArrowType.Struct.INSTANCE)
         val children = field.getChildren
@@ -234,6 +234,65 @@ class ArrowUtilsSuite extends SparkFunSuite {
     val defaultSchema = ArrowUtils.toArrowSchema(
       new StructType().add("value", TimestampNTZNanosType(9)), null, true, false)
     assert(defaultSchema.findField("value").getType.isInstanceOf[ArrowType.Timestamp])
+  }
+
+  test("calendar interval lossless struct") {
+    def losslessRoundtrip(schema: StructType): Unit = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    // Top-level: the lossless mapping is a struct of the type's own components
+    // (months: int32, days: int32, microseconds: int64), tagged through child field metadata.
+    val schema = new StructType().add("value", CalendarIntervalType)
+    val arrowSchema =
+      ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
+    val field = arrowSchema.findField("value")
+    assert(field.getType === ArrowType.Struct.INSTANCE)
+    val children = field.getChildren
+    assert(children.size() === 3)
+    assert(children.get(0).getName === "months")
+    assert(children.get(0).getType === new ArrowType.Int(32, true))
+    assert(!children.get(0).isNullable)
+    assert(children.get(1).getName === "days")
+    assert(children.get(1).getType === new ArrowType.Int(32, true))
+    assert(!children.get(1).isNullable)
+    assert(children.get(2).getName === "microseconds")
+    assert(children.get(2).getType === new ArrowType.Int(64, true))
+    assert(!children.get(2).isNullable)
+    assert(ArrowUtils.isCalendarIntervalStructField(field))
+    assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+
+    // Nested: the flag must reach intervals inside arrays, structs, and maps.
+    losslessRoundtrip(new StructType()
+      .add("arr", ArrayType(CalendarIntervalType))
+      .add("struct", new StructType().add("i", CalendarIntervalType))
+      .add("map", MapType(IntegerType, CalendarIntervalType)))
+
+    // User metadata on the column is preserved alongside the struct tag.
+    val md = new MetadataBuilder().putString("city", "beijing").build()
+    losslessRoundtrip(new StructType().add("value", CalendarIntervalType, true, md))
+
+    // A plain struct that merely uses the same child names, but carries no tag, stays a struct.
+    val untagged = new StructType().add(
+      "value",
+      new StructType()
+        .add("months", IntegerType, nullable = false)
+        .add("days", IntegerType, nullable = false)
+        .add("microseconds", LongType, nullable = false))
+    losslessRoundtrip(untagged)
+    assert(
+      ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(untagged, null, true, false)) ===
+        untagged)
+
+    // The default mapping is untouched when the flag is off: still IntervalMonthDayNano.
+    val defaultSchema = ArrowUtils.toArrowSchema(
+      new StructType().add("value", CalendarIntervalType), null, true, false)
+    val defaultType = defaultSchema.findField("value").getType
+    assert(defaultType.isInstanceOf[ArrowType.Interval])
+    assert(
+      defaultType.asInstanceOf[ArrowType.Interval].getUnit === IntervalUnit.MONTH_DAY_NANO)
   }
 
   test("time") {

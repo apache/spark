@@ -121,11 +121,16 @@ private[sql] object ArrowUtils {
   // untouched) and recovered on read in `fromArrowField`.
   private val timePrecisionKey = "SPARK::time::precision"
   // Marks the epochMicros child of the lossless struct representation of a nanosecond timestamp
-  // (see `toArrowField` with `losslessTimestampNanos = true`). The value is "ntz" or "ltz" and
+  // (see `toArrowField` with `losslessInternalTypes = true`). The value is "ntz" or "ltz" and
   // distinguishes TimestampNTZNanosType from TimestampLTZNanosType on read; the precision is
   // stored alongside under `timestampNanosPrecisionKey`. The tag lives on a child field (like the
   // geometry/variant struct tags) so it cannot collide with user metadata on the struct itself.
   private val timestampNanosStructKey = "SPARK::timestampNanos::struct"
+  // Marks the months child of the lossless struct representation of a CalendarInterval (see
+  // `toArrowField` with `losslessInternalTypes = true`). The value is "true"; like
+  // `timestampNanosStructKey`, the tag lives on a child field so it cannot collide with user
+  // metadata on the struct itself.
+  private val calendarIntervalStructKey = "SPARK::calendarInterval::struct"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -181,7 +186,7 @@ private[sql] object ArrowUtils {
    *   - Internal storage (e.g. the Arrow-based Dataset cache) is a closed write-then-read-back
    *     loop with no external consumer, where the only requirement is fidelity to Spark
    *     semantics, hence this struct.
-   * The choice is made per call site via `losslessTimestampNanos` on `toArrowSchema` /
+   * The choice is made per call site via `losslessInternalTypes` on `toArrowSchema` /
    * `toArrowField` (the same pattern as `largeVarTypes`: one Spark type, two Arrow encodings,
    * selected by the consumer's needs). Only schema construction needs the flag: the struct is
    * self-describing through its child-field tag, so `fromArrowField`, `ArrowWriter`, and
@@ -214,12 +219,46 @@ private[sql] object ArrowUtils {
   }
 
   /**
+   * Builds the lossless Arrow struct representation of a CalendarInterval: a struct of (months:
+   * int32, days: int32, microseconds: int64) -- the type's own field layout, mirroring the
+   * default in-memory cache's CALENDAR_INTERVAL ColumnType. The default Interval(MONTH_DAY_NANO)
+   * mapping multiplies microseconds by 1000 into Arrow's int64 nanosecond field, so any
+   * |microseconds| > Long.MaxValue / 1000 (roughly +/-292 years) cannot be represented; this
+   * struct stores the components as-is, so the full Long microsecond domain round-trips. See
+   * `toTimestampNanosStructField` for why the default interchange mapping must stay unchanged
+   * and the lossless shape is a per-call-site opt-in for internal storage.
+   */
+  private def toCalendarIntervalStructField(
+      name: String,
+      nullable: Boolean,
+      metadata: Metadata): Field = {
+    val fieldType =
+      new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+    // Tag the months child so `fromArrowField` (and ArrowColumnVector) can recognize that this
+    // struct represents a CalendarInterval, following the geometry/variant tag pattern.
+    val monthsFieldType = new FieldType(
+      false,
+      new ArrowType.Int(8 * 4, true),
+      null,
+      Map(calendarIntervalStructKey -> "true").asJava)
+    val daysFieldType = new FieldType(false, new ArrowType.Int(8 * 4, true), null, null)
+    val microsFieldType = new FieldType(false, new ArrowType.Int(8 * 8, true), null, null)
+    new Field(
+      name,
+      fieldType,
+      Seq(
+        new Field("months", monthsFieldType, Seq.empty[Field].asJava),
+        new Field("days", daysFieldType, Seq.empty[Field].asJava),
+        new Field("microseconds", microsFieldType, Seq.empty[Field].asJava)).asJava)
+  }
+
+  /**
    * Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType
    *
-   * @param losslessTimestampNanos
-   *   when true, nanosecond timestamps map to the lossless struct representation covering their
-   *   full value domain instead of the standard int64 Timestamp(NANOSECOND) encoding. Only
-   *   internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
+   * @param losslessInternalTypes
+   *   when true, types whose standard Arrow encoding cannot cover their full Spark value domain
+   *   (nanosecond timestamps, CalendarInterval) map to lossless struct representations instead.
+   *   Only internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
    *   cache) should pass true; interchange paths must keep the default. See
    *   `toTimestampNanosStructField` for the full rationale.
    */
@@ -230,7 +269,7 @@ private[sql] object ArrowUtils {
       timeZoneId: String,
       largeVarTypes: Boolean = false,
       metadata: Metadata = Metadata.empty,
-      losslessTimestampNanos: Boolean = false): Field = {
+      losslessInternalTypes: Boolean = false): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType =
@@ -246,7 +285,7 @@ private[sql] object ArrowUtils {
               timeZoneId,
               largeVarTypes,
               Metadata.empty,
-              losslessTimestampNanos)).asJava)
+              losslessInternalTypes)).asJava)
       case StructType(fields) =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -262,7 +301,7 @@ private[sql] object ArrowUtils {
                 timeZoneId,
                 largeVarTypes,
                 field.metadata,
-                losslessTimestampNanos)
+                losslessInternalTypes)
             }
             .toImmutableArraySeq
             .asJava)
@@ -283,7 +322,7 @@ private[sql] object ArrowUtils {
               timeZoneId,
               largeVarTypes,
               Metadata.empty,
-              losslessTimestampNanos)).asJava)
+              losslessInternalTypes)).asJava)
       case udt: UserDefinedType[_] =>
         toArrowField(
           name,
@@ -292,7 +331,7 @@ private[sql] object ArrowUtils {
           timeZoneId,
           largeVarTypes,
           metadata,
-          losslessTimestampNanos)
+          losslessInternalTypes)
       case g: GeometryType =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -346,9 +385,11 @@ private[sql] object ArrowUtils {
           Seq(
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
-      case t: TimestampNTZNanosType if losslessTimestampNanos =>
+      case CalendarIntervalType if losslessInternalTypes =>
+        toCalendarIntervalStructField(name, nullable, metadata)
+      case t: TimestampNTZNanosType if losslessInternalTypes =>
         toTimestampNanosStructField(name, isNtz = true, t.precision, nullable, metadata)
-      case t: TimestampLTZNanosType if losslessTimestampNanos =>
+      case t: TimestampLTZNanosType if losslessInternalTypes =>
         toTimestampNanosStructField(name, isNtz = false, t.precision, nullable, metadata)
       case t: TimestampNTZNanosType =>
         toPrecisionTaggedArrowField(
@@ -422,7 +463,7 @@ private[sql] object ArrowUtils {
 
   /**
    * Whether the Arrow struct field is the lossless representation of a nanosecond timestamp built
-   * by `toArrowField` with `losslessTimestampNanos = true`. Also callable from Java
+   * by `toArrowField` with `losslessInternalTypes = true`. Also callable from Java
    * (ArrowColumnVector) to select the timestamp accessor for such structs.
    */
   def isTimestampNanosStructField(field: Field): Boolean = {
@@ -437,6 +478,23 @@ private[sql] object ArrowUtils {
     }
   }
 
+  /**
+   * Whether the Arrow struct field is the lossless representation of a CalendarInterval built by
+   * `toArrowField` with `losslessInternalTypes = true`. Also callable from Java
+   * (ArrowColumnVector) to select the interval accessor for such structs.
+   */
+  def isCalendarIntervalStructField(field: Field): Boolean = {
+    field.getType.isInstanceOf[ArrowType.Struct] &&
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("months", "days", "microseconds").asJava) &&
+    field.getChildren.asScala.exists { child =>
+      child.getName == "months" &&
+      child.getMetadata.getOrDefault(calendarIntervalStructKey, "false") == "true"
+    }
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
@@ -448,6 +506,8 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
+      case ArrowType.Struct.INSTANCE if isCalendarIntervalStructField(field) =>
+        CalendarIntervalType
       case ArrowType.Struct.INSTANCE if isTimestampNanosStructField(field) =>
         val microsChild = field.getChildren.asScala.find(_.getName == "epochMicros").get
         val isNtz = microsChild.getMetadata.get(timestampNanosStructKey) == "ntz"
@@ -519,16 +579,16 @@ private[sql] object ArrowUtils {
   /**
    * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
    *
-   * @param losslessTimestampNanos
-   *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps for
-   *   internal storage; interchange paths must keep the default.
+   * @param losslessInternalTypes
+   *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps and
+   *   CalendarInterval for internal storage; interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
-      losslessTimestampNanos: Boolean = false): Schema = {
+      losslessInternalTypes: Boolean = false): Schema = {
     new Schema(schema.map { field =>
       toArrowField(
         field.name,
@@ -537,7 +597,7 @@ private[sql] object ArrowUtils {
         timeZoneId,
         largeVarTypes,
         field.metadata,
-        losslessTimestampNanos)
+        losslessInternalTypes)
     }.asJava)
   }
 

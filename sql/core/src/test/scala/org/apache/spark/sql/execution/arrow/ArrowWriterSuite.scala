@@ -226,7 +226,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     // 0001-9999) must round-trip -- including values that overflow the default mapping.
     def losslessWriter(schema: StructType): ArrowWriter = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
       val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
       ArrowWriter.create(root)
     }
@@ -273,7 +273,7 @@ class ArrowWriterSuite extends SparkFunSuite {
 
     def losslessWriter(schema: StructType): ArrowWriter = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
       val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
       ArrowWriter.create(root)
     }
@@ -319,6 +319,118 @@ class ArrowWriterSuite extends SparkFunSuite {
       assert(map.numElements() === 2)
       assert(map.valueArray().getTimestampNTZNanos(0) === v1)
       assert(map.valueArray().getTimestampNTZNanos(1) === v2)
+      writer.root.close()
+    }
+  }
+
+  test("calendar interval overflow raises DATETIME_OVERFLOW at the conversion site") {
+    // The default IntervalMonthDayNano mapping multiplies microseconds by 1000 into Arrow's
+    // int64 nanosecond field. The overflow must surface as the structured DATETIME_OVERFLOW
+    // (not a raw ArithmeticException), and the translation must be scoped to the conversion:
+    // an unrelated (Spark)ArithmeticException raised by upstream evaluation must pass through
+    // unchanged, which the writer guarantees by catching only around Math.multiplyExact.
+    val schema = new StructType().add("value", CalendarIntervalType, nullable = true)
+    val writer = ArrowWriter.create(schema, "UTC")
+    // A normal interval still writes fine.
+    writer.write(InternalRow(new CalendarInterval(1, 2, 3000000L)))
+    val tooLarge = new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L)
+    val e = intercept[SparkArithmeticException] {
+      writer.write(InternalRow(tooLarge))
+    }
+    assert(e.getCondition === "DATETIME_OVERFLOW")
+    assert(e.getMessage.contains("IntervalMonthDayNano"))
+    writer.root.close()
+  }
+
+  test("calendar interval lossless struct round-trip covers the full value domain") {
+    // The default IntervalMonthDayNano mapping only covers |microseconds| <= Long.MaxValue / 1000
+    // (see the DATETIME_OVERFLOW test above). The lossless struct representation stores the raw
+    // (months, days, microseconds) components, so the full Long microsecond domain must
+    // round-trip -- including values that overflow the default mapping.
+    def losslessWriter(schema: StructType): ArrowWriter = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      ArrowWriter.create(root)
+    }
+
+    val values = Seq(
+      new CalendarInterval(0, 0, 0L),
+      new CalendarInterval(1, 2, 3000000L),
+      new CalendarInterval(-1, -2, -3000000L),
+      // beyond the default mapping's +/-(Long.MaxValue / 1000) nanosecond-conversion limit
+      new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L),
+      new CalendarInterval(0, 0, Long.MaxValue),
+      new CalendarInterval(0, 0, Long.MinValue),
+      new CalendarInterval(Int.MaxValue, Int.MaxValue, Long.MaxValue),
+      new CalendarInterval(Int.MinValue, Int.MinValue, Long.MinValue))
+
+    val schema = new StructType().add("value", CalendarIntervalType, nullable = true)
+    val writer = losslessWriter(schema)
+    (values.map(Option(_)) :+ None).foreach(v => writer.write(InternalRow(v.orNull)))
+    writer.finish()
+
+    val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+    assert(reader.dataType() === CalendarIntervalType)
+    values.zipWithIndex.foreach { case (v, rowId) =>
+      assert(reader.getInterval(rowId) === v)
+    }
+    assert(reader.isNullAt(values.length))
+    writer.root.close()
+  }
+
+  test("calendar interval lossless struct round-trip inside nested types") {
+    val v1 = new CalendarInterval(0, 0, Long.MaxValue)
+    val v2 = new CalendarInterval(Int.MinValue, Int.MinValue, Long.MinValue)
+
+    def losslessWriter(schema: StructType): ArrowWriter = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, null, true, false, losslessInternalTypes = true)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      ArrowWriter.create(root)
+    }
+
+    // array<interval>
+    {
+      val schema = new StructType().add("arr", ArrayType(CalendarIntervalType))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(new GenericArrayData(Array[Any](v1, null, v2))))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val arr = reader.getArray(0)
+      assert(arr.numElements() === 3)
+      assert(arr.getInterval(0) === v1)
+      assert(arr.isNullAt(1))
+      assert(arr.getInterval(2) === v2)
+      writer.root.close()
+    }
+
+    // struct<i: interval>
+    {
+      val schema = new StructType()
+        .add("struct", new StructType().add("i", CalendarIntervalType))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(InternalRow(v1)))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      assert(reader.getStruct(0).getInterval(0) === v1)
+      writer.root.close()
+    }
+
+    // map<int, interval>
+    {
+      val schema = new StructType().add("map", MapType(IntegerType, CalendarIntervalType))
+      val writer = losslessWriter(schema)
+      writer.write(InternalRow(
+        new ArrayBasedMapData(
+          new GenericArrayData(Array[Any](1, 2)),
+          new GenericArrayData(Array[Any](v1, v2)))))
+      writer.finish()
+      val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
+      val map = reader.getMap(0)
+      assert(map.numElements() === 2)
+      assert(map.valueArray().getInterval(0) === v1)
+      assert(map.valueArray().getInterval(1) === v2)
       writer.root.close()
     }
   }
