@@ -57,7 +57,7 @@ are listed below:
       - Default
     * - spark.sql.execution.pythonUDF.arrow.enabled
       - Enable PyArrow in PySpark. See more `here <arrow_pandas.rst>`_.
-      - True
+      - False
     * - spark.sql.pyspark.inferNestedDictAsStruct.enabled
       - When enabled, nested dictionaries are inferred as StructType. Otherwise, they are inferred as MapType.
       - False

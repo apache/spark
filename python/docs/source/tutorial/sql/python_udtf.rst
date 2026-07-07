@@ -429,8 +429,7 @@ Arrow Optimization
 ------------------
 
 Apache Arrow is an in-memory columnar data format used in Spark to efficiently transfer
-data between Java and Python processes. Beginning in Spark 4.2, Apache Arrow is enabled by default for Python UDTFs.
-To disable Arrow optimization, set ``spark.sql.execution.pythonUDTF.arrow.enabled`` to false.
+data between Java and Python processes. Apache Arrow is disabled by default for Python UDTFs.
 
 Arrow can improve performance when each input row generates a large result table from the UDTF.
 

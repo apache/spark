@@ -4493,7 +4493,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val ARROW_PYSPARK_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
@@ -4911,7 +4911,7 @@ object SQLConf {
         "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
@@ -4956,7 +4956,7 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
