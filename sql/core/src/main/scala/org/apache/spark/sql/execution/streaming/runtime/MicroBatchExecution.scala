@@ -1210,6 +1210,11 @@ class MicroBatchExecution(
     setupStateStoreCommitTracking(execCtx)
 
     markMicroBatchExecutionStart(execCtx)
+    if (!isActive) {
+      // Workaround for the case the interrupt status is unexpectedly cleared. See SPARK-57963 for
+      // more details.
+      Thread.currentThread.interrupt
+    }
 
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       RealTimeModeAllowlist.checkAllowedPhysicalOperator(
