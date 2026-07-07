@@ -100,6 +100,17 @@ abstract class RemoveRedundantAggregatesSuiteBase
     }
   }
 
+  test("HashAgg: global aggregate over single-partition child collapses") {
+    withTempView("t") {
+      // A single-partition child satisfies AllTuples, so EnsureRequirements skips the
+      // shuffle between Partial and Final for a global aggregate.
+      spark.range(0, 100, 1, 1)
+        .selectExpr("cast(id as double) as v")
+        .createOrReplaceTempView("t")
+      checkCollapsed("SELECT sum(v) as s FROM t")
+    }
+  }
+
   test("HashAgg: with SUM aggregate function") {
     withTempView("t1", "t2") {
       // Each of the 50 (a, b) keys matches 20 t1 rows. sum(v) accumulates 20 raw
@@ -112,6 +123,20 @@ abstract class RemoveRedundantAggregatesSuiteBase
           |GROUP BY t1.a, t1.b
           |""".stripMargin)
       assert(aggNodes(df).head.isInstanceOf[HashAggregateExec])
+    }
+  }
+
+  test("HashAgg: strict-subset child partitioning collapses") {
+    withTempView("t1", "t2") {
+      // The child is clustered on a strict subset (a) of the GROUP BY keys (a, b).
+      // HashPartitioning(a) satisfies ClusteredDistribution(a, b), so EnsureRequirements
+      // skips the shuffle and the partial+final pair collapses to a single Complete agg.
+      createFactAndLookup()
+      checkCollapsed(
+        """SELECT /*+ MERGE(t1, t2) */ t1.a, t1.b, sum(t1.v) as s
+          |FROM t1 JOIN t2 ON t1.a = t2.a
+          |GROUP BY t1.a, t1.b
+          |""".stripMargin)
     }
   }
 
