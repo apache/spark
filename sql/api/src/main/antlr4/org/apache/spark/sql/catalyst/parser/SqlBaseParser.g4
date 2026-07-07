@@ -1358,6 +1358,9 @@ expressionSeq
 booleanExpression
     : (NOT | BANG) booleanExpression                               #logicalNot
     | EXISTS LEFT_PAREN query RIGHT_PAREN                          #exists
+    | LEFT_PAREN start1=expression COMMA end1=expression RIGHT_PAREN
+      OVERLAPS
+      LEFT_PAREN start2=expression COMMA end2=expression RIGHT_PAREN #overlaps
     | valueExpression predicate?                                   #predicated
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary

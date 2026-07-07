@@ -621,6 +621,7 @@ class Analyzer(
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
+      ResolveOverlaps ::
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveDeduplicate ::
@@ -702,6 +703,29 @@ class Analyzer(
       plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide) if expr.childrenResolved =>
           BinaryArithmeticWithDatetimeResolver.resolve(expr)
+      }
+  }
+
+  /**
+   * Resolve OVERLAPS expressions that use the (start, interval) form by rewriting
+   * the interval endpoint to start + interval.
+   */
+  object ResolveOverlaps extends Rule[LogicalPlan] {
+    private def isIntervalType(dt: DataType): Boolean = dt match {
+      case _: DayTimeIntervalType | _: YearMonthIntervalType | CalendarIntervalType => true
+      case _ => false
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveExpressionsUp {
+        case o @ Overlaps(s1, e1, s2, e2) if o.childrenResolved =>
+          val resolvedEnd1 = if (isIntervalType(e1.dataType)) Add(s1, e1) else e1
+          val resolvedEnd2 = if (isIntervalType(e2.dataType)) Add(s2, e2) else e2
+          if (resolvedEnd1.ne(e1) || resolvedEnd2.ne(e2)) {
+            Overlaps(s1, resolvedEnd1, s2, resolvedEnd2)
+          } else {
+            o
+          }
       }
   }
 
