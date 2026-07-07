@@ -234,7 +234,7 @@ SELECT try_add(time'23:59:59.999999', interval 1 hour)
 -- !query schema
 struct<try_add(TIME '23:59:59.999999', INTERVAL '01' HOUR):time(6)>
 -- !query output
-NULL
+00:59:59.999999
 
 
 -- !query
@@ -242,7 +242,7 @@ SELECT try_add(time'00:00:00', interval -1 second)
 -- !query schema
 struct<try_add(TIME '00:00:00', INTERVAL '-01' SECOND):time(6)>
 -- !query output
-NULL
+23:59:59
 
 
 -- !query
@@ -664,7 +664,7 @@ SELECT try_subtract(time'00:30:00', interval 1 hour)
 -- !query schema
 struct<try_subtract(TIME '00:30:00', INTERVAL '01' HOUR):time(6)>
 -- !query output
-NULL
+23:30:00
 
 
 -- !query
@@ -672,7 +672,7 @@ SELECT try_subtract(time'00:00:00', interval 1 second)
 -- !query schema
 struct<try_subtract(TIME '00:00:00', INTERVAL '01' SECOND):time(6)>
 -- !query output
-NULL
+23:59:59
 
 
 -- !query
