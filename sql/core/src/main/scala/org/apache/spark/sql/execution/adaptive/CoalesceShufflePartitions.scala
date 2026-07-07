@@ -180,7 +180,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
 
   private def childrenNeedCompatiblePartitioning(p: SparkPlan): Boolean = p match {
     // TODO: match more plan nodes here.
-    case _: UnionExec => false
+    // A UnionExec that reports a real outputPartitioning (i.e. it is not a plain union) has that
+    // partitioning relied on by downstream operators, so its children must remain co-partitioned
+    // -- coalesce them as a single group. When it reports UnknownPartitioning (config off, or
+    // children not compatibly partitioned), the children may still be coalesced independently.
+    case u: UnionExec => !u.isPlainUnion
     case _: CartesianProductExec => false
     case _: BroadcastHashJoinExec => false
     case _: BroadcastNestedLoopJoinExec => false
