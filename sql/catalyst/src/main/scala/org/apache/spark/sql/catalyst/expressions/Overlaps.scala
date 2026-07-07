@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, TimeType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, TimestampNTZType, TimestampType, TimeType}
 
 /**
  * Implements the ANSI SQL OVERLAPS predicate for datetime periods.
