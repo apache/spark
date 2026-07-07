@@ -20,6 +20,13 @@
 name: Build / Cache base image
 
 on:
+  # Rebuild cache on a schedule to keep it warm despite base image drift.
+  # The `ubuntu:noble` tag is re-pointed to a new image roughly monthly,
+  # which invalidates all cached layers built on top of it. Without a
+  # scheduled rebuild, the cache goes stale between Dockerfile changes
+  # and every commit on every PR spends ~50 minutes building base images!
+  schedule:
+    - cron: '0 0 * * 0'
   # Run jobs when a commit is merged
   push:
     branches:
