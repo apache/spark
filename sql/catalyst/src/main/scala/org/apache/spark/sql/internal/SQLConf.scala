@@ -1151,6 +1151,7 @@ object SQLConf {
         "single task. This puts a hard limit on the reducer-partition fan-in of a coalesced " +
         "shuffle task, independent of the advisory partition size.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ > 0, "The maximum number of reducer partitions per task must be positive.")
       .createWithDefault(Int.MaxValue)
