@@ -9822,6 +9822,44 @@ object functions {
     Column.fn("variant_delete", (v +: lit(path) +: paths.map(lit)): _*)
 
   /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field (error if it already exists); an array path inserts at the index, shifting later
+   * elements right. Missing intermediate keys are created. Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the insertion target. A valid path
+   *   should start with `$` and is followed by one or more segments like `[123]`, `.name`,
+   *   `['name']`, or `["name"]`. The root path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_insert(v: Column, path: Column, value: Column): Column =
+    Column.fn("variant_insert", v, path, value)
+
+  /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field (error if it already exists); an array path inserts at the index, shifting later
+   * elements right. Missing intermediate keys are created. Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the insertion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_insert(v: Column, path: String, value: Column): Column =
+    Column.fn("variant_insert", v, lit(path), value)
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
