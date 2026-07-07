@@ -25,6 +25,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{JobExecutionStatus, SparkFunSuite}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphEdge, SparkPlanGraphNode, SQLExecutionUIData, SQLPlanMetric}
+import org.apache.spark.status.api.v1.JacksonMessageWriter
 
 object SqlResourceSuite {
 
@@ -257,5 +258,26 @@ class SqlResourceSuite extends SparkFunSuite with PrivateMethodTester {
     assert(executionData.queryId == null)
     assert(executionData.errorMessage == null)
     assert(executionData.rootExecutionId == -1)
+  }
+
+  test("SPARK-57987: JSON serialization of default modifiedConfigs and node desc") {
+    val mapper = new JacksonMessageWriter().mapper
+    val nodeWithEmptyDesc = Node(0, SCAN_TEXT, metrics = Seq.empty)
+    val executionData = new ExecutionData(
+      id = 0,
+      status = "COMPLETED",
+      description = DESCRIPTION,
+      planDescription = "",
+      submissionTime = new Date(),
+      duration = 0,
+      runningJobIds = Seq.empty,
+      successJobIds = Seq.empty,
+      failedJobIds = Seq.empty,
+      nodes = Seq(nodeWithEmptyDesc),
+      edges = Seq.empty)
+    val executionJson = mapper.writeValueAsString(executionData).replaceAll("\\s", "")
+    assert(executionJson.contains("\"modifiedConfigs\":{}"))
+    assert(executionJson.contains(
+      "\"nodes\":[{\"nodeId\":0,\"nodeName\":\"Scantext\",\"metrics\":[]}]"))
   }
 }
