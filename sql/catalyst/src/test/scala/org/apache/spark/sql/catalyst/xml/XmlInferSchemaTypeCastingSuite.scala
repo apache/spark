@@ -164,4 +164,34 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(newInferSchema(Map("preferDate" -> "false"))
       .inferFrom("2024-01-15", NullType) == TimestampType)
   }
+
+  test("preferDate gates the incremental temporal re-entry (tryParseTime)") {
+    // Refining a temporal `typeSoFar` re-enters the cascade at `tryParseTime`, which must honor
+    // `preferDate` just like the fresh path (`tryParseDouble`). With a `Date`-so-far field seeing
+    // another date-only value: preferDate=true re-infers `Date` and the merge stays `Date`;
+    // preferDate=false skips date inference so the value falls through to `Timestamp`, and the
+    // merge widens `Date` to `Timestamp`. This guards the `tryParseTime` branch, which the
+    // incremental-vs-legacy parity test does not cover (it runs only at the default preferDate=true).
+    assert(newInferSchema(Map("preferDate" -> "true"))
+      .inferFrom("2024-01-15", DateType) == DateType)
+    assert(newInferSchema(Map("preferDate" -> "false"))
+      .inferFrom("2024-01-15", DateType) == TimestampType)
+  }
+
+  test("TIME inference precedes the preferDate gate") {
+    // TIME is tried ahead of date/timestamp in both `tryParseDouble` (fresh path) and
+    // `tryParseTime` (incremental temporal re-entry), so a TIME-shaped value infers as `TimeType`
+    // regardless of `preferDate`. This guards against a refactor that would move the TIME guard
+    // inside the `preferDate` branch and silently drop TIME inference when preferDate=false.
+    val time = TimeType(TimeType.DEFAULT_PRECISION)
+    Seq("true", "false").foreach { preferDate =>
+      val inferSchema = newInferSchema(Map("preferDate" -> preferDate))
+      // Fresh path (typeSoFar == NullType, enters via tryParseDouble).
+      assert(inferSchema.inferFrom("10:00:00", NullType) == time,
+        s"expected TimeType with preferDate=$preferDate")
+      // Incremental temporal re-entry (typeSoFar == TimeType, enters via tryParseTime).
+      assert(inferSchema.inferFrom("10:00:00", time) == time,
+        s"expected TimeType with preferDate=$preferDate")
+    }
+  }
 }
