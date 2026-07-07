@@ -120,6 +120,12 @@ private[sql] object ArrowUtils {
   // (namespaced like `metadataKey`, separate from the user metadata blob so user metadata is
   // untouched) and recovered on read in `fromArrowField`.
   private val timePrecisionKey = "SPARK::time::precision"
+  // Marks the epochMicros child of the lossless struct representation of a nanosecond timestamp
+  // (see `toArrowField` with `losslessTimestampNanos = true`). The value is "ntz" or "ltz" and
+  // distinguishes TimestampNTZNanosType from TimestampLTZNanosType on read; the precision is
+  // stored alongside under `timestampNanosPrecisionKey`. The tag lives on a child field (like the
+  // geometry/variant struct tags) so it cannot collide with user metadata on the struct itself.
+  private val timestampNanosStructKey = "SPARK::timestampNanos::struct"
   private def toArrowMetaData(metadata: Metadata) = {
     if (metadata != null && !metadata.isEmpty) {
       Map(metadataKey -> metadata.json).asJava
@@ -156,14 +162,75 @@ private[sql] object ArrowUtils {
     new Field(name, fieldType, Seq.empty[Field].asJava)
   }
 
-  /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
+  /**
+   * Builds the lossless Arrow struct representation of a nanosecond timestamp: a struct of
+   * (epochMicros: int64, nanosWithinMicro: int16), mirroring TimestampNanosVal's own layout with
+   * no unit conversion. Unlike the default Timestamp(NANOSECOND) mapping, which packs the value
+   * into a single int64 of epoch-nanoseconds and therefore only covers roughly years 1677-2262,
+   * this representation covers the full domain of the Spark types (years 0001-9999).
+   *
+   * Why two representations exist, permanently: the mismatch is structural. Arrow's timestamp
+   * physical type is fixed at int64 by the Arrow format spec, while the Spark types are defined
+   * over years 0001-9999, so no single Arrow timestamp encoding can serve both goals.
+   *   - Interchange paths (pandas conversion, Arrow UDFs, Connect result sets) must keep the
+   *     standard Timestamp(NANOSECOND) encoding: their consumers only understand that encoding,
+   *     and those consumers' own timestamp domains are equally int64-bound (e.g. pandas
+   *     datetime64[ns]), so the reduced domain is inherent to the destination -- failing loudly
+   *     at write (DATETIME_OVERFLOW) is the correct behavior there, not a limitation of the
+   *     mapping.
+   *   - Internal storage (e.g. the Arrow-based Dataset cache) is a closed write-then-read-back
+   *     loop with no external consumer, where the only requirement is fidelity to Spark
+   *     semantics, hence this struct.
+   * The choice is made per call site via `losslessTimestampNanos` on `toArrowSchema` /
+   * `toArrowField` (the same pattern as `largeVarTypes`: one Spark type, two Arrow encodings,
+   * selected by the consumer's needs). Only schema construction needs the flag: the struct is
+   * self-describing through its child-field tag, so `fromArrowField`, `ArrowWriter`, and
+   * `ArrowColumnVector` recognize both shapes unconditionally and no mode mismatch is possible.
+   */
+  private def toTimestampNanosStructField(
+      name: String,
+      isNtz: Boolean,
+      precision: Int,
+      nullable: Boolean,
+      metadata: Metadata): Field = {
+    val fieldType =
+      new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
+    // Tag the epochMicros child so `fromArrowField` (and ArrowColumnVector) can recognize that
+    // this struct represents a nanosecond timestamp, following the geometry/variant tag pattern.
+    val microsFieldType = new FieldType(
+      false,
+      new ArrowType.Int(8 * 8, true),
+      null,
+      Map(
+        timestampNanosStructKey -> (if (isNtz) "ntz" else "ltz"),
+        timestampNanosPrecisionKey -> precision.toString).asJava)
+    val nanosFieldType = new FieldType(false, new ArrowType.Int(8 * 2, true), null, null)
+    new Field(
+      name,
+      fieldType,
+      Seq(
+        new Field("epochMicros", microsFieldType, Seq.empty[Field].asJava),
+        new Field("nanosWithinMicro", nanosFieldType, Seq.empty[Field].asJava)).asJava)
+  }
+
+  /**
+   * Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType
+   *
+   * @param losslessTimestampNanos
+   *   when true, nanosecond timestamps map to the lossless struct representation covering their
+   *   full value domain instead of the standard int64 Timestamp(NANOSECOND) encoding. Only
+   *   internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
+   *   cache) should pass true; interchange paths must keep the default. See
+   *   `toTimestampNanosStructField` for the full rationale.
+   */
   def toArrowField(
       name: String,
       dt: DataType,
       nullable: Boolean,
       timeZoneId: String,
       largeVarTypes: Boolean = false,
-      metadata: Metadata = Metadata.empty): Field = {
+      metadata: Metadata = Metadata.empty,
+      losslessTimestampNanos: Boolean = false): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType =
@@ -172,7 +239,14 @@ private[sql] object ArrowUtils {
           name,
           fieldType,
           Seq(
-            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes)).asJava)
+            toArrowField(
+              "element",
+              elementType,
+              containsNull,
+              timeZoneId,
+              largeVarTypes,
+              Metadata.empty,
+              losslessTimestampNanos)).asJava)
       case StructType(fields) =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -187,7 +261,8 @@ private[sql] object ArrowUtils {
                 field.nullable,
                 timeZoneId,
                 largeVarTypes,
-                field.metadata)
+                field.metadata,
+                losslessTimestampNanos)
             }
             .toImmutableArraySeq
             .asJava)
@@ -206,9 +281,18 @@ private[sql] object ArrowUtils {
                 .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
               nullable = false,
               timeZoneId,
-              largeVarTypes)).asJava)
+              largeVarTypes,
+              Metadata.empty,
+              losslessTimestampNanos)).asJava)
       case udt: UserDefinedType[_] =>
-        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, metadata)
+        toArrowField(
+          name,
+          udt.sqlType,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata,
+          losslessTimestampNanos)
       case g: GeometryType =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -262,6 +346,10 @@ private[sql] object ArrowUtils {
           Seq(
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
             new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
+      case t: TimestampNTZNanosType if losslessTimestampNanos =>
+        toTimestampNanosStructField(name, isNtz = true, t.precision, nullable, metadata)
+      case t: TimestampLTZNanosType if losslessTimestampNanos =>
+        toTimestampNanosStructField(name, isNtz = false, t.precision, nullable, metadata)
       case t: TimestampNTZNanosType =>
         toPrecisionTaggedArrowField(
           name,
@@ -332,6 +420,23 @@ private[sql] object ArrowUtils {
     }
   }
 
+  /**
+   * Whether the Arrow struct field is the lossless representation of a nanosecond timestamp built
+   * by `toArrowField` with `losslessTimestampNanos = true`. Also callable from Java
+   * (ArrowColumnVector) to select the timestamp accessor for such structs.
+   */
+  def isTimestampNanosStructField(field: Field): Boolean = {
+    field.getType.isInstanceOf[ArrowType.Struct] &&
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("epochMicros", "nanosWithinMicro").asJava) &&
+    field.getChildren.asScala.exists { child =>
+      child.getName == "epochMicros" &&
+      Set("ntz", "ltz").contains(child.getMetadata.getOrDefault(timestampNanosStructKey, ""))
+    }
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
@@ -343,6 +448,18 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
+      case ArrowType.Struct.INSTANCE if isTimestampNanosStructField(field) =>
+        val microsChild = field.getChildren.asScala.find(_.getName == "epochMicros").get
+        val isNtz = microsChild.getMetadata.get(timestampNanosStructKey) == "ntz"
+        // Recover the precision like the Timestamp(NANOSECOND) case below: a missing or invalid
+        // precision key falls back to the canonical maximum precision.
+        val precision = Option(microsChild.getMetadata.get(timestampNanosPrecisionKey))
+          .flatMap(s => scala.util.Try(s.toInt).toOption)
+          .filter { p =>
+            p >= TimestampNTZNanosType.MIN_PRECISION && p <= TimestampNTZNanosType.MAX_PRECISION
+          }
+          .getOrElse(TimestampNTZNanosType.MAX_PRECISION)
+        if (isNtz) TimestampNTZNanosType(precision) else TimestampLTZNanosType(precision)
       case ArrowType.Struct.INSTANCE if isVariantField(field) =>
         VariantType
       case ArrowType.Struct.INSTANCE if isGeometryField(field) =>
@@ -401,12 +518,17 @@ private[sql] object ArrowUtils {
 
   /**
    * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
+   *
+   * @param losslessTimestampNanos
+   *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps for
+   *   internal storage; interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
-      largeVarTypes: Boolean): Schema = {
+      largeVarTypes: Boolean,
+      losslessTimestampNanos: Boolean = false): Schema = {
     new Schema(schema.map { field =>
       toArrowField(
         field.name,
@@ -414,7 +536,8 @@ private[sql] object ArrowUtils {
         field.nullable,
         timeZoneId,
         largeVarTypes,
-        field.metadata)
+        field.metadata,
+        losslessTimestampNanos)
     }.asJava)
   }
 
