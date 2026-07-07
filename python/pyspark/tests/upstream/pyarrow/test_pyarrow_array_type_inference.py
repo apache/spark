@@ -328,12 +328,15 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([date1, date2]), pa.date32()),
             (pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp(ts_unit)),
             (pd.Series([pd.Timestamp("1970-01-01")]), pa.timestamp(ts_unit)),
-            (pd.Series([pd.Timestamp.min]), pa.timestamp(ts_unit)),
-            (pd.Series([pd.Timestamp.max]), pa.timestamp(ts_unit)),
+            # Timestamp.min/max carry nanosecond precision, so they stay ns-resolution
+            # even under the pandas 3 microsecond default.
+            (pd.Series([pd.Timestamp.min]), pa.timestamp("ns")),
+            (pd.Series([pd.Timestamp.max]), pa.timestamp("ns")),
             (pd.Series(pd.to_timedelta(["1 day", "2 hours"])), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta(0)]), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta.min]), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta.max]), pa.duration(ts_unit)),
+            # Likewise Timedelta(0)/min/max are constructed at nanosecond resolution.
+            (pd.Series([pd.Timedelta(0)]), pa.duration("ns")),
+            (pd.Series([pd.Timedelta.min]), pa.duration("ns")),
+            (pd.Series([pd.Timedelta.max]), pa.duration("ns")),
             # Timezone-aware
             (pd.Series([dt1_sg, dt2_sg]), pa.timestamp(ts_unit, tz="Asia/Singapore")),
             (pd.Series([ts1_la, ts2_la]), pa.timestamp(ts_unit, tz=la)),
