@@ -140,6 +140,8 @@ public class GcmTransportCipher implements TransportCipher {
             //                          the encrypter before any ciphertext segments.
             //   segment bytes        - full segments each padded with a 16-byte GCM auth tag,
             //                          plus any partial final segment similarly padded.
+            // NOTE: This formula is coupled to Tink's internal layout. testEncryptedCountBoundary
+            // guards current behavior.
             this.encryptedCount = LENGTH_HEADER_BYTES
                     + aesGcmHkdfStreaming.getHeaderLength()
                     + fullSegments * ciphertextSegmentSize
