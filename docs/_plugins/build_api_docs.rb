@@ -34,17 +34,17 @@ def print_header(text)
 end
 
 def print_skip_flags
-  print_header "Skip flags"
-  skip_flags = ENV.select { |name, value| name.start_with?('SKIP_') && value == '1' }.sort
+  print_header "Skip flags enabled"
+  skip_flags = ENV.select { |name, value| name.start_with?('SKIP_') && !value.empty? }.sort
   if skip_flags.empty?
     puts "None"
   else
-    skip_flags.each { |name, value| puts "#{name}=#{value}" }
+    skip_flags.each { |name, value| puts "#{name}" }
   end
 end
 
 def build_spark_if_necessary
-  if ENV['SKIP_SPARK_BUILD'] == '1'
+  if !ENV['SKIP_SPARK_BUILD'].to_s.empty?
     return
   end
 
@@ -284,7 +284,7 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs"
   cd(SPARK_PROJECT_ROOT)
 
-  if not (ENV['SKIP_UNIDOC'] == '1')
+  if ENV['SKIP_UNIDOC'].to_s.empty?
     build_unidoc
   end
 
@@ -354,8 +354,9 @@ end
 def build_error_docs
   print_header "Building error docs"
 
-  system("python3 --version") \
-  || raise("`python3` is not on your PATH")
+  python_version = %x{python3 --version}.strip
+  raise("`python3` is not on your PATH") unless $?.success?
+  puts "Using #{python_version}."
 
   system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
@@ -363,24 +364,24 @@ end
 
 print_skip_flags
 
-if not (ENV['SKIP_ERRORDOC'] == '1')
+if ENV['SKIP_ERRORDOC'].to_s.empty?
   build_error_docs
 end
 
-if not (ENV['SKIP_API'] == '1')
-  if not (ENV['SKIP_SCALADOC'] == '1')
+if ENV['SKIP_API'].to_s.empty?
+  if ENV['SKIP_SCALADOC'].to_s.empty?
     build_scala_and_java_docs
   end
 
-  if not (ENV['SKIP_PYTHONDOC'] == '1')
+  if ENV['SKIP_PYTHONDOC'].to_s.empty?
     build_python_docs
   end
 
-  if not (ENV['SKIP_RDOC'] == '1')
+  if ENV['SKIP_RDOC'].to_s.empty?
     build_r_docs
   end
 
-  if not (ENV['SKIP_SQLDOC'] == '1')
+  if ENV['SKIP_SQLDOC'].to_s.empty?
     build_sql_docs
   end
 end

@@ -123,11 +123,13 @@ To control what API docs get built, you can set any combination of the following
 * `SKIP_ERRORDOC=1`: Skip building the unified error documentation.
 * `SKIP_SPARK_BUILD=1`: Skip building Spark. A working Spark build is required for the docs (except the error docs) to build correctly, so set this only if you know you've already built Spark.
 * `SKIP_API=1`: Skip building all the API docs. This is basically the same as setting all of the skip flags below.
-* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs, which includes building the Unidoc.
-* `SKIP_UNIDOC=1`: Skip building the Unidoc.
+* `SKIP_SCALADOC=1`: Skip the Scala and Java API docs. This includes skipping the Unidoc build as well as the copy of files to the site output.
+* `SKIP_UNIDOC=1`: Skip building the Unidoc. Any existing Scala and Java docs will still be copied to the output directory.
 * `SKIP_PYTHONDOC=1`: Skip the Python API docs.
 * `SKIP_RDOC=1`: Skip the R API docs.
 * `SKIP_SQLDOC=1`: Skip the SQL API docs.
+
+Note that you can set these variables to any value and they will be considered enabled. To disable them, simply unset them or set them to the empty string.
 
 ## Build docs with docker image (Optional)
 
