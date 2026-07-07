@@ -33,6 +33,12 @@ output while the producer stage is still running.
 A **regular shuffle dependency (RSD)** is an ordinary shuffle dependency: its output must be fully
 materialized before any consumer reads it.
 
+Note: the name *pipelined* is deliberately chosen over *streaming*. The property is that a consumer
+reads producer output as it is produced — software-pipelining of dependent stages — which is a
+general execution capability. Streaming / real-time mode is the first caller, but nothing about the
+primitive is streaming-specific, so the dependency and the group are named for the capability, not
+the caller.
+
 ### 2.2 Pipelined group (G)
 
 The set of stages connected to one another through pipelined edges — the connected component of the
@@ -77,9 +83,42 @@ not — i.e. a normal materialized parent of the group.
   worth of capacity, so this is the maximum number of tasks that can run at once). If the group
   needs more slots than the cluster can offer, the submission fails fast, since the group could
   never become fully co-resident.
+  - *What "available slots" is:* the cluster's concurrent-task capacity — the number of tasks it can
+    run at once — reusing the value the barrier slot check already uses (`sc.maxNumConcurrentTasks`),
+    not `spark.default.parallelism` (a default partition count, unrelated to how many tasks can run
+    concurrently).
+- **Single resource profile per group (v1).** A resource profile is the executor/task resource
+  requirement (cores, memory, GPUs, ...) a stage runs under; the number of concurrent slots is
+  defined *per profile* (a cluster may run many concurrent CPU tasks but few GPU tasks). Comparing
+  one demand against one capacity is therefore only well-defined when all member stages of a group
+  share a single profile. v1 requires that and rejects a mixed-profile group (fail-fast, §9);
+  per-profile accounting — checking each profile's demand against that profile's own capacity — is a
+  follow-up, not needed for the streaming shapes whose members share the default profile.
 - **Co-residency.** Once admitted, all member stages of a group are simultaneously running.
 - **Single ownership.** A pipelined group belongs to exactly one job; a pipelined producer is not
   shared across jobs.
+
+### 4.1 Cross-group admission (multiple groups / groups vs. regular jobs)
+
+A pipelined group holds its slots for its whole run, so admission is decided against currently-free
+slots, and a group that does not fit is failed rather than queued.
+
+- **Capacity is free slots, not total.** The slot check counts only slots not occupied by running
+  tasks — running groups' and regular jobs' tasks are subtracted — so a group is admitted only if its
+  full demand fits in the slots free at admission time.
+  - *How free capacity is measured:* the cluster's concurrent-task capacity (the number of tasks it
+    can run at once — what an all-at-once gang admission must check against, see §4) minus the tasks
+    currently running.
+- **No waiting queue, no partial reservation.** A group that doesn't fit fails its admission; it never
+  sits in a queue holding slots incrementally. This keeps the scheduler change minimal and cannot
+  deadlock (a group never occupies slots a sibling is blocked on), matching barrier, which also fails
+  its slot check rather than queuing.
+- **Two failure reasons, one path.** Demand > total capacity can never fit (a plan/sizing error);
+  demand > free slots but ≤ total could fit later. Both fail admission.
+- **Retry is the caller's decision.** The scheduler does not automatically retry a failed admission —
+  it fails the job. Whether and how to retry is up to the caller. For a streaming query this is the
+  batch-execution loop restarting the batch (with its own backoff), so a transiently-busy cluster is
+  handled by the caller's restart policy, not a scheduler retry loop.
 
 ---
 
@@ -96,6 +135,13 @@ not — i.e. a normal materialized parent of the group.
 - **Replay window.** There is a window between a member finishing and group completion. A failure in
   that window is a group failure (§6): the deferred finish transitions are dropped and the group
   reruns.
+- **In-group result-stage side effects must be idempotent.** Per-task side effects run immediately
+  (above), including a result stage's output commit. If a result task commits and a sibling then
+  fails in the replay window, the group reruns and re-delivers that output. This is the standard
+  streaming model — a batch is re-delivered on recovery and the sink must absorb it — so v1 requires
+  an in-group result stage's side effects to be idempotent, and fail-fast rejects a sink that cannot
+  absorb re-delivery (§9). Deferring the commit itself to group completion is a possible future
+  augmentation if a non-idempotent committer ever needs to be supported.
 
 ### 5.1 Observable completion events (listener bus)
 
@@ -128,12 +174,15 @@ member as completed before the group has committed.
 
 ## 6. Failure
 
-- **Failure is group-atomic.** Any task failure in any member stage — including a fetch failure —
-  fails the whole group. There is no independent single-stage failure within a group. Two mechanisms
-  make this hold:
-  - *No single-stage resubmit inside a group.* The ordinary "resubmit one failed stage" path is
-    invalid for a group member: the transient pipelined shuffle cannot be re-read, and members are
-    co-scheduled. A member failure routes to group failure instead.
+- **Failure is group-atomic.** Any member task failure, for any reason, fails the whole group; there
+  is no independent single-stage failure within a group.
+  - *Single-stage resubmit is disabled for group members.* That isolated-resubmit branch is turned
+    off for a member of a pipelined group: the transient pipelined shuffle cannot be re-read and
+    members are co-scheduled, so a lone-stage resubmit is never valid. With it disabled, every member
+    failure necessarily routes to group failure.
+    - *Note this differs from the base scheduler,* which handles a task failure by resubmitting just
+      that one stage — the `FetchFailed` -> resubmit path, and retry paths generally — recomputing
+      the failed stage in isolation and resuming.
   - *Teardown is by group membership, not producer availability.* At the end of a batch the producer
     finishes and registers all its map outputs — becoming "available" — while the consumer is still
     draining the remainder, so a producer-available-while-consumer-still-running window is normal,
@@ -153,6 +202,7 @@ member as completed before the group has committed.
 
 - **Regular shuffle into a group — supported.** A regular dependency from outside the group to a
   member is a normal materialized parent (an external input); the group waits for it.
+  - A lost external durable input reruns the group rather than being recomputed in isolation.
 - **Regular shuffle out of a group — supported.** A regular dependency from a member to a stage
   outside the group produces a materialized output that a downstream group consumes with normal
   sequencing; the downstream waits for the group to complete.
@@ -198,6 +248,7 @@ itself and would corrupt or hang a group that never fails.
 | Cached/persisted RDD in a member's within-stage chain | incompatible | Would capture partial output read mid-run and serve it as a complete result on reuse. Scoped to the member's within-stage (narrow-dependency) chain: a cached *complete* input reached via a broadcast variable or across a materialized shuffle — e.g. the static side of a stream-static join — is outside that chain and is unaffected. |
 | Pipelined producer shared across jobs | incompatible | Breaks single ownership: a failure must map to exactly one job's group. |
 | Regular shuffle internal to a group | incompatible | Concurrent co-scheduling contradicts materialize-before-read (§7). |
+| Members with differing resource profiles | incompatible | The gang slot check compares one demand against one capacity (§4); v1 requires a group to be single-profile. Per-profile accounting is a follow-up. |
 | Adaptive Query Execution over a pipelined exchange | incompatible | AQE reshapes exchanges from complete map-output statistics, which are unavailable while the shuffle is read incrementally. Enforced where exchanges are marked pipelined. |
 
 The AQE row forbids AQE's *intra-batch, mid-stage* replanning — reading a running producer's statistics
