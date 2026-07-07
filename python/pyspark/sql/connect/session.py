@@ -1321,9 +1321,9 @@ class SparkSession:
     def _acquire_local_connect_start_lock() -> Any:
         """Take an exclusive file lock guarding persistent-server start-up.
 
-        Returns the open fd to pass to ``_release_local_connect_start_lock``, or ``None`` when file
-        locking is unavailable (e.g. Windows, which has no ``fcntl``); there we rely on the
-        reconnect-the-winner fallback in ``_start_persistent_local_connect_server`` instead.
+        Returns the open fd to pass to ``_release_local_connect_start_lock``. Returns ``None`` on
+        platforms without ``fcntl``; those callers may race and then reconnect to the server that
+        wins the discovery-file update.
         """
         try:
             import fcntl
@@ -1360,9 +1360,9 @@ class SparkSession:
         endpoint = SparkSession._reuse_from_discovery()
         if endpoint is not None:
             return endpoint
-        # No reusable server yet. Serialize start-up across processes so concurrent opted-in
-        # processes (parallel workers, an IDE spawning scripts) do not each spawn a server and
-        # collide on the port; the winner writes the discovery file and the others reuse it.
+        # No reusable server yet. Serialize start-up across processes when file locking is
+        # available. Without it, racing callers may each start a daemon; the winner writes the
+        # discovery file and the others reconnect to it.
         lock_fd = SparkSession._acquire_local_connect_start_lock()
         try:
             endpoint = SparkSession._reuse_from_discovery()
@@ -1412,28 +1412,28 @@ class SparkSession:
         return conf
 
     @staticmethod
-    def _terminate_local_connect_server(proc: Any) -> None:
-        """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM.
-
-        The daemon is a POSIX session leader (``start_new_session=True``) and its child JVM stays in
-        that process group, so signalling the group reaps both -- important when the timeout fires
-        before the daemon has wired up its own signal handling. Escalates to SIGKILL if a graceful
-        stop does not take. On non-POSIX platforms it falls back to terminating just the process.
-        """
+    def _signal_local_connect_server(pid: int, sig: int) -> bool:
+        """Signal a detached local Connect daemon, including its JVM on POSIX."""
         try:
             if os.name == "posix":
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                os.killpg(os.getpgid(pid), sig)
             else:
-                proc.terminate()
+                os.kill(pid, sig)
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _terminate_local_connect_server(proc: Any) -> None:
+        """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM."""
+        if SparkSession._signal_local_connect_server(proc.pid, signal.SIGTERM):
             try:
                 proc.wait(timeout=10)
             except Exception:
                 if os.name == "posix":
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    SparkSession._signal_local_connect_server(proc.pid, signal.SIGKILL)
                 else:
                     proc.kill()
-        except OSError:
-            pass
 
     @staticmethod
     def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
@@ -1576,14 +1576,8 @@ class SparkSession:
                 pid = int(disc["pid"])
             except (TypeError, ValueError, KeyError):
                 pid = None
-            # Never signal the current process: a discovery file should only ever point at the
-            # detached server, never at the client that is reading it.
             if pid is not None and pid != os.getpid():
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                    stopped = True
-                except OSError:
-                    pass
+                stopped = SparkSession._signal_local_connect_server(pid, signal.SIGTERM)
         try:
             os.remove(path)
         except OSError:
