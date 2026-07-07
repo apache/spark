@@ -172,14 +172,15 @@ private[sql] object ArrowUtils {
    * Why two representations exist, permanently: the mismatch is structural. Arrow's timestamp
    * physical type is fixed at int64 by the Arrow format spec, while the Spark types are defined
    * over years 0001-9999, so no single Arrow timestamp encoding can serve both goals.
-   *  - Interchange paths (pandas conversion, Arrow UDFs, Connect result sets) must keep the
-   *    standard Timestamp(NANOSECOND) encoding: their consumers only understand that encoding,
-   *    and those consumers' own timestamp domains are equally int64-bound (e.g. pandas
-   *    datetime64[ns]), so the reduced domain is inherent to the destination -- failing loudly at
-   *    write (DATETIME_OVERFLOW) is the correct behavior there, not a limitation of the mapping.
-   *  - Internal storage (e.g. the Arrow-based Dataset cache) is a closed write-then-read-back
-   *    loop with no external consumer, where the only requirement is fidelity to Spark semantics,
-   *    hence this struct.
+   *   - Interchange paths (pandas conversion, Arrow UDFs, Connect result sets) must keep the
+   *     standard Timestamp(NANOSECOND) encoding: their consumers only understand that encoding,
+   *     and those consumers' own timestamp domains are equally int64-bound (e.g. pandas
+   *     datetime64[ns]), so the reduced domain is inherent to the destination -- failing loudly
+   *     at write (DATETIME_OVERFLOW) is the correct behavior there, not a limitation of the
+   *     mapping.
+   *   - Internal storage (e.g. the Arrow-based Dataset cache) is a closed write-then-read-back
+   *     loop with no external consumer, where the only requirement is fidelity to Spark
+   *     semantics, hence this struct.
    * The choice is made per call site via `losslessTimestampNanos` on `toArrowSchema` /
    * `toArrowField` (the same pattern as `largeVarTypes`: one Spark type, two Arrow encodings,
    * selected by the consumer's needs). Only schema construction needs the flag: the struct is
@@ -215,11 +216,12 @@ private[sql] object ArrowUtils {
   /**
    * Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType
    *
-   * @param losslessTimestampNanos when true, nanosecond timestamps map to the lossless struct
-   *   representation covering their full value domain instead of the standard int64
-   *   Timestamp(NANOSECOND) encoding. Only internal-storage callers with no external Arrow
-   *   consumer (e.g. the Arrow-based Dataset cache) should pass true; interchange paths must
-   *   keep the default. See `toTimestampNanosStructField` for the full rationale.
+   * @param losslessTimestampNanos
+   *   when true, nanosecond timestamps map to the lossless struct representation covering their
+   *   full value domain instead of the standard int64 Timestamp(NANOSECOND) encoding. Only
+   *   internal-storage callers with no external Arrow consumer (e.g. the Arrow-based Dataset
+   *   cache) should pass true; interchange paths must keep the default. See
+   *   `toTimestampNanosStructField` for the full rationale.
    */
   def toArrowField(
       name: String,
@@ -237,8 +239,14 @@ private[sql] object ArrowUtils {
           name,
           fieldType,
           Seq(
-            toArrowField("element", elementType, containsNull, timeZoneId, largeVarTypes,
-              Metadata.empty, losslessTimestampNanos)).asJava)
+            toArrowField(
+              "element",
+              elementType,
+              containsNull,
+              timeZoneId,
+              largeVarTypes,
+              Metadata.empty,
+              losslessTimestampNanos)).asJava)
       case StructType(fields) =>
         val fieldType =
           new FieldType(nullable, ArrowType.Struct.INSTANCE, null, toArrowMetaData(metadata))
@@ -277,7 +285,13 @@ private[sql] object ArrowUtils {
               Metadata.empty,
               losslessTimestampNanos)).asJava)
       case udt: UserDefinedType[_] =>
-        toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes, metadata,
+        toArrowField(
+          name,
+          udt.sqlType,
+          nullable,
+          timeZoneId,
+          largeVarTypes,
+          metadata,
           losslessTimestampNanos)
       case g: GeometryType =>
         val fieldType =
@@ -413,15 +427,14 @@ private[sql] object ArrowUtils {
    */
   def isTimestampNanosStructField(field: Field): Boolean = {
     field.getType.isInstanceOf[ArrowType.Struct] &&
-      field.getChildren.asScala
-        .map(_.getName)
-        .asJava
-        .containsAll(Seq("epochMicros", "nanosWithinMicro").asJava) &&
-      field.getChildren.asScala.exists { child =>
-        child.getName == "epochMicros" &&
-          Set("ntz", "ltz").contains(
-            child.getMetadata.getOrDefault(timestampNanosStructKey, ""))
-      }
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("epochMicros", "nanosWithinMicro").asJava) &&
+    field.getChildren.asScala.exists { child =>
+      child.getName == "epochMicros" &&
+      Set("ntz", "ltz").contains(child.getMetadata.getOrDefault(timestampNanosStructKey, ""))
+    }
   }
 
   def fromArrowField(field: Field): DataType = {
@@ -506,8 +519,9 @@ private[sql] object ArrowUtils {
   /**
    * Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType
    *
-   * @param losslessTimestampNanos see `toArrowField`: opt-in full-domain struct encoding of
-   *   nanosecond timestamps for internal storage; interchange paths must keep the default.
+   * @param losslessTimestampNanos
+   *   see `toArrowField`: opt-in full-domain struct encoding of nanosecond timestamps for
+   *   internal storage; interchange paths must keep the default.
    */
   def toArrowSchema(
       schema: StructType,
