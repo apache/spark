@@ -1413,10 +1413,16 @@ class SparkSession:
 
     @staticmethod
     def _signal_local_connect_server(pid: int, sig: int) -> bool:
-        """Signal a detached local Connect daemon, including its JVM on POSIX."""
+        """Signal a detached local Connect daemon, including its JVM on POSIX.
+
+        The daemon is launched as a session leader, so its process group id equals its pid and
+        signalling the group reaps its child JVM too. If the group id differs, ``pid`` belongs to
+        an unrelated process (e.g. recycled after a stale discovery file), so only the pid itself
+        is signalled -- never a group this code did not create.
+        """
         try:
-            if os.name == "posix":
-                os.killpg(os.getpgid(pid), sig)
+            if os.name == "posix" and os.getpgid(pid) == pid:
+                os.killpg(pid, sig)
             else:
                 os.kill(pid, sig)
             return True

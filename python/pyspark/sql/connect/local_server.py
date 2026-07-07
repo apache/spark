@@ -34,6 +34,7 @@ It is launched by file path rather than ``python -m`` so it does not require the
 *client* dependencies (grpc, etc.): a server only needs a classic PySpark install plus the Connect
 server jar, like ``sbin/start-connect-server.sh``. It imports only the classic ``pyspark.sql`` API.
 """
+
 import sys
 
 # Launching by file path puts this file's directory -- pyspark/sql/connect -- at the front of
