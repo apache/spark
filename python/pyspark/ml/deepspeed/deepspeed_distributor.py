@@ -100,7 +100,9 @@ class DeepspeedTorchDistributor(TorchDistributor):
     @staticmethod
     def _get_deepspeed_config_path(deepspeed_config: Union[str, Dict[str, Any]]) -> str:
         if isinstance(deepspeed_config, dict):
-            with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as file:
+            with tempfile.NamedTemporaryFile(
+                mode="w+", delete=False, suffix=".json", encoding="utf-8"
+            ) as file:
                 json.dump(deepspeed_config, file)
                 return file.name
         deepspeed_config_path = deepspeed_config
