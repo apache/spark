@@ -1087,12 +1087,15 @@ class JDBCSuite extends SharedSparkSession {
     // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
     // LiteralValue for StringType must use UTF8String (Spark's internal string type).
     import org.apache.spark.unsafe.types.UTF8String
-    val startsWith = new Predicate("STARTS_WITH",
-      Array[V2Expression](a, LiteralValue(UTF8String.fromString("abc"), StringType)))
-    val isNullStartsWith = new Predicate("IS_NULL", Array[V2Expression](startsWith))
-    assert(dialect.compileExpression(isNullStartsWith).get ===
-      """("a" LIKE 'abc%' ESCAPE '\') IS NULL""")
-    assert(msSqlServer.compileExpression(isNullStartsWith).isEmpty)
+    for ((op, pattern) <- Seq(
+        "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
+      val like = new Predicate(op,
+        Array[V2Expression](a, LiteralValue(UTF8String.fromString("abc"), StringType)))
+      val isNullLike = new Predicate("IS_NULL", Array[V2Expression](like))
+      assert(dialect.compileExpression(isNullLike).get ===
+        raw"""("a" LIKE '$pattern' ESCAPE '\') IS NULL""")
+      assert(msSqlServer.compileExpression(isNullLike).isEmpty)
+    }
 
     // Arithmetic operands are parenthesized; they are value expressions, not predicates, so
     // MsSqlServer still pushes them down.
