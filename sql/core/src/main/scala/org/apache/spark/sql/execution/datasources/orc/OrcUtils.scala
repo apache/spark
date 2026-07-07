@@ -23,6 +23,7 @@ import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
@@ -46,8 +47,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.ThreadUtils
 
 object OrcUtils extends Logging {
 
@@ -78,10 +79,20 @@ object OrcUtils extends Logging {
       ignoreMissingFiles: Boolean = false): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+    // Follow-up to SPARK-57958: This runs on `readingOrcSchemas` parmap workers (Spark task
+    // threads) during parallel/merged schema inference. When a sibling file fails and
+    // the enclosing Spark job is aborted, the worker can be interrupted between opening
+    // the ORC `Reader` (which holds an `FSDataInputStream` opened in
+    // `ReaderImpl.extractFileTail`) and closing it. `Reader.close()` performs file-system
+    // I/O, so a pending interrupt can turn it into a no-op/`ClosedByInterruptException`
+    // and orphan the stream, which later surfaces as
+    // `DebugFilesystem.assertNoOpenStreams` "possibly leaked file streams" aborting an
+    // unrelated ORC suite. Hold the reader explicitly and close it uninterruptibly so the
+    // handle is always released regardless of the enclosing task's interrupt state.
+    var reader: Reader = null
     try {
-      val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
-        reader.getSchema
-      }
+      reader = OrcFile.createReader(file, readerOptions)
+      val schema = reader.getSchema
       if (schema.getFieldNames.size == 0) {
         None
       } else {
@@ -99,6 +110,22 @@ object OrcUtils extends Logging {
         } else {
           throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
         }
+    } finally {
+      if (reader != null) {
+        // Close without being aborted by a pending interrupt from job cancellation,
+        // then restore the interrupt status for the caller.
+        val interrupted = Thread.interrupted()
+        try {
+          reader.close()
+        } catch {
+          case NonFatal(t) =>
+            logWarning(log"Failed to close the ORC reader for ${MDC(PATH, file)}", t)
+        } finally {
+          if (interrupted) {
+            Thread.currentThread().interrupt()
+          }
+        }
+      }
     }
   }
 
