@@ -656,10 +656,12 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
    * many synchronous callbacks inside a single {@code processSelectedKeys()} call,
    * monopolising the Netty EventLoop and starving the executor-driver heartbeat task.
    *
-   * The fix accumulates all decrypted segments into a {@code CompositeByteBuf} and issues
-   * exactly one {@code ctx.fireChannelRead()} per Spark message. This test verifies that a
-   * multi-segment plaintext produces exactly one {@code fireChannelRead} call regardless of
-   * the segment count.
+   * The fix accumulates all decrypted segments into a {@code CompositeByteBuf} and reduce
+   * the number of {@code ctx.fireChannelRead()} calls. This test verifies that a
+   * multi-segment plaintext below the 1 MB accumulator threshold
+   * ({@code MAX_PLAINTEXT_BATCH_BYTES}) produces exactly one {@code fireChannelRead} call.
+   * Above that threshold the accumulator flushes mid-message; see
+   * {@code testLargeMessageBatchedFlush}.
    */
   @Test
   public void testSingleFirePerMessage() throws Exception {
@@ -708,6 +710,70 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       assertEquals(plaintextSize, plaintext.readableBytes());
       assertEquals('M', plaintext.getByte(0));
       assertEquals('M', plaintext.getByte(plaintextSize - 1));
+    }
+  }
+
+  /**
+   * Verifies that DecryptionHandler flushes plaintext in multiple batches when the message
+   * plaintext exceeds {@code MAX_PLAINTEXT_BATCH_BYTES} (1 MB). The bounded accumulation
+   * prevents full on-heap materialisation of large shuffle blocks that route to disk via
+   * {@code spark.maxRemoteBlockSizeFetchToMem}. This test uses a 2 MB plaintext, which
+   * crosses the 1 MB threshold mid-message (triggering the first flush) and flushes once
+   * more at message completion, producing at least two {@code fireChannelRead} calls whose
+   * concatenated output must reproduce the original plaintext exactly.
+   */
+  @Test
+  public void testLargeMessageBatchedFlush() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher cipher = server.sessionCipher();
+      assert (cipher instanceof GcmTransportCipher);
+      GcmTransportCipher gcmTransportCipher = (GcmTransportCipher) cipher;
+
+      GcmTransportCipher.EncryptionHandler encryptionHandler =
+              gcmTransportCipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler =
+              gcmTransportCipher.getDecryptionHandler();
+
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // 2 MB plaintext exceeds MAX_PLAINTEXT_BATCH_BYTES (1 MB): the accumulator flushes
+      // when the threshold is crossed (after ~33 segments) and again at completion,
+      // so at least two fireChannelRead() calls are expected rather than one.
+      int plaintextSize = 2 * GcmTransportCipher.MAX_PLAINTEXT_BATCH_BYTES;
+      byte[] data = new byte[plaintextSize];
+      Arrays.fill(data, (byte) 'L');
+
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> encryptedCaptor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(encryptedCaptor.capture(), eq(promise));
+
+      GcmTransportCipher.GcmEncryptedMessage encrypted = encryptedCaptor.getValue();
+      ByteBuffer ciphertextBuf = ByteBuffer.allocate((int) encrypted.count());
+      encrypted.transferTo(new ByteBufferWriteableChannel(ciphertextBuf), 0);
+      ciphertextBuf.flip();
+
+      reset(ctx);
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ciphertextBuf));
+      // At least two batches: one when the accumulator crosses 1 MB, one at completion.
+      verify(ctx, atLeast(2)).fireChannelRead(plaintextCaptor.capture());
+
+      byte[] decrypted = new byte[plaintextSize];
+      int offset = 0;
+      for (ByteBuf segment : plaintextCaptor.getAllValues()) {
+        int len = segment.readableBytes();
+        segment.readBytes(decrypted, offset, len);
+        offset += len;
+      }
+      assertEquals(plaintextSize, offset);
+      assertArrayEquals(data, decrypted);
     }
   }
 

@@ -46,7 +46,8 @@ public class GcmTransportCipher implements TransportCipher {
     // if the GCM message is not yet complete. Bounds on-heap retention for large shuffle
     // blocks that route to disk via spark.maxRemoteBlockSizeFetchToMem, while still
     // reducing EventLoop callbacks to 1 for the common small-message case (< 1 MB).
-    private static final int MAX_PLAINTEXT_BATCH_BYTES = 1024 * 1024; // 1 MB
+    @VisibleForTesting
+    static final int MAX_PLAINTEXT_BATCH_BYTES = 1024 * 1024; // 1 MB
     private final SecretKeySpec aesKey;
 
     public GcmTransportCipher(SecretKeySpec aesKey)  {
