@@ -1271,8 +1271,6 @@ jobs:
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      ACTIONS_RUNNER_DEBUG: true
-      ACTIONS_STEP_DEBUG: true
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
