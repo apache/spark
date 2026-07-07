@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -55,7 +56,44 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val 
       rdd.sparkContext.runJob(rdd, action, missingPartitionIndices.toImmutableArraySeq)
     }
 
+    // The checkpoint is not yet exposed to readers (markCheckpointed runs after doCheckpoint
+    // returns), so this is the point to finalize one consistent version per partition. If
+    // verification was enabled for this RDD, seal it at the master.
+    sealCheckpointIfEnabled()
+
     new LocalCheckpointRDD[T](rdd)
+  }
+
+  /**
+   * Seal this RDD's checkpoint blocks so every later read sees a single consistent version, even
+   * if Spark non-determinism plus speculation or stage retries materialized a partition into more
+   * than one divergent copy. The master keeps the plurality checksum per partition, evicts the
+   * divergent copies, and rejects future divergent registrations; reads then self-check against the
+   * sealed checksum. No-op unless this RDD was marked for verification at `localCheckpoint`.
+   *
+   * Relies on the per-replica checksums recorded by BlockManager at store time (see
+   * `SerializerManager.wrapForChecksum`).
+   */
+  private def sealCheckpointIfEnabled(): Unit = {
+    if (rdd.verifySealedChecksum) {
+      val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(rdd.id)
+      if (unverified > 0) {
+        // Content checksums are computed only for serialized blocks materialized after this RDD was
+        // marked. A non-zero count means some materialized partitions could not be checked: either
+        // the storage level is deserialized (only on-disk blocks are serialized + checksummed), or
+        // they were cached before `localCheckpoint` marked the RDD.
+        if (rdd.getStorageLevel.deserialized) {
+          logWarning(log"Local checkpoint content verification is enabled for RDD " +
+            log"${MDC(RDD_ID, rdd.id)} but its storage level is deserialized, so " +
+            log"${MDC(NUM_PARTITIONS, unverified)} in-memory partition(s) were left unverified " +
+            log"(only on-disk, serialized blocks are checksummed).")
+        } else {
+          logWarning(log"Local checkpoint content verification is enabled for RDD " +
+            log"${MDC(RDD_ID, rdd.id)} but ${MDC(NUM_PARTITIONS, unverified)} partition(s) were " +
+            log"materialized before localCheckpoint() and were left unverified.")
+        }
+      }
+    }
   }
 
 }

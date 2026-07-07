@@ -376,6 +376,13 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Set by `localCheckpoint` (when verification is enabled) to mark this RDD's cache blocks for
+   * content-checksum + seal. Read in `getOrCompute` to decide whether to compute a checksum, and at
+   * the checkpoint commit point to decide whether to seal. Travels with the RDD to executors.
+   */
+  private[spark] var verifySealedChecksum: Boolean = false
+
+  /**
    * Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
    */
   private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
@@ -386,7 +393,8 @@ abstract class RDD[T: ClassTag](
       context.taskAttemptId(), blockId, storageLevel, elementClassTag, () => {
         readCachedBlock = false
         computeOrReadCheckpoint(partition, context)
-      }
+      },
+      computeChecksum = verifySealedChecksum
     ) match {
       // Block hit.
       case Left(blockResult) =>
@@ -1758,6 +1766,9 @@ abstract class RDD[T: ClassTag](
         case _ =>
       }
       checkpointData = Some(new LocalRDDCheckpointData(this))
+      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED)) {
+        verifySealedChecksum = true
+      }
     }
     this
   }

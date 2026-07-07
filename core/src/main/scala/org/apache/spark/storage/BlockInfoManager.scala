@@ -83,6 +83,22 @@ private[storage] class BlockInfo(
   }
   private[this] var _writerTask: Long = BlockInfo.NO_WRITER
 
+  /**
+   * Content checksum of this block's serialized+compressed (pre-encryption) bytes, computed at
+   * store time when RDD block checksums are enabled. Two task attempts that produced divergent
+   * bytes for the same `RDDBlockId` get different checksums, which lets a consumer detect a block
+   * that was materialized inconsistently. `None` when the feature is off or the block was not
+   * serialized at store time.
+   */
+  var checksum: Option[Long] = None
+
+  /**
+   * Cached authoritative sealed checksum for this block, pulled from the master once on the first
+   * read of a block that carries a content checksum (see `BlockManager`). `None` until pulled, or
+   * if the block is not sealed. Immutable once set, so no invalidation is needed.
+   */
+  var sealedChecksum: Option[Long] = None
+
   private def checkInvariants(): Unit = {
     // A block's reader count must be non-negative:
     assert(_readerCount >= 0)

@@ -23,6 +23,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
+import java.util.zip.Checksum
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -229,6 +230,44 @@ private[spark] class BlockManager(
 
   /** Whether rdd cache visibility tracking is enabled. */
   private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+
+  /** Algorithm used for RDD block checksums (a built-in JDK checksum, shared with shuffle). */
+  private val rddBlockChecksumAlgorithm: String =
+    conf.get(config.STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM)
+
+  /**
+   * Returns a fresh content-checksum accumulator for an RDD block, or None when checksum
+   * computation is disabled or this is not an RDD block.
+   *
+   * Callers wrap their serialization sink with `SerializerManager.wrapForChecksum` so the checksum
+   * covers the serialized+compressed (pre-encryption) bytes - the deterministic,
+   * representation-independent form, identical across the disk and in-memory paths and across
+   * replicas - then record `checksum.getValue` on the block's `BlockInfo` once it is fully
+   * written. The driver tracks it per replica (`BlockManagerMasterEndpoint`), which lets a consumer
+   * detect a block produced inconsistently by more than one task attempt (Spark non-determinism
+   * together with speculation or stage retries).
+   */
+  private def newRddBlockChecksum(blockId: BlockId, compute: Boolean): Option[Checksum] = {
+    if (compute && blockId.isRDD) {
+      Some(ShuffleChecksumHelper.getChecksumByAlgorithm(rddBlockChecksumAlgorithm))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * For a block that carries its own content checksum, whether this executor's local copy is the
+   * one to serve: it must match the block's sealed checksum. The sealed value is pulled from the
+   * master once and cached on the `BlockInfo` (immutable once set). A block with no sealed checksum
+   * yet imposes no constraint - the local copy is served as usual; only once a block is sealed
+   * does a non-matching local copy become a stale replica to skip in favor of a remote one.
+   */
+  private def localCopyMatchesSeal(blockId: BlockId, info: BlockInfo): Boolean = {
+    if (info.sealedChecksum.isEmpty) {
+      info.sealedChecksum = master.getSealedChecksum(blockId)
+    }
+    info.sealedChecksum.isEmpty || info.sealedChecksum == info.checksum
+  }
 
   // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager(trackingCacheVisibility)
@@ -910,8 +949,10 @@ private[spark] class BlockManager(
   private[spark] def reportBlockStatus(
       blockId: BlockId,
       status: BlockStatus,
-      droppedMemorySize: Long = 0L): Unit = {
-    val needReregister = !tryToReportBlockStatus(blockId, status, droppedMemorySize)
+      droppedMemorySize: Long = 0L,
+      checksum: Option[Long] = None): Unit = {
+    val needReregister =
+      !tryToReportBlockStatus(blockId, status, droppedMemorySize, checksum)
     if (needReregister) {
       logInfo(log"Got told to re-register updating block ${MDC(BLOCK_ID, blockId)}")
       // Re-registering will report our new block for free.
@@ -928,14 +969,15 @@ private[spark] class BlockManager(
   private def tryToReportBlockStatus(
       blockId: BlockId,
       status: BlockStatus,
-      droppedMemorySize: Long = 0L): Boolean = {
+      droppedMemorySize: Long = 0L,
+      checksum: Option[Long] = None): Boolean = {
     val storageLevel = status.storageLevel
     val inMemSize = Math.max(status.memSize, droppedMemorySize)
     val onDiskSize = status.diskSize
     // Yet `blockId` could only be `ShuffleIndexBlockId` or `ShuffleDataBlockId` when it's a
     // shuffle block because of decommission.
     val bmId = if (blockId.isShuffle) shuffleServerId else blockManagerId
-    master.updateBlockInfo(bmId, blockId, storageLevel, inMemSize, onDiskSize)
+    master.updateBlockInfo(bmId, blockId, storageLevel, inMemSize, onDiskSize, checksum)
   }
 
   /**
@@ -1001,6 +1043,16 @@ private[spark] class BlockManager(
         logDebug(s"Block $blockId was not found")
         None
       case Some(info) =>
+        // If this block is sealed (a single authoritative checksum was chosen for it) and the local
+        // copy does not match, the local copy is a stale replica that the seal asked this executor
+        // to drop, but that removal is asynchronous (fire-and-forget) and may not have landed yet,
+        // or was lost - so skip the local copy and fall through to a remote (authoritative)
+        // location. This self-check is what makes correctness independent of the removal landing.
+        // Unsealed blocks impose no such constraint.
+        if (info.checksum.isDefined && !localCopyMatchesSeal(blockId, info)) {
+          releaseLock(blockId, Option(TaskContext.get()))
+          return None
+        }
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
         val taskContext = Option(TaskContext.get())
@@ -1411,9 +1463,11 @@ private[spark] class BlockManager(
       blockId: RDDBlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
-      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+      makeIterator: () => Iterator[T],
+      computeChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
-    val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible)
+    val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible,
+      computeChecksum = computeChecksum)
     if (res.isLeft && !isCacheVisible) {
       // Block exists but not visible, report taskId -> blockId info to master.
       master.updateRDDBlockTaskInfo(blockId, taskId)
@@ -1434,7 +1488,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
-      isCacheVisible: Boolean): Either[BlockResult, Iterator[T]] = {
+      isCacheVisible: Boolean,
+      computeChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
     // Track whether the data is computed or not, force to do the computation later if need to.
     // The reason we push the force computing later is that once the executor is decommissioned we
     // will have a better chance to replicate the cache block because of the `checkShouldStore`
@@ -1459,7 +1514,8 @@ private[spark] class BlockManager(
     //  for same blockId could be different. And the reported accumulators could be not matching
     //  the cached results.
     // Initially we hold no locks on this block.
-    doPutIterator(blockId, iterator, level, classTag, keepReadLock = true) match {
+    doPutIterator(blockId, iterator, level, classTag, keepReadLock = true,
+      computeChecksum = computeChecksum) match {
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
@@ -1679,7 +1735,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+      keepReadLock: Boolean = false,
+      computeChecksum: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
@@ -1692,23 +1749,33 @@ private[spark] class BlockManager(
           memoryStore.putIteratorAsValues(blockId, iterator(), level.memoryMode, classTag) match {
             case Right(s) =>
               size = s
+              // A deserialized block resident in memory has no serialized bytes, so no checksum is
+              // computed here; it gets one only if/when it is later serialized (the spill-to-disk
+              // branch below, or replication).
             case Left(iter) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
                 logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
+                val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
                 diskStore.put(blockId) { channel =>
-                  val out = Channels.newOutputStream(channel)
+                  val rawOut = Channels.newOutputStream(channel)
+                  val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut))
+                    .getOrElse(rawOut)
                   serializerManager.dataSerializeStream(blockId, out, iter)(classTag)
                 }
+                checksumOpt.foreach(c => info.checksum = Some(c.getValue))
                 size = diskStore.getSize(blockId)
               } else {
                 iteratorFromFailedMemoryStorePut = Some(iter)
               }
           }
         } else { // !level.deserialized
-          memoryStore.putIteratorAsBytes(blockId, iterator(), classTag, level.memoryMode) match {
+          val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
+          memoryStore.putIteratorAsBytes(
+            blockId, iterator(), classTag, level.memoryMode, checksumOpt) match {
             case Right(s) =>
               size = s
+              checksumOpt.foreach(c => info.checksum = Some(c.getValue))
             case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
@@ -1725,10 +1792,13 @@ private[spark] class BlockManager(
         }
 
       } else if (level.useDisk) {
+        val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
         diskStore.put(blockId) { channel =>
-          val out = Channels.newOutputStream(channel)
+          val rawOut = Channels.newOutputStream(channel)
+          val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut)).getOrElse(rawOut)
           serializerManager.dataSerializeStream(blockId, out, iterator())(classTag)
         }
+        checksumOpt.foreach(c => info.checksum = Some(c.getValue))
         size = diskStore.getSize(blockId)
       }
 
@@ -1738,7 +1808,8 @@ private[spark] class BlockManager(
         // Now that the block is in either the memory or disk store, tell the master about it.
         info.size = size
         if (tellMaster && info.tellMaster) {
-          reportBlockStatus(blockId, putBlockStatus)
+          // Carry the content checksum (set above for disk-serialized RDD blocks).
+          reportBlockStatus(blockId, putBlockStatus, checksum = info.checksum)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
         logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeNs(startTimeNs)}")

@@ -19,12 +19,13 @@ package org.apache.spark.serializer
 
 import java.io.{BufferedInputStream, BufferedOutputStream, InputStream, OutputStream}
 import java.nio.ByteBuffer
+import java.util.zip.Checksum
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.config
-import org.apache.spark.io.CompressionCodec
+import org.apache.spark.io.{CompressionCodec, MutableCheckedOutputStream}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.storage._
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
@@ -157,6 +158,22 @@ private[spark] class SerializerManager(
    */
   def wrapForCompression(blockId: BlockId, s: OutputStream): OutputStream = {
     if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
+  }
+
+  /**
+   * Wrap an output stream so that bytes written through it are folded into `checksum`.
+   *
+   * Compose this INSIDE `wrapForCompression` and ABOVE the sink, i.e.
+   * `ser.serializeStream(wrapForCompression(blockId, wrapForChecksum(checksum, sink)))`, so the
+   * checksum observes the serialized+compressed *plaintext* rather than the possibly-encrypted
+   * on-disk bytes (DiskStore applies encryption below the sink with a random IV). That makes the
+   * fingerprint deterministic and identical across storage representations and replicas, so a
+   * consumer can tell whether two replicas of a block hold the same bytes.
+   */
+  def wrapForChecksum(checksum: Checksum, s: OutputStream): OutputStream = {
+    val checked = new MutableCheckedOutputStream(s)
+    checked.setChecksum(checksum)
+    checked
   }
 
   /**

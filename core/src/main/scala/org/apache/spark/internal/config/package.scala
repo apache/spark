@@ -2894,6 +2894,31 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.storage.rddBlockChecksum.algorithm")
+      .internal()
+      .doc("The checksum algorithm used for RDD block content checksums (e.g. local-checkpoint " +
+        "verification). Only built-in JDK algorithms are supported.")
+      .version("4.3.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
+      .createWithDefault("CRC32C")
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
+      .internal()
+      .doc("When true, Spark fingerprints the serialized bytes of locally-checkpointed RDD " +
+        "partitions at store time and, at the checkpoint commit point, detects partitions that " +
+        "were materialized inconsistently by more than one task attempt (Spark non-determinism " +
+        "combined with retries/speculation) and seals each partition to a single version. Guards " +
+        "against silently inconsistent local checkpoints. Only serialized blocks materialized " +
+        "after localCheckpoint() is called are covered; deserialized in-memory blocks are not " +
+        "checksummed (a warning is logged).")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STAGE_MAX_ATTEMPTS =
     ConfigBuilder("spark.stage.maxAttempts")
       .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +

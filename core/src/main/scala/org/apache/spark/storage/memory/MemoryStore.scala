@@ -20,6 +20,7 @@ package org.apache.spark.storage.memory
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
+import java.util.zip.Checksum
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -346,7 +347,8 @@ private[spark] class MemoryStore(
       blockId: BlockId,
       values: Iterator[T],
       classTag: ClassTag[T],
-      memoryMode: MemoryMode): Either[PartiallySerializedBlock[T], Long] = {
+      memoryMode: MemoryMode,
+      checksum: Option[Checksum] = None): Either[PartiallySerializedBlock[T], Long] = {
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
@@ -363,7 +365,7 @@ private[spark] class MemoryStore(
     }
 
     val valuesHolder = new SerializedValuesHolder[T](blockId, chunkSize, classTag,
-      memoryMode, serializerManager)
+      memoryMode, serializerManager, checksum)
 
     val res = putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
@@ -730,7 +732,8 @@ private class SerializedValuesHolder[T](
     chunkSize: Int,
     classTag: ClassTag[T],
     memoryMode: MemoryMode,
-    serializerManager: SerializerManager) extends ValuesHolder[T] {
+    serializerManager: SerializerManager,
+    checksum: Option[Checksum] = None) extends ValuesHolder[T] {
   val allocator = memoryMode match {
     case MemoryMode.ON_HEAP => ByteBuffer.allocate _
     case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
@@ -742,7 +745,11 @@ private class SerializedValuesHolder[T](
   val serializationStream: SerializationStream = {
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-    ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
+    // Optionally fold a content checksum over the serialized+compressed plaintext (composed above
+    // the sink, below compression -- same as the disk path).
+    val sink = checksum.map(serializerManager.wrapForChecksum(_, redirectableStream))
+      .getOrElse(redirectableStream)
+    ser.serializeStream(serializerManager.wrapForCompression(blockId, sink))
   }
 
   override def storeValue(value: T): Unit = {

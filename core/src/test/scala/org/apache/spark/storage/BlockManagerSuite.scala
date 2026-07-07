@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.util.UUID
@@ -334,7 +334,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       eventually(timeout(5.seconds)) {
         // For non-shuffle blocks, it should just report block manager id.
         verify(master, times(1))
-          .updateBlockInfo(mc.eq(blockManagerId), mc.any(), mc.any(), mc.any(), mc.any())
+          .updateBlockInfo(mc.eq(blockManagerId), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
       }
       bm.reportBlockStatus(BlockId("shuffle_0_0_0.index"), BlockStatus.empty)
       bm.reportBlockStatus(BlockId("shuffle_0_0_0.data"), BlockStatus.empty)
@@ -347,7 +347,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
           (blockManagerId, 3)
         }
         verify(master, times(expectedTimes))
-          .updateBlockInfo(mc.eq(expectedBMId), mc.any(), mc.any(), mc.any(), mc.any())
+          .updateBlockInfo(mc.eq(expectedBMId), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
       }
     }
   }
@@ -741,7 +741,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val storageLevelCaptor =
       ArgumentCaptor.forClass(classOf[StorageLevel]).asInstanceOf[ArgumentCaptor[StorageLevel]]
     verify(master, atLeastOnce()).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
-      storageLevelCaptor.capture(), memSizeCaptor.capture(), diskSizeCaptor.capture())
+      storageLevelCaptor.capture(), memSizeCaptor.capture(), diskSizeCaptor.capture(), mc.any())
     assertSizeReported(memSizeCaptor, removedFromMemory)
     assertSizeReported(diskSizeCaptor, removedFromDisk)
     assert(storageLevelCaptor.getValue.replication == 0)
@@ -749,7 +749,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
   private def assertUpdateBlockInfoNotReported(store: BlockManager, blockId: BlockId): Unit = {
     verify(master, never()).updateBlockInfo(mc.eq(store.blockManagerId), mc.eq(blockId),
-      mc.any[StorageLevel](), mc.anyInt(), mc.anyInt())
+      mc.any[StorageLevel](), mc.anyInt(), mc.anyInt(), mc.any())
   }
 
   test("reregistration on heart beat") {
@@ -2418,6 +2418,145 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     verify(master, times(2)).updateRDDBlockTaskInfo(blockId, 1)
   }
 
+  // Local-checkpoint content-checksum verification (dedup-and-seal). The master keeps one
+  // authoritative checksum per RDD block, evicts divergent replicas, rejects later divergent
+  // registrations, and reports partitions it cannot check. See SerializerManager.wrapForChecksum,
+  // BlockManagerMasterEndpoint.sealRddChecksums, and LocalRDDCheckpointData.
+  test("sealRddChecksums keeps the plurality checksum and evicts divergent replicas") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val store3 = makeBlockManager(20000, "exec3")
+    val blockId = RDDBlockId(7, 0)
+    // Two replicas agree on checksum 100, one diverged at 200.
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(100L))
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(100L))
+    master.updateBlockInfo(
+      store3.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(200L))
+    assert(master.getLocations(blockId).toSet ===
+      Set(store1.blockManagerId, store2.blockManagerId, store3.blockManagerId))
+
+    assert(master.sealRddChecksums(7) === 0)
+    assert(master.getSealedChecksum(blockId) === Some(100L))
+    assert(master.getLocations(blockId).toSet ===
+      Set(store1.blockManagerId, store2.blockManagerId))
+  }
+
+  test("sealRddChecksums rejects later divergent registrations and admits matching ones") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(8, 0)
+    master.updateBlockInfo(
+      store1.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.sealRddChecksums(8) === 0)
+    assert(master.getSealedChecksum(blockId) === Some(42L))
+
+    // A divergent checksum is acknowledged but not admitted to the directory.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+    // A matching checksum is admitted.
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    assert(master.getLocations(blockId).contains(store2.blockManagerId))
+  }
+
+  test("sealRddChecksums reports materialized partitions that carry no checksum") {
+    val store = makeBlockManager(20000, "exec1")
+    // Present in the directory but with no recorded checksum (a deserialized in-memory block, or a
+    // block materialized before localCheckpoint marked the RDD).
+    master.updateBlockInfo(
+      store.blockManagerId, RDDBlockId(9, 0), StorageLevel.DISK_ONLY, 0, 100, None)
+    master.updateBlockInfo(
+      store.blockManagerId, RDDBlockId(9, 1), StorageLevel.DISK_ONLY, 0, 100, Some(5L))
+    assert(master.sealRddChecksums(9) === 1) // partition 0 had no checksum
+    assert(master.getSealedChecksum(RDDBlockId(9, 1)) === Some(5L))
+    assert(master.getSealedChecksum(RDDBlockId(9, 0)).isEmpty)
+  }
+
+  test("sealed checksums are cleared when the RDD is removed") {
+    val store = makeBlockManager(20000, "exec1")
+    val blockId = RDDBlockId(10, 0)
+    master.updateBlockInfo(
+      store.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(7L))
+    master.sealRddChecksums(10)
+    assert(master.getSealedChecksum(blockId) === Some(7L))
+    master.removeRdd(10, blocking = true)
+    assert(master.getSealedChecksum(blockId).isEmpty)
+  }
+
+  test("local-checkpoint verification: agreeing disk and _SER replicas survive the seal") {
+    val diskStore = makeBlockManager(20000, "exec1")
+    val serStore = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(11, 0)
+    val data = (1 to 32).toArray
+    // Same data on two executors at different serialized levels; both compute a content checksum,
+    // which must agree across the disk and _SER store paths so the seal keeps both replicas.
+    diskStore.getOrElseUpdateRDDBlock(
+      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => data.iterator,
+      computeChecksum = true)
+    serStore.getOrElseUpdateRDDBlock(
+      2L, blockId, StorageLevel.MEMORY_ONLY_SER, classTag[Int], () => data.iterator,
+      computeChecksum = true)
+    assert(master.getLocations(blockId).toSet ===
+      Set(diskStore.blockManagerId, serStore.blockManagerId))
+
+    assert(master.sealRddChecksums(11) === 0)
+    // A spurious format mismatch across paths would have evicted one replica.
+    assert(master.getLocations(blockId).toSet ===
+      Set(diskStore.blockManagerId, serStore.blockManagerId))
+    assert(master.getSealedChecksum(blockId).isDefined)
+  }
+
+  test("UpdateBlockInfo Externalizable round-trip preserves the checksum field") {
+    def roundTrip(msg: UpdateBlockInfo): UpdateBlockInfo = {
+      val baos = new ByteArrayOutputStream()
+      val oos = new ObjectOutputStream(baos)
+      msg.writeExternal(oos)
+      oos.close()
+      val result = new UpdateBlockInfo()
+      result.readExternal(new ObjectInputStream(new ByteArrayInputStream(baos.toByteArray)))
+      result
+    }
+    val bmId = BlockManagerId("exec", "host", 1234, None)
+    val withChecksum =
+      UpdateBlockInfo(bmId, RDDBlockId(1, 0), StorageLevel.DISK_ONLY, 0, 100, Some(42L))
+    val withoutChecksum =
+      UpdateBlockInfo(bmId, RDDBlockId(1, 0), StorageLevel.DISK_ONLY, 0, 100, None)
+    // The hand-rolled Externalizable must carry the checksum (the seal depends on it reaching the
+    // master) and round-trip the other fields unchanged.
+    assert(roundTrip(withChecksum).checksum === Some(42L))
+    assert(roundTrip(withoutChecksum).checksum === None)
+    assert(roundTrip(withChecksum) === withChecksum)
+  }
+
+  test("divergent RDD block copies converge: seal evicts the minority and reads skip it") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val store3 = makeBlockManager(20000, "exec3")
+    val blockId = RDDBlockId(20, 0)
+    val dataA = Seq(1, 2, 3, 4)
+    val dataB = Seq(9, 9, 9, 9)
+    // Inject divergence: two executors materialize dataA, a third diverges with dataB under the
+    // same block id (as a non-deterministic recompute by a speculative or zombie attempt would).
+    store1.getOrElseUpdateRDDBlock(
+      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
+      () => dataA.iterator, computeChecksum = true)
+    store3.getOrElseUpdateRDDBlock(
+      3L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
+      () => dataA.iterator, computeChecksum = true)
+    store2.getOrElseUpdateRDDBlock(
+      2L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
+      () => dataB.iterator, computeChecksum = true)
+
+    // The seal keeps the plurality (dataA, two copies) and evicts the divergent dataB copy.
+    assert(master.sealRddChecksums(20) === 0)
+    assert(master.getLocations(blockId).toSet === Set(store1.blockManagerId, store3.blockManagerId))
+    // The diverged executor no longer serves its stale local copy -- it was evicted, or the
+    // read-side self-check skips it because its checksum != the sealed one (so reads converge).
+    assert(store2.getLocalValues(blockId).isEmpty)
+  }
 
   test("SPARK-41497: mark rdd block as visible") {
     val store = makeBlockManager(8000, "executor1")
