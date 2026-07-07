@@ -873,6 +873,11 @@ class MicroBatchExecution(
     }
 
     markMicroBatchExecutionStart(execCtx)
+    if (!isActive) {
+      // Workaround for the case the interrupt status is unexpectedly cleared. See SPARK-57963 for
+      // more details.
+      Thread.currentThread.interrupt
+    }
 
     if (execCtx.previousContext.isEmpty) {
       purgeStatefulMetadataAsync(execCtx.executionPlan.executedPlan)
