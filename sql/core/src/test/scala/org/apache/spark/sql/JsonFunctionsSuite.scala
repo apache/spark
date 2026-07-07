@@ -27,7 +27,8 @@ import com.fasterxml.jackson.core.StreamReadConstraints
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{JsonToStructs, Literal, MultiGetJsonObject}
+import org.apache.spark.sql.catalyst.expressions.{GetJsonObject, JsonToStructs, Literal,
+  MultiGetJsonObject}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -38,6 +39,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
+import org.apache.spark.unsafe.types.UTF8String
 
 class JsonFunctionsSuite extends SharedSparkSession {
   import testImplicits._
@@ -165,6 +167,149 @@ class JsonFunctionsSuite extends SharedSparkSession {
       Row("{\"nested\":1}", "[1,2]", "dot", "6"),
       Row(null, null, null, null),
       Row("single", "7", "8", "9")))
+  }
+
+  test("SPARK-57990: share simple array-index get_json_object paths") {
+    val input = Seq[String](
+      """[{"name":"root-zero","value":"raw"},{"name":"root-one"}]""",
+      """{"items":[{"name":"item-zero"},{"name":"item-one","value":{"x":1}}],""" +
+        """"matrix":[[0,"one"]]}""",
+      """{"items":[null,{"name":"after-null","value":[1,2]}],""" +
+        """"matrix":[[0,null]]}""",
+      """{"items":[{"name":"first"}],"items":[{"name":"second-zero"},""" +
+        """{"name":"second-one"}]}""",
+      """{"items":[{"name":null,"name":"after-null"},""" +
+        """{"name":"first","name":"second"}]}""",
+      """{"items":[{"name":"before"},{"bad":"\q"}],"other":1}""",
+      """[{"name":"before"},{"bad":"\q"}]""",
+      """{'items':[{'name':'single'},{'value':7}]}""",
+      """[]""",
+      """{}""",
+      """1""",
+      null)
+
+    def result(jsonOptimization: Boolean, sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> jsonOptimization.toString,
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          get_json_object($"json", "$[0].name"),
+          get_json_object($"json", "$[1].name"),
+          get_json_object($"json", "$[0].value"),
+          get_json_object($"json", "$.items[0].name"),
+          get_json_object($"json", "$.items[1].name"),
+          get_json_object($"json", "$.items[1].value"),
+          get_json_object($"json", "$.matrix[0][1]"),
+          get_json_object($"json", "$.items[9].name"))
+        val hasSharedParsing = query.queryExecution.optimizedPlan.exists { plan =>
+          plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+        }
+        if (jsonOptimization) {
+          assert(hasSharedParsing == sharedParsing)
+        }
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(jsonOptimization = false, sharedParsing = false)
+    assert(result(jsonOptimization = true, sharedParsing = false) == legacy)
+    assert(result(jsonOptimization = true, sharedParsing = true) == legacy)
+    assert(legacy.take(8) == Seq(
+      Row("root-zero", "root-one", "raw", null, null, null, null, null),
+      Row(null, null, null, "item-zero", "item-one", "{\"x\":1}", "one", null),
+      Row(null, null, null, null, "after-null", "[1,2]", "null", null),
+      Row(null, null, null, "first", "second-one", null, null, null),
+      Row(null, null, null, "after-null", "first", null, null, null),
+      Row(null, null, null, null, null, null, null, null),
+      Row(null, null, null, null, null, null, null, null),
+      Row(null, null, null, "single", null, "7", null, null)))
+  }
+
+  test("SPARK-57990: shared get_json_object preserves object-or-array coalesce semantics") {
+    val input = Seq[String](
+      """{"name":"object","nested":[{"name":"object-nested"}]}""",
+      """[{"name":"array","nested":[{"name":"array-nested"}]},{"other":1}]""",
+      """{"name":null,"nested":[null]}""",
+      """[null]""",
+      """1""",
+      """[{"name":"before"},{"bad":"\q"}]""",
+      """{"name":"before","bad":"\q"}""",
+      null)
+
+    def result(sharedParsing: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsing.toString) {
+        val query = input.toDF("json").select(
+          coalesce(
+            get_json_object($"json", "$.name"),
+            get_json_object($"json", "$[0].name")),
+          coalesce(
+            get_json_object($"json", "$.nested[0].name"),
+            get_json_object($"json", "$[0].nested[0].name")))
+        val hasSharedParsing = query.queryExecution.optimizedPlan.exists { plan =>
+          plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+        }
+        assert(hasSharedParsing == sharedParsing)
+        rows = query.collect().toSeq
+      }
+      rows
+    }
+
+    val legacy = result(sharedParsing = false)
+    assert(result(sharedParsing = true) == legacy)
+    assert(legacy == Seq(
+      Row("object", "object-nested"),
+      Row("array", "array-nested"),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null),
+      Row(null, null)))
+  }
+
+  test("SPARK-57990: shared get_json_object validates simple array-index paths") {
+    import GetJsonObject.{IndexedPathSegment, NamedPathSegment}
+
+    def simplePath(path: String): Option[Seq[GetJsonObject.SimpleJsonPathSegment]] = {
+      GetJsonObject.simplePath(UTF8String.fromString(path))
+    }
+
+    assert(simplePath("$.a[0]['b'][2]") == Some(Seq(
+      NamedPathSegment("a"), IndexedPathSegment(0), NamedPathSegment("b"),
+      IndexedPathSegment(2))))
+    Seq("$", "$[*]", "$.a[*]", "$.a[-1]", "$.a[1x]", "$[9223372036854775808]")
+      .foreach(path => assert(simplePath(path).isEmpty, path))
+
+    val expression = MultiGetJsonObject(
+      Literal("""["raw",{"x":1},[2,3],null]"""),
+      Seq("$[0]", "$[1]", "$[1]", "$[2][1]", "$[3]", "$[9]"))
+    val row = expression.eval().asInstanceOf[InternalRow]
+    assert(row.getUTF8String(0).toString == "raw")
+    assert(row.getUTF8String(1).toString == "{\"x\":1}")
+    assert(row.getUTF8String(2).toString == "{\"x\":1}")
+    assert(row.getUTF8String(3).toString == "3")
+    assert(row.getUTF8String(4).toString == "null")
+    assert(row.isNullAt(5))
+    assert(row.getUTF8String(4) == GetJsonObject(
+      Literal("""["raw",{"x":1},[2,3],null]"""), Literal("$[3]")).eval())
+
+    val nestedNull = MultiGetJsonObject(
+      Literal("""{"a":[null],"b":1}"""), Seq("$.a[0]", "$.b")).eval()
+      .asInstanceOf[InternalRow]
+    assert(nestedNull.getUTF8String(0).toString == "null")
+    assert(nestedNull.getUTF8String(0) == GetJsonObject(
+      Literal("""{"a":[null],"b":1}"""), Literal("$.a[0]")).eval())
+    assert(nestedNull.getUTF8String(1).toString == "1")
+
+    val prefixConflict = MultiGetJsonObject(
+      Literal("""[{"x":1}]"""), Seq("$[0]", "$[0].x"))
+    val error = intercept[IllegalArgumentException](prefixConflict.eval())
+    assert(error.getMessage.contains("must not be prefixes"))
   }
 
   test("SPARK-57626: shared nested get_json_object isolates value rendering failures") {

@@ -145,25 +145,37 @@ case class GetJsonObject(json: Expression, path: Expression)
 object GetJsonObject {
   import PathInstruction._
 
-  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
+  private[sql] sealed trait SimpleJsonPathSegment
+  private[sql] case class NamedPathSegment(name: String) extends SimpleJsonPathSegment
+  private[sql] case class IndexedPathSegment(index: Long) extends SimpleJsonPathSegment
+
+  private[sql] def simplePath(path: UTF8String): Option[Seq[SimpleJsonPathSegment]] = {
     try {
       Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
-        val names = instructions.grouped(2).map {
-          case List(Key, Named(fieldName)) => Some(fieldName)
+        val segments = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(NamedPathSegment(fieldName))
+          case List(Subscript, Index(index)) if index >= 0 => Some(IndexedPathSegment(index))
           case _ => None
         }.toSeq
-        if (names.nonEmpty && names.forall(_.isDefined)) Some(names.flatten) else None
+        if (segments.nonEmpty && segments.forall(_.isDefined)) Some(segments.flatten) else None
       }
     } catch {
       // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
       case _: NumberFormatException => None
     }
   }
+
+  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
+    simplePath(path).flatMap { segments =>
+      val names = segments.collect { case NamedPathSegment(name) => name }
+      if (names.length == segments.length) Some(names) else None
+    }
+  }
 }
 
 /**
- * Extracts multiple simple named paths from a JSON string in one parse. This is an internal
- * expression used to share sibling [[GetJsonObject]] expressions; unsupported and
+ * Extracts multiple simple object-key and array-index paths from a JSON string in one parse. This
+ * is an internal expression used to share sibling [[GetJsonObject]] expressions; unsupported and
  * prefix-conflicting JSON paths remain as independent GetJsonObject expressions.
  */
 case class MultiGetJsonObject(
@@ -194,8 +206,8 @@ case class MultiGetJsonObject(
   final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
-  private lazy val namedPaths = fallbackPaths.map { path =>
-    GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+  private lazy val simplePaths = fallbackPaths.map { path =>
+    GetJsonObject.simplePath(UTF8String.fromString(path)).getOrElse {
       throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
     }
   }
@@ -203,7 +215,7 @@ case class MultiGetJsonObject(
   @transient
   private lazy val evaluator = MultiGetJsonObjectEvaluator(
     fallbackPaths.map(UTF8String.fromString),
-    namedPaths)
+    simplePaths)
 
   override def eval(input: InternalRow): Any = {
     evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
