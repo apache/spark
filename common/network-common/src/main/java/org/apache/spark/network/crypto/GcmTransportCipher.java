@@ -42,6 +42,11 @@ public class GcmTransportCipher implements TransportCipher {
     private static final int LENGTH_HEADER_BYTES = 8;
     @VisibleForTesting
     static final int CIPHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
+    // Maximum plaintext bytes to accumulate before flushing to downstream handlers, even
+    // if the GCM message is not yet complete. Bounds on-heap retention for large shuffle
+    // blocks that route to disk via spark.maxRemoteBlockSizeFetchToMem, while still
+    // reducing EventLoop callbacks to 1 for the common small-message case (< 1 MB).
+    private static final int MAX_PLAINTEXT_BATCH_BYTES = 1024 * 1024; // 1 MB
     private final SecretKeySpec aesKey;
 
     public GcmTransportCipher(SecretKeySpec aesKey)  {
@@ -303,14 +308,13 @@ public class GcmTransportCipher implements TransportCipher {
         private int segmentNumber = 0;
         private long expectedLength = -1;
         private long ciphertextRead = 0;
-        // Accumulates all decrypted segments for the current GCM message. Each segment is
-        // appended as a zero-copy component via addComponent(true, segment). A single
-        // ctx.fireChannelRead() fires when the message is complete, reducing N EventLoop
-        // callbacks (one per 32 KB segment) to 1. This prevents the EventLoop from being
-        // monopolised by large messages, which would starve other channels sharing the
-        // thread (including the executor-driver heartbeat channel) under concurrent shuffle
-        // load. Null between messages; ownership is transferred to downstream on
-        // fireChannelRead().
+        // Accumulates decrypted segments and flushes them to downstream in bounded batches.
+        // For small messages (total plaintext < MAX_PLAINTEXT_BATCH_BYTES) a single
+        // ctx.fireChannelRead() fires at message completion, reducing N per-segment
+        // EventLoop callbacks to 1 and preventing EventLoop starvation under shuffle load.
+        // For large messages the accumulator flushes every MAX_PLAINTEXT_BATCH_BYTES,
+        // bounding on-heap retention for blocks that route to disk. Null between flushes;
+        // ownership transfers to downstream on fireChannelRead().
         private CompositeByteBuf plaintextAccumulator = null;
 
         DecryptionHandler() throws GeneralSecurityException {
@@ -462,10 +466,10 @@ public class GcmTransportCipher implements TransportCipher {
                             ciphertextBuffer.clear();
                             plaintextBuffer.flip();
                             if (plaintextAccumulator == null) {
-                                // Integer.MAX_VALUE disables consolidation entirely.
-                                // CompositeByteBuf.newCompArray() always initialises the
-                                // backing array to min(16, maxNumComponents) regardless of
-                                // this value, so there is no upfront memory cost.
+                                // Integer.MAX_VALUE disables Netty's internal consolidation,
+                                // which would copy all components into a single buffer on
+                                // access. The initial component array is small regardless of
+                                // this cap (min(16, maxNumComponents) elements).
                                 plaintextAccumulator =
                                         Unpooled.compositeBuffer(Integer.MAX_VALUE);
                             }
@@ -473,6 +477,14 @@ public class GcmTransportCipher implements TransportCipher {
                             // so the component is immediately readable from the composite.
                             plaintextAccumulator.addComponent(
                                     true, Unpooled.wrappedBuffer(plaintextBuffer));
+                            // Flush when the batch threshold is reached or the message ends.
+                            // Small messages flush once at completion; large blocks flush
+                            // every MAX_PLAINTEXT_BATCH_BYTES to cap on-heap retention.
+                            if (completed ||
+                                    plaintextAccumulator.readableBytes() >=
+                                            MAX_PLAINTEXT_BATCH_BYTES) {
+                                flushAccumulator(ctx);
+                            }
                         } else {
                             // Set the ciphertext buffer up to read the next chunk
                             ciphertextBuffer.limit(ciphertextBuffer.capacity());
@@ -483,12 +495,10 @@ public class GcmTransportCipher implements TransportCipher {
                         // Partial message: more bytes needed from the next channelRead() call.
                         break;
                     }
-                    // Fire the entire plaintext as a single event so that downstream
-                    // handlers receive one callback per Spark message instead of one per
-                    // 32 KB segment.
+                    // Flush any remaining accumulator not yet fired inside the segment
+                    // loop (e.g. a zero-length ciphertext where the loop never ran).
                     if (plaintextAccumulator != null) {
-                        ctx.fireChannelRead(plaintextAccumulator);
-                        plaintextAccumulator = null; // ownership transferred to downstream
+                        flushAccumulator(ctx);
                     }
                     // Current message is fully decoded. Reset state so the handler can
                     // decode the next independent GCM message on the same channel.
@@ -501,6 +511,13 @@ public class GcmTransportCipher implements TransportCipher {
             } finally {
                 ciphertextNettyBuf.release();
             }
+        }
+
+        private void flushAccumulator(ChannelHandlerContext ctx) {
+            CompositeByteBuf out = plaintextAccumulator;
+            // null the accumulator before firing
+            plaintextAccumulator = null;
+            ctx.fireChannelRead(out);
         }
 
         @Override
