@@ -55,6 +55,22 @@ class DataSourceV2DataFrameConnectSuite
 
   override protected def testPrefix: String = "[connect] "
 
+  // Unlike the classic suite, the connect suite shares a single server-side session across all
+  // tests in the suite (created once by SparkSessionBinder), so catalog state is not reset
+  // between tests. Mirror the classic suite's `after` block: clear the caching connector's cache
+  // and reset the catalog manager so each test starts from a clean catalog state. Without this,
+  // CachingInMemoryTableCatalog retains stale table entries (it does not invalidate on drop), so a
+  // later test's CREATE TABLE fails with TABLE_OR_VIEW_ALREADY_EXISTS.
+  override protected def afterEach(): Unit = {
+    val serverSession = getServerSession(spark)
+    serverSession.sessionState.catalogManager
+      .catalog("cachingcat")
+      .asInstanceOf[CachingInMemoryTableCatalog]
+      .clearCache()
+    serverSession.sessionState.catalogManager.reset()
+    super.afterEach()
+  }
+
   protected def getServerSession(clientSession: SparkSession): classic.SparkSession = {
     val connectSession = clientSession.asInstanceOf[connect.SparkSession]
     val userId = connectSession.client.userId
