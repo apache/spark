@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types.{BooleanType, DataType, DateType, TimeType, TimestampNTZType, TimestampType}
 
 /**
@@ -49,6 +50,8 @@ case class Overlaps(
   override def second: Expression = end1
   override def third: Expression = start2
   override def fourth: Expression = end2
+
+  override val nodePatterns: Seq[TreePattern] = Seq(OVERLAPS)
 
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = start1.nullable || end1.nullable ||

@@ -717,7 +717,7 @@ class Analyzer(
     }
 
     override def apply(plan: LogicalPlan): LogicalPlan =
-      plan.resolveExpressionsUp {
+      plan.resolveExpressionsUpWithPruning(_.containsPattern(OVERLAPS), ruleId) {
         case o @ Overlaps(s1, e1, s2, e2) if o.childrenResolved =>
           val resolvedEnd1 = if (isIntervalType(e1.dataType)) Add(s1, e1) else e1
           val resolvedEnd2 = if (isIntervalType(e2.dataType)) Add(s2, e2) else e2
