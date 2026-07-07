@@ -919,8 +919,17 @@ class AdaptiveQueryExecSuite
     }
 
     withUserDefinedFunction("slow_udf" -> true) {
+      // `slow_udf` sits in scalar subqueries on the `df`/`df3` shuffle stages to delay their
+      // submission, so that the `df2` coalesce stage (which has no subquery) submits its shuffle
+      // job and fails with "coalesce test error" first, while the two delayed stages are still
+      // sleeping and thus get cancelled before submission. The test asserts exactly that ordering.
+      // A short delay makes this timing-dependent: under a loaded CI runner the coalesce stage's
+      // map task can be slow enough that a delayed stage is submitted, or the coalesce stage is
+      // itself cancelled, before "coalesce test error" is thrown -- making the error disappear from
+      // the failure chain and flaking the test. Use a generous sleep so the coalesce stage reliably
+      // wins the race; the per-test timeout is 20 minutes, so this adds no meaningful cost.
       spark.udf.register("slow_udf", () => {
-        Thread.sleep(3000)
+        Thread.sleep(15000)
         1
       })
 
