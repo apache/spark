@@ -1364,6 +1364,9 @@ jobs:
     - name: Register javadoc problem matcher
       run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - run: echo "$GITHUB_WORKSPACE"
+    - name: Fix git remote for problem matcher compatibility
+      if: github.repository != 'apache/spark'
+      run: git remote set-url origin "https://github.com/${{ github.repository }}"
     - name: Run documentation build for branch-3.5 and branch-4.0
       if: inputs.branch == 'branch-3.5' || inputs.branch == 'branch-4.0'
       run: |
