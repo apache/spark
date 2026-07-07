@@ -151,6 +151,45 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         finally:
             RemoteSparkSession._signal_local_connect_server = old_signal
 
+    @unittest.skipUnless(os.name == "posix", "process groups are POSIX-only")
+    def test_signal_group_kills_only_session_leaders(self) -> None:
+        """A pid that is not a session leader is signalled alone, never via its group.
+
+        The daemon is always launched as a session leader (its group id equals its pid). A
+        recorded pid whose group id differs was recycled by an unrelated process -- for example
+        via a stale discovery file -- and group-killing it could take down the caller's own
+        process group.
+        """
+        from unittest import mock
+
+        sleeper = [sys.executable, "-c", "import time; time.sleep(60)"]
+        # Same process group as this test (not a leader): must fall back to a plain kill.
+        child = subprocess.Popen(sleeper)
+        try:
+            self.assertNotEqual(os.getpgid(child.pid), child.pid)
+            with mock.patch("os.killpg") as killpg, mock.patch("os.kill") as kill:
+                self.assertTrue(
+                    RemoteSparkSession._signal_local_connect_server(child.pid, signal.SIGTERM)
+                )
+                killpg.assert_not_called()
+                kill.assert_called_once_with(child.pid, signal.SIGTERM)
+        finally:
+            child.kill()
+            child.communicate()
+        # A session leader, like the real daemon: the whole group is signalled.
+        leader = subprocess.Popen(sleeper, start_new_session=True)
+        try:
+            self.assertEqual(os.getpgid(leader.pid), leader.pid)
+            with mock.patch("os.killpg") as killpg, mock.patch("os.kill") as kill:
+                self.assertTrue(
+                    RemoteSparkSession._signal_local_connect_server(leader.pid, signal.SIGTERM)
+                )
+                killpg.assert_called_once_with(leader.pid, signal.SIGTERM)
+                kill.assert_not_called()
+        finally:
+            leader.kill()
+            leader.communicate()
+
     def test_reuse_from_discovery_none_when_absent(self) -> None:
         self.assertIsNone(RemoteSparkSession._reuse_from_discovery())
 
