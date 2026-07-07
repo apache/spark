@@ -1145,6 +1145,16 @@ object SQLConf {
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
 
+  val COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK =
+    buildConf("spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask")
+      .doc("The maximum number of contiguous reducer partitions that may be coalesced into a " +
+        "single task. This puts a hard limit on the reducer-partition fan-in of a coalesced " +
+        "shuffle task, independent of the advisory partition size.")
+      .version("4.3.0")
+      .intConf
+      .checkValue(_ > 0, "The maximum number of reducer partitions per task must be positive.")
+      .createWithDefault(Int.MaxValue)
+
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
       .internal()
