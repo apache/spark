@@ -165,12 +165,6 @@ object GetJsonObject {
     }
   }
 
-  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
-    simplePath(path).flatMap { segments =>
-      val names = segments.collect { case NamedPathSegment(name) => name }
-      if (names.length == segments.length) Some(names) else None
-    }
-  }
 }
 
 /**

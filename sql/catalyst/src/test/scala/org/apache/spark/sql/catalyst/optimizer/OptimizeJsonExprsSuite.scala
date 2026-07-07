@@ -371,6 +371,7 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
   }
 
   test("SPARK-57990: keep coalesce path pairs atomic across prefix groups") {
+    // $.a conflicts with $.a.x but not $[0].x, so both coalesce paths must move together.
     val query = testRelation2.select(
       GetJsonObject($"json", Literal("$.a")).as("a"),
       Coalesce(Seq(

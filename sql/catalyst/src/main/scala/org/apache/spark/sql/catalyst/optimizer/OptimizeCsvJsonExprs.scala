@@ -79,13 +79,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       val conflictsWithGroup = newPaths.exists { case (path, _) =>
         hasPrefixConflict(root, path)
       }
-      val conflictsWithinUnit = newPaths.indices.exists { leftIndex =>
-        newPaths.indices.exists { rightIndex =>
-          leftIndex != rightIndex && isStrictPrefix(
-            newPaths(leftIndex)._1, newPaths(rightIndex)._1)
-        }
-      }
-      if (!conflictsWithGroup && !conflictsWithinUnit) {
+      if (!conflictsWithGroup) {
         newPaths.foreach { case (path, _) => commitPath(root, path) }
         paths ++= newPaths
         true
@@ -147,12 +141,9 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     visited.foreach(_.hasSelectedPathInSubtree = true)
   }
 
-  private def isStrictPrefix(left: SimpleJsonPath, right: SimpleJsonPath): Boolean = {
-    left.length < right.length && right.startsWith(left)
-  }
-
   // First-fit builds every prefix-free group in one invocation. Coalesce candidates are added as
-  // atomic units so their mutually exclusive object/array paths always use the same shared parse.
+  // atomic, prefix-free units so their mutually exclusive object/array paths always use the same
+  // shared parse.
   private def groupNonConflictingPaths(
       units: Iterable[RequestedJsonPathUnit]): Seq[Seq[RequestedJsonPath]] = {
     val groups = mutable.ArrayBuffer.empty[SelectedJsonPathGroup]
@@ -307,7 +298,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
             .getOrElse(firstCandidate._1.json.semanticHash(), Nil)
             .find { candidate =>
               candidate.json.semanticEquals(firstCandidate._1.json) &&
-                branches.forall { case (_, (_, pathSegments, _)) =>
+                branches.forall { case (_, branchCandidate) =>
+                  val (_, pathSegments, _) = branchCandidate
                   candidate.ordinalMapping.contains(pathSegments)
                 }
             }
@@ -335,9 +327,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   /**
    * Returns the first object-root and first array-root parser calls from a coalesce only when every
    * branch is a GetJsonObject, optionally wrapped in casts, and all branches read the same input
-   * attribute. These two root shapes are mutually exclusive, so sharing them cannot eagerly render
-   * a later value that coalesce would have skipped. Casts remain in the outer coalesce, preserving
-   * their lazy evaluation and branch ordering.
+   * attribute. Only one root shape can match a given input. Later same-shape fallbacks and all
+   * casts remain in the outer coalesce, preserving lazy evaluation and branch ordering.
    */
   private def eligibleCoalesceBranches(
       coalesce: Coalesce): Option[Seq[(Int, SharedJsonCandidate)]] = {
