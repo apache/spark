@@ -373,4 +373,20 @@ class ResolveHintsSuite extends AnalysisTest {
       }
     }
   }
+
+  test("SPARK-57993: Support specify advisory partition size for rebalance") {
+    withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1024") {
+      Seq(
+        Nil -> 1024,
+        Seq(Literal(2048)) -> 2048,
+        Seq(Literal(4096L)) -> 4096,
+        Seq(UnresolvedAttribute("a")) -> 1024,
+        Seq(Literal(2048), UnresolvedAttribute("a")) -> 2048).foreach {
+        case (param, advisoryPartitionSize) =>
+          assert(UnresolvedHint("REBALANCE_BY_SIZE", param, testRelation).analyze
+            .asInstanceOf[RebalancePartitions].optAdvisoryPartitionSize.getOrElse(1024)
+            == advisoryPartitionSize.toLong)
+      }
+    }
+  }
 }

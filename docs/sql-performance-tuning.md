@@ -141,7 +141,8 @@ Coalesce hints allow Spark SQL users to control the number of output files just 
 tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
 parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
-hint has an initial partition number, columns, or both/neither of them as parameters.
+hint has an initial partition number, columns, or both/neither of them as parameters. The "REBALANCE_BY_SIZE"
+hint has an advisory partition size in bytes, columns, or both/neither of them as parameters.
 
 ```sql
 SELECT /*+ COALESCE(3) */ * FROM t;
@@ -155,6 +156,8 @@ SELECT /*+ REBALANCE */ * FROM t;
 SELECT /*+ REBALANCE(3) */ * FROM t;
 SELECT /*+ REBALANCE(c) */ * FROM t;
 SELECT /*+ REBALANCE(3, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728, c) */ * FROM t;
 ```
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).

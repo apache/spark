@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, ShortLiteral, SortOrder, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, LongLiteral, ShortLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, Repartition, RepartitionByExpression, UnresolvedHint}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -36,6 +36,20 @@ object CoalesceHintUtils {
       case Seq(ShortLiteral(numPartitions), _*) =>
         (Some(numPartitions.toInt), hint.parameters.tail)
       case Seq(IntegerLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
+      case _ => (None, hint.parameters)
+    }
+  }
+
+  def getAdvisorySizeOfPartitions(hint: UnresolvedHint): (Option[Long], Seq[Expression]) = {
+    hint.parameters match {
+      case Seq(ByteLiteral(advisoryPartitionSize), _*) =>
+        (Some(advisoryPartitionSize.toLong), hint.parameters.tail)
+      case Seq(ShortLiteral(advisoryPartitionSize), _*) =>
+        (Some(advisoryPartitionSize.toLong), hint.parameters.tail)
+      case Seq(IntegerLiteral(advisoryPartitionSize), _*) =>
+        (Some(advisoryPartitionSize.toLong), hint.parameters.tail)
+      case Seq(LongLiteral(advisoryPartitionSize), _*) =>
+        (Some(advisoryPartitionSize), hint.parameters.tail)
       case _ => (None, hint.parameters)
     }
   }
@@ -109,6 +123,15 @@ object CoalesceHintUtils {
     val (numPartitionsOption, partitionExprs) = getNumOfPartitions(hint)
     validateParameters(hint.name, partitionExprs)
     RebalancePartitions(partitionExprs, hint.child, numPartitionsOption)
+  }
+
+  /**
+   * This function handles hints for "REBALANCE_BY_SIZE".
+   */
+  def createRebalanceBySize(hint: UnresolvedHint): LogicalPlan = {
+    val (optAdvisoryPartitionSize, partitionExprs) = getAdvisorySizeOfPartitions(hint)
+    validateParameters(hint.name, partitionExprs)
+    RebalancePartitions(partitionExprs, hint.child, None, optAdvisoryPartitionSize)
   }
 
   def transformStringToAttribute(hint: UnresolvedHint): UnresolvedHint = {
