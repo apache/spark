@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.ui.SparkPlanGraphEdge
 
 case class Metric private[spark] (name: String, value: String)
 
-case class Node private[spark](
+case class Node private[spark] (
     nodeId: Long,
     nodeName: String,
     wholeStageCodegenId: Option[Long] = None,
