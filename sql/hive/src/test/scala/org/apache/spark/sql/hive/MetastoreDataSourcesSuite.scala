@@ -1614,6 +1614,48 @@ class MetastoreDataSourcesSuite extends QueryTest
     }
   }
 
+  test("SPARK-57831: nanosecond timestamp partition columns are stored in Spark-specific " +
+    "format (not Hive compatible)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(
+        "TIMESTAMP_NTZ(9)" -> TimestampNTZNanosType(9),
+        "TIMESTAMP_LTZ(8)" -> TimestampLTZNanosType(8)
+      ).foreach { case (typeStr, dt) =>
+        withTable("t") {
+          val logAppender = new LogAppender(
+            "Check that nanosecond timestamp partition columns are Hive incompatible")
+          logAppender.setThreshold(Level.WARN)
+          withLogAppender(logAppender) {
+            sql(
+              s"""
+                 |CREATE TABLE t(id INT, p $typeStr)
+                 |USING Parquet
+                 |PARTITIONED BY (p)""".stripMargin)
+          }
+          // (a) The nanos partition column alone makes the table Hive incompatible: the WARN
+          // lists its parameterized simpleString (e.g. "timestamp_ntz(9)"). This is driven by
+          // the partition column, since the data column `id` is itself Hive compatible.
+          val actualMessages = logAppender.loggingEvents
+            .map(_.getMessage.getFormattedMessage)
+            .filter(_.contains("incompatible"))
+          assert(actualMessages.exists(_.contains(dt.simpleString)))
+          // (b) The raw HMS schema is the dummy array<string>: the data column is the empty
+          // placeholder schema and the nanos partition column is stored via the
+          // INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER (HiveClientImpl), which the raw catalog view
+          // filters out. The real schema is restored from table properties in (c).
+          assert(hiveClient.getTable("default", "t").schema
+            .forall(_.dataType == ArrayType(StringType)))
+          // (c) The reloaded logical schema round-trips back to the real nanos partition type,
+          // with the partition column placed at the end of the schema.
+          assert(sql("SELECT * FROM t").schema ===
+            StructType(Seq(
+              StructField("id", IntegerType),
+              StructField("p", dt))))
+        }
+      }
+    }
+  }
+
   // Note: this is parser/serde round-trip coverage for the nanos type strings; it passes
   // with or without the isHiveCompatibleDataType change and does not by itself guard the
   // regression. The load-bearing test is the "stored in Spark-specific format" case above.
