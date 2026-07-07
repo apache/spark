@@ -327,6 +327,18 @@ private object ArrowCachedBatchSerializer {
   }
 
   /**
+   * Byte offset of the unscaled low-order word within a 16-byte Arrow Decimal128 slot, for the
+   * given native byte order. Arrow Java writes decimal values in native byte order
+   * (DecimalUtility.writeLongToArrowBuf / writeBigDecimalToArrowBuf): on little-endian platforms
+   * the low-order word occupies the first 8 bytes and the sign-extension word follows, while on
+   * big-endian platforms the order is reversed and the low-order word occupies the last 8 bytes.
+   * Reading the wrong word on a big-endian JVM turns positive compact decimals into 0 and
+   * negative ones into an unscaled -1.
+   */
+  def compactDecimalUnscaledOffset(nativeOrder: java.nio.ByteOrder): Long =
+    if (nativeOrder == java.nio.ByteOrder.LITTLE_ENDIAN) 0L else 8L
+
+  /**
    * Shut down a prefetch worker during task cleanup without leaking the root it may have produced.
    *
    * The prefetch worker deserializes the next batch into a fresh [[VectorSchemaRoot]] off-thread.
@@ -1418,12 +1430,17 @@ private object ArrowColumnReader {
     case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
       // Fast path for compact decimals (precision <= 18):
       // Read the unscaled long directly from the Arrow buffer, zero allocation.
-      // Arrow stores Decimal as 128-bit little-endian integer in 16 bytes.
-      // For compact decimals, the value fits in the lower 8 bytes.
+      // Arrow Java stores Decimal128 in the platform's native byte order, so the position of
+      // the low-order word inside the 16-byte slot depends on endianness: first 8 bytes on
+      // little-endian, last 8 bytes on big-endian (the other word is sign extension). ArrowBuf
+      // getLong also reads in native order, so selecting the right word is all that is needed.
+      // See ArrowCachedBatchSerializer.compactDecimalUnscaledOffset.
       new ArrowColumnReader {
         private var _vector: DecimalVector = _
         private var _dataBuffer: org.apache.arrow.memory.ArrowBuf = _
         private val typeWidth = DecimalVector.TYPE_WIDTH // 16 bytes
+        private val unscaledOffset = ArrowCachedBatchSerializer
+          .compactDecimalUnscaledOffset(java.nio.ByteOrder.nativeOrder())
         def vector: FieldVector = _vector
         def setVector(v: FieldVector): Unit = {
           _vector = v.asInstanceOf[DecimalVector]
@@ -1431,7 +1448,7 @@ private object ArrowColumnReader {
         }
         def read(rowIndex: Int, ordinal: Int, writer: UnsafeRowWriter): Unit = {
           val startIndex = rowIndex.toLong * typeWidth
-          val unscaledLong = _dataBuffer.getLong(startIndex)
+          val unscaledLong = _dataBuffer.getLong(startIndex + unscaledOffset)
           writer.write(ordinal, unscaledLong)
         }
       }

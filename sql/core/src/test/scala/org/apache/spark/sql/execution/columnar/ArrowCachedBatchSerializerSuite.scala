@@ -953,8 +953,11 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     checkAnswer(decDf, Seq(Row(BigDecimal("123.45")), Row(null), Row(BigDecimal("678.90"))))
     decDf.unpersist()
 
-    // DecimalType (compact, negative values): verifies sign-bit correctness when reading
-    // lower 8 bytes of Arrow's 128-bit little-endian two's-complement buffer as signed Long
+    // DecimalType (compact, negative values): verifies sign-bit correctness when reading the
+    // unscaled low-order word of Arrow's 128-bit two's-complement buffer as a signed Long. The
+    // word's position in the 16-byte slot depends on the platform's native byte order (see
+    // compactDecimalUnscaledOffset), so on big-endian hardware this test guards the offset
+    // selection: reading the wrong word turns these values into 0 / unscaled -1.
     val negDecData = Seq(
       new java.math.BigDecimal("-123.45"),
       new java.math.BigDecimal("0.00"),
@@ -1634,6 +1637,41 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           s"actual=$actualEpochNanos")
     } finally {
       root.close()
+    }
+  }
+
+  test("compact decimal unscaled word offset follows the native byte order") {
+    // Arrow Java writes Decimal128 in the platform's native byte order
+    // (DecimalUtility.writeLongToArrowBuf): little-endian platforms put the unscaled low-order
+    // word in the first 8 bytes of the 16-byte slot, big-endian platforms put it in the last 8
+    // (the other word is sign extension). Reading the wrong word turns positive compact decimals
+    // into 0 and negative ones into an unscaled -1, so the fast-path reader selects the word by
+    // ByteOrder.nativeOrder(). CI runs on little-endian hardware, so the big-endian branch is
+    // asserted here directly.
+    assert(ArrowCachedBatchSerializer.compactDecimalUnscaledOffset(
+      java.nio.ByteOrder.LITTLE_ENDIAN) === 0L)
+    assert(ArrowCachedBatchSerializer.compactDecimalUnscaledOffset(
+      java.nio.ByteOrder.BIG_ENDIAN) === 8L)
+
+    // And the offset selected for the platform this suite actually runs on must agree with
+    // where DecimalVector really stored the low-order word, so the layout assumption itself is
+    // validated against the running Arrow version (on big-endian hardware this exercises the
+    // big-endian branch against reality).
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("test-compact-decimal", 0, Long.MaxValue)
+    val vector = new DecimalVector("d", allocator, 10, 2)
+    try {
+      vector.allocateNew(2)
+      vector.setSafe(0, 12345L)
+      vector.setSafe(1, -99999999L)
+      vector.setValueCount(2)
+      val offset = ArrowCachedBatchSerializer.compactDecimalUnscaledOffset(
+        java.nio.ByteOrder.nativeOrder())
+      assert(vector.getDataBuffer.getLong(0L * DecimalVector.TYPE_WIDTH + offset) === 12345L)
+      assert(vector.getDataBuffer.getLong(1L * DecimalVector.TYPE_WIDTH + offset) === -99999999L)
+    } finally {
+      vector.close()
+      allocator.close()
     }
   }
 
