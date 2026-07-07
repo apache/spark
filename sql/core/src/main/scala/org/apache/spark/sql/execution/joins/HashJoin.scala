@@ -41,7 +41,7 @@ private[joins] case class HashedRelationInfo(
     keyIsUnique: Boolean,
     isEmpty: Boolean)
 
-trait HashJoin extends JoinCodegenSupport {
+trait HashJoin extends JoinCodegenSupport with PredicateHelper {
   assert(leftKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
   assert(rightKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
 
@@ -152,6 +152,34 @@ trait HashJoin extends JoinCodegenSupport {
     (r: InternalRow) => true
   }
 
+  /**
+   * For join types that preserve all streamed rows, split the condition into
+   * streamed-only and rest. The streamed-only part can be evaluated once per streamed row
+   * before probing the hash table.
+   */
+  protected lazy val (streamedOnlyCondition, restCondition):
+      (Option[Expression], Option[Expression]) = {
+    if (condition.isDefined && conf.splitStreamedSideJoinCondition &&
+        (joinType match {
+          case LeftAnti | LeftOuter | RightOuter | _: ExistenceJoin => true
+          case _ => false
+        })) {
+      val conjuncts = splitConjunctivePredicates(condition.get)
+      val (streamedOnly, rest) = conjuncts.partition(_.references.subsetOf(streamedPlan.outputSet))
+      (streamedOnly.reduceOption(And), rest.reduceOption(And))
+    } else {
+      (None, condition)
+    }
+  }
+
+  @transient protected[this] lazy val boundStreamedOnlyCondition = streamedOnlyCondition.map {
+    Predicate.create(_, streamedPlan.output).eval _
+  }.getOrElse((_: InternalRow) => true)
+
+  @transient protected[this] lazy val boundRestCondition = restCondition.map {
+    Predicate.create(_, streamedPlan.output ++ buildPlan.output).eval _
+  }.getOrElse((_: InternalRow) => true)
+
   protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
     case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
@@ -205,8 +233,14 @@ trait HashJoin extends JoinCodegenSupport {
       streamedIter.map { currentRow =>
         val rowKey = keyGenerator(currentRow)
         joinedRow.withLeft(currentRow)
-        val matched = hashedRelation.getValue(rowKey)
-        if (matched != null && boundCondition(joinedRow.withRight(matched))) {
+        // If streamed-only condition is false/null, the full condition can never be true,
+        // so the row is emitted with null build side (no probe needed).
+        val matched = if (boundStreamedOnlyCondition(currentRow)) {
+          hashedRelation.getValue(rowKey)
+        } else {
+          null
+        }
+        if (matched != null && boundRestCondition(joinedRow.withRight(matched))) {
           joinedRow
         } else {
           joinedRow.withRight(nullRow)
@@ -216,13 +250,17 @@ trait HashJoin extends JoinCodegenSupport {
       streamedIter.flatMap { currentRow =>
         val rowKey = keyGenerator(currentRow)
         joinedRow.withLeft(currentRow)
-        val buildIter = hashedRelation.get(rowKey)
+        val buildIter = if (boundStreamedOnlyCondition(currentRow)) {
+          hashedRelation.get(rowKey)
+        } else {
+          null
+        }
         new RowIterator {
           private var found = false
           override def advanceNext(): Boolean = {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
-              if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+              if (boundRestCondition(joinedRow.withRight(nextBuildRow))) {
                 if (found && singleJoin) {
                   throw QueryExecutionErrors.scalarSubqueryReturnsMultipleRows();
                 }
@@ -279,19 +317,23 @@ trait HashJoin extends JoinCodegenSupport {
     if (hashedRelation.keyIsUnique) {
       streamIter.map { current =>
         val key = joinKeys(current)
-        lazy val matched = hashedRelation.getValue(key)
-        val exists = !key.anyNull && matched != null &&
-          (condition.isEmpty || boundCondition(joinedRow(current, matched)))
+        val exists = !key.anyNull && boundStreamedOnlyCondition(current) && {
+          val matched = hashedRelation.getValue(key)
+          matched != null && (restCondition.isEmpty ||
+            boundRestCondition(joinedRow(current, matched)))
+        }
         result.setBoolean(0, exists)
         joinedRow(current, result)
       }
     } else {
       streamIter.map { current =>
         val key = joinKeys(current)
-        lazy val buildIter = hashedRelation.get(key)
-        val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
-          (row: InternalRow) => boundCondition(joinedRow(current, row))
-        })
+        val exists = !key.anyNull && boundStreamedOnlyCondition(current) && {
+          val buildIter = hashedRelation.get(key)
+          buildIter != null && (restCondition.isEmpty || buildIter.exists {
+            (row: InternalRow) => boundRestCondition(joinedRow(current, row))
+          })
+        }
         result.setBoolean(0, exists)
         joinedRow(current, result)
       }
@@ -313,16 +355,21 @@ trait HashJoin extends JoinCodegenSupport {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
-        key.anyNull || matched == null ||
-          (condition.isDefined && !boundCondition(joinedRow(current, matched)))
+        // If streamed-only condition is false/null, the full condition can never be true,
+        // so the row is guaranteed emitted (no probe needed).
+        key.anyNull || matched == null || !boundStreamedOnlyCondition(current) ||
+          (restCondition.isDefined && !boundRestCondition(joinedRow(current, matched)))
       }
     } else {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val buildIter = hashedRelation.get(key)
-        key.anyNull || buildIter == null || (condition.isDefined && !buildIter.exists {
-          row => boundCondition(joinedRow(current, row))
-        })
+        // If streamed-only condition is false/null, the full condition can never be true,
+        // so the row is guaranteed emitted (no probe needed).
+        key.anyNull || buildIter == null || !boundStreamedOnlyCondition(current) ||
+          (restCondition.isDefined && !buildIter.exists {
+            row => boundRestCondition(joinedRow(current, row))
+          })
       }
     }
   }
@@ -355,6 +402,18 @@ trait HashJoin extends JoinCodegenSupport {
       numOutputRows += 1
       resultProj(r)
     }
+  }
+
+  /**
+   * Generates the code for evaluating a streamed-side-only condition on the given stream vars.
+   */
+  protected def genStreamedOnlyCondition(
+      ctx: CodegenContext,
+      expr: Expression,
+      streamVars: Seq[ExprCode]): ExprCode = {
+    ctx.currentVars = streamVars
+    val boundExpr = BindReferences.bindReference(expr, streamedPlan.output)
+    boundExpr.genCode(ctx)
   }
 
   override def doProduce(ctx: CodegenContext): String = {
@@ -457,14 +516,11 @@ trait HashJoin extends JoinCodegenSupport {
     val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // filter the output via condition. When there is no condition, skip the `conditionPassed`
-    // variable and the wrapping `if (!conditionPassed)` / `if (conditionPassed)` branches that
-    // would always be dead / unconditional.
-    val hasCondition = condition.isDefined
-    val conditionPassed = if (hasCondition) ctx.freshName("conditionPassed") else ""
-    val checkCondition = if (hasCondition) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
+    // Evaluate the rest of the condition (cross-side conjuncts) inside the match loop.
+    val hasRestCondition = restCondition.isDefined
+    val conditionPassed = if (hasRestCondition) ctx.freshName("conditionPassed") else ""
+    val checkCondition = if (hasRestCondition) {
+      val expr = restCondition.get
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       ctx.currentVars = input ++ buildVars
       val ev =
@@ -486,8 +542,32 @@ trait HashJoin extends JoinCodegenSupport {
       case BuildRight => input ++ buildVars
     }
 
+    // Variables for the guard-false path: emit the streamed row with null build side.
+    // They must be separate ExprCode instances so that the shared resultVars used in the
+    // main path are not consumed/cleared by the guard-false consume.
+    val defaultBuildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
+    val defaultResultVars = buildSide match {
+      case BuildLeft => defaultBuildVars ++ input
+      case BuildRight => input ++ defaultBuildVars
+    }
+
+    // Early-return guard: if streamed-only predicate is false/null, full condition is false
+    // and the row is emitted with null build side, so skip the probe entirely.
+    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
+      val ev = genStreamedOnlyCondition(ctx, expr, input)
+      s"""
+         |${ev.code}
+         |if (${ev.isNull} || !${ev.value}) {
+         |  UnsafeRow $matched = null;
+         |  $numOutput.add(1);
+         |  ${consume(ctx, defaultResultVars)}
+         |  return;
+         |}
+       """.stripMargin
+    }.getOrElse("")
+
     if (keyIsUnique) {
-      val resetWhenConditionFails = if (hasCondition) {
+      val resetWhenConditionFails = if (hasRestCondition) {
         s"""
            |if (!$conditionPassed) {
            |  $matched = null;
@@ -501,6 +581,7 @@ trait HashJoin extends JoinCodegenSupport {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |${checkCondition.trim}
@@ -525,11 +606,12 @@ trait HashJoin extends JoinCodegenSupport {
       }
 
       val (conditionGuardOpen, conditionGuardClose) =
-        if (hasCondition) (s"if ($conditionPassed) {", "}") else ("", "")
+        if (hasRestCondition) (s"if ($conditionPassed) {", "}") else ("", "")
 
       s"""
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
@@ -617,7 +699,26 @@ trait HashJoin extends JoinCodegenSupport {
     }
 
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
+    val (matched, checkCondition, _) = restCondition match {
+      case Some(expr) => getJoinCondition(ctx, expr, input, streamedPlan, buildPlan, None)
+      case None =>
+        val dummy = ctx.freshName("matched")
+        (dummy, "", Nil)
+    }
+
+    // Early-return guard: if streamed-only predicate is false/null, full condition is false
+    // and the row is guaranteed emitted, so skip the probe entirely.
+    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
+      val ev = genStreamedOnlyCondition(ctx, expr, input)
+      s"""
+         |${ev.code}
+         |if (${ev.isNull} || !${ev.value}) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |  return;
+         |}
+       """.stripMargin
+    }.getOrElse("")
 
     if (keyIsUnique) {
       val found = ctx.freshName("found")
@@ -625,6 +726,7 @@ trait HashJoin extends JoinCodegenSupport {
          |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// Check if the key has nulls.
          |if (!($anyNull)) {
          |  // Check if the HashedRelation exists.
@@ -649,6 +751,7 @@ trait HashJoin extends JoinCodegenSupport {
          |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// Check if the key has nulls.
          |if (!($anyNull)) {
          |  // Check if the HashedRelation exists.
@@ -682,35 +785,55 @@ trait HashJoin extends JoinCodegenSupport {
 
     val matched = ctx.freshName("matched")
     val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = false)
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      s"""
-         |$eval
-         |${ev.code}
-         |$existsVar = !${ev.isNull} && ${ev.value};
-       """.stripMargin
-    } else {
-      s"$existsVar = true;"
+
+    // Evaluate the rest of the condition (cross-side conjuncts) inside the match loop.
+    val checkCondition = restCondition match {
+      case Some(expr) =>
+        val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+        ctx.currentVars = input ++ buildVars
+        val ev = BindReferences.bindReference(
+          expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+        s"""
+           |$eval
+           |${ev.code}
+           |$existsVar = !${ev.isNull} && ${ev.value};
+         """.stripMargin
+      case None =>
+        s"$existsVar = true;"
     }
+
+    // Early-return guard: if streamed-only predicate is false/null, full condition is false
+    // and the exists flag is false, so skip the probe entirely.
+    val existsFalseResultVar = input ++ Seq(ExprCode.forNonNullValue(
+      JavaCode.variable(existsVar, BooleanType)))
+    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
+      val ev = genStreamedOnlyCondition(ctx, expr, input)
+      s"""
+         |${ev.code}
+         |if (${ev.isNull} || !${ev.value}) {
+         |  $existsVar = false;
+         |  $numOutput.add(1);
+         |  ${consume(ctx, existsFalseResultVar)}
+         |  return;
+         |}
+       """.stripMargin
+    }.getOrElse("")
 
     val resultVar = input ++ Seq(ExprCode.forNonNullValue(
       JavaCode.variable(existsVar, BooleanType)))
 
     if (keyIsUnique) {
       s"""
+         |boolean $existsVar = false;
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// find matches from HashedRelation
-         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |boolean $existsVar = false;
-         |if ($matched != null) {
-         |  $checkCondition
+         |if (!($anyNull)) {
+         |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |  if ($matched != null) {
+         |    $checkCondition
+         |  }
          |}
          |$numOutput.add(1);
          |${consume(ctx, resultVar)}
@@ -719,15 +842,18 @@ trait HashJoin extends JoinCodegenSupport {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       s"""
+         |boolean $existsVar = false;
          |// generate join key for stream side
          |${keyEv.code}
+         |$streamedOnlyGuard
          |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |boolean $existsVar = false;
-         |if ($matches != null) {
-         |  while (!$existsVar && $matches.hasNext()) {
-         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |    $checkCondition
+         |if (!($anyNull)) {
+         |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |  if ($matches != null) {
+         |    while (!$existsVar && $matches.hasNext()) {
+         |      UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |      $checkCondition
+         |    }
          |  }
          |}
          |$numOutput.add(1);
