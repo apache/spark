@@ -21,7 +21,7 @@ import org.apache.spark.sql.{Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.trees.TreePattern.USER_DEFINED_AGGREGATION
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction}
@@ -149,6 +149,26 @@ class MarkSingleTaskExecutionSuite extends QueryTest with SharedSparkSession
     checkNotMarked(
       s"select col from $t order by col",
       enabledConfs :+ (SQLConf.SINGLE_TASK_EXECUTION_SORT.key -> "false"))
+  }
+
+  test("marking does not mutate the input plan's nodes") {
+    // The rule must mark a copy of each eligible node rather than tag the node it was handed:
+    // an in-place tag on a shared node would propagate through `TreeNode.clone`/`copyTagsFrom`
+    // and could leak the marking into unrelated queries. Build an eligible plan shape directly
+    // (rather than through a query, whose optimizer would have already run this rule) so the
+    // input is guaranteed unmarked, then run the rule on it.
+    withSQLConf(enabledConfs: _*) {
+      val relation = spark.table(t).queryExecution.analyzed.collectFirst {
+        case lr: LogicalRelation => lr
+      }.get
+      val input = Sort(Nil, global = true, relation)
+      val output = MarkSingleTaskExecution(input)
+      // The rule marks a copied relation ...
+      assert(isMarked(output), s"expected output to be marked:\n$output")
+      // ... and leaves the original relation node untagged (it was copied, not mutated).
+      assert(relation.getTagValue(MarkSingleTaskExecution.markTag).isEmpty,
+        "rule must not tag the input relation node in place")
+    }
   }
 
   test("does not mark unsupported plan shapes (join)") {

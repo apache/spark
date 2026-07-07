@@ -104,7 +104,15 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
     if (plan.containsAnyPattern(unsupportedPatterns: _*)) {
       plan
     } else if (isSupportedShape(plan, enabled)) {
-      markSingleTaskExecution(plan)
+      // Mark a private clone of the plan rather than the plan itself, so that this rule never
+      // mutates a node it was handed: a tag set on a shared node would propagate through
+      // `TreeNode.clone`/`copyTagsFrom` and could leak the marking into unrelated plans. Note
+      // that marking a per-node copy would not work either: a copy differing only in tags is
+      // structurally equal to the original, so tree-rebuilding APIs such as `withNewChildren`
+      // would discard it and keep the original node.
+      val cloned = plan.clone()
+      markSingleTaskExecution(cloned)
+      cloned
     } else {
       plan
     }
@@ -138,27 +146,24 @@ object MarkSingleTaskExecution extends Rule[LogicalPlan] {
   }
 
   /**
-   * Marks each scan in the (already validated) plan for single-task execution and returns the
-   * updated plan.
+   * Sets the mark on each scan in the given (already validated) plan. Marking mutates the nodes
+   * in place, which is only safe because the caller passes this rule's private clone of the plan.
    */
-  private def markSingleTaskExecution(plan: LogicalPlan): LogicalPlan = plan match {
+  private def markSingleTaskExecution(plan: LogicalPlan): Unit = plan match {
     case lr: LogicalRelation =>
       lr.setTagValue(markTag, true)
-      lr
     case r: LocalRelation =>
       if (isLocalRelationEligible(r)) {
         r.setTagValue(markTag, true)
       }
-      r
     case e: Expand =>
       // Also mark the Expand itself: the physical `ExpandExec` reads this tag to forward the
       // child's `SinglePartition` output partitioning, which it must only do within a plan
       // marked for single-task execution.
-      val marked = e.withNewChildren(e.children.map(markSingleTaskExecution))
-      marked.setTagValue(markTag, true)
-      marked
+      e.setTagValue(markTag, true)
+      e.children.foreach(markSingleTaskExecution)
     case other =>
-      other.withNewChildren(other.children.map(markSingleTaskExecution))
+      other.children.foreach(markSingleTaskExecution)
   }
 
   /**
