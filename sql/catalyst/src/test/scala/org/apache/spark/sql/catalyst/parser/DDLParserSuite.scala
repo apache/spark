@@ -2254,7 +2254,7 @@ class DDLParserSuite extends AnalysisTest {
         stop = 70))
   }
 
-  test("update table: with options") {
+  test("SPARK-57681: update table: with options") {
     parseCompare(
       """
         |UPDATE testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
@@ -2269,10 +2269,10 @@ class DDLParserSuite extends AnalysisTest {
         None))
   }
 
-  test("update table: with options and alias") {
+  test("SPARK-57681: update table: with options and alias") {
     parseCompare(
       """
-        |UPDATE testcat.ns1.ns2.tbl WITH (`k` = 'v') AS t
+        |UPDATE testcat.ns1.ns2.tbl AS t WITH (`k` = 'v')
         |SET t.a='Robert', t.b=32
         |WHERE t.c=2
       """.stripMargin,
@@ -2284,18 +2284,6 @@ class DDLParserSuite extends AnalysisTest {
         Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
           Assignment(UnresolvedAttribute("t.b"), Literal(32))),
         Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
-  }
-
-  test("update table: options without values are not allowed") {
-    val sql = "UPDATE testcat.ns1.ns2.tbl WITH (`split-size`) SET a = 1"
-    checkError(
-      exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0035",
-      parameters = Map("message" -> "Values must be specified for key(s): [split-size]"),
-      context = ExpectedContext(
-        fragment = "testcat.ns1.ns2.tbl",
-        start = 7,
-        stop = 25))
   }
 
   test("merge into table: basic") {

@@ -1257,7 +1257,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     }
   }
 
-  test("update with dynamic options") {
+  test("SPARK-57681: update with dynamic options") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -1270,5 +1270,40 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
+  test("SPARK-57681: update with dynamic options and a subquery on the same table") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM $tableNameAsString WHERE dep = 'hr')"),
+      "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
+  }
+
+  test("SPARK-57681: update with dynamic options and a CTE on the same table") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"WITH hr_rows AS (SELECT pk FROM $tableNameAsString WHERE dep = 'hr') " +
+        s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM hr_rows)"),
+      "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
   }
 }
