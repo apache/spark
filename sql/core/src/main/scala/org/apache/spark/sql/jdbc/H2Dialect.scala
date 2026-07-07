@@ -124,8 +124,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = "SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
-      s"TABLE_SCHEMA = '${tableIdent.namespace().last}' AND " +
-      s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '${escapeSql(indexName)}'"
+      s"TABLE_SCHEMA = '${escapeSql(tableIdent.namespace().last)}' AND " +
+      s"TABLE_NAME = '${escapeSql(tableIdent.name())}' AND INDEX_NAME = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
@@ -152,8 +152,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
          | AND i.INDEX_CATALOG = ic.INDEX_CATALOG
          | AND i.INDEX_SCHEMA = ic.INDEX_SCHEMA
          | AND i.INDEX_NAME = ic.INDEX_NAME
-         | AND i.TABLE_NAME = '${tableIdent.name()}'
-         | AND i.INDEX_SCHEMA = '${tableIdent.namespace().last}'
+         | AND i.TABLE_NAME = '${escapeSql(tableIdent.name())}'
+         | AND i.INDEX_SCHEMA = '${escapeSql(tableIdent.namespace().last)}'
          |""".stripMargin
     }
     var indexMap: Map[String, TableIndex] = Map()
