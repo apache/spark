@@ -227,11 +227,17 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof ListVector listVector) {
       accessor = new ArrayAccessor(listVector);
     } else if (vector instanceof StructVector structVector) {
-      accessor = new StructAccessor(structVector);
+      if (ArrowUtils.isTimestampNanosStructField(structVector.getField())) {
+        // Lossless struct representation of a nanosecond timestamp (ArrowUtils.toArrowField with
+        // losslessTimestampNanos = true): logically a scalar, so no child columns are exposed.
+        accessor = new TimestampNanosStructAccessor(structVector);
+      } else {
+        accessor = new StructAccessor(structVector);
 
-      childColumns = new ArrowColumnVector[structVector.size()];
-      for (int i = 0; i < childColumns.length; ++i) {
-        childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
+        childColumns = new ArrowColumnVector[structVector.size()];
+        for (int i = 0; i < childColumns.length; ++i) {
+          childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
+        }
       }
     } else if (vector instanceof NullVector nullVector) {
       accessor = new NullAccessor(nullVector);
@@ -616,6 +622,32 @@ public class ArrowColumnVector extends ColumnVector {
     @Override
     final TimestampNanosVal getTimestampNanos(int rowId) {
       return decodeEpochNanos(accessor.get(rowId));
+    }
+  }
+
+  /**
+   * Reads the lossless struct representation of a nanosecond timestamp (epochMicros: int64,
+   * nanosWithinMicro: int16), built by ArrowUtils.toArrowField with losslessTimestampNanos = true.
+   * The components are stored as-is (TimestampNanosVal's own layout), so unlike the int64
+   * epoch-nanoseconds accessors above there is no decoding arithmetic and no reduced value domain.
+   */
+  static class TimestampNanosStructAccessor extends ArrowVectorAccessor {
+
+    private final BigIntVector epochMicros;
+    private final SmallIntVector nanosWithinMicro;
+
+    TimestampNanosStructAccessor(StructVector vector) {
+      super(vector);
+      this.epochMicros = (BigIntVector) vector.getChild("epochMicros");
+      this.nanosWithinMicro = (SmallIntVector) vector.getChild("nanosWithinMicro");
+    }
+
+    @Override
+    final TimestampNanosVal getTimestampNanos(int rowId) {
+      // fromParts validates nanosWithinMicro is in [0, 999]; the write side always stores a valid
+      // TimestampNanosVal, but this format may be deserialized from stored bytes, so validate
+      // rather than trusting blindly.
+      return TimestampNanosVal.fromParts(epochMicros.get(rowId), nanosWithinMicro.get(rowId));
     }
   }
 
