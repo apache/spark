@@ -1621,6 +1621,7 @@ docs = Module(
     dependencies=[],
     source_file_regexes=[
         "docs/",
+        "python/docs/",
     ],
 )
 
