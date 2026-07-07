@@ -68,3 +68,137 @@ line-length = 100
 target-version = ['py39']
 include = '\.pyi?$'
 extend-exclude = 'cloudpickle|error_classes.py'
+
+[dependency-groups]
+_py4j = ["py4j>=0.10.9.9"]
+
+_numpy = ["numpy>=1.23.2"]
+_pandas = ["pandas>=2.2.0,<3.0.0"]
+_protobuf = ["protobuf==6.33.5"]
+_pyarrow = ["pyarrow>=18.0.0"]
+
+_pyspark_devtool = [
+    # Optional tools that are used by pyspark directly.
+    "memory-profiler>=0.61.0",
+    "flameprof==0.4",
+    "psutil",
+    "pystack>=1.6.0; sys_platform=='linux'",
+]
+
+connect = [
+    {include-group = "_py4j"},
+    {include-group = "_pandas"},
+    {include-group = "_protobuf"},
+    {include-group = "_pyarrow"},
+    "grpcio>=1.76.0",
+    "grpcio-status>=1.76.0",
+    "googleapis-common-protos>=1.71.0",
+    "zstandard>=0.25.0",
+    "graphviz>=0.20",
+]
+
+sql = [
+    {include-group = "_py4j"},
+    {include-group = "_pandas"},
+    {include-group = "_pyarrow"},
+]
+
+pandas_on_spark = [
+    {include-group = "_py4j"},
+    {include-group = "_pandas"},
+    {include-group = "_pyarrow"},
+]
+
+pandas_on_spark_extra = [
+    "plotly<6.0.0",
+    "matplotlib",
+    "mlflow>=2.3.1",
+]
+
+ml = [
+    {include-group = "_py4j"},
+    {include-group = "_numpy"},
+]
+
+mllib = [
+    {include-group = "_py4j"},
+    {include-group = "_numpy"},
+]
+
+ml_extra = [
+    "scipy>1.8.0",
+    "scikit-learn",
+    "torch",
+    "torchvision",
+    "torcheval",
+    "deepspeed; sys_platform != 'darwin'",
+]
+
+pipelines = [
+    {include-group = "connect"},
+    "pyyaml>=3.11",
+]
+
+_lint = [
+    "ruff==0.14.8",
+    "mypy==1.19.1",
+    "pytest-mypy-plugins==3.2.0",
+    "mypy-protobuf==3.3.0",
+    "googleapis-common-protos-stubs==2.2.0",
+    "grpc-stubs==1.24.11",
+    "pandas-stubs>=2.2.0",
+    "scipy-stubs",
+    "types-PyYAML"
+]
+
+_test = [
+    # Dependency for running tests
+    "unittest-xml-reporting",
+    # 3rd party libraries that unittests use.
+    "openpyxl",
+    "tabulate",
+    "testcontainers[kafka]>=3.7.0",
+    "kafka-python-ng>=2.0.2",
+]
+
+_docs = [
+    "sphinx==8.2.3",
+    "sphinx-plotly-directive",
+    "sphinx-copybutton",
+    "docutils",
+    "markupsafe",
+    "pydata_sphinx_theme>=0.13",
+    "ipython",
+    "nbsphinx",
+    "numpydoc",
+    "jinja2",
+]
+
+_devtools = [
+    # Devtools that are used by pyspark developers.
+    "debugpy",
+    "viztracer",
+    "jira>=3.5.2",
+    "PyGithub",
+    "asv",
+]
+
+dev = [
+    {include-group = "_pyspark_devtool"},
+    {include-group = "_lint"},
+    {include-group = "_test"},
+    {include-group = "_docs"},
+    {include-group = "_devtools"},
+    {include-group = "sql"},
+    {include-group = "connect"},
+    {include-group = "ml"},
+    {include-group = "mllib"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "pandas_on_spark_extra"},
+    {include-group = "pipelines"},
+]
+
+all = [
+    {include-group = "dev"},
+    {include-group = "ml_extra"},
+]

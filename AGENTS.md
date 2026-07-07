@@ -94,7 +94,8 @@ If the default venv does not exist, create it:
 
     python3 -m venv .venv
     source .venv/bin/activate
-    pip install -r dev/requirements.txt
+    pip install --upgrade pip
+    pip install --group dev
 
 Run a single test suite:
 
