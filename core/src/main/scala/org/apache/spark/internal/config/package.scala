@@ -2917,7 +2917,7 @@ package object config {
         "checksummed (a warning is logged).")
       .version("4.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STAGE_MAX_ATTEMPTS =
     ConfigBuilder("spark.stage.maxAttempts")
