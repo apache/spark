@@ -518,7 +518,10 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+            type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-cache:${{ inputs.branch }},mode=max
       - name: Build and push (Documentation)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).docs == 'true' && hashFiles('dev/spark-test-image/docs/Dockerfile') != '' }}
         id: docker_build_docs
@@ -529,7 +532,10 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
+            type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }},mode=max
       - name: Build and push (Linter)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).lint == 'true' && hashFiles('dev/spark-test-image/lint/Dockerfile') != '' }}
         id: docker_build_lint
@@ -540,7 +546,10 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
+            type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }},mode=max
       - name: Build and push (SparkR)
         if: ${{ inputs.branch != 'branch-3.5' && fromJson(needs.precondition.outputs.required).sparkr == 'true' && hashFiles('dev/spark-test-image/sparkr/Dockerfile') != '' }}
         id: docker_build_sparkr
@@ -551,7 +560,10 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_sparkr_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
+            type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }},mode=max
       - name: Build and push (PySpark with ${{ env.PYSPARK_IMAGE_TO_TEST }})
         if: ${{ inputs.branch != 'branch-3.5' && (fromJson(needs.precondition.outputs.required).pyspark == 'true' || fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true') && env.PYSPARK_IMAGE_TO_TEST != '' }}
         id: docker_build_pyspark
@@ -563,7 +575,10 @@ jobs:
           tags: |
             ${{ needs.precondition.outputs.image_pyspark_url }}
           # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
+            type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/spark/apache-spark-github-action-image-pyspark-${{ env.PYSPARK_IMAGE_TO_TEST }}-cache:${{ inputs.branch }},mode=max
 
 
   precompile:
