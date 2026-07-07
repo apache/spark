@@ -141,18 +141,9 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             count = F.count(scol).over(self._window)
             if LooseVersion(pd.__version__) >= "3.0.0":
                 # pandas 3.0 fixed sem to std(ddof) / sqrt(count) (pandas-dev/pandas#63181);
-                # earlier pandas used std / sqrt(count - ddof). Use Spark's std with the matching
-                # ddof directly for the two common cases so the result matches pandas bit-for-bit;
-                # fall back to rescaling the sample stddev for any other ddof.
-                if ddof == 1:
-                    std = F.stddev(scol).over(self._window)
-                elif ddof == 0:
-                    std = F.stddev_pop(scol).over(self._window)
-                else:
-                    std = F.stddev(scol).over(self._window) * F.sqrt((count - 1) / (count - ddof))
-                sem_scol = std / F.sqrt(count)
+                # earlier pandas divided by sqrt(count - ddof) instead.
+                sem_scol = SF.stddev(scol, ddof).over(self._window) / F.sqrt(count)
             else:
-                # Older pandas computed sem as std / sqrt(count - ddof).
                 sem_scol = F.stddev(scol).over(self._window) / F.sqrt(count - ddof)
             return F.when(
                 (F.row_number().over(self._unbounded_window) >= self._min_periods) & (count > ddof),
