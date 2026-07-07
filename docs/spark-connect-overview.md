@@ -331,10 +331,15 @@ This is **off by default**; nothing changes unless you opt in. A few details:
 - The server listens on port `15002` by default and authenticates with a token written, together
   with the host, port, pid and Spark version, to `~/.spark/connect-local.json` (mode `0600`).
   Set `SPARK_LOCAL_CONNECT_DISCOVERY` to relocate that file. Reuse is refused (and a fresh server
-  started) if the recorded process is gone, the port is closed, or the Spark version differs.
+  started) if the recorded process is gone, the port is closed, or the Spark version differs. On
+  Unix-like systems, PySpark uses a file lock around first startup. On platforms without `fcntl`,
+  concurrent startups can race; callers that lose the race reconnect to the server recorded in the
+  discovery file.
 - The server self-terminates once it has been idle for `spark.local.connect.server.idleTimeout`
-  seconds (default `3600`; set `0` to disable). To stop it sooner, terminate the `pid` recorded in
-  the discovery file.
+  seconds (default `3600`; set `0` to disable). To stop it sooner, call
+  `SparkSession._stop_local_connect_server()` or terminate the `pid` recorded in the discovery file.
+  If an old discovery file is rejected after a Spark upgrade, stop the old recorded `pid` if you do
+  not want to wait for the idle timeout.
 
 ## Use Spark Connect in standalone applications
 
@@ -430,7 +435,7 @@ one may implement their own class extending `ClassFinder` for customized search 
 </div>
 
 For more information on application development with Spark Connect as well as extending Spark Connect
-with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html). 
+with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html).
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to

@@ -20,8 +20,10 @@ import os
 import shutil
 import signal
 import socket
+import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import unittest
 
@@ -29,6 +31,7 @@ from pyspark.util import is_remote_only
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
+    from pyspark.sql import SparkSession as PySparkSession
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.version import __version__
 
@@ -131,6 +134,23 @@ class LocalConnectServerReuseTests(unittest.TestCase):
     def test_stop_when_no_server_is_safe(self) -> None:
         self.assertFalse(RemoteSparkSession._stop_local_connect_server())
 
+    def test_stop_signals_recorded_server_group(self) -> None:
+        self._write_discovery(pid=12345)
+        calls = []
+        old_signal = RemoteSparkSession._signal_local_connect_server
+
+        def fake_signal(pid, sig):
+            calls.append((pid, sig))
+            return True
+
+        try:
+            RemoteSparkSession._signal_local_connect_server = staticmethod(fake_signal)
+            self.assertTrue(RemoteSparkSession._stop_local_connect_server())
+            self.assertEqual(calls, [(12345, signal.SIGTERM)])
+            self.assertFalse(os.path.exists(self._discovery))
+        finally:
+            RemoteSparkSession._signal_local_connect_server = old_signal
+
     def test_reuse_from_discovery_none_when_absent(self) -> None:
         self.assertIsNone(RemoteSparkSession._reuse_from_discovery())
 
@@ -206,6 +226,78 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             time.sleep(0.5)
         return False
 
+    def test_builder_remote_local_uses_reuse_flag(self) -> None:
+        spark = None
+        try:
+            spark = (
+                PySparkSession.builder.remote("local[2]")
+                .config("spark.local.connect.reuse", "true")
+                .getOrCreate()
+            )
+            self.assertEqual(spark.range(2).count(), 2)
+
+            disc = RemoteSparkSession._read_local_connect_discovery()
+            self.assertIsNotNone(disc)
+            self.assertEqual(disc["spark_version"], __version__)
+            self.assertNotEqual(disc["pid"], os.getpid())
+        finally:
+            if spark is not None:
+                spark.stop()
+
+    def test_concurrent_startup_reuses_one_server(self) -> None:
+        script = textwrap.dedent(
+            """
+            import json
+            import os
+
+            from pyspark.sql import SparkSession
+
+            spark = (
+                SparkSession.builder.remote("local[2]")
+                .config("spark.local.connect.reuse", "true")
+                .getOrCreate()
+            )
+            try:
+                count = spark.range(1).count()
+                with open(os.environ["SPARK_LOCAL_CONNECT_DISCOVERY"], "r") as f:
+                    disc = json.load(f)
+                print(json.dumps({"count": count, "pid": disc["pid"], "port": disc["port"]}))
+            finally:
+                spark.stop()
+            """
+        )
+        env = dict(os.environ)
+        env["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery
+        env["SPARK_LOCAL_CONNECT_REUSE"] = "1"
+
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", script],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(3)
+        ]
+        outputs = []
+        try:
+            for proc in procs:
+                stdout, stderr = proc.communicate(timeout=180)
+                self.assertEqual(proc.returncode, 0, stderr)
+                lines = stdout.strip().splitlines()
+                self.assertTrue(lines, stderr)
+                outputs.append(json.loads(lines[-1]))
+        finally:
+            for proc in procs:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.communicate()
+
+        self.assertEqual({o["count"] for o in outputs}, {1})
+        self.assertEqual(len({o["pid"] for o in outputs}), 1)
+        self.assertEqual(len({o["port"] for o in outputs}), 1)
+
     def test_start_reuse_and_session_isolation(self) -> None:
         # First call starts a detached persistent server and records it in the discovery file.
         endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", {})
@@ -253,20 +345,14 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         )
 
     def test_start_seeds_static_conf_on_the_server(self) -> None:
-        """A start-up conf passed by the first caller reaches the daemon's SparkConf.
-
-        Uses a static conf (``spark.sql.warehouse.dir``) that the per-session ``_apply_options``
-        path cannot set on an already-running JVM, so observing it on the server proves the seed
-        conf was forwarded rather than applied client-side afterwards.
-        """
+        """A start-up conf passed by the first caller reaches the daemon's SparkConf."""
         warehouse = os.path.join(self._tmpdir, "seeded-wh")
         opts = {"spark.sql.warehouse.dir": warehouse}
         endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", opts)
         spark = None
         try:
             spark = RemoteSparkSession.builder.remote(endpoint).create()
-            # Spark normalizes the warehouse dir to a file: URI; the path still identifies our dir,
-            # which proves the seed conf reached the daemon (a per-session apply cannot set it).
+            # The per-session apply path cannot set this static conf after the JVM is running.
             self.assertTrue(spark.conf.get("spark.sql.warehouse.dir").endswith(warehouse))
         finally:
             if spark is not None:
@@ -277,12 +363,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
     def test_terminate_reaps_daemon_and_jvm(self) -> None:
         """_terminate_local_connect_server kills the daemon *and* its child JVM.
 
-        Reproduces the start-up-timeout orphan case: terminating only the daemon leader would leak
-        the JVM it spawned. The helper signals the whole process group, so nothing in the group
-        survives -- checked here after the daemon has actually launched its JVM.
+        The test waits until the daemon has launched the JVM, then checks that the whole process
+        group exits.
         """
-        import subprocess
-
         if shutil.which("pgrep") is None:
             self.skipTest("pgrep is needed to detect the child JVM")
 
@@ -290,19 +373,28 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
         daemon = os.path.join(os.path.dirname(session_mod.__file__), "local_server.py")
         cmd = [
-            sys.executable, daemon,
-            "--master", "local[2]",
-            "--port", "0",  # ephemeral, so a stray server elsewhere cannot interfere
-            "--token", "reap-test",
-            "--discovery", self._discovery,
-            "--idle-timeout", "3600",
+            sys.executable,
+            daemon,
+            "--master",
+            "local[2]",
+            "--port",
+            "0",  # ephemeral, so a stray server elsewhere cannot interfere
+            "--token",
+            "reap-test",
+            "--discovery",
+            self._discovery,
+            "--idle-timeout",
+            "3600",
         ]
         env = dict(os.environ)
         for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
             env.pop(var, None)
         proc = subprocess.Popen(
-            cmd, env=env,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            cmd,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             start_new_session=True,  # session/group leader, matching the production launch
         )
 
@@ -315,7 +407,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
         pgid = os.getpgid(proc.pid)
         try:
-            # Wait until the daemon has spawned its child JVM -- the process the fix must also reap.
+            # Wait until the daemon has spawned its child JVM before terminating the group.
             deadline = time.time() + 90
             kids = []
             while time.time() < deadline:
@@ -340,7 +432,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             with self.assertRaises(ProcessLookupError):
                 os.killpg(pgid, 0)
         finally:
-            # Belt and suspenders: never leak the group if an assertion above failed early.
             try:
                 os.killpg(pgid, signal.SIGKILL)
             except OSError:
