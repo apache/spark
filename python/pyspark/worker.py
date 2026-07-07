@@ -1755,9 +1755,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                     # then call eval once per input row.
                     pylist = [
                         (
-                            [conv(v) for v in column.to_pylist()]
+                            [conv(v) for v in ArrowTableToRowsConversion._to_pylist(column)]
                             if conv is not None
-                            else column.to_pylist()
+                            else ArrowTableToRowsConversion._to_pylist(column)
                         )
                         for column, conv in zip(batch.columns, converters)
                     ]
@@ -2616,9 +2616,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        assert len(parsed_offsets) == 1, (
-            "Expected one pair of offsets for GROUPED_MAP_ARROW_ITER UDF."
-        )
+        assert (
+            len(parsed_offsets) == 1
+        ), "Expected one pair of offsets for GROUPED_MAP_ARROW_ITER UDF."
 
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
@@ -2752,9 +2752,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
         grouped_udf, arg_offsets, return_type, num_udf_args = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        assert len(parsed_offsets) == 1, (
-            "Expected one pair of offsets for GROUPED_MAP_PANDAS_ITER UDF."
-        )
+        assert (
+            len(parsed_offsets) == 1
+        ), "Expected one pair of offsets for GROUPED_MAP_PANDAS_ITER UDF."
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]
@@ -3067,7 +3067,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 # --- Input: Arrow -> Python columns ---
                 columns = [
-                    [conv(v) for v in col.to_pylist()] if conv is not None else col.to_pylist()
+                    (
+                        [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                        if conv is not None
+                        else ArrowTableToRowsConversion._to_pylist(col)
+                    )
                     for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
                 ]
                 if not columns:
@@ -3119,9 +3123,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             coerce = (
                 str
                 if isinstance(udf_return_type, StringType)
-                else bytes
-                if isinstance(udf_return_type, BinaryType)
-                else None
+                else bytes if isinstance(udf_return_type, BinaryType) else None
             )
             udf_infos.append(
                 (
@@ -3363,9 +3365,9 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
         parsed_offsets = extract_key_value_indexes(arg_offsets)
-        assert len(parsed_offsets) == 1, (
-            "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
-        )
+        assert (
+            len(parsed_offsets) == 1
+        ), "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]

@@ -981,6 +981,60 @@ class ArrowTableToRowsConversion:
     """
 
     @staticmethod
+    def _to_pylist(column: Union["pa.Array", "pa.ChunkedArray"]) -> List[Any]:
+        """
+        Equivalent to ``column.to_pylist()``, but converts (nested) list columns in bulk
+        instead of one scalar at a time.
+
+        ``Array.to_pylist()`` materializes one Scalar per element; for list types each row
+        additionally allocates a C++ scalar, a Python Scalar wrapper and a Python Array
+        wrapper for the row's values before converting elements one by one, which is
+        several times slower than converting the flattened child values in a single pass
+        and slicing the resulting Python list per row (see apache/arrow#50326). The values
+        themselves are still converted by Arrow's own ``to_pylist``, so results are exactly
+        identical: ``None`` stays ``None`` and values inside numeric lists stay Python ints,
+        unlike a pandas round trip which would coerce them to floats/NaN. NumPy is used
+        only for the offsets (non-null integers) and the validity bitmap (booleans), so no
+        value coercion can occur.
+
+        This can be removed once the minimum supported PyArrow version includes the fix
+        for apache/arrow#50326.
+        """
+        import pyarrow as pa
+        import pyarrow.types as pa_types
+
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return column.to_pylist()
+
+        if isinstance(column, pa.ChunkedArray):
+            result: List[Any] = []
+            for chunk in column.chunks:
+                result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
+            return result
+
+        column_type = column.type
+        if (pa_types.is_list(column_type) or pa_types.is_large_list(column_type)) and len(
+            column
+        ) > 0:
+            n = len(column)
+            offsets = column.offsets.to_numpy(zero_copy_only=True).tolist()
+            start = offsets[0]
+            flat = ArrowTableToRowsConversion._to_pylist(
+                column.values.slice(start, offsets[-1] - start)
+            )
+            if column.null_count == 0:
+                return [flat[offsets[i] - start : offsets[i + 1] - start] for i in range(n)]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            return [
+                flat[offsets[i] - start : offsets[i + 1] - start] if valid[i] else None
+                for i in range(n)
+            ]
+
+        return column.to_pylist()
+
+    @staticmethod
     def _need_converter(dataType: DataType) -> bool:
         if isinstance(dataType, NullType):
             return True
@@ -1069,9 +1123,9 @@ class ArrowTableToRowsConversion:
                 dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
-            assert element_conv is not None, (
-                f"_need_converter() returned True for ArrayType of {dataType.elementType}"
-            )
+            assert (
+                element_conv is not None
+            ), f"_need_converter() returned True for ArrayType of {dataType.elementType}"
 
             def convert_array(value: Any) -> Any:
                 if value is None:
@@ -1306,7 +1360,11 @@ class ArrowTableToRowsConversion:
             ]
 
             columnar_data = [
-                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
+                (
+                    [conv(v) for v in ArrowTableToRowsConversion._to_pylist(column)]
+                    if conv is not None
+                    else ArrowTableToRowsConversion._to_pylist(column)
+                )
                 for column, conv in zip(table.columns, field_converters)
             ]
 
