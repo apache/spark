@@ -2577,6 +2577,34 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.getSealedChecksum(blockId).isDefined)
   }
 
+  test("global checksum flag records divergent replicas without evicting or skipping them") {
+    // The compute-only mirror of the "divergent copies converge" seal test: with the global flag
+    // on but no seal, divergent replicas are recorded but NOT converged - nothing is evicted, no
+    // read is skipped, and no sealed checksum exists. Checksumming on its own only observes.
+    val checksumConf = new SparkConf(false).set(STORAGE_RDD_BLOCK_CHECKSUM_ENABLED, true)
+    val store1 = makeBlockManager(20000, "exec1", testConf = Some(checksumConf))
+    val store2 = makeBlockManager(20000, "exec2", testConf = Some(checksumConf))
+    val blockId = RDDBlockId(22, 0)
+    // No computeChecksum flag: only the global switch drives the checksum, so neither block is on
+    // the seal path.
+    store1.getOrElseUpdateRDDBlock(
+      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => Seq(1, 2, 3, 4).iterator)
+    store2.getOrElseUpdateRDDBlock(
+      2L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => Seq(9, 9, 9, 9).iterator)
+    // Both replicas stay in the directory (no seal => updateBlockInfo admits both, divergent or
+    // not), and both are served locally - the read-side self-check does not fire without a seal.
+    assert(master.getLocations(blockId).toSet === Set(store1.blockManagerId, store2.blockManagerId))
+    assert(store1.getLocalValues(blockId).isDefined)
+    assert(store2.getLocalValues(blockId).isDefined)
+    assert(master.getSealedChecksum(blockId).isEmpty)
+
+    // The divergent checksums were recorded, so an explicit seal can still converge them later
+    // (observe-then-enforce): the plurality is undefined at 1-vs-1, but exactly one survives.
+    assert(master.sealRddChecksums(22) === 0)
+    assert(master.getLocations(blockId).size === 1)
+    assert(master.getSealedChecksum(blockId).isDefined)
+  }
+
   test("SPARK-41497: mark rdd block as visible") {
     val store = makeBlockManager(8000, "executor1")
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)
