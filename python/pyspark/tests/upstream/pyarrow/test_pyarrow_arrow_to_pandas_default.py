@@ -399,12 +399,31 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
                 except Exception as e:
                     return f"ERR@{type(e).__name__}"
 
+        # pandas 3.0.0 makes the new string dtype the default (PDEP-14), so `Array.to_pandas()`
+        # yields `Series[str]` (missing values shown as `nan`) instead of `Series[object]` (with
+        # `None`). The golden file captures the pandas < 3 spelling; override the string rows when
+        # running on pandas >= 3.
+        import pandas as pd
+        from pyspark.loose_version import LooseVersion
+
+        overrides = None
+        if LooseVersion(pd.__version__) >= "3.0.0":
+            overrides = {
+                ("string:standard", "pandas series"): "['hello', 'world', '']@Series[str]",
+                ("string:nullable", "pandas series"): "['hello', nan, 'world']@Series[str]",
+                ("string:empty", "pandas series"): "[]@Series[str]",
+                ("large_string:standard", "pandas series"): "['hello', 'world']@Series[str]",
+                ("large_string:nullable", "pandas series"): "['hello', nan]@Series[str]",
+                ("large_string:empty", "pandas series"): "[]@Series[str]",
+            }
+
         self.compare_or_generate_golden_matrix(
             row_names=row_names,
             col_names=col_names,
             compute_cell=compute_cell,
             golden_file_prefix="golden_pyarrow_arrow_to_pandas_default",
             index_name="test case",
+            overrides=overrides,
         )
 
 

@@ -1904,7 +1904,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  aa  3  10
         2  bb  6  10
 
-        >>> g.apply(sum).sort_index()  # doctest: +NORMALIZE_WHITESPACE
+        >>> g.apply(sum).sort_index()  # pandas 3 raises TypeError on int + str  # doctest: +SKIP
             A  B   C
         A
         a  aa  3  10
@@ -5041,6 +5041,11 @@ def _test() -> None:
         .appName("pyspark.pandas.groupby tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.groupby,
         globs=globs,

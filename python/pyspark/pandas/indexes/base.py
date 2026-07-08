@@ -750,9 +750,9 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> df = ps.DataFrame({'a': ['A', 'C'], 'b': ['A', 'B']}, columns=['a', 'b'])
+        >>> df = ps.DataFrame({'a': ['A', 'C'], 'b': ['A', 'B']}, index=[10, 20])
         >>> df.index.rename("c")
-        Index([0, 1], dtype='int64', name='c')
+        Index([10, 20], dtype='int64', name='c')
 
         >>> df.set_index("a", inplace=True)
         >>> df.index.rename("d")
@@ -2368,19 +2368,19 @@ class Index(IndexOpsMixin):
         Examples
         --------
         >>> psidx = ps.Index([1, 2, 3, 4])
-        >>> psidx.holds_integer()
+        >>> psidx.holds_integer()  # `holds_integer` was removed in pandas 3  # doctest: +SKIP
         True
 
         Returns False for string type.
 
         >>> psidx = ps.Index(["A", "B", "C", "D"])
-        >>> psidx.holds_integer()  # doctest: +SKIP
+        >>> psidx.holds_integer()  # `holds_integer` was removed in pandas 3  # doctest: +SKIP
         False
 
         Returns False for float type.
 
         >>> psidx = ps.Index([1.1, 2.2, 3.3, 4.4])
-        >>> psidx.holds_integer()  # doctest: +SKIP
+        >>> psidx.holds_integer()  # `holds_integer` was removed in pandas 3  # doctest: +SKIP
         False
         """
         if LooseVersion(pd.__version__) < "3.0.0":
@@ -2674,6 +2674,11 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.base tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.base,
         globs=globs,

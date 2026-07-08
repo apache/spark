@@ -89,20 +89,20 @@ class DatetimeIndex(Index):
     Examples
     --------
     >>> ps.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
-    DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[...]', freq=None)
 
     From a Series:
 
     >>> from datetime import datetime
     >>> s = ps.Series([datetime(2021, 3, 1), datetime(2021, 3, 2)], index=[10, 20])
     >>> ps.DatetimeIndex(s)
-    DatetimeIndex(['2021-03-01', '2021-03-02'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['2021-03-01', '2021-03-02'], dtype='datetime64[...]', freq=None)
 
     From an Index:
 
     >>> idx = ps.DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'])
     >>> ps.DatetimeIndex(idx)
-    DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['1970-01-01', '1970-01-01', '1970-01-01'], dtype='datetime64[...]', freq=None)
     """
 
     @no_type_check
@@ -570,7 +570,7 @@ class DatetimeIndex(Index):
         >>> rng.ceil('H')  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 13:00:00'],
-                      dtype='datetime64[ns]', freq=None)
+                      dtype='datetime64[...]', freq=None)
         """
         disallow_nanoseconds(freq)
 
@@ -600,7 +600,7 @@ class DatetimeIndex(Index):
         >>> rng.floor("H")  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 11:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
-                      dtype='datetime64[ns]', freq=None)
+                      dtype='datetime64[...]', freq=None)
         """
         disallow_nanoseconds(freq)
 
@@ -630,7 +630,7 @@ class DatetimeIndex(Index):
         >>> rng.round("H")  # doctest: +SKIP
         DatetimeIndex(['2018-01-01 12:00:00', '2018-01-01 12:00:00',
                        '2018-01-01 12:00:00'],
-                      dtype='datetime64[ns]', freq=None)
+                      dtype='datetime64[...]', freq=None)
         """
         disallow_nanoseconds(freq)
 
@@ -778,7 +778,7 @@ class DatetimeIndex(Index):
         >>> psidx
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
-                      dtype='datetime64[ns]', freq=None)
+                      dtype='datetime64[...]', freq=None)
 
         >>> psidx.indexer_between_time("00:01", "00:02").sort_values()
         Index([1, 2], dtype='int64')
@@ -832,7 +832,7 @@ class DatetimeIndex(Index):
         >>> psidx  # doctest: +SKIP
         DatetimeIndex(['2000-01-01 00:00:00', '2000-01-01 00:01:00',
                        '2000-01-01 00:02:00'],
-                      dtype='datetime64[ns]', freq=None)
+                      dtype='datetime64[...]', freq=None)
 
         >>> psidx.indexer_at_time("00:00")  # doctest: +SKIP
         Index([0], dtype='int64')
@@ -881,6 +881,11 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.datetimes tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.datetimes,
         globs=globs,

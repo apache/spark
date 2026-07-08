@@ -2423,6 +2423,11 @@ def _test() -> None:
         .appName("pyspark.pandas.strings tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.strings,
         globs=globs,

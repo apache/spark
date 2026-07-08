@@ -2549,27 +2549,27 @@ class Frame(object, metaclass=ABCMeta):
 
         Examples
         --------
-        >>> ps.DataFrame({'a': [True]}).bool()
+        >>> ps.DataFrame({'a': [True]}).bool()  # `bool` was removed in pandas 3  # doctest: +SKIP
         True
 
-        >>> ps.Series([False]).bool()
+        >>> ps.Series([False]).bool()  # `bool` was removed in pandas 3  # doctest: +SKIP
         False
 
         If there are non-boolean or multiple values exist, it raises an exception in all
         cases as below.
 
-        >>> ps.DataFrame({'a': ['a']}).bool()
+        >>> ps.DataFrame({'a': ['a']}).bool()  # `bool` was removed in pandas 3  # doctest: +SKIP
         Traceback (most recent call last):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
 
-        >>> ps.DataFrame({'a': [True], 'b': [False]}).bool()  # doctest: +NORMALIZE_WHITESPACE
+        >>> ps.DataFrame({'a': [True], 'b': [False]}).bool()  # doctest: +SKIP
         Traceback (most recent call last):
           ...
         ValueError: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(),
         a.item(), a.any() or a.all().
 
-        >>> ps.Series([1]).bool()
+        >>> ps.Series([1]).bool()  # `bool` was removed in pandas 3  # doctest: +SKIP
         Traceback (most recent call last):
           ...
         ValueError: bool cannot act on a non-boolean single element DataFrame
@@ -3679,6 +3679,11 @@ def _test() -> None:
 
     path = tempfile.mkdtemp()
     globs["path"] = path
+
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
 
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.generic,

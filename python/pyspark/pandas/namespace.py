@@ -1677,7 +1677,7 @@ def to_datetime(
     >>> ps.to_datetime(df)
     0   2015-02-04
     1   2016-03-05
-    dtype: datetime64[ns]
+    dtype: datetime64[...]
 
     If a date does not meet the `timestamp limitations
     <http://pandas.pydata.org/pandas-docs/stable/timeseries.html
@@ -1689,7 +1689,7 @@ def to_datetime(
 
     >>> ps.to_datetime('13000101', format='%Y%m%d', errors='ignore')  # doctest: +SKIP
     datetime.datetime(1300, 1, 1, 0, 0)
-    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')
+    >>> ps.to_datetime('13000101', format='%Y%m%d', errors='coerce')  # doctest: +SKIP
     NaT
 
     Passing infer_datetime_format=True can often-times speedup a parsing
@@ -1725,7 +1725,7 @@ def to_datetime(
     Using a non-unix epoch origin
 
     >>> ps.to_datetime([1, 2, 3], unit='D', origin=pd.Timestamp('1960-01-01'))
-    DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['1960-01-02', '1960-01-03', '1960-01-04'], dtype='datetime64[...]', freq=None)
     """
 
     # mappings for assembling units
@@ -1868,21 +1868,21 @@ def date_range(
     >>> ps.date_range(start='1/1/2018', end='1/08/2018')  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     Specify `start` and `periods`, the number of periods (days).
 
     >>> ps.date_range(start='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2018-01-01', '2018-01-02', '2018-01-03', '2018-01-04',
                    '2018-01-05', '2018-01-06', '2018-01-07', '2018-01-08'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     Specify `end` and `periods`, the number of periods (days).
 
     >>> ps.date_range(end='1/1/2018', periods=8)  # doctest: +SKIP
     DatetimeIndex(['2017-12-25', '2017-12-26', '2017-12-27', '2017-12-28',
                    '2017-12-29', '2017-12-30', '2017-12-31', '2018-01-01'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     Specify `start`, `end`, and `periods`; the frequency is generated
     automatically (linearly spaced).
@@ -1892,7 +1892,7 @@ def date_range(
     ... )  # doctest: +SKIP
     DatetimeIndex(['2018-04-24 00:00:00', '2018-04-25 12:00:00',
                    '2018-04-27 00:00:00'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     **Other Parameters**
 
@@ -1901,14 +1901,14 @@ def date_range(
     >>> ps.date_range(start='1/1/2018', periods=5, freq='ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-02-28', '2018-03-31', '2018-04-30',
                    '2018-05-31'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     Multiples are allowed
 
     >>> ps.date_range(start='1/1/2018', periods=5, freq='3ME')  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     `freq` can also be specified as an Offset object.
 
@@ -1917,7 +1917,7 @@ def date_range(
     ... )  # doctest: +SKIP
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
-                  dtype='datetime64[ns]', freq=None)
+                  dtype='datetime64[...]', freq=None)
 
     `inclusive` controls whether to include `start` and `end` that are on the
     boundary. The default includes boundary points on either end.
@@ -1926,21 +1926,21 @@ def date_range(
     ...     start='2017-01-01', end='2017-01-04', inclusive="both"
     ... )  # doctest: +NORMALIZE_WHITESPACE
     DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
-                   dtype='datetime64[ns]', freq=None)
+                   dtype='datetime64[...]', freq=None)
 
     Use ``inclusive='left'`` to exclude `end` if it falls on the boundary.
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', inclusive='left'
     ... )  # doctest: +NORMALIZE_WHITESPACE
-    DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[...]', freq=None)
 
     Use ``inclusive='right'`` to exclude `start` if it falls on the boundary.
 
     >>> ps.date_range(
     ...     start='2017-01-01', end='2017-01-04', inclusive='right'
     ... )  # doctest: +NORMALIZE_WHITESPACE
-    DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
+    DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[...]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
@@ -2026,17 +2026,17 @@ def to_timedelta(
 
     >>> ps.to_timedelta(['1 days 06:05:01.00003', '15.5us', 'nan'])  # doctest: +SKIP
     TimedeltaIndex(['1 days 06:05:01.000030', '0 days 00:00:00.000015500', NaT],
-                   dtype='timedelta64[ns]', freq=None)
+                   dtype='timedelta64[...]', freq=None)
 
     Converting numbers by specifying the `unit` keyword argument:
 
     >>> ps.to_timedelta(np.arange(5), unit='s')  # doctest: +SKIP
     TimedeltaIndex(['0 days 00:00:00', '0 days 00:00:01', '0 days 00:00:02',
                     '0 days 00:00:03', '0 days 00:00:04'],
-                   dtype='timedelta64[ns]', freq=None)
+                   dtype='timedelta64[...]', freq=None)
     >>> ps.to_timedelta(np.arange(5), unit='d')  # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['0 days', '1 days', '2 days', '3 days', '4 days'],
-                   dtype='timedelta64[ns]', freq=None)
+                   dtype='timedelta64[...]', freq=None)
     """
     if isinstance(arg, Series):
         ret_dtype: Union[type, Dtype]
@@ -2106,14 +2106,14 @@ def timedelta_range(
     Examples
     --------
     >>> ps.timedelta_range(start='1 day', periods=4)  # doctest: +NORMALIZE_WHITESPACE
-    TimedeltaIndex(['1 days', '2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+    TimedeltaIndex(['1 days', '2 days', '3 days', '4 days'], dtype='timedelta64[...]', freq=None)
 
     The closed parameter specifies which endpoint is included.
     The default behavior is to include both endpoints.
 
     >>> ps.timedelta_range(start='1 day', periods=4, closed='right')
     ... # doctest: +NORMALIZE_WHITESPACE
-    TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[ns]', freq=None)
+    TimedeltaIndex(['2 days', '3 days', '4 days'], dtype='timedelta64[...]', freq=None)
 
     The freq parameter specifies the frequency of the TimedeltaIndex.
     Only fixed frequencies can be passed, non-fixed frequencies such as 'M' (month end) will raise.
@@ -2122,7 +2122,7 @@ def timedelta_range(
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '1 days 06:00:00', '1 days 12:00:00',
                     '1 days 18:00:00', '2 days 00:00:00'],
-                   dtype='timedelta64[ns]', freq=None)
+                   dtype='timedelta64[...]', freq=None)
 
     Specify start, end, and periods; the frequency is generated automatically (linearly spaced).
 
@@ -2130,7 +2130,7 @@ def timedelta_range(
     ... # doctest: +NORMALIZE_WHITESPACE
     TimedeltaIndex(['1 days 00:00:00', '2 days 08:00:00', '3 days 16:00:00',
                     '5 days 00:00:00'],
-                   dtype='timedelta64[ns]', freq=None)
+                   dtype='timedelta64[...]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
 
@@ -4078,6 +4078,11 @@ def _test() -> None:
 
     path = tempfile.mkdtemp()
     globs["path"] = path
+
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
 
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.namespace,

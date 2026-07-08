@@ -579,11 +579,11 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         dtype('O')
 
         >>> s = ps.Series(pd.date_range('20130101', periods=3))
-        >>> s.dtype
-        dtype('<M8[ns]')
+        >>> s.dtype  # pandas 3 numpy datetime defaults to us, not ns  # doctest: +ELLIPSIS
+        dtype('<M8[...]')
 
-        >>> s.rename("a").to_frame().set_index("a").index.dtype
-        dtype('<M8[ns]')
+        >>> s.rename("a").to_frame().set_index("a").index.dtype  # doctest: +ELLIPSIS
+        dtype('<M8[...]')
         """
         return self._internal.data_fields[0].dtype
 
@@ -1697,8 +1697,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         3    2
         4    1
         dtype: int32
-        >>> uniques
-        Index(['a', 'b', 'c', None], dtype='object')
+        >>> uniques  # missing value renders as nan (pandas 3) vs None  # doctest: +ELLIPSIS
+        Index(['a', 'b', 'c', ...], dtype='object')
 
         For Index:
 
@@ -1804,6 +1804,11 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,

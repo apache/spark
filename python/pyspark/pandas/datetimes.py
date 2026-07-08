@@ -269,7 +269,7 @@ class DatetimeMethods:
         0   2018-02-27
         1   2018-02-28
         2   2018-03-01
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> s.dt.is_month_start
         0    False
@@ -308,7 +308,7 @@ class DatetimeMethods:
         0   2018-02-27
         1   2018-02-28
         2   2018-03-01
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> s.dt.is_month_end
         0    False
@@ -447,7 +447,7 @@ class DatetimeMethods:
         0   2017-12-30
         1   2017-12-31
         2   2018-01-01
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> dates.dt.is_year_start
         0    False
@@ -486,7 +486,7 @@ class DatetimeMethods:
         0   2017-12-30
         1   2017-12-31
         2   2018-01-01
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> dates.dt.is_year_end
         0    False
@@ -525,7 +525,7 @@ class DatetimeMethods:
         0   2012-12-31
         1   2013-12-31
         2   2014-12-31
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> dates_series.dt.is_leap_year
         0     True
@@ -604,7 +604,7 @@ class DatetimeMethods:
         0   2012-01-31
         1   2012-02-29
         2   2012-03-31
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
         """
         ret_dtype: Union[type, Dtype]
         if LooseVersion(pd.__version__) < "3.0.0":
@@ -651,7 +651,7 @@ class DatetimeMethods:
         0   2018-03-10 09:00:00
         1   2018-03-10 09:00:01
         2   2018-03-10 09:00:02
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.strftime('%B %d, %Y, %r')
         0    March 10, 2018, 09:00:00 AM
@@ -706,13 +706,13 @@ class DatetimeMethods:
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:01:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.round("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
         """
         ret_dtype: Union[type, Dtype]
         if LooseVersion(pd.__version__) < "3.0.0":
@@ -766,13 +766,13 @@ class DatetimeMethods:
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:01:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.floor("h")
         0   2018-01-01 11:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:00:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
         """
         ret_dtype: Union[type, Dtype]
         if LooseVersion(pd.__version__) < "3.0.0":
@@ -826,13 +826,13 @@ class DatetimeMethods:
         0   2018-01-01 11:59:00
         1   2018-01-01 12:00:00
         2   2018-01-01 12:01:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.ceil("h")
         0   2018-01-01 12:00:00
         1   2018-01-01 12:00:00
         2   2018-01-01 13:00:00
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
         """
         ret_dtype: Union[type, Dtype]
         if LooseVersion(pd.__version__) < "3.0.0":
@@ -867,7 +867,7 @@ class DatetimeMethods:
         0   2018-01-31
         1   2018-02-28
         2   2018-03-31
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.month_name()
         0     January
@@ -903,7 +903,7 @@ class DatetimeMethods:
         0   2018-01-01
         1   2018-01-02
         2   2018-01-03
-        dtype: datetime64[ns]
+        dtype: datetime64[...]
 
         >>> series.dt.day_name()
         0       Monday
@@ -934,6 +934,11 @@ def _test() -> None:
         .appName("pyspark.pandas.datetimes tests")
         .getOrCreate()
     )
+    # TODO(SPARK-58014): remove once the min supported pandas is >= 3. pandas 3 makes the new
+    # string dtype the default (PDEP-14); these doctests use the pandas < 3 spelling, so keep it
+    # for the doctest run. No-op on pandas < 3. Unit tests keep the native pandas 3 behavior.
+    pd.set_option("future.infer_string", False)
+
     failure_count, test_count = doctest.testmod(
         pyspark.pandas.datetimes,
         globs=globs,
