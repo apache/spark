@@ -155,7 +155,7 @@ Dependencies
 ========================== ========================= ======================================================================================
 Package                    Supported version Note
 ========================== ========================= ======================================================================================
-`py4j`                     >=0.10.9.7                Required
+`py4j`                     >=0.10.9.7,<0.10.9.10     Required
 `pandas`                   >=1.0.5                   Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `pyarrow`                  >=4.0.0,<13.0.0           Required for pandas API on Spark and Spark Connect; Optional for Spark SQL
 `numpy`                    >=1.15                    Required for pandas API on Spark and MLLib DataFrame-based API; Optional for Spark SQL
