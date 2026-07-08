@@ -361,6 +361,24 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-58027: getZoneId normalizes legacy sign-prefixed offsets, passes others through") {
+    // Sign-prefixed legacy formats are normalized: (+|-)h:mm -> (+|-)0h:mm, (+|-)hh:m -> (+|-)hh:0m.
+    assert(getZoneId("+7:30") === ZoneId.of("+07:30"))
+    assert(getZoneId("-7:30") === ZoneId.of("-07:30"))
+    assert(getZoneId("+07:3") === ZoneId.of("+07:03"))
+    assert(getZoneId("-1:0") === ZoneId.of("-01:00"))
+    // Already-canonical sign offsets are unaffected by the normalization.
+    assert(getZoneId("+07:30") === ZoneId.of("+07:30"))
+    assert(getZoneId("-08:00") === ZoneId.of("-08:00"))
+    // Region-based IDs and other non-sign inputs bypass the regex normalization unchanged. In
+    // particular "GMT+8" contains a '+' that is not the leading character, so it must not be
+    // rewritten (matching the pre-guard behavior, where the sign-anchored patterns never matched).
+    assert(getZoneId("UTC") === ZoneId.of("UTC"))
+    assert(getZoneId("Z") === ZoneId.of("Z"))
+    assert(getZoneId("America/New_York") === ZoneId.of("America/New_York"))
+    assert(getZoneId("GMT+8") === ZoneId.of("GMT+8", ZoneId.SHORT_IDS))
+  }
+
   test("SPARK-35780: support full range of timestamp string") {
     def checkStringToTimestamp(str: String, expected: Option[Long]): Unit = {
       assert(toTimestamp(str, UTC) === expected)

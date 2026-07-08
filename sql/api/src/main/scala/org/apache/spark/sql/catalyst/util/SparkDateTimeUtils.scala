@@ -43,10 +43,20 @@ trait SparkDateTimeUtils {
 
   def getZoneId(timeZoneId: String): ZoneId = {
     try {
-      // To support the (+|-)h:mm format because it was supported before Spark 3.0.
-      var formattedZoneId = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
-      // To support the (+|-)hh:m format because it was supported before Spark 3.0.
-      formattedZoneId = singleMinuteTz.matcher(formattedZoneId).replaceFirst("$1$2:0$3")
+      // The (+|-)h:mm and (+|-)hh:m formats (supported before Spark 3.0) both start with a sign
+      // character, and the two patterns below are anchored on that leading (+|-). Region-based IDs
+      // ("UTC", "America/New_York", "GMT+8", ...) can never match, so only run the regex
+      // normalization when the input starts with a sign and skip the Matcher allocations otherwise.
+      val formattedZoneId =
+        if (timeZoneId.nonEmpty &&
+          (timeZoneId.charAt(0) == '+' || timeZoneId.charAt(0) == '-')) {
+          // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+          val withHour = singleHourTz.matcher(timeZoneId).replaceFirst("$10$2:")
+          // To support the (+|-)hh:m format because it was supported before Spark 3.0.
+          singleMinuteTz.matcher(withHour).replaceFirst("$1$2:0$3")
+        } else {
+          timeZoneId
+        }
       ZoneId.of(formattedZoneId, ZoneId.SHORT_IDS)
     } catch {
       case e: java.time.DateTimeException =>
