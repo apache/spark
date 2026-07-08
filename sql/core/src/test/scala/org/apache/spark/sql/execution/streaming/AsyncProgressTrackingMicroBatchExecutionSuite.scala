@@ -356,6 +356,29 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
   }
 
+  test("Succeed when only one of sink evolution / async progress tracking is enabled") {
+    val inputData = new MemoryStream[Int](id = 0, spark)
+    val ds = inputData.toDF()
+
+    // The guard must be narrow: it fires only when both configs are on. Verify that each config
+    // on its own still starts a query, so a future broadening of the condition is caught here.
+
+    // Async progress tracking on, sink evolution off (default).
+    val asyncOnly = ds.writeStream
+      .format("noop")
+      .option(ASYNC_PROGRESS_TRACKING_ENABLED, true)
+      .start()
+    try assert(asyncOnly.isActive) finally asyncOnly.stop()
+
+    // Sink evolution on, async progress tracking off.
+    withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "true") {
+      val evolutionOnly = ds.writeStream
+        .format("noop")
+        .start()
+      try assert(evolutionOnly.isActive) finally evolutionOnly.stop()
+    }
+  }
+
   test("switching between async wal commit enabled and trigger once") {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
