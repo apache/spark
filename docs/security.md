@@ -813,7 +813,7 @@ Security.
 </tr>
 <tr>
   <td><code>spark.ui.contentSecurityPolicy.enabled</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     When enabled, the Content-Security-Policy (CSP) HTTP response header is set for the Spark UI,
     restricting the sources from which the browser is allowed to load resources as a
