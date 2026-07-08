@@ -281,10 +281,10 @@ The connection may also be programmatically created using _SparkSession#builder_
 
 When you develop or test locally with
 
-{% highlight python %}
+```python
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("local[*]").getOrCreate()
-{% endhighlight %}
+```
 
 PySpark boots a fresh in-process Spark Connect server in **every** process. Each
 `python script.py` run (or each forked test JVM) therefore re-pays the one-time startup cost --
@@ -297,7 +297,7 @@ There are two ways to amortize that cost across runs by reconnecting to a long-l
 
 Start one persistent local Spark Connect server and point every run at it:
 
-{% highlight bash %}
+```bash
 # Start once; it stays up across runs.
 $SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
 
@@ -306,7 +306,7 @@ python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc
 
 # Stop it when you are done.
 $SPARK_HOME/sbin/stop-connect-server.sh
-{% endhighlight %}
+```
 
 ### Let PySpark manage the server (opt-in)
 
@@ -315,11 +315,11 @@ manage a server by hand, enable the opt-in reuse path. The first run starts a **
 Connect server and records it in a discovery file; later runs reconnect to it in a fraction of a
 second:
 
-{% highlight bash %}
+```bash
 export SPARK_LOCAL_CONNECT_REUSE=1     # or .config("spark.local.connect.reuse", "true")
 python script.py     # 1st run: starts a persistent server (cold start, once)
 python script.py     # 2nd+ run: reconnects to it (sub-second)
-{% endhighlight %}
+```
 
 This is **off by default**; nothing changes unless you opt in. A few details:
 
