@@ -94,7 +94,7 @@ connect = [
     "grpcio-status>=1.76.0",
     "googleapis-common-protos>=1.71.0",
     "zstandard>=0.25.0",
-    "graphviz>=0.20",
+    "graphviz==0.20.3",
 ]
 
 sql = [
