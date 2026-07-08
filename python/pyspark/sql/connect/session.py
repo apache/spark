@@ -1728,7 +1728,12 @@ class SparkSession:
         os.makedirs(pool_dir, mode=0o700, exist_ok=True)
 
         def _write_pending(daemon_pid: int) -> None:
-            payload = {"daemon_pid": daemon_pid, "created": time.time(), "fingerprint": fingerprint}
+            payload = {
+                "daemon_pid": daemon_pid,
+                "spawner_pid": os.getpid(),
+                "created": time.time(),
+                "fingerprint": fingerprint,
+            }
             tmp = os.path.join(pool_dir, "pending-{}.json.{}.tmp".format(uid, os.getpid()))
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
@@ -1764,6 +1769,11 @@ class SparkSession:
             "--idle-timeout",
             os.environ.get("SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT", "1800"),
         ]
+        # JIT-warm pool members while they sit idle (fixed synthetic queries, no user state),
+        # so the one real run each member serves gets a warm first query. The member is
+        # discoverable before warmup starts, so claim latency is unaffected.
+        if os.environ.get("SPARK_LOCAL_CONNECT_POOL_WARMUP", "1").lower() not in ("0", "false"):
+            cmd.append("--warmup")
         if conf_file is not None:
             cmd += ["--conf-file", conf_file]
 
@@ -1961,7 +1971,14 @@ class SparkSession:
 
     @staticmethod
     def _local_connect_pool_has_live_pending(pool_dir: str, fingerprint: str) -> bool:
-        """Whether any matching launch is still in flight with a live daemon process."""
+        """Whether any matching launch is still in flight with a live daemon process.
+
+        A marker whose ``daemon_pid`` is still the ``-1`` placeholder is counted as live while
+        its spawner process is alive and the marker is fresh: the spawner is between publishing
+        the marker and ``Popen`` returning, so the launch exists even though no daemon pid is
+        recorded yet. Without this, a waiter polling at exactly that instant sees "no live
+        launches" and gives up on a healthy pool.
+        """
         try:
             entries = os.listdir(pool_dir)
         except OSError:
@@ -1975,7 +1992,16 @@ class SparkSession:
                     daemon_pid = int(data.get("daemon_pid", -1))
                 except (TypeError, ValueError):
                     daemon_pid = -1
-                if SparkSession._pid_alive(daemon_pid):
+                if daemon_pid > 0:
+                    if SparkSession._pid_alive(daemon_pid):
+                        return True
+                    continue
+                try:
+                    spawner_pid = int(data.get("spawner_pid", -1))
+                except (TypeError, ValueError):
+                    spawner_pid = -1
+                age = time.time() - float(data.get("created", 0) or 0)
+                if age < 15 and (spawner_pid <= 0 or SparkSession._pid_alive(spawner_pid)):
                     return True
         return False
 
@@ -2018,14 +2044,35 @@ class SparkSession:
 
         if disc is None:
             # Cold pool: wait (without holding the lock) for one of the in-flight launches.
+            # "No live launches" is a transient observation, not a stable condition: a claim
+            # consumes its launch marker an instant before the winner's refill publishes a
+            # replacement, and a freshly published marker briefly carries the -1 placeholder
+            # pid. So the dry check is debounced over consecutive polls, and a *persistently*
+            # dry pool is respawned under the lock rather than treated as fatal; only the
+            # overall deadline fails the acquire.
             deadline = time.time() + 120
+            dry_polls = 0
             while disc is None and time.time() < deadline:
                 time.sleep(0.25)
                 disc = SparkSession._claim_local_connect_pool_server(pool_dir, fingerprint)
-                if disc is None and not SparkSession._local_connect_pool_has_live_pending(
-                    pool_dir, fingerprint
-                ):
-                    break  # every in-flight launch died; fail fast instead of waiting out 120s
+                if disc is not None:
+                    break
+                if SparkSession._local_connect_pool_has_live_pending(pool_dir, fingerprint):
+                    dry_polls = 0
+                    continue
+                dry_polls += 1
+                if dry_polls >= 8:
+                    dry_polls = 0
+                    lock_fd = SparkSession._acquire_local_connect_pool_lock(pool_dir)
+                    try:
+                        SparkSession._local_connect_pool_janitor(pool_dir)
+                        disc = SparkSession._claim_local_connect_pool_server(pool_dir, fingerprint)
+                        if disc is None:
+                            SparkSession._refill_local_connect_pool(
+                                pool_dir, master, seed_conf, fingerprint, target
+                            )
+                    finally:
+                        SparkSession._release_local_connect_pool_lock(lock_fd)
             if disc is None:
                 raise PySparkRuntimeError(
                     errorClass="LOCAL_CONNECT_SERVER_START_FAILED",

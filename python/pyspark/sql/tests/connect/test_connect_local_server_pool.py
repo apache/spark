@@ -307,6 +307,49 @@ class LocalConnectServerPoolUnitTests(unittest.TestCase):
         self.assertTrue(_wait_proc_dead(warm))
         self.assertTrue(_wait_proc_dead(pending))
 
+    def test_has_live_pending_trusts_fresh_placeholder(self) -> None:
+        # A marker still carrying the -1 placeholder pid counts as live while its spawner is
+        # alive and the marker is fresh: the spawner is between publishing the marker and
+        # Popen returning (the race caught by the 4-parallel-clients scenario).
+        self._write(
+            "pending-boot.json",
+            {
+                "daemon_pid": -1,
+                "spawner_pid": os.getpid(),
+                "created": time.time(),
+                "fingerprint": "fp",
+            },
+        )
+        self.assertTrue(
+            RemoteSparkSession._local_connect_pool_has_live_pending(self._pool_dir, "fp")
+        )
+        # A fresh placeholder from a dead spawner is not live.
+        self._write(
+            "pending-boot.json",
+            {
+                "daemon_pid": -1,
+                "spawner_pid": 2**31 - 1,
+                "created": time.time(),
+                "fingerprint": "fp",
+            },
+        )
+        self.assertFalse(
+            RemoteSparkSession._local_connect_pool_has_live_pending(self._pool_dir, "fp")
+        )
+        # Nor is a stale placeholder, whoever spawned it.
+        self._write(
+            "pending-boot.json",
+            {
+                "daemon_pid": -1,
+                "spawner_pid": os.getpid(),
+                "created": time.time() - 60,
+                "fingerprint": "fp",
+            },
+        )
+        self.assertFalse(
+            RemoteSparkSession._local_connect_pool_has_live_pending(self._pool_dir, "fp")
+        )
+
     def test_pool_lock_roundtrip(self) -> None:
         fd = RemoteSparkSession._acquire_local_connect_pool_lock(self._pool_dir)
         try:
