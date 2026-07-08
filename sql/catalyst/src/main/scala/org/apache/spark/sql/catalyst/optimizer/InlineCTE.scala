@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
-import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, OuterReference, OuterScopeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, Join, JoinHint, LogicalPlan, Project, Subquery, UnionLoop, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -94,10 +94,15 @@ case class InlineCTE(
         case s: SubqueryExpression if s.outerScopeAttrs.nonEmpty => s
       }))
     if (outerScopeSubqueries.nonEmpty) {
+      // `outerScopeAttrs` are expressions that contain an `OuterScopeReference` and may be
+      // compound (e.g. `Add(OuterScopeReference(a), Literal(1))`), so collect the reference node
+      // rather than assuming the attribute itself is one.
+      val outerScopeRef = outerScopeSubqueries.head.outerScopeAttrs
+        .flatMap(_.collect { case r: OuterScopeReference => r }).head
       throw SparkException.internalError(
         "A force-materialized CTE cannot carry an outer reference across its boundary, but " +
           "found a subquery with outer-scope reference " +
-          s"'${outerScopeSubqueries.head.outerScopeAttrs.head.name}' in the CTE definition " +
+          s"'${outerScopeRef.name}' in the CTE definition " +
           s"(cteId=${cteDef.id}).")
     }
   }
