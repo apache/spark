@@ -1821,6 +1821,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ =
+    buildConf("spark.sql.parquet.timeType.allowIsAdjustedToUtcRead")
+      .doc("When true, Spark reads Parquet TIME(MICROS,isAdjustedToUTC=true) as TimeType, " +
+        "for compatibility with writers such as Apache Arrow. When false (default), reading " +
+        "TIME(MICROS,isAdjustedToUTC=true) throws an error.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -8347,6 +8357,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetOutputTimestampType: ParquetOutputTimestampType.Value =
     getConf(PARQUET_OUTPUT_TIMESTAMP_TYPE)
+
+  def parquetTimeTypeAllowIsAdjustedToUtcRead: Boolean =
+    getConf(PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ)
 
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
