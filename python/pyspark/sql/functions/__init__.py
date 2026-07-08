@@ -248,6 +248,7 @@ __all__ = [  # noqa: F405
     "timestamp_diff",
     "timestamp_micros",
     "timestamp_millis",
+    "timestamp_nanos",
     "timestamp_seconds",
     "time_bucket",
     "time_diff",
@@ -481,6 +482,7 @@ __all__ = [  # noqa: F405
     "try_variant_get",
     "variant_delete",
     "variant_get",
+    "variant_insert",
     "try_parse_json",
     "to_variant_object",
     # XML Functions

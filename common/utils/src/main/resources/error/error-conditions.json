@@ -2128,11 +2128,6 @@
         "message" : [
           ""
         ]
-      },
-      "WITH_SUGGESTION" : {
-        "message" : [
-          "If necessary set <ansiConfig> to \"false\" to bypass this error."
-        ]
       }
     },
     "sqlState" : "22023"
@@ -2456,6 +2451,19 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_CONFLICTING_OPTION" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' DataFrame API reader option is mutually exclusive with the '<option>' DataFrame API option.",
+      "Please remove one of them and then retry the DataFrame operation again."
+    ],
+    "sqlState" : "4274K"
+  },
+  "EXPLODE_EMBEDDED_ARRAY_UNSUPPORTED_USAGE" : {
+    "message" : [
+      "The 'explodeEmbeddedArray' option can only be used when reading JSON files. It is not supported in <usage>."
+    ],
+    "sqlState" : "0A000"
   },
   "EXPRESSION_DECODING_FAILED" : {
     "message" : [
@@ -3822,6 +3830,12 @@
       "Please increase executor memory using the --executor-memory option or \"<config>\" in Spark configuration."
     ],
     "sqlState" : "F0000"
+  },
+  "INVALID_EXPLODE_EMBEDDED_ARRAY_SCHEMA" : {
+    "message" : [
+      "User specified schema <schema> is invalid when the `explodeEmbeddedArray` option is enabled. The schema must either be a variant field, or a variant field plus a corrupt column field."
+    ],
+    "sqlState" : "42613"
   },
   "INVALID_EXPRESSION_ENCODER" : {
     "message" : [
@@ -5633,7 +5647,7 @@
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
-      "Cannot specify time travel in both the time travel clause and options."
+      "Cannot specify time travel in more than one of: the '@' suffix in the table name, the time travel clause, and the read options."
     ],
     "sqlState" : "42K0E"
   },
@@ -8565,6 +8579,11 @@
           "Time travel on the relation: <relationId>."
         ]
       },
+      "TIME_TRAVEL_AT_SYNTAX" : {
+        "message" : [
+          "Time travel using the '@' suffix in table names. Set <config> to true to enable it."
+        ]
+      },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [
           "UDF class with <num> type arguments."
@@ -8661,6 +8680,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_HIVE_TYPE" : {
+    "message" : [
+      "Cannot read the Hive type <fieldType> of the column <fieldName> because Spark SQL does not support this data type."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_INSERT" : {
     "message" : [
       "Can't insert into the target."
@@ -8728,6 +8753,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK" : {
+    "message" : [
+      "The operation <operation> is not supported for ContinuousMemorySink."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
@@ -9126,6 +9157,12 @@
   "VARIANT_DUPLICATE_KEY" : {
     "message" : [
       "Failed to build variant because of a duplicate object key `<key>`."
+    ],
+    "sqlState" : "22023"
+  },
+  "VARIANT_PATH_TYPE_MISMATCH" : {
+    "message" : [
+      "The path '<path>' is incompatible with the variant value at '<failedAt>' in <functionName>."
     ],
     "sqlState" : "22023"
   },

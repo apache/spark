@@ -13184,6 +13184,57 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    """
+    Creates a nanosecond-precision timestamp (``TIMESTAMP_LTZ(9)``) from the number of
+    nanoseconds since the UTC epoch.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        a column of ``BIGINT`` or ``DECIMAL`` nanosecond values since the UTC epoch.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a ``TIMESTAMP_LTZ(9)`` column representing the corresponding point in time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.timestamp_seconds`
+    :meth:`pyspark.sql.functions.timestamp_millis`
+    :meth:`pyspark.sql.functions.timestamp_micros`
+    :meth:`pyspark.sql.functions.unix_nanos`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> spark.conf.set("spark.sql.timestampNanosTypes.enabled", "true")
+    >>> df = spark.createDataFrame([(1577885075123456789,)], ['nanos'])
+    >>> df.select(sf.timestamp_nanos('nanos')).show(truncate=False)
+    +-----------------------------+
+    |timestamp_nanos(nanos)       |
+    +-----------------------------+
+    |2020-01-01 13:24:35.123456789|
+    +-----------------------------+
+
+    >>> df.select(sf.timestamp_nanos(sf.lit(None).cast('bigint'))).show()
+    +-------------------------------------+
+    |timestamp_nanos(CAST(NULL AS BIGINT))|
+    +-------------------------------------+
+    |                                 NULL|
+    +-------------------------------------+
+
+    >>> spark.conf.unset("spark.sql.timestampNanosTypes.enabled")
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+@_try_remote_functions
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:
     """
     Gets the difference between the timestamps in the specified units by truncating
@@ -21672,6 +21723,66 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
         _to_java_column(v),
         _to_java_column(path_cols[0]),
         _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    """
+    Inserts a value into a variant at the given JSONPath location. An object path adds a new field
+    (error if it already exists); an array path inserts at the index, shifting later elements
+    right. Missing intermediate keys are created. Returns NULL if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath insertion target. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to insert. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` inserted at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_insert
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": 1, "arr": ["x", "y"] }''',
+    ...     'path': '$.d'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_insert(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
+    >>> df.select(to_json(variant_insert(v, df.path, lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"d":9}')]
+    >>> df.select(to_json(variant_insert(v, "$.b", parse_json(lit('null')))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":null}')]
+    >>> df.select(variant_insert(v, "$.b", lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_insert",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
     )
 
 

@@ -931,8 +931,17 @@ class AdaptiveQueryExecSuite
     }
 
     withUserDefinedFunction("slow_udf" -> true) {
+      // `slow_udf` sits in scalar subqueries on the `df`/`df3` shuffle stages to delay their
+      // submission, so that the `df2` coalesce stage (which has no subquery) submits its shuffle
+      // job and fails with "coalesce test error" first, while the two delayed stages are still
+      // sleeping and thus get cancelled before submission. The test asserts exactly that ordering.
+      // A short delay makes this timing-dependent: under a loaded CI runner the coalesce stage's
+      // map task can be slow enough that a delayed stage is submitted, or the coalesce stage is
+      // itself cancelled, before "coalesce test error" is thrown -- making the error disappear from
+      // the failure chain and flaking the test. Use a generous sleep so the coalesce stage reliably
+      // wins the race; the per-test timeout is 20 minutes, so this adds no meaningful cost.
       spark.udf.register("slow_udf", () => {
-        Thread.sleep(3000)
+        Thread.sleep(15000)
         1
       })
 
@@ -3585,6 +3594,53 @@ class AdaptiveQueryExecSuite
 
             checkAnswer(sql(query), correctResults)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57996: CoalesceShufflePartitions should coalesce partitioning-aware UnionExec " +
+    "children as a single group") {
+    // A UNION ALL of two aggregates on the same key, feeding a downstream aggregate on that key.
+    // With UNION_OUTPUT_PARTITIONING on, the union reports the shared HashPartitioning that the
+    // outer aggregate relies on. The two children have very different data sizes, so coalescing
+    // them independently would produce different partition counts, breaking co-partitioning and
+    // causing AQE to revert the coalescing. They must be coalesced together as a single group.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "2",
+      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key -> "1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 USING parquet AS SELECT id AS c1, uuid() AS c2 FROM range(10)")
+        sql("CREATE TABLE t2 USING parquet AS SELECT id AS c1, uuid() AS c2 FROM range(100)")
+
+        val query =
+          """
+            |SELECT c1, c2 FROM (
+            |  SELECT c1, c2 FROM t1 GROUP BY c1, c2
+            |  UNION ALL
+            |  SELECT c1, c2 FROM t2 GROUP BY c1, c2
+            |) GROUP BY c1, c2
+            |""".stripMargin
+
+        val correctResults = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+          sql(query).collect()
+        }
+
+        withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+          val df = sql(query)
+          df.collect()
+          val reads = collect(df.queryExecution.executedPlan) {
+            case r: AQEShuffleReadExec => r
+          }
+          // Both union children are coalesced (the plan is not reverted) and to the same number
+          // of partitions, so they remain co-partitioned.
+          assert(reads.size === 2)
+          assert(reads.forall(_.hasCoalescedPartition))
+          assert(reads.map(_.partitionSpecs.length).distinct.length === 1)
+          checkAnswer(df, correctResults)
         }
       }
     }

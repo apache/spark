@@ -21,7 +21,7 @@ import decimal
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 import pyspark
-from pyspark.errors import PySparkRuntimeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkRuntimeError, PySparkValueError
 from pyspark.sql.pandas.types import (
     _dedup_names,
     _deduplicate_field_names,
@@ -62,6 +62,7 @@ from pyspark.sql.types import (
     VariantType,
     VariantVal,
     _create_row,
+    _has_type,
 )
 
 if TYPE_CHECKING:
@@ -1275,6 +1276,24 @@ class ArrowTableToRowsConversion:
         assert isinstance(table, pa.Table)
 
         assert schema is not None and isinstance(schema, StructType)
+
+        # YearMonthIntervalType is serialized by the JVM as an Arrow YEAR_MONTH interval, which
+        # PyArrow cannot materialize into Python values: `to_pylist()` raises an opaque
+        # `KeyError: <Arrow type id>` from `get_array_class_from_type`. That lookup fails for an
+        # empty column too (it resolves the array class before reading any element), so the check
+        # below is intentionally unconditional in the row count -- it covers empty results as well,
+        # surfacing a clean NOT_IMPLEMENTED instead of the opaque KeyError. Collecting such a value
+        # is therefore not supported in the Spark Connect client; raise the same NOT_IMPLEMENTED
+        # error as the classic PySpark path (YearMonthIntervalType.fromInternal). Note that, unlike
+        # classic, PYSPARK_YM_INTERVAL_LEGACY (returning the integer months) cannot be honored here,
+        # and an empty result raises rather than returning [] as classic would.
+        if any(_has_type(f.dataType, YearMonthIntervalType) for f in schema.fields):
+            raise PySparkNotImplementedError(
+                errorClass="NOT_IMPLEMENTED",
+                messageParameters={
+                    "feature": "Collecting a year-month interval value in Spark Connect"
+                },
+            )
 
         fields = schema.fieldNames()
 

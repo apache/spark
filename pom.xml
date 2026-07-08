@@ -222,7 +222,7 @@
      -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.15.Final</netty.version>
-    <netty-tcnative.version>2.0.79.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.80.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -237,13 +237,13 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
-    <ammonite.version>3.0.8</ammonite.version>
+    <ammonite.version>3.0.9</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.7.0</kubernetes-client.version>
-    <vertx.version>4.5.26</vertx.version>
+    <kubernetes-client.version>7.8.0</kubernetes-client.version>
+    <vertx.version>4.5.28</vertx.version>
     <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -1999,6 +1999,11 @@
           <exclusion>
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <!-- javax.xml.stream is provided by the JDK (java.xml module) -->
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

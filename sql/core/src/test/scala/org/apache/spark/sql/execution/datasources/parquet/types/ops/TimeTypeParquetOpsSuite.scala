@@ -17,16 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import java.time.LocalTime
+import java.time.temporal.ChronoField.MICRO_OF_DAY
+
+import org.apache.parquet.column.ColumnDescriptor
+import org.apache.parquet.filter2.predicate.FilterApi
+import org.apache.parquet.filter2.predicate.SparkFilterApi.longColumn
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{IntegerType, TimeType}
 
 /**
- * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
+ * Unit tests for [[TimeTypeParquetOps]]'s Parquet read guards - both the row-based
+ * [[TimeTypeParquetOps.requireCompatibleParquetType]] and the vectorized-read
+ * getVectorUpdater / getVectorUpdaterOrNull dispatch, which share the same
+ * compatible-encoding check so the two readers accept and reject the same set.
  *
  * TimeType is stored in Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false) for precision
  * 0..6 and INT64 TIME(NANOS, isAdjustedToUTC=false) for precision 7..9. The read-path guard
@@ -38,6 +47,9 @@ import org.apache.spark.sql.types.TimeType
  * TimeType is zone-less local time, so the flag carries no extra information on read and the
  * raw time-of-day value decodes identically either way. This keeps the framework read path
  * consistent with both the legacy row-based reader and the vectorized reader.
+ *
+ * Also covers the filter-pushdown ops ([[TimeTypeParquetOps.filterOps]]) and the
+ * [[ParquetTypeOps.filterOpsFor]] reverse lookup that resolves them.
  */
 class TimeTypeParquetOpsSuite extends SparkFunSuite {
 
@@ -128,6 +140,116 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
   // wrong-primitive branch of requireCompatibleParquetType is unreachable for
   // the TIME annotation; the raw-INT64 / TIMESTAMP / DECIMAL / group tests
   // above already exercise the !isPrimitive and "non-TIME annotation" branches.
+
+  // ---------- vectorized read updater ----------
+
+  private def timeColumn(unit: TimeUnit): ColumnDescriptor =
+    new ColumnDescriptor(
+      Array("c"),
+      Types.primitive(INT64, REQUIRED).as(LogicalTypeAnnotation.timeType(false, unit)).named("c"),
+      0, 0)
+
+  test("getVectorUpdater returns a framework updater for TimeType (micros and nanos)") {
+    assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(timeColumn(TimeUnit.MICROS)).isDefined)
+    assert(TimeTypeParquetOps(timeNanos).getVectorUpdater(timeColumn(TimeUnit.NANOS)).isDefined)
+    // Java-friendly companion entry point used by ParquetVectorUpdaterFactory.
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(timeMicros, timeColumn(TimeUnit.MICROS)) != null)
+  }
+
+  test("getVectorUpdater returns None for incompatible encodings (clean reject, vectorized path)") {
+    val int32Millis = Types.primitive(INT32, REQUIRED)
+      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MILLIS)).named("c")
+    val rawInt64 = Types.primitive(INT64, REQUIRED).named("c")
+    val int64Timestamp = Types.primitive(INT64, REQUIRED)
+      .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named("c")
+    // None -> the factory falls through to a clean SchemaColumnConvertNotSupportedException,
+    // matching the row-path reject set (requireCompatibleParquetType), instead of silently
+    // mis-decoding (e.g. readLongs over an INT32 column).
+    Seq(int32Millis, rawInt64, int64Timestamp).foreach { field =>
+      val descriptor = new ColumnDescriptor(Array("c"), field, 0, 0)
+      assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(descriptor).isEmpty)
+    }
+  }
+
+  test("getVectorUpdaterOrNull returns null for non-framework types") {
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(IntegerType, null) == null)
+  }
+
+  test("supportsLazyDictionaryDecoding is false for TimeType (updater does per-value work)") {
+    // TIME decoding does per-value micros->nanos + truncation in the updater, so lazy dictionary
+    // decoding (which would bypass the updater) must stay disabled on the vectorized path.
+    assert(!TimeTypeParquetOps(timeMicros)
+      .supportsLazyDictionaryDecoding(timeColumn(TimeUnit.MICROS)))
+    assert(!TimeTypeParquetOps(timeNanos)
+      .supportsLazyDictionaryDecoding(timeColumn(TimeUnit.NANOS)))
+    // Java-friendly companion entry point used by VectorizedColumnReader: FALSE for TimeType,
+    // null for a non-framework type (so the reader keeps its built-in lazy-decoding decision).
+    assert(ParquetTypeOps.supportsLazyDictionaryDecodingOrNull(
+      timeMicros, timeColumn(TimeUnit.MICROS)) === java.lang.Boolean.FALSE)
+    assert(ParquetTypeOps.supportsLazyDictionaryDecodingOrNull(IntegerType, null) == null)
+  }
+
+  // ---------- filter pushdown ops ----------
+
+  test("filterOps accepts LocalTime values and rejects others") {
+    val ops = TimeTypeParquetOps.filterOps
+    assert(ops.acceptsValue(LocalTime.of(1, 2, 3)))
+    assert(!ops.acceptsValue(java.lang.Long.valueOf(1L)))
+    assert(!ops.acceptsValue("12:00:00"))
+  }
+
+  test("filterOps declares the canonical TimeType Parquet encoding") {
+    val ops = TimeTypeParquetOps.filterOps
+    assert(ops.primitiveTypeName === INT64)
+    assert(ops.logicalTypeAnnotation ===
+      LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
+  }
+
+  test("filterOps builds predicates for LocalTime, converting to micros-of-day") {
+    val ops = TimeTypeParquetOps.filterOps
+    val path = Array("c")
+    val col = longColumn(path)
+    val t = LocalTime.of(23, 59, 59, 123456000)
+    // parquet-mr operators implement value equality, so we can pin the exact pushed-down value:
+    // LocalTime -> micros-of-day Long, the same conversion the removed inline TimeType arms used.
+    val micros = java.lang.Long.valueOf(t.getLong(MICRO_OF_DAY))
+    assert(ops.makeEq(path, t) === FilterApi.eq(col, micros))
+    assert(ops.makeNotEq(path, t) === FilterApi.notEq(col, micros))
+    assert(ops.makeLt(path, t) === FilterApi.lt(col, micros))
+    assert(ops.makeLtEq(path, t) === FilterApi.ltEq(col, micros))
+    assert(ops.makeGt(path, t) === FilterApi.gt(col, micros))
+    assert(ops.makeGtEq(path, t) === FilterApi.gtEq(col, micros))
+    val set = new java.util.HashSet[java.lang.Long]()
+    set.add(micros)
+    set.add(null)
+    assert(ops.makeIn(path, Array[Any](t, null)) === FilterApi.in(col, set))
+  }
+
+  test("filterOps eq/notEq/in tolerate a null value (IsNull / IsNotNull)") {
+    val ops = TimeTypeParquetOps.filterOps
+    val path = Array("c")
+    val col = longColumn(path)
+    // null value -> null Long comparand; used by ParquetFilters for IsNull / IsNotNull.
+    assert(ops.makeEq(path, null) === FilterApi.eq(col, null.asInstanceOf[java.lang.Long]))
+    assert(ops.makeNotEq(path, null) === FilterApi.notEq(col, null.asInstanceOf[java.lang.Long]))
+    val set = new java.util.HashSet[java.lang.Long]()
+    set.add(null)
+    assert(ops.makeIn(path, Array[Any](null)) === FilterApi.in(col, set))
+  }
+
+  test("ParquetTypeOps.filterOpsFor resolves the TimeType encoding and nothing else") {
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT64).isDefined)
+    // A different unit, isAdjustedToUTC=true, primitive, or annotation kind is not the
+    // TimeType encoding, so no framework filter ops is returned (pushdown falls through).
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timeType(false, TimeUnit.NANOS), INT64).isEmpty)
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS), INT64).isEmpty)
+    assert(ParquetTypeOps.filterOpsFor(
+      LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS), INT32).isEmpty)
+    assert(ParquetTypeOps.filterOpsFor(null, INT64).isEmpty)
+  }
 
   // ---------- helper ----------
 

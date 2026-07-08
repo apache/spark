@@ -270,11 +270,15 @@ package object util extends Logging {
     MetadataColumn.PRESERVE_ON_REINSERT
   )
 
-  def removeInternalMetadata(schema: StructType): StructType = {
+  def removeInternalMetadata(schema: StructType, keepFieldIds: Boolean = false): StructType = {
     StructType(schema.map { field =>
       var builder = new MetadataBuilder().withMetadata(field.metadata)
       INTERNAL_METADATA_KEYS.foreach { key =>
-        builder = builder.remove(key)
+        // Column IDs are listed as internal so most paths drop them, but some paths (e.g. the v2
+        // relation output) deliberately surface them, so allow callers to keep them.
+        if (!(keepFieldIds && key == FIELD_ID_METADATA_KEY)) {
+          builder = builder.remove(key)
+        }
       }
       field.copy(metadata = builder.build())
     })

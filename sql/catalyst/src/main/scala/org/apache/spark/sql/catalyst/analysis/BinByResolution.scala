@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EmptyRow, Expression, ExprId}
+import org.apache.spark.sql.catalyst.plans.logical.BinByOutputAliases
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -154,4 +155,22 @@ object BinByResolution {
       timeZoneId = if (isLTZ) Some(sessionZone) else None
     )
   }
+
+  /**
+   * Builds the three appended output attributes (`bin_start`, `bin_end`, `bin_distribute_ratio`),
+   * applying `aliases`; `rangeType` is the type of `bin_start` / `bin_end`.
+   */
+  def appendedAttributesWithAliases(
+      rangeType: DataType,
+      aliases: BinByOutputAliases): Seq[Attribute] = Seq(
+    AttributeReference(aliases.effectiveBinStart, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinEnd, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinRatio, DoubleType, nullable = true)())
+
+  /**
+   * Mints a produced output attribute for each DISTRIBUTE input column: same name, type, and
+   * nullability, but a fresh `ExprId` so the rescaled value is a distinct attribute from the input.
+   */
+  def scaledDistributeAttributes(distributeColumns: Seq[Attribute]): Seq[Attribute] =
+    distributeColumns.map(a => AttributeReference(a.name, a.dataType, a.nullable)())
 }

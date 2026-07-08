@@ -299,6 +299,7 @@ Date and Timestamp Functions
     timestamp_diff
     timestamp_micros
     timestamp_millis
+    timestamp_nanos
     timestamp_seconds
     time_bucket
     time_diff
@@ -603,6 +604,7 @@ VARIANT Functions
     try_variant_get
     variant_delete
     variant_get
+    variant_insert
     try_parse_json
     to_variant_object
 

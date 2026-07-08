@@ -2219,6 +2219,14 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
 variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
 
 
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+variant_insert.__doc__ = pysparkfuncs.variant_insert.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
@@ -3786,6 +3794,13 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
 
 timestamp_micros.__doc__ = pysparkfuncs.timestamp_micros.__doc__
+
+
+def timestamp_nanos(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("timestamp_nanos", col)
+
+
+timestamp_nanos.__doc__ = pysparkfuncs.timestamp_nanos.__doc__
 
 
 def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Column:

@@ -28,9 +28,10 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Cast, CurrentDate,
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DateType, IntegerType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DateType, IntegerType, StringType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ComputeCurrentTimeSuite extends PlanTest {
@@ -341,5 +342,79 @@ class ComputeCurrentTimeSuite extends PlanTest {
       }
     }
     literals
+  }
+
+  test("SPARK-57748: TIME->TIMESTAMP cast is rewritten even with no CURRENT_LIKE node") {
+    val timeLit = Literal(0L, TimeType(6))
+    Seq(TimestampNTZType, TimestampType).foreach { target =>
+      val in = Project(Seq(Alias(Cast(timeLit, target), "a")()), LocalRelation())
+      val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+      val remaining = plan.expressions.flatMap(_.collect {
+        case c: Cast if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType)
+                     || Cast.isTimeToTimestampLTZ(c.child.dataType, c.dataType) => c
+      })
+      assert(remaining.isEmpty,
+        s"TIME->$target cast should be rewritten with no CURRENT_LIKE present")
+    }
+  }
+
+  test("SPARK-57748: CAST_TO_TIMESTAMP tree pattern is set for NTZ target types") {
+    // Cast with TimestampNTZType target should contain CAST_TO_TIMESTAMP
+    val ntzCast = Cast(Literal(0L, TimeType(6)), TimestampNTZType)
+    assert(ntzCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(ntzCast.containsPattern(TreePattern.CAST)) // existing CAST tag preserved
+
+    // Cast with TimestampNTZNanosType target should also contain CAST_TO_TIMESTAMP
+    val ntzNanosCast = Cast(Literal(0L, TimeType(6)), TimestampNTZNanosType(9))
+    assert(ntzNanosCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(ntzNanosCast.containsPattern(TreePattern.CAST))
+  }
+
+  test("SPARK-57748: CAST_TO_TIMESTAMP tree pattern is NOT set for non-timestamp targets") {
+    // Cast to StringType should NOT contain CAST_TO_TIMESTAMP
+    val stringCast = Cast(Literal(0L, TimeType(6)), StringType)
+    assert(!stringCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(stringCast.containsPattern(TreePattern.CAST))
+
+    // Cast to IntegerType should NOT contain CAST_TO_TIMESTAMP
+    val intCast = Cast(Literal("10"), IntegerType)
+    assert(!intCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(intCast.containsPattern(TreePattern.CAST))
+  }
+
+  test("SPARK-57748: CAST_TO_TIMESTAMP tree pattern is set for LTZ targets") {
+    // Cast to TimestampType (LTZ micro) should contain CAST_TO_TIMESTAMP because
+    // ComputeCurrentTime rewrites TIME->LTZ casts via the same predicate.
+    val ltzCast = Cast(Literal(0L, TimeType(6)), TimestampType)
+    assert(ltzCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(ltzCast.containsPattern(TreePattern.CAST))
+
+    // Cast to TimestampLTZNanosType should also contain CAST_TO_TIMESTAMP
+    val ltzNanosCast = Cast(Literal(0L, TimeType(6)), TimestampLTZNanosType(9))
+    assert(ltzNanosCast.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(ltzNanosCast.containsPattern(TreePattern.CAST))
+  }
+
+  test("SPARK-57748: CAST_TO_TIMESTAMP is keyed on target type, not source type") {
+    // Source type does not matter - only the target determines the pattern bit
+    val fromString = Cast(Literal("2024-01-01"), TimestampNTZType)
+    assert(fromString.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+
+    val fromInt = Cast(Literal(42), TimestampNTZType)
+    assert(fromInt.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+
+    // Even with an expression child (rand()), the target type determines the bit
+    import org.apache.spark.sql.catalyst.expressions.Rand
+    val fromRand = Cast(Rand(Literal(0L)), TimestampNTZType)
+    assert(fromRand.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+  }
+
+  test("SPARK-57748: plan with non-timestamp cast only does not contain CAST_TO_TIMESTAMP") {
+    val timeLit = Literal(0L, TimeType(6))
+    val plan = Project(Seq(
+      Alias(Cast(timeLit, IntegerType), "a")()),
+      LocalRelation())
+    assert(!plan.containsPattern(TreePattern.CAST_TO_TIMESTAMP))
+    assert(plan.containsPattern(TreePattern.CAST))
   }
 }

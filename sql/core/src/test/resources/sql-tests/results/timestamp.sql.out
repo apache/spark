@@ -154,10 +154,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
   }
 }
@@ -186,10 +185,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
   }
 }
@@ -202,10 +200,9 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITH_SUGGESTION",
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
   }
 }
@@ -620,8 +617,14 @@ select TIMESTAMP_SECONDS(1230219000123123)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP from 1230219000123123L seconds since the epoch"
+  }
+}
 
 
 -- !query
@@ -629,8 +632,14 @@ select TIMESTAMP_SECONDS(-1230219000123123)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP from -1230219000123123L seconds since the epoch"
+  }
+}
 
 
 -- !query
@@ -638,8 +647,14 @@ select TIMESTAMP_MILLIS(92233720368547758)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP from 92233720368547758L milliseconds since the epoch"
+  }
+}
 
 
 -- !query
@@ -647,8 +662,14 @@ select TIMESTAMP_MILLIS(-92233720368547758)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP from -92233720368547758L milliseconds since the epoch"
+  }
+}
 
 
 -- !query

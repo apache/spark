@@ -592,13 +592,20 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
-    case (v: UTF8String, StringType) =>
-      // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
     case (v: UTF8String, st: StringType) =>
+      // Only render a `collate` clause for an explicit collation (including an explicit
+      // `UTF8_BINARY`). The default `StringType` (the case object) has no explicit collation, so
+      // it must render without a clause and stay distinguishable from an explicitly-collated
+      // string on re-parse (e.g. so that default-collation resolution does not treat an
+      // explicitly-collated literal as eligible for inheriting a default collation).
+      val collateClause =
+        if (DataTypeUtils.isDefaultStringCharOrVarcharType(st)) {
+          ""
+        } else {
+          s" collate ${st.collationName}"
+        }
       // Escapes all backslashes and single quotes.
-      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") +
-        "'" + st.typeName.substring(6)
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'" + collateClause
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
     case (v: Long, LongType) => s"${v}L"

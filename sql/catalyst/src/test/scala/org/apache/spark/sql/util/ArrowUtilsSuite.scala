@@ -154,6 +154,88 @@ class ArrowUtilsSuite extends SparkFunSuite {
       ArrowUtils.toArrowSchema(schemaWithMeta, null, true, false)) === schemaWithMeta)
   }
 
+  test("timestamp nanos lossless struct") {
+    def losslessRoundtrip(schema: StructType, timeZoneId: String = null): Unit = {
+      val arrowSchema =
+        ArrowUtils.toArrowSchema(schema, timeZoneId, true, false, losslessTimestampNanos = true)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+
+    // Top-level: the lossless mapping is a struct of (epochMicros: int64, nanosWithinMicro:
+    // int16); the NTZ/LTZ kind and the precision round-trip through the child field metadata.
+    Seq(7, 8, 9).foreach { p =>
+      Seq[DataType](TimestampNTZNanosType(p), TimestampLTZNanosType(p)).foreach { dt =>
+        val schema = new StructType().add("value", dt)
+        val arrowSchema =
+          ArrowUtils.toArrowSchema(schema, null, true, false, losslessTimestampNanos = true)
+        val field = arrowSchema.findField("value")
+        assert(field.getType === ArrowType.Struct.INSTANCE)
+        val children = field.getChildren
+        assert(children.size() === 2)
+        assert(children.get(0).getName === "epochMicros")
+        assert(children.get(0).getType === new ArrowType.Int(64, true))
+        assert(!children.get(0).isNullable)
+        assert(children.get(1).getName === "nanosWithinMicro")
+        assert(children.get(1).getType === new ArrowType.Int(16, true))
+        assert(!children.get(1).isNullable)
+        assert(ArrowUtils.isTimestampNanosStructField(field))
+        assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+      }
+    }
+
+    // Unlike the default int64 mapping, LTZ needs no session time zone: the struct stores the
+    // raw value components, which are zone-independent.
+    losslessRoundtrip(new StructType().add("value", TimestampLTZNanosType(9)))
+
+    // Nested: the flag must reach nanosecond timestamps inside arrays, structs, and maps.
+    losslessRoundtrip(new StructType()
+      .add("arr", ArrayType(TimestampNTZNanosType(9)))
+      .add("struct", new StructType().add("ts", TimestampLTZNanosType(7)))
+      .add("map", MapType(IntegerType, TimestampNTZNanosType(8))))
+
+    // User metadata on the column is preserved alongside the struct tag.
+    val md = new MetadataBuilder().putString("city", "beijing").build()
+    losslessRoundtrip(new StructType().add("value", TimestampNTZNanosType(7), true, md))
+
+    // An invalid or missing precision on the tagged child falls back to the canonical maximum
+    // precision, mirroring the default int64 mapping's fallback.
+    def taggedStructField(precision: Option[String]): Field = {
+      val microsMd = new java.util.HashMap[String, String]()
+      microsMd.put("SPARK::timestampNanos::struct", "ntz")
+      precision.foreach(p => microsMd.put("SPARK::timestampNanos::precision", p))
+      new Field(
+        "value",
+        new FieldType(true, ArrowType.Struct.INSTANCE, null, null),
+        java.util.Arrays.asList(
+          new Field(
+            "epochMicros",
+            new FieldType(false, new ArrowType.Int(64, true), null, microsMd),
+            java.util.Collections.emptyList[Field]()),
+          new Field(
+            "nanosWithinMicro",
+            new FieldType(false, new ArrowType.Int(16, true), null, null),
+            java.util.Collections.emptyList[Field]())))
+    }
+    assert(ArrowUtils.fromArrowField(taggedStructField(Some("5"))) === TimestampNTZNanosType(9))
+    assert(ArrowUtils.fromArrowField(taggedStructField(None)) === TimestampNTZNanosType(9))
+
+    // A plain struct that merely uses the same child names, but carries no tag, stays a struct.
+    val untagged = new StructType().add(
+      "value",
+      new StructType()
+        .add("epochMicros", LongType, nullable = false)
+        .add("nanosWithinMicro", ShortType, nullable = false))
+    losslessRoundtrip(untagged)
+    assert(
+      ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(untagged, null, true, false)) ===
+        untagged)
+
+    // The default mapping is untouched when the flag is off: still a single nanosecond timestamp.
+    val defaultSchema = ArrowUtils.toArrowSchema(
+      new StructType().add("value", TimestampNTZNanosType(9)), null, true, false)
+    assert(defaultSchema.findField("value").getType.isInstanceOf[ArrowType.Timestamp])
+  }
+
   test("time") {
     // Arrow's Time type has no precision field, so TIME(p) precision is preserved via field
     // metadata; the Arrow type itself stays Time(NANOSECOND, 64).

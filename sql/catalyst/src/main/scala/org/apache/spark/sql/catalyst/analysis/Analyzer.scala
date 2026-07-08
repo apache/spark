@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -899,11 +899,12 @@ class Analyzer(
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
-        // The unresolved grouping id will be resolved by ResolveReferences
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
           expression = cond,
           groupByExpressions = groupingExprs,
-          gid = VirtualColumn.groupingIdAttribute,
+          gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs),
           newAlias = (child, name, qualifier) =>
             Alias(child, name.get)(qualifier = qualifier)
         )
@@ -913,8 +914,9 @@ class Analyzer(
       case s @ Sort(order, _, child, _)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
-        val gid = VirtualColumn.groupingIdAttribute
-        // The unresolved grouping id will be resolved by ResolveReferences
+        val gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs)
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newOrder = order.map { expression =>
           GroupingAnalyticsTransformer.replaceGroupingFunction(
             expression = expression,
@@ -3913,13 +3915,35 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
-        val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
-          defaultValueFillMode)
+        // Only let TableOutputResolver see generation expression metadata if the catalog
+        // supports auto-filling generated columns on write.
+        val expected = v2Write.table match {
+          case r: DataSourceV2Relation
+            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog) =>
+            r.output.map(GeneratedColumn.removeGenerationExpressionMetadata)
+          case _ => v2Write.table.output
+        }
+        val (projection, autoFilledGenCols) =
+          TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
+            v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
+            defaultValueFillMode)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
-              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+              r.copy(output = r.output.map { attr =>
+                val cleaned = CharVarcharUtils.cleanAttrMetadata(attr)
+                // Strip the generation expression metadata from columns Spark auto-filled, so
+                // ResolveTableConstraints does not add a (redundant) CheckInvariant for them:
+                // their values were computed from the generation expression and are correct by
+                // construction. User-provided generated columns keep the metadata so their
+                // values are still validated.
+                if (autoFilledGenCols.contains(attr.name)) {
+                  GeneratedColumn.removeGenerationExpressionMetadata(cleaned)
+                    .asInstanceOf[AttributeReference]
+                } else {
+                  cleaned
+                }
+              })
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -144,26 +145,32 @@ case class GetJsonObject(json: Expression, path: Expression)
 object GetJsonObject {
   import PathInstruction._
 
-  private[sql] def simpleNamedPath(path: UTF8String): Option[Seq[String]] = {
+  private[sql] sealed trait SimpleJsonPathSegment
+  private[sql] case class NamedPathSegment(name: String) extends SimpleJsonPathSegment
+  private[sql] case class IndexedPathSegment(index: Long) extends SimpleJsonPathSegment
+
+  private[sql] def simplePath(path: UTF8String): Option[Seq[SimpleJsonPathSegment]] = {
     try {
       Option(path).flatMap(value => JsonPathParser.parse(value.toString)).flatMap { instructions =>
-        val names = instructions.grouped(2).map {
-          case List(Key, Named(fieldName)) => Some(fieldName)
+        val segments = instructions.grouped(2).map {
+          case List(Key, Named(fieldName)) => Some(NamedPathSegment(fieldName))
+          case List(Subscript, Index(index)) if index >= 0 => Some(IndexedPathSegment(index))
           case _ => None
         }.toSeq
-        if (names.nonEmpty && names.forall(_.isDefined)) Some(names.flatten) else None
+        if (segments.nonEmpty && segments.forall(_.isDefined)) Some(segments.flatten) else None
       }
     } catch {
       // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
       case _: NumberFormatException => None
     }
   }
+
 }
 
 /**
- * Builds the internal expression that extracts multiple simple named paths from a JSON string in
- * one parse, used to share sibling [[GetJsonObject]] expressions; unsupported and
- * prefix-conflicting paths remain as independent `GetJsonObject` expressions.
+ * Builds the internal expression that extracts multiple simple object-key and array-index paths
+ * from a JSON string in one parse, used to share sibling [[GetJsonObject]] expressions; unsupported
+ * and prefix-conflicting paths remain as independent `GetJsonObject` expressions.
  *
  * It is inserted by `OptimizeCsvJsonExprs` (after analysis, so its inputs are resolved), and is the
  * optimizer-constructed showcase for [[DelegateExpression]]: instead of hand-written
@@ -181,13 +188,13 @@ object MultiGetJsonObject {
     val resultType = StructType(fallbackPaths.indices.map { index =>
       StructField(s"_$index", StringType, nullable = true)
     })
-    val namedPaths = fallbackPaths.map { path =>
-      GetJsonObject.simpleNamedPath(UTF8String.fromString(path)).getOrElse {
+    val simplePaths = fallbackPaths.map { path =>
+      GetJsonObject.simplePath(UTF8String.fromString(path)).getOrElse {
         throw new IllegalArgumentException(s"Unsupported shared JSON path: $path")
       }
     }
     val evaluator =
-      MultiGetJsonObjectEvaluator(fallbackPaths.map(UTF8String.fromString), namedPaths)
+      MultiGetJsonObjectEvaluator(fallbackPaths.map(UTF8String.fromString), simplePaths)
     // `propagateNull = true` reproduces the old null-intolerant behavior: null json -> null result.
     val definition = Invoke(
       Literal.create(evaluator, ObjectType(classOf[MultiGetJsonObjectEvaluator])),
@@ -377,14 +384,22 @@ case class JsonToStructs(
       child = child,
       timeZoneId = None)
 
-  override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
-    case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
-      val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
-      if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
-    case _ =>
-      DataTypeMismatch(
-        errorSubClass = "INVALID_JSON_SCHEMA",
-        messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // `from_json` parses each input string as one JSON document, so the embedded array
+    // splitting can never apply.
+    if (CaseInsensitiveMap(options).contains(JSONOptions.EXPLODE_EMBEDDED_ARRAY)) {
+      throw QueryCompilationErrors.explodeEmbeddedArrayUnsupportedUsage(
+        "the from_json function")
+    }
+    nullableSchema match {
+      case _: StructType | _: ArrayType | _: MapType | _: VariantType =>
+        val checkResult = ExprUtils.checkJsonSchema(nullableSchema)
+        if (checkResult.isFailure) checkResult else super.checkInputDataTypes()
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "INVALID_JSON_SCHEMA",
+          messageParameters = Map("schema" -> toSQLType(nullableSchema)))
+    }
   }
 
   override def dataType: DataType = nullableSchema
