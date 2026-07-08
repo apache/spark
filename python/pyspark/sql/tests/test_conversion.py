@@ -844,6 +844,7 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         self.assertEqual(len(result), 0)
 
 
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class ArrowColumnToPylistTests(unittest.TestCase):
     """
     ArrowTableToRowsConversion._to_pylist must return exactly what
