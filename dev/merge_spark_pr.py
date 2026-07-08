@@ -320,8 +320,12 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     return list(dict.fromkeys(v for _, v in filtered)), warnings
 
 
+def red(text):
+    return "\033[91m%s\033[0m" % text
+
+
 def print_error(msg):
-    print("\033[91m%s\033[0m" % msg)
+    print(red(msg))
 
 
 def bold_input(prompt) -> str:
@@ -684,6 +688,62 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
             fail("Unrecognized choice %r; aborting." % choice)
 
     return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+
+
+def format_jira_verification(
+    pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False
+):
+    """Render the JIRA-vs-PR match block shown before merging.
+
+    Places the PR title next to the linked ticket's summary so the committer can
+    eyeball whether they match, and flags a ticket that is already Resolved/Closed
+    (a fresh merge should target an open ticket). Pure formatting so it is covered
+    by the inline doctests. ``use_color`` wraps the Resolved/Closed warning in the
+    same red as ``print_error``; it is left off in the doctests so the expected
+    output stays plain text.
+
+    >>> print(format_jira_verification(
+    ...     42,
+    ...     "[SPARK-2222][SQL] Feature B",
+    ...     "SPARK-1111",
+    ...     "Feature A (unrelated)",
+    ...     "Resolved",
+    ...     "Improvement",
+    ... ))
+    === Verify JIRA matches PR #42 ===
+    PR title:  [SPARK-2222][SQL] Feature B
+    JIRA SPARK-1111: Feature A (unrelated)
+      Status:  Resolved   <-- WARNING: already Resolved/Closed
+      Type:    Improvement
+
+    >>> print(format_jira_verification(
+    ...     42,
+    ...     "[SPARK-2222][SQL] Feature B",
+    ...     "SPARK-2222",
+    ...     "Feature B",
+    ...     "In Progress",
+    ...     "Bug",
+    ... ))
+    === Verify JIRA matches PR #42 ===
+    PR title:  [SPARK-2222][SQL] Feature B
+    JIRA SPARK-2222: Feature B
+      Status:  In Progress
+      Type:    Bug
+    """
+    warning = ""
+    if status in ("Resolved", "Closed"):
+        warning = "   <-- WARNING: already Resolved/Closed"
+        if use_color:
+            warning = red(warning)
+    return "\n".join(
+        [
+            "=== Verify JIRA matches PR #%s ===" % pr_num,
+            "PR title:  %s" % pr_title,
+            "JIRA %s: %s" % (jira_id, summary),
+            "  Status:  %s%s" % (status, warning),
+            "  Type:    %s" % issuetype,
+        ]
+    )
 
 
 def print_jira_issue_summary(issue):
@@ -1516,6 +1576,7 @@ def main():
     # discovering them one-by-one across repeated merge attempts.
     blocking_issue_types = {"Epic", "Umbrella"}
     blockers = []
+    linked_issues = []
     for jira_id in jira_ids:
         try:
             issue = asf_jira.issue(jira_id)
@@ -1523,6 +1584,7 @@ def main():
             print_error("Unable to fetch summary of %s" % jira_id)
             continue
         print_jira_issue_summary(issue)
+        linked_issues.append((jira_id, issue))
         issue_type = issue.fields.issuetype.name
         if issue_type in blocking_issue_types:
             blockers.append((jira_id, issue_type))
@@ -1534,6 +1596,30 @@ def main():
             "Sub-task(s) under %s and update the PR title to reference "
             "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
         )
+
+    # Confirm each linked JIRA actually matches this PR before merging. A committer can
+    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
+    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
+    # Show the PR title next to each ticket's summary, warn when a ticket is already
+    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
+    for jira_id, issue in linked_issues:
+        print()
+        print(
+            format_jira_verification(
+                pr_num,
+                title,
+                jira_id,
+                issue.fields.summary,
+                issue.fields.status.name,
+                issue.fields.issuetype.name,
+                use_color=True,
+            )
+        )
+        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
+            fail(
+                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
+                "correct JIRA ticket and retry." % (jira_id, pr_num)
+            )
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
