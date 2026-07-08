@@ -155,7 +155,8 @@ object DataTypeProtoConverter {
       // class's no-arg constructor, so load it without initializing and check the type first,
       // rather than instantiating an arbitrary client-provided class name and relying on a
       // later cast (which happens only after the constructor has already run).
-      val clazz = SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
+      val clazz =
+        SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
       if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
         throw InvalidPlanInput(
           "CONNECT_INVALID_PLAN.UDT_JVM_CLASS_NOT_UDT",
