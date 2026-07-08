@@ -3025,19 +3025,20 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 udf_func, udf_args_offsets, udf_kwargs_offsets
             )
             zero_arg = len(args_kwargs_offsets) == 0
+            arrow_return_type = to_arrow_type(
+                udf_return_type,
+                timezone="UTC",
+                prefers_large_types=runner_conf.use_large_var_types,
+            )
             udf_infos.append(
                 (
                     wrapped_func,
                     args_kwargs_offsets or (0,),
                     zero_arg,
-                    to_arrow_type(
+                    LocalDataToArrowConversion._create_results_to_arrow(
                         udf_return_type,
-                        timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
-                    ),
-                    LocalDataToArrowConversion._create_converter(
-                        udf_return_type,
-                        none_on_identity=True,
+                        arrow_return_type,
+                        safecheck=runner_conf.safecheck,
                         int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )
@@ -3079,7 +3080,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 # --- Process: evaluate each UDF row-by-row ---
                 output_arrays = []
-                for udf_func, offsets, zero_arg, arrow_return_type, result_conv in udf_infos:
+                for udf_func, offsets, zero_arg, results_to_arrow in udf_infos:
                     rows = (
                         [() for _ in range(num_rows)]
                         if zero_arg
@@ -3089,16 +3090,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     verify_result_row_count(len(results), num_rows)
 
                     # --- Output: Python -> Arrow ---
-                    converted = (
-                        [result_conv(r) for r in results] if result_conv is not None else results
-                    )
-                    try:
-                        arr = pa.array(converted, type=arrow_return_type)
-                    except pa.lib.ArrowInvalid:
-                        arr = pa.array(converted).cast(
-                            target_type=arrow_return_type, safe=runner_conf.safecheck
-                        )
-                    output_arrays.append(arr)
+                    output_arrays.append(results_to_arrow(results))
 
                 yield pa.RecordBatch.from_arrays(output_arrays, col_names)
 

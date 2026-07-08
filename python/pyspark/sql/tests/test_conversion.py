@@ -988,6 +988,79 @@ class ArrowColumnToPylistTests(unittest.TestCase):
         self.assertEqual(actual[2], Row(arr=[], nested=None))
 
 
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class LocalDataResultsToArrowTests(unittest.TestCase):
+    """
+    LocalDataToArrowConversion._create_results_to_arrow must produce the same
+    Arrow array as applying the per-row converter and pa.array.
+    """
+
+    def _reference(self, results, data_type, arrow_type):
+        conv = LocalDataToArrowConversion._create_converter(
+            data_type, none_on_identity=True, int_to_decimal_coercion_enabled=False
+        )
+        converted = [conv(r) for r in results] if conv is not None else results
+        import pyarrow as pa
+
+        return pa.array(converted, type=arrow_type)
+
+    def _check(self, results, data_type):
+        from pyspark.sql.pandas.types import to_arrow_type
+
+        arrow_type = to_arrow_type(data_type, timezone="UTC", prefers_large_types=False)
+        to_arrow = LocalDataToArrowConversion._create_results_to_arrow(
+            data_type, arrow_type, safecheck=True, int_to_decimal_coercion_enabled=False
+        )
+        actual = to_arrow(results)
+        expected = self._reference(results, data_type, arrow_type)
+        self.assertTrue(actual.equals(expected), f"{data_type}: {actual} != {expected}")
+
+    def test_matches_per_row_converter(self):
+        array_string = ArrayType(StringType())
+        map_si = MapType(StringType(), IntegerType())
+        struct_t = (
+            StructType().add("i", IntegerType()).add("s", StringType()).add("d", DoubleType())
+        )
+        cases = [
+            (array_string, [["a", None], None, []]),
+            (ArrayType(IntegerType()), [[1, None], None, [2]]),
+            (map_si, [{"a": 1, "b": None}, None, {}]),
+            (struct_t, [Row(i=1, s="x", d=0.5), None, Row(i=None, s=None, d=None)]),
+            # dict results for struct take the fallback path
+            (struct_t, [{"i": 1, "s": "x", "d": 0.5}, None]),
+            (StringType(), ["a", None]),
+            (ArrayType(ArrayType(StringType())), [[["a"], None], None]),
+            (StructType().add("l", ArrayType(StringType())), [Row(l=["a", None]), None]),
+        ]
+        for data_type, results in cases:
+            with self.subTest(type=str(data_type)):
+                self._check(results, data_type)
+
+    def test_struct_arity_mismatch_falls_back_to_same_error(self):
+        from pyspark.sql.pandas.types import to_arrow_type
+
+        struct_t = StructType().add("i", IntegerType()).add("s", StringType())
+        arrow_type = to_arrow_type(struct_t, timezone="UTC", prefers_large_types=False)
+        to_arrow = LocalDataToArrowConversion._create_results_to_arrow(
+            struct_t, arrow_type, safecheck=True, int_to_decimal_coercion_enabled=False
+        )
+        with self.assertRaises(PySparkValueError):
+            to_arrow([(1, "x", "extra")])
+
+    def test_returned_lists_are_not_mutated(self):
+        from pyspark.sql.pandas.types import to_arrow_type
+
+        data_type = ArrayType(StringType())
+        arrow_type = to_arrow_type(data_type, timezone="UTC", prefers_large_types=False)
+        to_arrow = LocalDataToArrowConversion._create_results_to_arrow(
+            data_type, arrow_type, safecheck=True, int_to_decimal_coercion_enabled=False
+        )
+        results = [["a", "b"], None]
+        arr = to_arrow(results)
+        self.assertEqual(arr.to_pylist(), [["a", "b"], None])
+        self.assertEqual(results, [["a", "b"], None])
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 

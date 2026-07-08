@@ -933,6 +933,112 @@ class LocalDataToArrowConversion:
             assert False, f"Need converter for {dataType} but failed to find one."
 
     @staticmethod
+    def _create_results_to_arrow(
+        dataType: DataType,
+        arrow_type: "pa.DataType",
+        *,
+        safecheck: bool,
+        int_to_decimal_coercion_enabled: bool,
+    ) -> Callable[[List[Any]], "pa.Array"]:
+        """
+        Return a function converting a column of UDF results (a list of Python
+        values) to an Arrow array of ``arrow_type``.
+
+        The generic strategy applies the per-row converter from
+        ``_create_converter`` and passes the converted values to ``pa.array``.
+        When the element/field/value converters are identity, the per-row
+        converter only reshapes values that ``pa.array`` accepts directly, so
+        results are assembled in bulk instead: arrays are passed as the
+        returned lists (skipping the per-row defensive copy), map results are
+        passed as dicts (PyArrow accepts dicts for map types), and struct
+        results (``Row``/tuples) are transposed and assembled via
+        ``pa.StructArray.from_arrays``. Any shape or validation mismatch falls
+        back to the per-row path, preserving its error behavior.
+        """
+        import pyarrow as pa
+
+        result_conv = LocalDataToArrowConversion._create_converter(
+            dataType,
+            none_on_identity=True,
+            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+        )
+
+        def _fallback(results: List[Any]) -> "pa.Array":
+            converted = [result_conv(r) for r in results] if result_conv is not None else results
+            try:
+                return pa.array(converted, type=arrow_type)
+            except pa.lib.ArrowInvalid:
+                return pa.array(converted).cast(target_type=arrow_type, safe=safecheck)
+
+        if result_conv is None:
+            return _fallback
+
+        def _child_conv(dt: DataType, nullable: bool) -> Optional[Callable]:
+            return LocalDataToArrowConversion._create_converter(
+                dt,
+                nullable,
+                none_on_identity=True,
+                int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            )
+
+        if isinstance(dataType, ArrayType) and (
+            _child_conv(dataType.elementType, dataType.containsNull) is None
+        ):
+
+            def _bulk_array(results: List[Any]) -> "pa.Array":
+                try:
+                    return pa.array(results, type=arrow_type)
+                except (pa.lib.ArrowInvalid, TypeError):
+                    return _fallback(results)
+
+            return _bulk_array
+
+        if isinstance(dataType, MapType) and (
+            _child_conv(dataType.keyType, False) is None
+            and _child_conv(dataType.valueType, dataType.valueContainsNull) is None
+        ):
+
+            def _bulk_map(results: List[Any]) -> "pa.Array":
+                try:
+                    return pa.array(results, type=arrow_type)
+                except (pa.lib.ArrowInvalid, TypeError):
+                    return _fallback(results)
+
+            return _bulk_map
+
+        if isinstance(dataType, StructType) and all(
+            _child_conv(f.dataType, f.nullable) is None for f in dataType.fields
+        ):
+            names = dataType.fieldNames()
+            width = len(names)
+            placeholder = (None,) * width
+
+            def _bulk_struct(results: List[Any]) -> "pa.Array":
+                # Rows are tuples; fall back for dict/object results.
+                if any(r is not None and not isinstance(r, tuple) for r in results):
+                    return _fallback(results)
+                if any(r is not None and len(r) != width for r in results):
+                    return _fallback(results)
+                mask = [r is None for r in results]
+                tuples = (
+                    [r if r is not None else placeholder for r in results] if any(mask) else results
+                )
+                try:
+                    field_arrays = [
+                        pa.array(list(f), type=arrow_type.field(k).type)
+                        for k, f in enumerate(zip(*tuples))
+                    ]
+                    return pa.StructArray.from_arrays(
+                        field_arrays, names=names, mask=pa.array(mask, type=pa.bool_())
+                    )
+                except (pa.lib.ArrowInvalid, TypeError):
+                    return _fallback(results)
+
+            return _bulk_struct
+
+        return _fallback
+
+    @staticmethod
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
         require_minimum_pyarrow_version()
         import pyarrow as pa
