@@ -1019,6 +1019,9 @@ class ArrowTableToRowsConversion:
             column
         ) > 0:
             n = len(column)
+            # List offset buffers never carry a validity bitmap, so this conversion is
+            # always zero-copy; zero_copy_only=True asserts that invariant and would
+            # fail loudly if a future Arrow list variant ever violated it.
             offsets = column.offsets.to_numpy(zero_copy_only=True).tolist()
             start = offsets[0]
             flat = ArrowTableToRowsConversion._to_pylist(
