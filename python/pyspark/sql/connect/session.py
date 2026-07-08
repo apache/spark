@@ -1434,8 +1434,29 @@ class SparkSession:
             return False
 
     @staticmethod
+    def _wait_local_connect_process_group_gone(pgid: int, timeout: float) -> bool:
+        """Wait for a POSIX process group to have no remaining members."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                return True
+            except OSError:
+                return True
+            time.sleep(0.2)
+        return False
+
+    @staticmethod
     def _terminate_local_connect_server(proc: Any) -> None:
         """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM."""
+        pgid = None
+        if os.name == "posix":
+            try:
+                if os.getpgid(proc.pid) == proc.pid:
+                    pgid = proc.pid
+            except OSError:
+                pass
         if SparkSession._signal_local_connect_server(proc.pid, signal.SIGTERM):
             try:
                 proc.wait(timeout=10)
@@ -1444,6 +1465,16 @@ class SparkSession:
                     SparkSession._signal_local_connect_server(proc.pid, signal.SIGKILL)
                 else:
                     proc.kill()
+                try:
+                    proc.wait(timeout=10)
+                except Exception:
+                    pass
+        if pgid is not None and not SparkSession._wait_local_connect_process_group_gone(pgid, 10):
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except OSError:
+                pass
+            SparkSession._wait_local_connect_process_group_gone(pgid, 10)
 
     @staticmethod
     def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
