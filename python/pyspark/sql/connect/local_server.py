@@ -181,6 +181,64 @@ def _run_warmup(spark: Any, port: int, token: str, should_stop: Any) -> None:
         thread.join(timeout=0.5)
 
 
+def _stop_and_reap_jvm(spark: Any) -> None:
+    """Stop the Spark session and reap the child JVM before this daemon exits.
+
+    This daemon must outlive and reap its child JVM: if the daemon exited first, the JVM
+    would be reparented to init, and where init does not reap orphans (e.g. a container
+    whose PID 1 is a non-reaping placeholder, as in CI job containers) its eventual zombie
+    would keep this process group non-empty forever -- so the client's killpg-based
+    group-liveness checks in ``_terminate_local_connect_server`` would see a server that
+    never terminates even though every process in it is dead.
+
+    ``spark.stop()`` is bounded by a daemon thread because it speaks py4j to a JVM that, on
+    the group-SIGTERM shutdown path, is already dying and may never answer (cf. the warmup
+    shutdown note in ``_run_warmup``). Closing the JVM's stdin pipe then asks a still-running
+    JVM to exit cleanly -- the gateway exits on stdin EOF, running Spark's shutdown hooks --
+    and SIGKILL is the backstop. The waits are sized to finish inside the ~10s the client
+    gives the daemon to exit after SIGTERM before it escalates to killing the whole group.
+    """
+    import threading
+
+    jvm_proc = None
+    try:
+        jvm_proc = spark.sparkContext._gateway.proc
+    except Exception:
+        pass
+
+    def _stop() -> None:
+        try:
+            spark.stop()
+        except Exception:
+            pass  # the JVM may already be gone; exiting is what matters
+
+    stopper = threading.Thread(target=_stop, name="spark-stop", daemon=True)
+    stopper.start()
+    stopper.join(timeout=3.0)
+
+    if jvm_proc is None:
+        return
+    try:
+        if jvm_proc.stdin is not None:
+            jvm_proc.stdin.close()
+    except Exception:
+        pass
+    try:
+        jvm_proc.wait(timeout=5.0)
+        return
+    except Exception:
+        pass
+    _debug("JVM did not exit in time; killing it")
+    try:
+        jvm_proc.kill()
+    except Exception:
+        pass
+    try:
+        jvm_proc.wait(timeout=5.0)
+    except Exception:
+        pass
+
+
 def _jvm_process_dead(spark: Any) -> bool:
     """Whether the child JVM process has already exited (its py4j Popen has a return code).
 
@@ -346,10 +404,7 @@ def main() -> None:
     finally:
         _debug("shutting down (stop flag={})".format(stop["flag"]))
         _remove_discovery_if_ours(args.discovery)
-        try:
-            spark.stop()
-        except Exception:
-            pass  # the JVM may already be gone; exiting is what matters
+        _stop_and_reap_jvm(spark)
         _debug("shutdown complete")
 
 
