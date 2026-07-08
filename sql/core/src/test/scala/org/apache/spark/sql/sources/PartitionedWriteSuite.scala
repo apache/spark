@@ -279,7 +279,8 @@ class PartitionedWriteSuite extends SharedSparkSession {
         // pruning on the nanos partition value: the matching predicate keeps the row
         checkAnswer(read.where(s"tt = cast('$tsStr' as ${tsType.sql})"), df)
         // and a deliberately non-matching predicate excludes the partition entirely
-        checkAnswer(read.where(s"tt = cast('2020-02-02 02:02:02' as ${tsType.sql})"), Seq.empty[Row])
+        checkAnswer(
+          read.where(s"tt = cast('2020-02-02 02:02:02' as ${tsType.sql})"), Seq.empty[Row])
       }
     }
   }
