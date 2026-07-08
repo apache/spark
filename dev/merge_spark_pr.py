@@ -742,6 +742,18 @@ def title_similarity(pr_title, summary):
     0.0
     >>> round(title_similarity("[SPARK-1] Ceil and floor overflow", "Handle floor overflow"), 2)
     0.5
+
+    A [FOLLOWUP] tag is stripped like any other bracket tag, so a follow-up whose
+    title still matches the ticket scores the same as the untagged title:
+
+    >>> title_similarity("[SPARK-1][FOLLOWUP] Add a cache", "Add a cache")
+    1.0
+
+    A Revert PR keeps its title verbatim (the "Revert" prefix and quotes are not
+    tags), so the extra word lowers the score but a genuine match still scores high:
+
+    >>> round(title_similarity('Revert "[SPARK-1] Add a cache"', "Add a cache"), 2)
+    0.5
     """
 
     def tokens(text):
