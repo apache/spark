@@ -141,6 +141,13 @@ class ArrowListColumnToRowsBenchmark:
             [[[i, i + 1], None, [i + 2]] if i % 10 != 0 else None for i in range(n_rows)],
             type=pa.list_(pa.list_(pa.int32())),
         )
+        self.array_of_structs = pa.array(
+            [
+                [{"i": i, "s": f"a{i}"}, {"i": i + 1, "s": f"b{i}"}] if i % 10 != 0 else None
+                for i in range(n_rows)
+            ],
+            type=pa.list_(pa.struct([("i", pa.int32()), ("s", pa.string())])),
+        )
         if method == "bulk":
             self.convert = ArrowTableToRowsConversion._to_pylist
         else:
@@ -152,5 +159,14 @@ class ArrowListColumnToRowsBenchmark:
     def time_nested_ints_with_nulls_to_rows(self, n_rows, method):
         self.convert(self.nested_ints_with_nulls)
 
+    def time_array_of_structs_to_rows(self, n_rows, method):
+        self.convert(self.array_of_structs)
+
     def peakmem_list_of_strings_to_rows(self, n_rows, method):
         self.convert(self.list_of_strings)
+
+    def peakmem_nested_ints_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.nested_ints_with_nulls)
+
+    def peakmem_array_of_structs_to_rows(self, n_rows, method):
+        self.convert(self.array_of_structs)

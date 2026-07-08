@@ -506,6 +506,21 @@ class PandasToArrowConversion:
         return pa.RecordBatch.from_arrays(arrays, schema.names)
 
 
+_numpy_available: Optional[bool] = None
+
+
+def _is_numpy_available() -> bool:
+    global _numpy_available
+    if _numpy_available is None:
+        try:
+            import numpy  # noqa: F401
+
+            _numpy_available = True
+        except ImportError:
+            _numpy_available = False
+    return _numpy_available
+
+
 class LocalDataToArrowConversion:
     """
     Conversion from local data (except pandas DataFrame and numpy ndarray) to Arrow.
@@ -1003,9 +1018,7 @@ class ArrowTableToRowsConversion:
         import pyarrow as pa
         import pyarrow.types as pa_types
 
-        try:
-            import numpy  # noqa: F401
-        except ImportError:
+        if not _is_numpy_available():
             return column.to_pylist()
 
         if isinstance(column, pa.ChunkedArray):
