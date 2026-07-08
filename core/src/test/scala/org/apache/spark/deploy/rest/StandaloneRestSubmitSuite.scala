@@ -604,7 +604,8 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, "1k")
     val localhost = Utils.localHostName()
     val securityManager = new SecurityManager(conf)
-    rpcEnv = Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
     val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
     val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
     server = Some(_server)
