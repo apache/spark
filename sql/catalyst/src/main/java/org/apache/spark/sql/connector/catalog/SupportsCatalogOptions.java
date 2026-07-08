@@ -62,6 +62,8 @@ public interface SupportsCatalogOptions extends TableProvider {
    *
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   *
+   * @since 4.3.0
    */
   default boolean useCatalogResolution(CaseInsensitiveStringMap options) {
     return true;
@@ -75,6 +77,8 @@ public interface SupportsCatalogOptions extends TableProvider {
    *
    * @param options the user-specified options that can identify a table, e.g. file path, Kafka
    *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   *
+   * @since 4.3.0
    */
   default boolean failWriteIfTableDoesNotExist(CaseInsensitiveStringMap options) {
     return true;

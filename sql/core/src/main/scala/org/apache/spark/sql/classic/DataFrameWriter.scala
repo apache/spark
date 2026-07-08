@@ -171,6 +171,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
       def createTableAsSelectCommand(
           catalog: TableCatalog, ident: Identifier, ignoreIfExists: Boolean): LogicalPlan = {
+        if (_withSchemaEvolution) {
+          throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
+        }
         val tableSpec = UnresolvedTableSpec(
           properties = Map.empty,
           provider = Some(source),
@@ -243,9 +246,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           provider match {
             case supportsExtract: SupportsCatalogOptions
                 if supportsExtract.useCatalogResolution(dsOptions) =>
-              if (_withSchemaEvolution) {
-                throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
-              }
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)

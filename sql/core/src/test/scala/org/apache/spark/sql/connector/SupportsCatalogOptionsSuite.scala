@@ -421,6 +421,44 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
     }
   }
 
+  test("overwrite to a missing table fails by default (failWriteIfTableDoesNotExist=true)") {
+    // The default provider keeps the prior behavior: append/overwrite to a missing table fails.
+    intercept[NoSuchTableException] {
+      spark.range(10).write.format(format).option("name", "t1").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
+    }
+  }
+
+  Seq(SaveMode.Append, SaveMode.Overwrite).foreach { mode =>
+    test(s"failWriteIfTableDoesNotExist=false: $mode create-on-write rejects schema evolution") {
+      // Create-on-write goes through CreateTableAsSelect, which does not support schema evolution,
+      // consistent with the create modes (ErrorIfExists/Ignore).
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.range(10).write.format(createOnWriteFormat).option("name", "t1")
+            .option("catalog", catalogName).mode(mode).withSchemaEvolution().save()
+        },
+        condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+        parameters = Map.empty)
+      assert(!catalog(catalogName).tableExists("t1"), "no table should have been created")
+    }
+  }
+
+  Seq(SaveMode.Append, SaveMode.Overwrite).foreach { mode =>
+    test(s"useCatalogResolution=false: $mode write bypasses the catalog") {
+      // Opting out of catalog resolution routes the write through the TableProvider path instead
+      // of the catalog. The opt-out provider's table does not support batch writes, so the write
+      // falls back to the V1 source path (which fails here since it is not a V1 source) rather
+      // than failing with NoSuchTableException from the catalog.
+      val e = intercept[SparkException] {
+        spark.range(10).write.format(optOutFormat).option("name", "t1")
+          .option("catalog", catalogName).mode(mode).save()
+      }
+      assert(e.getMessage.contains("does not allow create table as select"))
+      assert(!catalog(catalogName).tableExists("t1"), "the catalog should not have been used")
+    }
+  }
+
   private def checkV2Identifiers(
       plan: LogicalPlan,
       identifier: String = "t1",
