@@ -1021,18 +1021,23 @@ class ArrowTableToRowsConversion:
     def _to_pylist(column: Union["pa.Array", "pa.ChunkedArray"]) -> List[Any]:
         """
         Equivalent to ``column.to_pylist()``, but converts (nested) list columns in bulk
-        instead of one scalar at a time.
+        instead of one scalar at a time, with fast paths for string, binary, integral,
+        floating point and boolean leaves.
 
         ``Array.to_pylist()`` materializes one Scalar per element; for list types each row
         additionally allocates a C++ scalar, a Python Scalar wrapper and a Python Array
         wrapper for the row's values before converting elements one by one, which is
         several times slower than converting the flattened child values in a single pass
-        and slicing the resulting Python list per row (see apache/arrow#50326). The values
-        themselves are still converted by Arrow's own ``to_pylist``, so results are exactly
-        identical: ``None`` stays ``None`` and values inside numeric lists stay Python ints,
-        unlike a pandas round trip which would coerce them to floats/NaN. NumPy is used
-        only for the offsets (non-null integers) and the validity bitmap (booleans), so no
-        value coercion can occur.
+        and slicing the resulting Python list per row (see apache/arrow#50326). Results
+        are exactly identical to ``to_pylist``: ``None`` stays ``None`` and values inside
+        numeric lists stay Python ints, unlike a pandas round trip which would coerce
+        them to floats/NaN. In particular the leaf fast paths cannot coerce: string and
+        binary columns use Arrow's object-dtype conversion, which only produces ``str`` /
+        ``bytes`` / ``None``; nullable numeric and boolean columns are converted from the
+        original values (nulls filled with a placeholder and restored to ``None`` from the
+        validity bitmap afterwards), so ints are materialized from the int buffer, never
+        via a float representation. Types whose ``as_py`` returns non-primitive objects
+        (dates, timestamps, decimals, ...) keep using ``to_pylist``.
 
         This can be removed once the minimum supported PyArrow version includes the fix
         for apache/arrow#50326.
@@ -1052,10 +1057,38 @@ class ArrowTableToRowsConversion:
                 result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
             return result
 
+        if len(column) == 0:
+            return []
+
         column_type = column.type
-        if (pa_types.is_list(column_type) or pa_types.is_large_list(column_type)) and len(
-            column
-        ) > 0:
+
+        if (
+            pa_types.is_string(column_type)
+            or pa_types.is_large_string(column_type)
+            or pa_types.is_binary(column_type)
+            or pa_types.is_large_binary(column_type)
+        ):
+            # The object-dtype conversion produces exactly str/bytes and None.
+            return column.to_numpy(zero_copy_only=False).tolist()
+
+        if (
+            pa_types.is_integer(column_type)
+            or pa_types.is_float32(column_type)
+            or pa_types.is_float64(column_type)
+            or pa_types.is_boolean(column_type)
+        ):
+            # Booleans are bit-packed, so their conversion to NumPy is never zero-copy.
+            zero_copy = not pa_types.is_boolean(column_type)
+            if column.null_count == 0:
+                return column.to_numpy(zero_copy_only=zero_copy).tolist()
+            import pyarrow.compute as pc
+
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            fill_value = False if pa_types.is_boolean(column_type) else 0
+            values = pc.fill_null(column, fill_value).to_numpy(zero_copy_only=zero_copy).tolist()
+            return [v if m else None for v, m in zip(values, valid)]
+
+        if pa_types.is_list(column_type) or pa_types.is_large_list(column_type):
             n = len(column)
             # List offset buffers never carry a validity bitmap, so this conversion is
             # always zero-copy; zero_copy_only=True asserts that invariant and would

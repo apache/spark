@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import datetime
+import decimal
 import unittest
 from zoneinfo import ZoneInfo
 
@@ -897,6 +898,27 @@ class ArrowColumnToPylistTests(unittest.TestCase):
             pa.array([], type=pa.list_(pa.int32())),
             pa.array([None, None], type=pa.list_(pa.string())),
             pa.array([[1, 2], None], type=pa.list_(pa.int64(), 2)),
+            # leaf fast paths: exact str/bytes/int/float/bool types, None for nulls
+            pa.array(["", None, "日本語", "\N{GRINNING FACE}", "x" * 40], type=pa.string()),
+            pa.array(["a", None, ""], type=pa.large_string()),
+            pa.array([b"", None, b"\x00\xff"], type=pa.binary()),
+            pa.array([b"a", None], type=pa.large_binary()),
+            pa.array([1, None, -(2**62), 3], type=pa.int64()),
+            pa.array([0, None, 2**63 + 7], type=pa.uint64()),
+            pa.array([-128, 127, None], type=pa.int8()),
+            pa.array([1.5, None, float("nan"), float("inf")], type=pa.float64()),
+            pa.array([1.5, None], type=pa.float32()),
+            pa.array([True, None, False], type=pa.bool_()),
+            pa.array([True, False] * 5, type=pa.bool_()),
+            pa.array(list(range(10)), type=pa.int32()),
+            # non-primitive leaves must keep as_py semantics (fallback path)
+            pa.array([datetime.date(2020, 1, 2), None], type=pa.date32()),
+            pa.array([datetime.datetime(2020, 1, 2, 3, 4, 5), None], type=pa.timestamp("us")),
+            pa.array([decimal.Decimal("1.23"), None], type=pa.decimal128(10, 2)),
+            # lists of fast-path leaves
+            pa.array([[b"x", None], None, [b""]], type=pa.list_(pa.binary())),
+            pa.array([[True, None], [False]], type=pa.list_(pa.bool_())),
+            pa.array([[1.5, None], None], type=pa.list_(pa.float32())),
         ]
         for column in columns:
             views = [column, column.slice(1), column.slice(0, max(len(column) - 1, 0))]

@@ -170,3 +170,46 @@ class ArrowListColumnToRowsBenchmark:
 
     def peakmem_array_of_structs_to_rows(self, n_rows, method):
         self.convert(self.array_of_structs)
+
+
+class ArrowLeafColumnToRowsBenchmark:
+    """
+    Benchmark for converting flat (leaf) Arrow columns to Python rows.
+
+    ``baseline`` measures plain ``column.to_pylist()``; ``bulk`` measures
+    ``ArrowTableToRowsConversion._to_pylist`` with the string/binary/numeric
+    fast paths.
+    """
+
+    params = [
+        [100000, 1000000],
+        ["baseline", "bulk"],
+    ]
+    param_names = ["n_rows", "method"]
+
+    def setup(self, n_rows, method):
+        from pyspark.sql.conversion import ArrowTableToRowsConversion
+
+        self.strings = pa.array(
+            [f"s{i}" if i % 10 != 0 else None for i in range(n_rows)], type=pa.string()
+        )
+        self.longs_with_nulls = pa.array(
+            [i if i % 10 != 0 else None for i in range(n_rows)], type=pa.int64()
+        )
+        self.doubles = pa.array([float(i) for i in range(n_rows)], type=pa.float64())
+        if method == "bulk":
+            self.convert = ArrowTableToRowsConversion._to_pylist
+        else:
+            self.convert = lambda column: column.to_pylist()
+
+    def time_strings_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.strings)
+
+    def time_longs_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.longs_with_nulls)
+
+    def time_doubles_to_rows(self, n_rows, method):
+        self.convert(self.doubles)
+
+    def peakmem_strings_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.strings)
