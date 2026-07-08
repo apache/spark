@@ -27,7 +27,6 @@ license: |
 - Since Spark 4.3, zero-length files are skipped during Parquet schema inference instead of failing with a `FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER` error.
 - Since Spark 4.3, the configuration key `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled` has been renamed to `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` to reflect that it now applies to storage-partitioned joins, aggregates, and windows. The old key continues to work as an alias.
 - Since Spark 4.3, the Spark Thrift Server rejects setting JVM system properties through the `set:system:` session configuration overlay (for example, in a JDBC connection string). To restore the previous behavior, set `spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties` to `true`.
-- Since Spark 4.3, `GROUP BY GROUPING SETS (())` (and the equivalent empty `GROUP BY CUBE()` / `GROUP BY ROLLUP()`) is treated as a grand total and returns one row over empty input, matching an aggregation with no `GROUP BY` clause; previously it returned no rows. To restore the previous behavior, set `spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled` to `false`.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
@@ -42,6 +41,7 @@ license: |
 - Since Spark 4.2, when a SQL UDF has a parameter whose name matches a parameterless built-in function (`current_user`, `current_date`, `current_time`, `current_timestamp`, `user`, `session_user`, `grouping__id`), a bare reference to that name in the function body resolves to the built-in function instead of the parameter, matching the documented name resolution rules. Rename the parameter to avoid the collision, or set `spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction` to `true` to restore the previous behavior.
 - Since Spark 4.2, `SET CATALOG <name>` resolves a bare (unquoted) name as a session variable first, using the variable's value as the catalog name when such a variable exists, and otherwise treats the name as a literal catalog name. Use a string literal (`SET CATALOG 'name'`) to force it to be interpreted literally.
 - Since Spark 4.2, when an error occurs while collecting observed metrics, `Observation.get` raises the underlying exception (for example, `SparkRuntimeException` in Scala or `PySparkException` in Python) instead of silently returning an empty result. Add error handling if your code relied on receiving an empty result on failure.
+- Since Spark 4.2, `GROUP BY GROUPING SETS (())` (and the equivalent empty `GROUP BY CUBE()` / `GROUP BY ROLLUP()`) is treated as a grand total and returns one row over empty input, matching an aggregation with no `GROUP BY` clause; previously it returned no rows. To restore the previous behavior, set `spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled` to `false`.
 
 ## Upgrading from Spark SQL 4.0 to 4.1
 
