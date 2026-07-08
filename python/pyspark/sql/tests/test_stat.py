@@ -28,6 +28,7 @@ from pyspark.sql.types import (
 from pyspark.errors import (
     AnalysisException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -125,6 +126,16 @@ class DataFrameStatTestsMixin:
                 "arg_name": "subset",
                 "arg_type": "int",
             },
+        )
+
+        # Regression test: invalid 'how' should raise PySparkValueError, not AssertionError
+        with self.assertRaises(PySparkValueError) as pe:
+            self.spark.createDataFrame([("Alice", 50, 80.1)], schema).dropna(how="foo")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="VALUE_NOT_ANY_OR_ALL",
+            messageParameters={"arg_name": "how", "arg_value": "foo"},
         )
 
     def test_fillna(self):
