@@ -229,8 +229,11 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof StructVector structVector) {
       if (ArrowUtils.isTimestampNanosStructField(structVector.getField())) {
         // Lossless struct representation of a nanosecond timestamp (ArrowUtils.toArrowField with
-        // losslessTimestampNanos = true): logically a scalar, so no child columns are exposed.
+        // losslessInternalTypes = true): logically a scalar, so no child columns are exposed.
         accessor = new TimestampNanosStructAccessor(structVector);
+      } else if (ArrowUtils.isCalendarIntervalStructField(structVector.getField())) {
+        // Lossless struct representation of a CalendarInterval: also logically a scalar.
+        accessor = new CalendarIntervalStructAccessor(structVector);
       } else {
         accessor = new StructAccessor(structVector);
 
@@ -627,7 +630,7 @@ public class ArrowColumnVector extends ColumnVector {
 
   /**
    * Reads the lossless struct representation of a nanosecond timestamp (epochMicros: int64,
-   * nanosWithinMicro: int16), built by ArrowUtils.toArrowField with losslessTimestampNanos = true.
+   * nanosWithinMicro: int16), built by ArrowUtils.toArrowField with losslessInternalTypes = true.
    * The components are stored as-is (TimestampNanosVal's own layout), so unlike the int64
    * epoch-nanoseconds accessors above there is no decoding arithmetic and no reduced value domain.
    */
@@ -648,6 +651,31 @@ public class ArrowColumnVector extends ColumnVector {
       // TimestampNanosVal, but this format may be deserialized from stored bytes, so validate
       // rather than trusting blindly.
       return TimestampNanosVal.fromParts(epochMicros.get(rowId), nanosWithinMicro.get(rowId));
+    }
+  }
+
+  /**
+   * Reads the lossless struct representation of a CalendarInterval (months: int32, days: int32,
+   * microseconds: int64), built by ArrowUtils.toArrowField with losslessInternalTypes = true.
+   * The components are stored as-is, so unlike IntervalMonthDayNanoAccessor there is no unit
+   * conversion and no reduced value domain.
+   */
+  static class CalendarIntervalStructAccessor extends ArrowVectorAccessor {
+
+    private final IntVector months;
+    private final IntVector days;
+    private final BigIntVector microseconds;
+
+    CalendarIntervalStructAccessor(StructVector vector) {
+      super(vector);
+      this.months = (IntVector) vector.getChild("months");
+      this.days = (IntVector) vector.getChild("days");
+      this.microseconds = (BigIntVector) vector.getChild("microseconds");
+    }
+
+    @Override
+    final CalendarInterval getInterval(int rowId) {
+      return new CalendarInterval(months.get(rowId), days.get(rowId), microseconds.get(rowId));
     }
   }
 
