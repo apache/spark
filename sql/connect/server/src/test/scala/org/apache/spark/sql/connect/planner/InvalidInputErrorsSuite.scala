@@ -139,7 +139,7 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
     }
   }
 
-  test("UDT jvm_class must be a UserDefinedType") {
+  test("SPARK-58042: UDT jvm_class must be a UserDefinedType") {
     // A jvm_class that is not a UserDefinedType must be rejected before it is instantiated.
     val udt = proto.DataType.UDT
       .newBuilder()
