@@ -1384,6 +1384,41 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT TIME'23:00' + INTERVAL '2' HOUR
+-- !query analysis
+Project [23:00:00 + INTERVAL '02' HOUR AS TIME '23:00:00' + INTERVAL '02' HOUR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'01:00' - INTERVAL '3' HOUR
+-- !query analysis
+Project [01:00:00 - INTERVAL '03' HOUR AS TIME '01:00:00' - INTERVAL '03' HOUR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'00:00' - INTERVAL '0.000001' SECOND
+-- !query analysis
+Project [00:00:00 - INTERVAL '00.000001' SECOND AS TIME '00:00:00' - INTERVAL '00.000001' SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'12:00' + INTERVAL '24' HOUR
+-- !query analysis
+Project [12:00:00 + INTERVAL '24' HOUR AS TIME '12:00:00' + INTERVAL '24' HOUR#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIME'06:30' + INTERVAL '48' HOUR
+-- !query analysis
+Project [06:30:00 + INTERVAL '48' HOUR AS TIME '06:30:00' + INTERVAL '48' HOUR#x]
++- OneRowRelation
+
+
+-- !query
 SELECT time_diff('HOUR', time'00:00:00', time'12:34:56')
 -- !query analysis
 Project [time_diff(HOUR, 00:00:00, 12:34:56) AS time_diff(HOUR, TIME '00:00:00', TIME '12:34:56')#xL]
