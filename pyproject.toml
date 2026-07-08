@@ -126,7 +126,7 @@ mllib = [
 ]
 
 ml_extra = [
-    "scipy>1.8.0",
+    "scipy>=1.8.0",
     "scikit-learn",
     "torch",
     "torchvision",
