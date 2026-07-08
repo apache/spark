@@ -84,7 +84,7 @@ install_app() {
     fi
     # if both were unsuccessful, exit
     if [ ! -f "${local_tarball}" ]; then
-      echo -n "ERROR: Cannot download ${remote_tarball} with cURL or wget; please install manually and try again."
+      echo -n "ERROR: Cannot download ${remote_tarball} with cURL or wget; please install manually and try again." 1>&2
       exit 2
     fi
     # Checksum may not have been specified; don't check if doesn't exist
@@ -94,7 +94,7 @@ install_app() {
         # Assuming SHA512 here for now
         echo "Verifying checksum from ${local_checksum}" 1>&2
         if ! shasum -a 512 -c "${local_checksum}" > /dev/null ; then
-          echo "Bad checksum from ${remote_checksum}"
+          echo "Bad checksum from ${remote_checksum}" 1>&2
           exit 2
         fi
       fi
@@ -132,7 +132,7 @@ install_mvn() {
     if [ $(command -v curl) ]; then
       if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
         # Fall back to archive.apache.org for older Maven
-        echo "Falling back to archive.apache.org to download Maven"
+        echo "Falling back to archive.apache.org to download Maven" 1>&2
         APACHE_MIRROR="https://archive.apache.org/dist"
         MIRROR_URL_QUERY=""
       fi
