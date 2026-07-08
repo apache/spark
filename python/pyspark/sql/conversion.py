@@ -1020,8 +1020,11 @@ class ArrowTableToRowsConversion:
     @staticmethod
     def _to_pylist(column: Union["pa.Array", "pa.ChunkedArray"]) -> List[Any]:
         """
-        Equivalent to ``column.to_pylist()``, but converts (nested) list columns in bulk
-        instead of one scalar at a time.
+        Equivalent to ``column.to_pylist()``, but converts (nested) list, struct and map
+        columns in bulk instead of one scalar at a time. Structs become dicts (with
+        a fallback to ``to_pylist`` for duplicate field names, which raise ``ValueError``
+        there) and maps become lists of ``(key, value)`` tuples, matching
+        ``StructScalar.as_py`` and ``MapScalar.as_py`` exactly.
 
         ``Array.to_pylist()`` materializes one Scalar per element; for list types each row
         additionally allocates a C++ scalar, a Python Scalar wrapper and a Python Array
@@ -1052,10 +1055,46 @@ class ArrowTableToRowsConversion:
                 result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
             return result
 
+        if len(column) == 0:
+            return []
+
         column_type = column.type
-        if (pa_types.is_list(column_type) or pa_types.is_large_list(column_type)) and len(
-            column
-        ) > 0:
+
+        if pa_types.is_map(column_type):
+            # Maps have the same offsets layout as lists; each row becomes a
+            # list of (key, value) tuples, matching MapScalar.as_py.
+            n = len(column)
+            offsets = column.offsets.to_numpy(zero_copy_only=True).tolist()
+            start = offsets[0]
+            length = offsets[-1] - start
+            keys = ArrowTableToRowsConversion._to_pylist(column.keys.slice(start, length))
+            items = ArrowTableToRowsConversion._to_pylist(column.items.slice(start, length))
+            if column.null_count == 0:
+                return [
+                    list(
+                        zip(
+                            keys[offsets[i] - start : offsets[i + 1] - start],
+                            items[offsets[i] - start : offsets[i + 1] - start],
+                        )
+                    )
+                    for i in range(n)
+                ]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            return [
+                (
+                    list(
+                        zip(
+                            keys[offsets[i] - start : offsets[i + 1] - start],
+                            items[offsets[i] - start : offsets[i + 1] - start],
+                        )
+                    )
+                    if valid[i]
+                    else None
+                )
+                for i in range(n)
+            ]
+
+        if pa_types.is_list(column_type) or pa_types.is_large_list(column_type):
             n = len(column)
             # List offset buffers never carry a validity bitmap, so this conversion is
             # always zero-copy; zero_copy_only=True asserts that invariant and would
@@ -1072,6 +1111,26 @@ class ArrowTableToRowsConversion:
                 flat[offsets[i] - start : offsets[i + 1] - start] if valid[i] else None
                 for i in range(n)
             ]
+
+        if pa_types.is_struct(column_type):
+            n = len(column)
+            names = [column_type.field(i).name for i in range(column_type.num_fields)]
+            if len(set(names)) != len(names):
+                # StructScalar.as_py raises ValueError on duplicate field names;
+                # let the generic path surface the same error.
+                return column.to_pylist()
+            fields = [
+                ArrowTableToRowsConversion._to_pylist(column.field(i))
+                for i in range(column_type.num_fields)
+            ]
+            if column.null_count == 0:
+                if not names:
+                    return [{} for _ in range(n)]
+                return [dict(zip(names, row)) for row in zip(*fields)]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            if not names:
+                return [{} if m else None for m in valid]
+            return [dict(zip(names, row)) if m else None for row, m in zip(zip(*fields), valid)]
 
         return column.to_pylist()
 
