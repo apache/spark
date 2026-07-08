@@ -594,7 +594,7 @@ package object config {
         "registration happens. When false, such a relocation is dropped (legacy behavior), " +
         "which can leave the map output pointing at the decommissioned origin executor and " +
         "surface downstream as a fetch failure once that executor is removed.")
-      .version("5.0.0")
+      .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
 
