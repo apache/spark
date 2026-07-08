@@ -73,9 +73,9 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
           IdentifierResolution.evalIdentifierExpr(p.identifierExpr), p.children))
       // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child LogicalPlan slots
       // (`child = query`), so the standard `resolveOperatorsUp` traversal never visits
-      // placeholders inside them. Materialize them explicitly. Only `InsertIntoStatement` and
-      // `OverwriteByExpression` carry a parse-time placeholder today, but matching the
-      // `V2WriteCommand` trait keeps the rule consistent across the family.
+      // placeholders inside them. Materialize them explicitly. Only `InsertIntoStatement`
+      // carries a parse-time placeholder today, but matching the `V2WriteCommand` trait keeps
+      // the rule consistent across the family.
       case i: InsertIntoStatement if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] =>
         val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
         if (p.identifierExpr.resolved && p.childrenResolved) {

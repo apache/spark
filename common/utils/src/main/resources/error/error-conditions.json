@@ -3224,6 +3224,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED" : {
+    "message" : [
+      "INSERT INTO ... (column_list) REPLACE WHERE is not enabled. Set 'spark.sql.insertIntoReplaceWhereColumnList.enabled' to true to enable it."
+    ],
+    "sqlState" : "0A000"
+  },
   "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
     "message" : [
       "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",

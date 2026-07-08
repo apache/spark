@@ -1154,6 +1154,9 @@ class Analyzer(
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
         // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
+          // Only REPLACE WHERE is rejected here. REPLACE ON/USING is rejected separately.
+          case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
+            throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
@@ -1345,14 +1348,15 @@ class Analyzer(
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isDefined =>
+            i.replaceCriteriaOpt.exists(_.isReplaceOnOrUsing) =>
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
+      // Handles all plain INSERTs and REPLACE WHERE.
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isEmpty =>
+            (i.replaceCriteriaOpt.isEmpty || i.replaceCriteriaOpt.exists(_.isReplaceWhere)) =>
         val r = i.table.asInstanceOf[DataSourceV2Relation]
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1386,7 +1390,11 @@ class Analyzer(
               query,
               withSchemaEvolution = i.withSchemaEvolution)
           }
-        } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
+        // Dynamic partition overwrite applies only to plain INSERT OVERWRITE. REPLACE WHERE always
+        // deletes by its condition, so it falls through to the OverwriteByExpression branch below
+        // even when the session is in DYNAMIC partition-overwrite mode.
+        } else if (i.replaceCriteriaOpt.isEmpty &&
+            conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
             OverwritePartitionsDynamic.byName(
               r,
@@ -1399,17 +1407,27 @@ class Analyzer(
               withSchemaEvolution = i.withSchemaEvolution)
           }
         } else {
+          val deleteExpr = i.replaceCriteriaOpt match {
+            case Some(InsertReplaceWhere(condition)) =>
+              assert(staticPartitions.isEmpty,
+                s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
+              condition
+            case Some(other) => throw SparkException.internalError(
+              s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
+                "ResolveInsertInto; REPLACE ON/USING are rejected earlier.")
+            case None => staticDeleteExpression(r, staticPartitions)
+          }
           if (isByName) {
             OverwriteByExpression.byName(
               table = r,
               df = query,
-              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           } else {
             OverwriteByExpression.byPosition(
               table = r,
               query = query,
-              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              deleteExpr = deleteExpr,
               withSchemaEvolution = i.withSchemaEvolution)
           }
         }

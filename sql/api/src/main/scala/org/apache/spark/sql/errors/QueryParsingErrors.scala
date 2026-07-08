@@ -72,6 +72,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceWhereColumnListNotEnabled(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_COLUMN_LIST_NOT_ENABLED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def insertReplaceWhereTableAliasNotAllowed(ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",

@@ -5314,6 +5314,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INSERT_INTO_REPLACE_WHERE_COLUMN_LIST_ENABLED =
+    buildConf("spark.sql.insertIntoReplaceWhereColumnList.enabled")
+      .doc("Enable the SQL syntax INSERT INTO ... (column_list) REPLACE WHERE (...). " +
+        "Allows using a column list with INSERT INTO REPLACE WHERE.")
+      .internal()
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val BIN_BY_ENABLED =
     buildConf("spark.sql.binByRelationOperator.enabled")
       .doc("Enable the BIN BY relation operator for aligning range-typed rows to " +

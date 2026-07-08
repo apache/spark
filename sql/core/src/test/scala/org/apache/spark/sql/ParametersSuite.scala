@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, Limit, OverwriteByExpression, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, InsertReplaceWhere, Limit, ReplaceTableAsSelect, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -2533,11 +2533,10 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // SPARK-46625: INSERT INTO REPLACE WHERE goes through `OverwriteByExpression`, whose `table`
-  // slot is typed `NamedRelation`. `PlanWithUnresolvedIdentifier` extends `NamedRelation` so the
-  // placeholder sits in the slot directly. Verify on the parsed plan that the placeholder lives
-  // in `OverwriteByExpression.table` rather than wrapping the whole command -- running the
-  // analyzer fully would require a v2 catalog.
+  // SPARK-46625: INSERT INTO REPLACE WHERE parses into `InsertIntoStatement`, whose `table`
+  // slot is a non-child `LogicalPlan`. `PlanWithUnresolvedIdentifier` sits in the slot directly.
+  // Verify on the parsed plan that the placeholder lives in `InsertIntoStatement.table` rather
+  // than wrapping the whole command -- running the analyzer fully would require a v2 catalog.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
     // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
@@ -2545,13 +2544,13 @@ class ParametersSuite extends SharedSparkSession {
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
         |SELECT * FROM transformation""".stripMargin)
-    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
-    assert(overwrite.table.isInstanceOf[PlanWithUnresolvedIdentifier],
-      s"Expected OverwriteByExpression.table to be PlanWithUnresolvedIdentifier, " +
-        s"got ${overwrite.table.getClass.getSimpleName}:\n$parsedPlan")
+    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    assert(insert.table.isInstanceOf[PlanWithUnresolvedIdentifier],
+      s"Expected InsertIntoStatement.table to be PlanWithUnresolvedIdentifier, " +
+        s"got ${insert.table.getClass.getSimpleName}:\n$parsedPlan")
     // After CTESubstitution runs, the CTE defs should land on the command's children (because
-    // OverwriteByExpression is a CTEInChildren) -- never as `WithCTE(OverwriteByExpression, _)`.
+    // InsertIntoStatement is a CTEInChildren) -- never as `WithCTE(InsertIntoStatement, _)`.
     val substituted = CTESubstitution.apply(parsedPlan)
     substituted.foreach {
       case WithCTE(_: CTEInChildren, _) =>
@@ -2561,29 +2560,51 @@ class ParametersSuite extends SharedSparkSession {
   }
 
   // SPARK-46625: Parameter inside `IDENTIFIER(:p)` on REPLACE WHERE lives in
-  // `OverwriteByExpression.table`, which is a non-child slot. Verify that
-  // `BindParameters.bind` reaches into the slot via the explicit `OverwriteByExpression`
+  // `InsertIntoStatement.table`, which is a non-child slot. Verify that
+  // `BindParameters.bind` reaches into the slot via the explicit `InsertIntoStatement`
   // recursion (parameters.scala) and that the `getDefaultTreePatternBits` override on
-  // `OverwriteByExpression` exposes the PARAMETER bit for pruning. Done at the rule level
+  // `InsertIntoStatement` exposes the PARAMETER bit for pruning. Done at the rule level
   // because driving REPLACE WHERE through full analysis would require a v2 catalog.
-  test("SPARK-46625: BindParameters recurses into OverwriteByExpression.table") {
+  test("SPARK-46625: BindParameters recurses into InsertIntoStatement.table") {
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """INSERT INTO IDENTIFIER(:tname) REPLACE WHERE a = 10
         |SELECT 1 AS a""".stripMargin)
-    val overwrite = parsedPlan.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in parsed plan:\n$parsedPlan"))
-    // Pruning prerequisite: the PARAMETER bit must be visible at the OverwriteByExpression
+    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    // Pruning prerequisite: the PARAMETER bit must be visible at the InsertIntoStatement
     // level (it lives inside `table`, which is not a child); this exercises the
     // `getDefaultTreePatternBits` override.
-    assert(overwrite.containsPattern(PARAMETER),
-      "OverwriteByExpression.getDefaultTreePatternBits must propagate `table`'s PARAMETER bit")
+    assert(insert.containsPattern(PARAMETER),
+      "InsertIntoStatement.getDefaultTreePatternBits must propagate `table`'s PARAMETER bit")
 
     val bound = BindParameters.apply(
       NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
-    val boundOverwrite = bound.collectFirst { case o: OverwriteByExpression => o }.getOrElse(
-      fail(s"Expected OverwriteByExpression in bound plan:\n$bound"))
-    assert(!boundOverwrite.table.containsPattern(PARAMETER),
-      s"Expected :tname inside OverwriteByExpression.table to be bound, got:\n$boundOverwrite")
+    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside InsertIntoStatement.table to be bound, got:\n$boundInsert")
+  }
+
+  test("BindParameters binds IDENTIFIER(:p) in the table slot for REPLACE WHERE with a column " +
+      "list and preserves the column list") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO IDENTIFIER(:tname) (id, name) REPLACE WHERE id = 1
+        |SELECT 1 AS id, 'x' AS name""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "InsertIntoStatement must expose the table slot's PARAMETER bit for pruning")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("tname"), Seq(Literal("foo_table"))))
+
+    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
+    assert(!boundInsert.table.containsPattern(PARAMETER),
+      s"Expected :tname inside InsertIntoStatement.table to be bound, got:\n$boundInsert")
+    assert(boundInsert.userSpecifiedCols === Seq("id", "name"),
+      s"Expected the column list to survive table-slot binding, got: " +
+        s"${boundInsert.userSpecifiedCols}")
   }
 
   // SPARK-46625 followup: `INSERT INTO IDENTIFIER(<sql-variable>) ...` places a
@@ -2704,6 +2725,28 @@ class ParametersSuite extends SharedSparkSession {
       case WithCTE(_: CTEInChildren, _) =>
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
       case _ =>
+    }
+  }
+
+  test("BindParameters binds parameters inside the REPLACE WHERE condition") {
+    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
+      """INSERT INTO some_table REPLACE WHERE a = :val
+        |SELECT 1 AS a""".stripMargin)
+    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
+    assert(insert.containsPattern(PARAMETER),
+      "InsertIntoStatement must expose the REPLACE WHERE condition's PARAMETER bit for pruning")
+
+    val bound = BindParameters.apply(
+      NameParameterizedQuery(parsedPlan, Seq("val"), Seq(Literal(10))))
+
+    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
+      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
+    boundInsert.replaceCriteriaOpt match {
+      case Some(InsertReplaceWhere(cond)) =>
+        assert(cond === EqualTo(UnresolvedAttribute("a"), Literal(10)),
+          s"Expected :val inside the REPLACE WHERE condition to be bound, got:\n$cond")
+      case other => fail(s"Expected InsertReplaceWhere criteria, got: $other")
     }
   }
 }

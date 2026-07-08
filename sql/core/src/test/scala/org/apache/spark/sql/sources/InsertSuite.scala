@@ -998,6 +998,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
   for ((label, insertClause) <- Seq(
+      ("REPLACE WHERE", "REPLACE WHERE i = 1"),
       ("REPLACE ON", "AS t REPLACE ON t.i = 1"),
       ("REPLACE USING", "AS t REPLACE USING (i)"))) {
     test(s"INSERT INTO ... $label is unsupported for V1 tables") {
