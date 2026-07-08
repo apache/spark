@@ -192,7 +192,7 @@ PySpark requires the following dependencies.
 ========================== ========================= =============================
 Package                    Supported version         Note
 ========================== ========================= =============================
-`py4j`                     >=0.10.9.9                Required to interact with JVM
+`py4j`                     >=0.10.9.7,<0.10.9.10     Required to interact with JVM
 ========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
