@@ -129,7 +129,6 @@ class GraphElementRegistryTest(unittest.TestCase):
             "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
         )
 
-
     def test_unsupported_pipelines_dataset_type_error(self):
         """Regression test: UNSUPPORTED_PIPELINES_DATASET_TYPE should raise PySparkTypeError,
         not AssertionError due to mismatched message parameter names."""
