@@ -1049,13 +1049,15 @@ private[spark] class BlockManager(
         logDebug(s"Block $blockId was not found")
         None
       case Some(info) =>
-        // If this block is sealed (a single authoritative checksum was chosen for it) and the local
+        // Only blocks on the local-checkpoint seal path (`verifySealed`) consult the master's
+        // sealed checksum; a block checksummed only by the global compute switch is served without
+        // any read-path master round-trip. If such a sealed block is sealed to a value the local
         // copy does not match, the local copy is a stale replica that the seal asked this executor
         // to drop, but that removal is asynchronous (fire-and-forget) and may not have landed yet,
         // or was lost - so skip the local copy and fall through to a remote (authoritative)
         // location. This self-check is what makes correctness independent of the removal landing.
-        // Unsealed blocks impose no such constraint.
-        if (info.checksum.isDefined && !localCopyMatchesSeal(blockId, info)) {
+        // A not-yet-sealed block imposes no such constraint.
+        if (info.verifySealed && !localCopyMatchesSeal(blockId, info)) {
           releaseLock(blockId, Option(TaskContext.get()))
           return None
         }
@@ -1746,6 +1748,9 @@ private[spark] class BlockManager(
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
+      // Only a caller-requested checksum (the local-checkpoint seal path) subjects this block to
+      // the read-side seal self-check; a checksum computed only by the global switch does not.
+      info.verifySealed = computeChecksum
       // Size of the block in bytes
       var size = 0L
       if (level.useMemory) {

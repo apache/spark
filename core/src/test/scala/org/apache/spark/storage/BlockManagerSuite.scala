@@ -2567,8 +2567,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockId = RDDBlockId(21, 0)
     store.getOrElseUpdateRDDBlock(
       1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator)
-    // A checksum was recorded even though no seal was requested; sealRddChecksums finds it (0
-    // unchecksummed) rather than reporting the partition as uncovered.
+    // The block is not on the seal path (computeChecksum defaulted false), so even though it now
+    // carries a checksum, a local read serves it directly and is not opted into the read-side seal
+    // self-check - it is served with the block unsealed (no seal exists for it here).
+    assert(store.getLocalValues(blockId).isDefined)
+    // The recorded checksum still reaches the master, so if the RDD were later sealed it would be
+    // found (0 unchecksummed) rather than reported as an uncovered partition.
     assert(master.sealRddChecksums(21) === 0)
     assert(master.getSealedChecksum(blockId).isDefined)
   }
