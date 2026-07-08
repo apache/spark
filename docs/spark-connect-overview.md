@@ -107,7 +107,7 @@ library.
 First, download Spark from the
 [Download Apache Spark](https://spark.apache.org/downloads.html) page. Choose the
 latest release in  the release drop down at the top of the page. Then choose your package type, typically
-“Pre-built for Apache Hadoop 3.3 and later”, and click the link to download.
+“Pre-built for Apache Hadoop 3.5 and later”, and click the link to download.
 
 Now extract the Spark package you just downloaded on your computer, for example:
 
