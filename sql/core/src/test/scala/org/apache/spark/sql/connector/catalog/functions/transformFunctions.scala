@@ -630,3 +630,89 @@ object DeprecatedOkGeneralizedThrowsFunction
       otherParams: Array[Literal[_]]): Reducer[Int, Int] =
     throw new RuntimeException("boom from generalized overload")
 }
+
+/**
+ * The mirror of [[DeprecatedOkGeneralizedThrowsFunction]]: the generalized overload returns a
+ * reducer, the deprecated overload throws. Used to verify that under generalized-first dispatch the
+ * deprecated overload is NOT probed once the generalized one reduced (no "reducer threw" warning).
+ */
+object GeneralizedOkDeprecatedThrowsFunction
+    extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "generalized_ok_deprecated_throws"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getLong(1), input.getInt(0))
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] =
+    throw new RuntimeException("boom from deprecated overload")
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] =
+    if (otherFunc == GeneralizedOkDeprecatedThrowsFunction) BucketReducer(1) else null
+}
+
+/**
+ * A legacy connector: implements ONLY the deprecated int reducer (returns a reducer for any int)
+ * and not the generalized overload. Used to verify the isSingleInt null-guard under generalized-
+ * first dispatch: a typed-null int param must not reach the deprecated fallback, where
+ * null.asInstanceOf[Int] would fabricate a 0 this reducer would accept.
+ */
+object LegacyIntReducerFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "legacy_int_reducer"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(1)
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] =
+    if (otherFunc == LegacyIntReducerFunction) BucketReducer(1) else null
+}
+
+/**
+ * A dual-API connector whose GENERALIZED reducer returns null (deliberately not reducible) while
+ * its DEPRECATED int reducer WOULD reduce a single-int pair (gcd). Used to pin generalized-first
+ * dispatch: the generalized null is authoritative, so Spark must NOT fall back to the deprecated
+ * overload (which would otherwise co-partition).
+ */
+object DualApiGeneralizedNullFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "dual_api_generalized_null"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  // Generalized API: deliberately not reducible (returns null, not an exception).
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = null
+
+  // Deprecated int API: WOULD reduce via gcd -- a deprecated-first order would co-partition.
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    if (otherFunc == DualApiGeneralizedNullFunction) {
+      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+      if (gcd > 1 && gcd != thisNumBuckets) {
+        return BucketReducer(gcd)
+      }
+    }
+    null
+  }
+}

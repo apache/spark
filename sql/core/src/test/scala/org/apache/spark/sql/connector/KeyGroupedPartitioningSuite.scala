@@ -4503,17 +4503,29 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     assert(a.isCompatible(b), "aligned (col, lit) layout must remain reducible")
   }
 
-  test("SPARK-50593: deprecated reducer returning null falls back to the generalized overload") {
+  test("SPARK-50593: a dual-API connector reduces via the generalized overload") {
     // DualApiBucketFunction implements both overloads: the deprecated reducer(int, ...) returns
-    // null, while the generalized reducer(Literal[], ...) returns a valid GCD reducer. The dispatch
-    // tries the deprecated one first; a null there must fall through to the generalized overload
-    // (Option.orElse fires on None), not be mistaken for "not reducible".
+    // null, the generalized reducer(Literal[], ...) returns a valid GCD reducer. Generalized-first
+    // dispatch reduces via the generalized overload directly; the deprecated overload is not
+    // consulted (its null is irrelevant).
     val l = TransformExpression(DualApiBucketFunction, Seq(Literal(4), attr("id")))
     val r = TransformExpression(DualApiBucketFunction, Seq(Literal(2), attr("store_id")))
-    assert(l.isCompatible(r), "a null from the deprecated reducer must fall back to the new API")
+    assert(l.isCompatible(r), "the generalized overload must produce a reducer")
     val red = l.reducers(r)
-    assert(red.isDefined, "generalized reducer must be reached when deprecated returns null")
+    assert(red.isDefined, "generalized reducer must be reached")
     assert(red.get.asInstanceOf[Reducer[Integer, Integer]].reduce(3) == 1)
+  }
+
+  test("SPARK-50593: the generalized overload's null is authoritative, no deprecated fallback") {
+    // DualApiGeneralizedNullFunction's generalized reducer returns null (not reducible) for a
+    // single-int pair its deprecated reducer WOULD reduce (gcd). Under generalized-first dispatch
+    // the generalized null is authoritative: Spark must not fall back to the deprecated overload,
+    // so the pair is not reducible. (Deprecated-first would instead co-partition via gcd(4,2)=2.)
+    val l = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(DualApiGeneralizedNullFunction, Seq(Literal(2), attr("store_id")))
+    assert(l.reducers(r).isEmpty,
+      "a generalized null must not fall back to the deprecated overload")
+    assert(r.reducers(l).isEmpty, "symmetric")
   }
 
   test("SPARK-50593: a complex (non-scalar) literal param is not reducible") {
@@ -4577,22 +4589,108 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       "must not emit the 'implements no reducer' hint for an implemented-but-throwing reducer")
   }
 
-  test("SPARK-50593: generalized overload is not probed once the deprecated one yields a reducer") {
-    // The single-int dispatch tries the deprecated int reducer first and must fall back to the
-    // generalized overload lazily -- not invoke it when the deprecated one already returned a
-    // reducer. Here the deprecated reducer succeeds and the generalized one throws; SPJ must still
-    // succeed via the deprecated path with NO "reducer threw" warning (which an eager probe of the
-    // generalized overload would spuriously log on this hot planning path).
-    val l = TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(4), attr("id")))
-    val r =
-      TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
-    val appender = new LogAppender("generalized overload probed eagerly")
+  test("SPARK-50593: deprecated overload is not probed once the generalized one reduces") {
+    // Generalized-first dispatch: the generalized reducer is tried first, and the deprecated int
+    // overload must not be probed once it reduced. Here the generalized reducer succeeds and the
+    // deprecated one throws; SPJ must succeed via the generalized path with NO "reducer threw"
+    // warning (which an eager probe of the deprecated overload would spuriously log).
+    val l = TransformExpression(GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(
+      GeneralizedOkDeprecatedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val appender = new LogAppender("deprecated overload probed eagerly")
     withLogAppender(appender) {
-      assert(l.reducers(r).isDefined, "the deprecated reducer must still produce a reducer")
+      assert(l.reducers(r).isDefined, "the generalized reducer must produce a reducer")
     }
     assert(!appender.loggingEvents.map(_.getMessage.getFormattedMessage)
       .exists(_.contains("reducer threw an exception")),
-      "the generalized overload must not be probed (and throw) once the deprecated one succeeded")
+      "the deprecated overload must not be probed (and throw) once the generalized one reduced")
+  }
+
+  test("SPARK-50593: a throwing generalized overload is surfaced, not masked by the deprecated " +
+      "one") {
+    // DeprecatedOkGeneralizedThrowsFunction implements both: the generalized overload throws, the
+    // deprecated one would reduce. Generalized-first dispatch treats the generalized bug as
+    // authoritative -- it logs the exception and does NOT fall back to the deprecated overload, so
+    // the pair shuffles. (Deprecated-first would have silently reduced via the deprecated overload,
+    // masking the new-API bug.)
+    val l = TransformExpression(DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(4), attr("id")))
+    val r = TransformExpression(
+      DeprecatedOkGeneralizedThrowsFunction, Seq(Literal(2), attr("store_id")))
+    val appender = new LogAppender("generalized bug masked")
+    withLogAppender(appender) {
+      assert(l.reducers(r).isEmpty, "a throwing generalized overload must not fall back and reduce")
+    }
+    assert(appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .exists(_.contains("reducer threw an exception")), "the generalized bug must be surfaced")
+  }
+
+  test("SPARK-50593: a typed-null integer param is not routed to the deprecated int reducer") {
+    // LegacyIntReducerFunction implements ONLY the deprecated int reducer (accepts any int), so the
+    // generalized probe is Unimplemented and dispatch falls back to the deprecated overload. A
+    // typed-null IntegerType param must be excluded by isSingleInt from that fallback -- otherwise
+    // null.asInstanceOf[Int] fabricates a 0 the legacy reducer accepts, falsely co-partitioning
+    // null vs 0. So the pair must NOT be reducible.
+    val col = AttributeReference("id", IntegerType)()
+    val l = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
+    val r = TransformExpression(LegacyIntReducerFunction, Seq(Literal(null, IntegerType), col))
+    assert(l.reducers(r).isEmpty,
+      "a typed-null int param must not reach the deprecated int fallback")
+  }
+
+  test("SPARK-50593: a column whose type differs from the declared input type is not reducible " +
+      "(identity-vs-transform, exact-typed literal)") {
+    // Models a cross-side join `a = b` on ShortType keys: left is identity(a), right is
+    // truncate(b, 4). The literal slot matches the declared input type exactly, but the column does
+    // not -- identityReducer evals the transform (with the identity column substituted in), feeding
+    // it through SpecificInternalRow(inputTypes), so a ShortType column at an IntegerType-declared
+    // position would ClassCastException. argsMatchInputTypes checks the column too, so the pair is
+    // not reducible (shuffle). IntegerTruncateFunction declares (IntegerType, IntegerType).
+    val a = AttributeReference("a", ShortType)()   // left, identity side
+    val b = AttributeReference("b", ShortType)()   // right, transform's value column
+    val identity = physical.KeyedPartitioning(Seq(a), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(IntegerTruncateFunction, Seq(b, Literal(4)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(a)))
+    val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(b)))
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "a mismatched-type column must not be reducible via the identity-vs-transform eval path")
+  }
+
+  test("SPARK-50593: identityReducer validates the substituted identity column, not the " +
+      "transform's own column") {
+    // The transform's own column matches its declared input type, but the identity column actually
+    // evaluated (substituted in) does not. identityReducer must reject based on the substituted
+    // column -- what it evals -- else it builds a reducer that ClassCastExceptions at eval. (The
+    // planner's keyPositions normally forces the two columns to share a type; this builds the specs
+    // directly to pin identityReducer's own correctness.)
+    val idCol = AttributeReference("a", ShortType)()   // evaluated column: ShortType
+    val tCol = AttributeReference("b", StringType)()   // transform's column: matches declared type
+    val identity = physical.KeyedPartitioning(Seq(idCol), Seq.empty)
+    val truncated = physical.KeyedPartitioning(
+      Seq(TransformExpression(TruncateFunction, Seq(tCol, Literal(3)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(idCol)))
+    val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(tCol)))
+    assert(idSpec.reducers(trSpec).isEmpty,
+      "must validate the substituted identity column (ShortType), not the transform's own column")
+  }
+
+  test("SPARK-50593: an arity-flexible transform (children > declared inputTypes) is not " +
+      "reducible via the identity-vs-transform eval path") {
+    // ZeroOrOneParamFunction declares inputTypes() of length 1 but admits transforms with 2
+    // children (col + one literal). The eval path (identityReducer) feeds every child through
+    // ApplyFunctionExpression's SpecificInternalRow(inputTypes()) -- sized 1 -- so evaluating a
+    // 2-child transform would ArrayIndexOutOfBoundsException at reduce time. argsMatchInputTypes'
+    // exact-arity check rejects it, so the pair is not reducible (shuffle) instead of crashing.
+    // (The transform-vs-transform path keeps its mixed-arity flexibility -- see the zero-vs-one
+    // test below -- because it passes literals to the connector reducer and never evals.)
+    val col = AttributeReference("id", IntegerType)()
+    val identity = physical.KeyedPartitioning(Seq(col), Seq.empty)
+    val arityFlexible = physical.KeyedPartitioning(
+      Seq(TransformExpression(ZeroOrOneParamFunction, Seq(col, Literal(2)))), Seq.empty)
+    val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(col)))
+    val afSpec = physical.KeyedShuffleSpec(arityFlexible, physical.ClusteredDistribution(Seq(col)))
+    assert(idSpec.reducers(afSpec).isEmpty,
+      "a child beyond the declared arity must not reach the eval path (would AIOOBE)")
   }
 
   test("SPARK-50593: zero-param vs one-param transforms reach the reducer (no arity block)") {

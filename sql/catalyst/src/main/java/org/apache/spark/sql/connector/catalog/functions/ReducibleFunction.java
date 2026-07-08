@@ -77,10 +77,14 @@ public interface ReducibleFunction<I, O> {
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
    * Implementations must check each array's length before indexing into it.
    * <p>
-   * Returning {@code null} means "not reducible for these parameters". Throwing
-   * {@link UnsupportedOperationException} signals that this overload is not implemented (Spark then
-   * falls back to the deprecated single-int overload, silently); any other exception is logged by
-   * Spark and treated as not reducible (the join falls back to a shuffle).
+   * Returning {@code null} means "not reducible for these parameters" and is authoritative:
+   * Spark consults no other overload. Dispatch order: Spark tries this generalized overload
+   * first; only if it is not implemented (throws {@link UnsupportedOperationException}) and each
+   * side has a single non-null integer parameter does Spark fall back to the deprecated
+   * {@code reducer(int, ReducibleFunction, int)} overload. If every eligible overload throws
+   * {@link UnsupportedOperationException}, Spark logs an "implements no reducer" warning; any
+   * other exception is logged and the pair is treated as not reducible (the join falls back to a
+   * shuffle).
    * <p>
    * Examples:
    * <ul>

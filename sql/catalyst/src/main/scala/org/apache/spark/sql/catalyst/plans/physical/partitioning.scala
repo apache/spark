@@ -1263,23 +1263,26 @@ case class KeyedShuffleSpec(
    * decision: [[isExpressionCompatible]] derives the gate from it (`.isDefined`) and [[reducers]]
    * returns it, so the two cannot drift (a divergence would keep raw keys -> mis-join).
    *
-   * `t`'s literal params must match its declared input types -- evaluating it here skips Analyzer
-   * coercion, so a mismatched literal would crash. (`sameArgumentLayout` / `noComplexLiteralParams`
-   * don't apply: there is one transform, evaluated in-process, not handed across the reducer API.)
-   * `col` is the single leaf child (asserted in `keyPositions`), at position 0 in the row built.
+   * The reducer evals the transform with `col` substituted for its column, so it validates the
+   * SUBSTITUTED expression's arg types ([[TransformExpression.argsMatchInputTypes]]) -- not t's own
+   * -- keeping a type mismatch (e.g. a `ShortType` `col` at an `IntegerType` slot) from reaching
+   * eval and raising a `ClassCastException`.
    */
   private def identityReducer(
       col: AttributeReference, t: TransformExpression): Option[Reducer[_, _]] = {
-    if (!t.literalParamsMatchInputTypes) {
-      None
-    } else {
-      val reducerExpr = t.transform { case _: AttributeReference => col }
+    // `transform` preserves the root node type, so this is always a TransformExpression; the only
+    // real gate is argsMatchInputTypes on the substituted (identity) column -- see the doc above.
+    val reducerExpr =
+      t.transform { case _: AttributeReference => col }.asInstanceOf[TransformExpression]
+    if (reducerExpr.argsMatchInputTypes) {
       val boundExpr = BindReferences.bindReference(reducerExpr, AttributeSeq(Seq(col)))
       Some(new Reducer[Any, Any] {
         override def reduce(v: Any): Any = boundExpr.eval(new GenericInternalRow(Array[Any](v)))
         override def resultType(): DataType = reducerExpr.dataType
         override def displayName(): String = reducerExpr.toString
       })
+    } else {
+      None
     }
   }
 
