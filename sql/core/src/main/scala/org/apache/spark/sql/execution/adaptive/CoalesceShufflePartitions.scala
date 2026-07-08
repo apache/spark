@@ -110,7 +110,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         advisoryTargetSize = advisoryTargetSize,
         minNumPartitions = minNumPartitions,
         minPartitionSize = minPartitionSize,
-        coalesceGroup.shuffleStages.map(_.shuffleStage.id))
+        shuffleStageIds = coalesceGroup.shuffleStages.map(_.shuffleStage.id),
+        maxReducerPartitionsPerTask =
+          conf.getConf(SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK))
 
       if (newPartitionSpecs.nonEmpty) {
         coalesceGroup.shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
