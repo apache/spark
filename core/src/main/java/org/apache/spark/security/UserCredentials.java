@@ -20,6 +20,7 @@ package org.apache.spark.security;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -30,10 +31,14 @@ import org.apache.spark.annotation.DeveloperApi;
  * :: DeveloperApi ::
  * A bundle of {@link ServiceCredential} instances keyed by scheme (e.g., "s3a", "abfss").
  * <p>
+ * Scheme keys are normalized to lowercase ({@link Locale#ROOT}) at construction time, and
+ * lookups via {@link #forScheme(String)} are case-insensitive. If the supplied map contains
+ * keys that differ only by case, the last entry (in iteration order) wins.
+ * <p>
  * This class is transmitted to executors and does <b>not</b> contain any reference
  * to {@link UserContext} or raw identity tokens. It is immutable and {@link Serializable}.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 @DeveloperApi
 public final class UserCredentials implements Serializable {
@@ -44,12 +49,19 @@ public final class UserCredentials implements Serializable {
 
   /**
    * Constructs a new {@code UserCredentials} bundle.
+   * <p>
+   * Scheme keys are normalized to lowercase using {@link Locale#ROOT}. If multiple keys
+   * collide after lowercasing, the last entry in iteration order wins.
    *
    * @param credentials per-scheme map of service credentials (must not be null; defensively copied)
    */
   public UserCredentials(Map<String, ServiceCredential> credentials) {
     Objects.requireNonNull(credentials, "credentials must not be null");
-    this.credentials = new HashMap<>(credentials);
+    Map<String, ServiceCredential> normalized = new HashMap<>(credentials.size());
+    for (Map.Entry<String, ServiceCredential> entry : credentials.entrySet()) {
+      normalized.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
+    }
+    this.credentials = normalized;
   }
 
   /**
@@ -60,14 +72,15 @@ public final class UserCredentials implements Serializable {
   }
 
   /**
-   * Looks up the {@link ServiceCredential} for the given scheme.
+   * Looks up the {@link ServiceCredential} for the given scheme. The lookup is
+   * case-insensitive (the argument is lowercased with {@link Locale#ROOT}).
    *
-   * @param scheme the target scheme (e.g., "s3a")
+   * @param scheme the target scheme (e.g., "s3a", "S3A"); must not be null
    * @return an {@link Optional} containing the credential, or empty if no credential is registered
    */
   public Optional<ServiceCredential> forScheme(String scheme) {
     Objects.requireNonNull(scheme, "scheme must not be null");
-    return Optional.ofNullable(credentials.get(scheme));
+    return Optional.ofNullable(credentials.get(scheme.toLowerCase(Locale.ROOT)));
   }
 
   @Override

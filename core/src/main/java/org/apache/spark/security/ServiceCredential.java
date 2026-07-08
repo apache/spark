@@ -36,7 +36,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * <p>
  * This class is immutable and {@link Serializable}.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 @DeveloperApi
 public final class ServiceCredential implements Serializable {
@@ -85,7 +85,7 @@ public final class ServiceCredential implements Serializable {
   @Override
   public String toString() {
     String redactedProps;
-    if (properties == null || properties.isEmpty()) {
+    if (properties.isEmpty()) {
       redactedProps = "{}";
     } else {
       StringBuilder sb = new StringBuilder("{");

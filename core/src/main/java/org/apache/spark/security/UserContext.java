@@ -34,13 +34,14 @@ import org.apache.spark.annotation.DeveloperApi;
  * The {@code rawToken} field is always redacted in {@link #toString()} and excluded from
  * Jackson serialization.
  *
- * @since 5.0.0
+ * @since 4.3.0
  */
 @DeveloperApi
 public final class UserContext {
 
   private final String principal;
   private final String issuer;
+  @JsonIgnore
   private final String rawToken;
   private final Instant issuedAt;
   private final Instant expiresAt;

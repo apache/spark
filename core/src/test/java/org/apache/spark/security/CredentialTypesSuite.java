@@ -19,6 +19,7 @@ package org.apache.spark.security;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.NotSerializableException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.time.Instant;
@@ -35,6 +36,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CredentialTypesSuite {
@@ -110,6 +112,17 @@ public class CredentialTypesSuite {
         "Jackson serialization must contain the issuer");
     assertFalse(json.contains("rawToken"),
         "Jackson serialization must not contain a rawToken field");
+  }
+
+  @Test
+  public void testUserContextNotSerializable() {
+    UserContext ctx = new UserContext("user1", "https://idp.example.com", TOKEN, NOW, FUTURE);
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    assertThrows(NotSerializableException.class, () -> {
+      try (ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+        oos.writeObject(ctx);
+      }
+    });
   }
 
   // --- ServiceCredential tests ---
@@ -258,6 +271,25 @@ public class CredentialTypesSuite {
     assertEquals(a, b);
     assertEquals(a.hashCode(), b.hashCode());
     assertNotEquals(a, c);
+  }
+
+  @Test
+  public void testUserCredentialsForSchemeCaseInsensitive() {
+    ServiceCredential cred = new ServiceCredential(Map.of("key", "val"), FUTURE);
+    // Store with lowercase key, lookup with uppercase
+    UserCredentials uc1 = new UserCredentials(Map.of("s3a", cred));
+    assertTrue(uc1.forScheme("S3A").isPresent(), "Uppercase lookup should find lowercase key");
+    assertEquals(cred, uc1.forScheme("S3A").get());
+    assertTrue(uc1.forScheme("s3a").isPresent(), "Exact case lookup should still work");
+    assertTrue(uc1.forScheme("S3a").isPresent(), "Mixed case lookup should work");
+
+    // Store with uppercase key, lookup with lowercase
+    UserCredentials uc2 = new UserCredentials(Map.of("ABFSS", cred));
+    assertTrue(uc2.forScheme("abfss").isPresent(), "Lowercase lookup should find uppercase key");
+    assertEquals(cred, uc2.forScheme("abfss").get());
+
+    // Absent scheme still returns empty
+    assertFalse(uc2.forScheme("hdfs").isPresent(), "Absent scheme should return empty");
   }
 
   // --- Helpers ---
