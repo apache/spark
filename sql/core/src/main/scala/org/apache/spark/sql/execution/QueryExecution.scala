@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
@@ -29,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
+import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSessionBuilder}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NameParameterizedQuery, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
@@ -70,7 +71,7 @@ class QueryExecution(
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
-    val refreshPhaseEnabled: Boolean = true,
+    val refreshPhaseEnabled: Boolean = QueryExecution.refreshPhaseEnabledDefault(sparkSession),
     val queryId: UUID = UUIDv7Generator.generate(),
     // When a transaction is active, callers creating nested QueryExecution instances MUST pass
     // the enclosing QueryExecution's analyzer here to propagate the transaction context.
@@ -731,10 +732,23 @@ object QueryExecution {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
+  // The refresh phase reloads versioned DSv2 relations from the catalog so that the plan reflects
+  // the latest table state at execution time, accounting for the delay between analysis and the
+  // subsequent phases. Spark Connect re-resolves and re-analyzes every plan per request, so by the
+  // time a plan reaches execution it already references the latest table state and the refresh is a
+  // redundant catalog round-trip. It is therefore disabled by default in Connect and enabled by
+  // default in Classic, keyed off the session's [[SparkSessionBuilder.API_MODE_KEY]].
+  private[sql] def refreshPhaseEnabledDefault(sparkSession: SparkSession): Boolean = {
+    val apiMode = sparkSession.sessionState.conf
+      .getConfString(SparkSessionBuilder.API_MODE_KEY, SparkSessionBuilder.API_MODE_CLASSIC)
+      .trim.toLowerCase(Locale.ROOT)
+    apiMode != SparkSessionBuilder.API_MODE_CONNECT
+  }
+
   private[execution] def create(
       sparkSession: SparkSession,
       logical: LogicalPlan,
-      refreshPhaseEnabled: Boolean = true): QueryExecution = {
+      refreshPhaseEnabled: Boolean = refreshPhaseEnabledDefault(sparkSession)): QueryExecution = {
     new QueryExecution(
       sparkSession,
       logical,
@@ -932,7 +946,7 @@ object QueryExecution {
       sparkSession: SparkSession,
       command: LogicalPlan,
       name: String,
-      refreshPhaseEnabled: Boolean = true,
+      refreshPhaseEnabled: Boolean = refreshPhaseEnabledDefault(sparkSession),
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
       analyzerOpt: Option[Analyzer] = None)
