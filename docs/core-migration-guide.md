@@ -32,6 +32,8 @@ license: |
 
 - Since Spark 4.3, the default value of `spark.ui.xXssProtection` has been changed from `1; mode=block` to `0`. The XSS Auditor has been removed from Chrome and Edge, and was never implemented in Firefox. It can introduce side-channel vulnerabilities in browsers that still support it (Safari). To restore the legacy behavior, you can set `spark.ui.xXssProtection` to `1; mode=block`. For modern XSS protection, consider enabling `spark.ui.contentSecurityPolicy.enabled`.
 
+- Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true`. When CSP is disabled (the default), `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value. To allow framing from a specific origin, set both `spark.ui.contentSecurityPolicy.enabled=true` and `spark.ui.allowFramingFrom=<uri>`.
+
 ## Upgrading from Core 4.1 to 4.2
 
 - Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.
