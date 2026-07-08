@@ -71,13 +71,22 @@ class QueryExecution(
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
-    val refreshPhaseEnabled: Boolean = QueryExecution.refreshPhaseEnabledDefault(sparkSession),
+    // Whether the refresh phase runs. When left unset it defaults based on the session's
+    // `spark.api.mode`: enabled in Classic and disabled in Connect. A default value that
+    // references `sparkSession` cannot be expressed directly on this parameter, so callers that
+    // want the mode-based default omit it and it is resolved in [[refreshPhaseEnabled]] below.
+    refreshPhaseEnabledOpt: Option[Boolean] = None,
     val queryId: UUID = UUIDv7Generator.generate(),
     // When a transaction is active, callers creating nested QueryExecution instances MUST pass
     // the enclosing QueryExecution's analyzer here to propagate the transaction context.
     // Omitting it causes the nested QE to use sessionState.analyzer, which has no knowledge
     // of the transaction and will load tables outside the transaction's catalog scope.
     val analyzerOpt: Option[Analyzer] = None) extends LookupCatalog {
+
+  // Resolve the refresh phase flag: honor an explicit value if provided, otherwise fall back to
+  // the mode-based default (enabled in Classic, disabled in Connect).
+  val refreshPhaseEnabled: Boolean =
+    refreshPhaseEnabledOpt.getOrElse(QueryExecution.refreshPhaseEnabledDefault(sparkSession))
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -748,13 +757,13 @@ object QueryExecution {
   private[execution] def create(
       sparkSession: SparkSession,
       logical: LogicalPlan,
-      refreshPhaseEnabled: Boolean = refreshPhaseEnabledDefault(sparkSession)): QueryExecution = {
+      refreshPhaseEnabled: Boolean = true): QueryExecution = {
     new QueryExecution(
       sparkSession,
       logical,
       mode = CommandExecutionMode.ALL,
       shuffleCleanupModeOpt = Some(determineShuffleCleanupMode(sparkSession.sessionState.conf)),
-      refreshPhaseEnabled = refreshPhaseEnabled)
+      refreshPhaseEnabledOpt = Some(refreshPhaseEnabled))
   }
 
   /**
@@ -946,7 +955,7 @@ object QueryExecution {
       sparkSession: SparkSession,
       command: LogicalPlan,
       name: String,
-      refreshPhaseEnabled: Boolean = refreshPhaseEnabledDefault(sparkSession),
+      refreshPhaseEnabled: Boolean = true,
       mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
       shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None,
       analyzerOpt: Option[Analyzer] = None)
@@ -956,7 +965,7 @@ object QueryExecution {
       command,
       mode = mode,
       shuffleCleanupModeOpt = shuffleCleanupModeOpt,
-      refreshPhaseEnabled = refreshPhaseEnabled,
+      refreshPhaseEnabledOpt = Some(refreshPhaseEnabled),
       analyzerOpt = analyzerOpt)
     val result = QueryExecution.withInternalError(s"Executed $name failed.") {
       SQLExecution.withNewExecutionId(qe, Some(name)) {
