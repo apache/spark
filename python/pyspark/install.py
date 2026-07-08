@@ -182,6 +182,11 @@ def _extract_tar(tar: tarfile.TarFile, package_name: str, dest: str) -> None:
     strip ``..`` segments, so a crafted member could otherwise resolve outside
     ``dest``. Any member whose resolved destination escapes ``dest`` is
     rejected instead of extracted.
+
+    Note: tarfile's ``filter="data"`` (PEP 706) rejects such members natively and
+    would replace this manual check, but it is only generally available from
+    Python 3.12.0 (backported to 3.11.4+), so we keep the explicit check while
+    Spark still supports Python 3.11.
     """
     dest_root = os.path.realpath(dest)
     for member in tar.getmembers():
