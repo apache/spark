@@ -987,7 +987,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // codegen is disabled for it (`supportCodegenFailureReason` reports "partitioning-aware"):
   // the per-partition key descriptor is consumed by a downstream `GroupPartitionsExec`, and
   // keeping these unions out of whole-stage codegen matches the `HashPartitioning` union case.
-  private[spark] def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
+  private[sql] def isPlainUnion: Boolean = outputPartitioning.isInstanceOf[UnknownPartitioning]
 
   // Per-child projection from the child's output to the union's output. The wrapped
   // child is always the source `Attribute` (deterministic by construction); the Alias

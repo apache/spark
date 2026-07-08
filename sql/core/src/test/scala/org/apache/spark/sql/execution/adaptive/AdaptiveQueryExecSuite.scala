@@ -3590,7 +3590,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-57996: CoalesceShufflePartitions should coalesces partitioning-aware UnionExec " +
+  test("SPARK-57996: CoalesceShufflePartitions should coalesce partitioning-aware UnionExec " +
     "children as a single group") {
     // A UNION ALL of two aggregates on the same key, feeding a downstream aggregate on that key.
     // With UNION_OUTPUT_PARTITIONING on, the union reports the shared HashPartitioning that the
