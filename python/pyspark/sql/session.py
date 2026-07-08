@@ -531,12 +531,14 @@ class SparkSession(SparkConversionMixin):
                             ).lower() in ("1", "true")
 
                             if url.startswith("local") and reuse_local:
+                                from pyspark.sql.connect.local_server import (
+                                    reuse_or_start_local_connect_server,
+                                )
+
                                 # Opt-in: reconnect to a persistent local Connect server (starting
                                 # one on the first run) instead of booting a fresh in-process server
-                                # every process. See `_reuse_or_start_local_connect_server`.
-                                url = RemoteSparkSession._reuse_or_start_local_connect_server(
-                                    url, opts
-                                )
+                                # every process. See `pyspark.sql.connect.local_server`.
+                                url = reuse_or_start_local_connect_server(url, opts)
                                 for k in (
                                     "spark.local.connect.reuse",
                                     "spark.local.connect.server.port",

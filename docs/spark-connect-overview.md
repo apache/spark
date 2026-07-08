@@ -336,10 +336,10 @@ This is **off by default**; nothing changes unless you opt in. A few details:
   concurrent startups can race; callers that lose the race reconnect to the server recorded in the
   discovery file.
 - The server self-terminates once it has been idle for `spark.local.connect.server.idleTimeout`
-  seconds (default `3600`; set `0` to disable). To stop it sooner, call
-  `SparkSession._stop_local_connect_server()` or terminate the `pid` recorded in the discovery file.
-  If an old discovery file is rejected after a Spark upgrade, stop the old recorded `pid` if you do
-  not want to wait for the idle timeout.
+  seconds (default `1800`, i.e. 30 minutes; set `0` to disable). To stop it sooner, run
+  `python -m pyspark.sql.connect.local_server --stop` or terminate the `pid` recorded in the
+  discovery file. If an old discovery file is rejected after a Spark upgrade, stop the old recorded
+  `pid` if you do not want to wait for the idle timeout.
 
 ## Use Spark Connect in standalone applications
 
