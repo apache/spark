@@ -130,6 +130,19 @@ class GraphElementRegistryTest(unittest.TestCase):
         )
 
 
+    def test_unsupported_pipelines_dataset_type_error(self):
+        """Regression test: UNSUPPORTED_PIPELINES_DATASET_TYPE should raise PySparkTypeError,
+        not AssertionError due to mismatched message parameter names."""
+        from pyspark.errors import PySparkTypeError
+
+        err = PySparkTypeError(
+            errorClass="UNSUPPORTED_PIPELINES_DATASET_TYPE",
+            messageParameters={"dataset_type": "UnsupportedClass"},
+        )
+        self.assertEqual(err.getCondition(), "UNSUPPORTED_PIPELINES_DATASET_TYPE")
+        self.assertIn("UnsupportedClass", err.getMessage())
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
