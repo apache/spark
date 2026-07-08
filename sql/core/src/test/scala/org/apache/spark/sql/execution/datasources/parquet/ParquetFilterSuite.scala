@@ -29,10 +29,13 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
+import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.filter2.predicate.Operators.{Column => _, Eq, Gt, GtEq, In => FilterIn, Lt, LtEq, NotEq, UserDefinedByInstance}
 import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetOutputFormat}
+import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -2825,6 +2828,59 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       assert(s.contains("v.typed_value.a.typed_value"), s"Expected leaf column in $s")
       assert(s.contains("v.typed_value.a.value") && s.contains("v.value"),
         s"Expected residual guards in $s")
+    }
+  }
+
+  test("SPARK-53368: filter pushdown - TIME(MICROS, isAdjustedToUTC=true)") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 t(TIME(MICROS,true));
+        |}""".stripMargin)
+
+    def secs(s: Int): LocalTime = LocalTime.ofSecondOfDay(s)
+    def secsLit(s: Int): Literal = Literal(secs(s))
+
+    withTempDir { dir =>
+      val tablePath = new Path(dir.getCanonicalPath, "part-0.parquet")
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val writer = ExampleParquetWriter.builder(tablePath)
+        .withWriterVersion(PARQUET_1_0)
+        .withType(schema)
+        .withConf(hadoopConf)
+        .build()
+      (1 to 4).foreach { i =>
+        val record = new SimpleGroup(schema)
+        record.add(0, secs(i).toNanoOfDay / 1000L)
+        writer.write(record)
+      }
+      writer.close()
+
+      withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+        implicit val df: DataFrame = spark.read.parquet(dir.getCanonicalPath)
+
+        val tAttr = df("t").expr
+        assert(df("t").expr.dataType === TimeType())
+
+        checkFilterPredicate(tAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+        checkFilterPredicate(tAttr.isNotNull, classOf[NotEq[_]],
+          (1 to 4).map(i => Row(secs(i))))
+
+        checkFilterPredicate(tAttr === secsLit(1), classOf[Eq[_]], secs(1))
+        checkFilterPredicate(tAttr =!= secsLit(1), classOf[NotEq[_]],
+          (2 to 4).map(i => Row(secs(i))))
+
+        checkFilterPredicate(tAttr < secsLit(2), classOf[Lt[_]], secs(1))
+        checkFilterPredicate(tAttr > secsLit(3), classOf[Gt[_]], secs(4))
+        checkFilterPredicate(tAttr <= secsLit(1), classOf[LtEq[_]], secs(1))
+        checkFilterPredicate(tAttr >= secsLit(4), classOf[GtEq[_]], secs(4))
+
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> "3") {
+          checkFilterPredicate(
+            In(tAttr, Array(2, 3, 4, 5).map(secsLit).toImmutableArraySeq),
+            classOf[FilterIn[_]],
+            Seq(Row(secs(2)), Row(secs(3)), Row(secs(4))))
+        }
+      }
     }
   }
 }
