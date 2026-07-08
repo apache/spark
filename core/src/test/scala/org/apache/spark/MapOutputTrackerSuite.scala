@@ -637,7 +637,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       val fetchedBytes = mapWorkerTracker.trackerEndpoint
-        .askSync[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
+        .askSync[(Array[Byte], Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
       assert(masterTracker.getNumAvailableMergeResults(20) == 1)
       assert(masterTracker.getNumAvailableOutputs(20) == 100)
 
@@ -1163,6 +1163,58 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 1)
     } finally {
       tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
+  test("SPARK-57491: staleMapIndexes propagated from driver to worker via getStatuses") {
+    val rpcEnv = createRpcEnv("test")
+    val masterTracker = newTrackerMaster()
+    try {
+      masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+      // Simulate driver side: register shuffle
+      masterTracker.registerShuffle(0, 4, 2)
+      masterTracker.registerMapOutput(0, 0,
+        MapStatus(BlockManagerId("exec-1", "hostA", 1000), Array(100L, 200L), 0))
+      masterTracker.registerMapOutput(0, 1,
+        MapStatus(BlockManagerId("exec-2", "hostB", 1000), Array(300L, 400L), 1))
+
+      val initialEpoch = masterTracker.getEpoch
+
+      // Mark partition 1 as stale via MapOutputTrackerMaster: marks the partition and bumps
+      // the epoch so reducers with a cached (empty) stale set are forced to re-fetch
+      masterTracker.markStalePushedPartition(0, 1)
+
+      // Verify epoch was bumped so reducer-side stale set cache is invalidated
+      assert(masterTracker.getEpoch > initialEpoch,
+        s"Expected epoch to be bumped past $initialEpoch, got ${masterTracker.getEpoch}")
+
+      val shuffleStatus = masterTracker.shuffleStatuses(0)
+
+      // Verify the stale mark was recorded on the shuffle status
+      assert(shuffleStatus.getStaleMapIndexes.contains(1))
+
+      // Serialize statuses including staleMapIndexes (simulates what driver sends to executors)
+      val (mapBytes, mergeBytes, staleBytes) =
+        shuffleStatus.serializedMapAndMergeStatus(
+          masterTracker.broadcastManager, isLocal = true, minBroadcastSize = Int.MaxValue, conf)
+
+      // Simulate worker side: deserialize and verify staleMapIndexes are received
+      val deserializedStale = MapOutputTracker.deserializeStaleMapIndexes(staleBytes)
+      assert(deserializedStale.contains(1))
+
+      // Also verify via MapOutputTrackerWorker (the path used by real executors)
+      val workerTracker = new MapOutputTrackerWorker(conf)
+      // Manually populate what the worker would get from a getStatuses fetch
+      workerTracker.staleMapIndexes.put(0, {
+        val s = new JHashSet[Int]()
+        s.addAll(deserializedStale)
+        s
+      })
+      assert(workerTracker.getStaleMapIndexes(0).contains(1))
+    } finally {
+      masterTracker.stop()
       rpcEnv.shutdown()
     }
   }

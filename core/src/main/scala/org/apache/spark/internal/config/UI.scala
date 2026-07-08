@@ -149,6 +149,17 @@ private[spark] object UI {
       .booleanConf
       .createWithDefault(false)
 
+  val UI_CONTENT_SECURITY_POLICY_FRAME_ANCESTORS_ENABLED =
+    ConfigBuilder("spark.ui.contentSecurityPolicy.frameAncestors.enabled")
+      .doc("Whether to include the frame-ancestors directive in the CSP header " +
+        "when spark.ui.contentSecurityPolicy.enabled is true. When enabled, the " +
+        "frame-ancestors directive enforces the spark.ui.allowFramingFrom setting. " +
+        "This setting is ignored when spark.ui.contentSecurityPolicy.enabled is false.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val UI_REQUEST_HEADER_SIZE = ConfigBuilder("spark.ui.requestHeaderSize")
     .doc("Value for HTTP request header size in bytes.")
     .version("2.2.3")

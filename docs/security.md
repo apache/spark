@@ -348,8 +348,14 @@ The following options control the authentication of Web UIs:
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
   <td><code>SAMEORIGIN</code></td>
-  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. Requires <code>spark.ui.contentSecurityPolicy.enabled=true</code> to take effect. When CSP is disabled, <code>X-Frame-Options: SAMEORIGIN</code> is used regardless of this setting.</td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.contentSecurityPolicy.frameAncestors.enabled</code></td>
+  <td><code>true</code></td>
+  <td>Whether to include the <code>frame-ancestors</code> directive in the CSP header when <code>spark.ui.contentSecurityPolicy.enabled=true</code>. When enabled, the <code>frame-ancestors</code> directive enforces the <code>spark.ui.allowFramingFrom</code> setting. This setting is ignored when CSP is disabled.</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
