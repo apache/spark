@@ -55,7 +55,8 @@ class InlineCTESuite extends PlanTest {
   test("SPARK-58006: forceSkipInline keeps a single-reference deterministic CTE") {
     // A single-reference deterministic CTE is normally inlined, but `forceSkipInline` should
     // keep it materialized in the `WithCTE` node.
-    val cteDef = CTERelationDef(OneRowRelation().select(1.as("a")), forceSkipInline = true)
+    val cteDef = CTERelationDef(
+      TestRelation(Seq($"a".int)).select($"a"), forceSkipInline = true)
     val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
     val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
     val optimized = Optimize.execute(plan)
@@ -65,7 +66,7 @@ class InlineCTESuite extends PlanTest {
 
   test("SPARK-58006: forceSkipInline is inlined normally when not set") {
     // The same single-reference deterministic CTE is inlined when `forceSkipInline` is false.
-    val cteDef = CTERelationDef(OneRowRelation().select(1.as("a")))
+    val cteDef = CTERelationDef(TestRelation(Seq($"a".int)).select($"a"))
     val cteRef = CTERelationRef(cteDef.id, cteDef.resolved, cteDef.output, cteDef.isStreaming)
     val plan = WithCTE(cteRef.select($"a"), Seq(cteDef)).analyze
     val optimized = Optimize.execute(plan)
@@ -94,7 +95,7 @@ class InlineCTESuite extends PlanTest {
     // outer-scope reference (nested correlation), which also cannot cross the CTE boundary.
     val relation = TestRelation(Seq($"a".int))
     val subquery = ScalarSubquery(
-      OneRowRelation().select(1.as("c")),
+      TestRelation(Seq($"c".int)).select($"c"),
       outerAttrs = Seq(OuterScopeReference($"a".int)))
     val cteChild = relation.select(subquery.as("s"))
     val cteDef = CTERelationDef(cteChild, forceSkipInline = true)
