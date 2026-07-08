@@ -43,7 +43,11 @@ object MimaExcludes {
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
-      "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel")
+      "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-57987] Add desc field to the SQL REST API Node case class
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
   )
 
   // Exclude rules for 4.2.x from 4.1.0
