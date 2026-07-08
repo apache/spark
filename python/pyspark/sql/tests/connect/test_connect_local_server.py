@@ -32,6 +32,7 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 
 if should_test_connect:
     from pyspark.sql import SparkSession as PySparkSession
+    from pyspark.sql.connect import local_server
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.version import __version__
 
@@ -58,11 +59,11 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         try:
             # Only stop a real, separately-spawned server. The discovery-logic unit tests fabricate
             # discovery files that point at this very process, which must never be signalled.
-            disc = RemoteSparkSession._read_local_connect_discovery()
-            if disc is not None and disc.get("pid") != os.getpid():
-                port = int(disc["port"])
-                RemoteSparkSession._stop_local_connect_server()
-                # _stop_local_connect_server only signals the daemon and returns; wait for the JVM
+            disc = local_server._read_discovery()
+            if disc is not None and disc["pid"] != os.getpid():
+                port = disc["port"]
+                local_server.stop_local_connect_server()
+                # stop_local_connect_server only signals the daemon and returns; wait for the JVM
                 # to actually release the port so the next test starts from a clean slate.
                 self._wait_port_closed(disc["host"], port)
         finally:
@@ -78,22 +79,22 @@ class LocalConnectServerReuseTests(unittest.TestCase):
     # -- discovery / reuse-decision logic (no real server) ----------------------------------------
 
     def test_discovery_path_honors_override(self) -> None:
-        self.assertEqual(RemoteSparkSession._local_connect_discovery_path(), self._discovery)
+        self.assertEqual(local_server._discovery_path(), self._discovery)
         os.environ.pop("SPARK_LOCAL_CONNECT_DISCOVERY")
         self.assertTrue(
-            RemoteSparkSession._local_connect_discovery_path().endswith(
-                os.path.join(".spark", "connect-local.json")
-            )
+            local_server._discovery_path().endswith(os.path.join(".spark", "connect-local.json"))
         )
 
     def test_read_discovery_missing_or_malformed(self) -> None:
-        self.assertIsNone(RemoteSparkSession._read_local_connect_discovery())
+        self.assertIsNone(local_server._read_discovery())
         with open(self._discovery, "w") as f:
             f.write("not json")
-        self.assertIsNone(RemoteSparkSession._read_local_connect_discovery())
+        self.assertIsNone(local_server._read_discovery())
         with open(self._discovery, "w") as f:
             json.dump({"host": "localhost"}, f)  # missing required keys
-        self.assertIsNone(RemoteSparkSession._read_local_connect_discovery())
+        self.assertIsNone(local_server._read_discovery())
+        self._write_discovery(pid="not-a-pid")  # all keys present, but pid is not an int
+        self.assertIsNone(local_server._read_discovery())
 
     def _write_discovery(self, **overrides) -> dict:
         disc = {
@@ -110,12 +111,12 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     def test_not_reusable_on_version_mismatch(self) -> None:
         disc = self._write_discovery(spark_version="0.0.0-not-this-build")
-        self.assertFalse(RemoteSparkSession._local_connect_server_is_reusable(disc))
+        self.assertFalse(local_server._server_is_reusable(disc))
 
     def test_not_reusable_on_dead_pid(self) -> None:
         # PID 2**31 - 1 is effectively guaranteed not to exist.
         disc = self._write_discovery(pid=2**31 - 1, port=1)
-        self.assertFalse(RemoteSparkSession._local_connect_server_is_reusable(disc))
+        self.assertFalse(local_server._server_is_reusable(disc))
 
     def test_reusable_when_alive_and_listening(self) -> None:
         # A live listening socket owned by this (alive) process with a matching version is reusable.
@@ -125,31 +126,60 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             listener.listen(1)
             port = listener.getsockname()[1]
             disc = self._write_discovery(port=port)
-            self.assertTrue(RemoteSparkSession._local_connect_server_is_reusable(disc))
+            self.assertTrue(local_server._server_is_reusable(disc))
         finally:
             listener.close()
         # Once the socket is closed the port is no longer reachable, so it is not reusable.
-        self.assertFalse(RemoteSparkSession._local_connect_server_is_reusable(disc))
+        self.assertFalse(local_server._server_is_reusable(disc))
+
+    def test_pid_probe_is_skipped_on_windows(self) -> None:
+        """The pid liveness probe must never run on Windows.
+
+        There ``os.kill(pid, 0)`` does not probe the process -- it unconditionally *terminates*
+        it via TerminateProcess -- so the reuse check would kill the very server it is examining.
+        """
+        from unittest import mock
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            listener.bind(("localhost", 0))
+            listener.listen(1)
+            disc = self._write_discovery(port=listener.getsockname()[1])
+            with mock.patch.object(os, "name", "nt"), mock.patch.object(os, "kill") as kill:
+                self.assertTrue(local_server._server_is_reusable(disc))
+                kill.assert_not_called()
+        finally:
+            listener.close()
 
     def test_stop_when_no_server_is_safe(self) -> None:
-        self.assertFalse(RemoteSparkSession._stop_local_connect_server())
+        self.assertFalse(local_server.stop_local_connect_server())
 
     def test_stop_signals_recorded_server_group(self) -> None:
+        from unittest import mock
+
         self._write_discovery(pid=12345)
         calls = []
-        old_signal = RemoteSparkSession._signal_local_connect_server
 
         def fake_signal(pid, sig):
             calls.append((pid, sig))
             return True
 
-        try:
-            RemoteSparkSession._signal_local_connect_server = staticmethod(fake_signal)
-            self.assertTrue(RemoteSparkSession._stop_local_connect_server())
-            self.assertEqual(calls, [(12345, signal.SIGTERM)])
-            self.assertFalse(os.path.exists(self._discovery))
-        finally:
-            RemoteSparkSession._signal_local_connect_server = old_signal
+        with mock.patch.object(local_server, "_signal_server", fake_signal):
+            self.assertTrue(local_server.stop_local_connect_server())
+        self.assertEqual(calls, [(12345, signal.SIGTERM)])
+        self.assertFalse(os.path.exists(self._discovery))
+
+    def test_stop_cli_reports_when_no_server(self) -> None:
+        """`python -m pyspark.sql.connect.local_server --stop` is safe with nothing running."""
+        result = subprocess.run(
+            [sys.executable, "-m", "pyspark.sql.connect.local_server", "--stop"],
+            env=dict(os.environ),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("No running persistent local Spark Connect server", result.stdout)
 
     @unittest.skipUnless(os.name == "posix", "process groups are POSIX-only")
     def test_signal_group_kills_only_session_leaders(self) -> None:
@@ -168,9 +198,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         try:
             self.assertNotEqual(os.getpgid(child.pid), child.pid)
             with mock.patch("os.killpg") as killpg, mock.patch("os.kill") as kill:
-                self.assertTrue(
-                    RemoteSparkSession._signal_local_connect_server(child.pid, signal.SIGTERM)
-                )
+                self.assertTrue(local_server._signal_server(child.pid, signal.SIGTERM))
                 killpg.assert_not_called()
                 kill.assert_called_once_with(child.pid, signal.SIGTERM)
         finally:
@@ -181,9 +209,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         try:
             self.assertEqual(os.getpgid(leader.pid), leader.pid)
             with mock.patch("os.killpg") as killpg, mock.patch("os.kill") as kill:
-                self.assertTrue(
-                    RemoteSparkSession._signal_local_connect_server(leader.pid, signal.SIGTERM)
-                )
+                self.assertTrue(local_server._signal_server(leader.pid, signal.SIGTERM))
                 killpg.assert_called_once_with(leader.pid, signal.SIGTERM)
                 kill.assert_not_called()
         finally:
@@ -191,7 +217,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             leader.communicate()
 
     def test_reuse_from_discovery_none_when_absent(self) -> None:
-        self.assertIsNone(RemoteSparkSession._reuse_from_discovery())
+        self.assertIsNone(local_server._reuse_from_discovery())
 
     def test_local_port_available(self) -> None:
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -199,14 +225,14 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             listener.bind(("localhost", 0))
             listener.listen(1)
             taken = listener.getsockname()[1]
-            self.assertFalse(RemoteSparkSession._local_port_available(taken))
+            self.assertFalse(local_server._port_available(taken))
         finally:
             listener.close()
         # The port is free again once the listener is closed.
-        self.assertTrue(RemoteSparkSession._local_port_available(taken))
+        self.assertTrue(local_server._port_available(taken))
 
     def test_server_conf_seeds_user_confs_and_drops_control_keys(self) -> None:
-        """_local_connect_server_conf keeps user startup confs but not keys the daemon controls."""
+        """_seed_conf keeps user startup confs but not keys the daemon controls."""
         opts = {
             "spark.sql.warehouse.dir": "/tmp/wh",
             "spark.jars.packages": "org.example:lib:1.0",
@@ -218,7 +244,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             "spark.local.connect.server.port": "15002",
             "spark.local.connect.server.idleTimeout": "60",
         }
-        conf = RemoteSparkSession._local_connect_server_conf(opts)
+        conf = local_server._seed_conf(opts)
         self.assertEqual(conf.get("spark.sql.warehouse.dir"), "/tmp/wh")
         self.assertEqual(conf.get("spark.jars.packages"), "org.example:lib:1.0")
         for dropped in (
@@ -233,13 +259,28 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             self.assertNotIn(dropped, conf)
 
     def test_start_lock_roundtrip(self) -> None:
-        """Acquiring and releasing the start-up lock creates the lock file and does not error."""
-        fd = RemoteSparkSession._acquire_local_connect_start_lock()
-        try:
-            if fd is not None:  # None only where fcntl is unavailable (e.g. Windows)
-                self.assertTrue(os.path.exists(self._discovery + ".lock"))
-        finally:
-            RemoteSparkSession._release_local_connect_start_lock(fd)
+        """Entering and exiting the start-up lock creates the lock file and does not error."""
+        with local_server._start_lock():
+            try:
+                import fcntl  # noqa: F401
+            except ImportError:
+                # Locking is a no-op without fcntl; entering the context is all we can assert.
+                return
+            self.assertTrue(os.path.exists(self._discovery + ".lock"))
+
+    @unittest.skipUnless(os.name == "posix", "the removal guard needs fcntl")
+    def test_remove_discovery_skipped_while_start_lock_held(self) -> None:
+        """Daemon shutdown must not delete the discovery file while a launcher holds the lock.
+
+        A held start-up lock means another process is publishing a new server; removing the file
+        in that window could delete the newcomer's entry (see _remove_discovery_if_ours).
+        """
+        self._write_discovery(pid=os.getpid())
+        with local_server._start_lock():
+            local_server._remove_discovery_if_ours(self._discovery)
+            self.assertTrue(os.path.exists(self._discovery))
+        local_server._remove_discovery_if_ours(self._discovery)
+        self.assertFalse(os.path.exists(self._discovery))
 
     # -- end-to-end: start a real detached server, reconnect to it, verify isolation --------------
 
@@ -275,7 +316,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             )
             self.assertEqual(spark.range(2).count(), 2)
 
-            disc = RemoteSparkSession._read_local_connect_discovery()
+            disc = local_server._read_discovery()
             self.assertIsNotNone(disc)
             self.assertEqual(disc["spark_version"], __version__)
             self.assertNotEqual(disc["pid"], os.getpid())
@@ -284,8 +325,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 spark.stop()
 
     def test_concurrent_startup_reuses_one_server(self) -> None:
-        script = textwrap.dedent(
-            """
+        script = textwrap.dedent("""
             import json
             import os
 
@@ -303,8 +343,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 print(json.dumps({"count": count, "pid": disc["pid"], "port": disc["port"]}))
             finally:
                 spark.stop()
-            """
-        )
+            """)
         env = dict(os.environ)
         env["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery
         env["SPARK_LOCAL_CONNECT_REUSE"] = "1"
@@ -339,10 +378,10 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     def test_start_reuse_and_session_isolation(self) -> None:
         # First call starts a detached persistent server and records it in the discovery file.
-        endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", {})
+        endpoint = local_server.reuse_or_start_local_connect_server("local[2]", {})
         self.assertTrue(endpoint.startswith("sc://localhost:"))
 
-        disc = RemoteSparkSession._read_local_connect_discovery()
+        disc = local_server._read_discovery()
         self.assertIsNotNone(disc)
         self.assertEqual(disc["spark_version"], __version__)
         self.assertEqual(os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN"), disc["token"])
@@ -351,9 +390,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         s1 = s2 = None
         try:
             # A second call reuses the running server: same endpoint, no new process spawned.
-            endpoint2 = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", {})
+            endpoint2 = local_server.reuse_or_start_local_connect_server("local[2]", {})
             self.assertEqual(endpoint2, endpoint)
-            self.assertEqual(RemoteSparkSession._read_local_connect_discovery()["pid"], first_pid)
+            self.assertEqual(local_server._read_discovery()["pid"], first_pid)
 
             # Two independent client connections to the same server run real queries...
             s1 = RemoteSparkSession.builder.remote(endpoint).create()
@@ -372,8 +411,8 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 self._release(s2)
 
         # Stopping signals the server and removes the discovery file.
-        self.assertTrue(RemoteSparkSession._stop_local_connect_server())
-        self.assertIsNone(RemoteSparkSession._read_local_connect_discovery())
+        self.assertTrue(local_server.stop_local_connect_server())
+        self.assertIsNone(local_server._read_discovery())
         # The server should stop accepting connections shortly afterwards. (We check the port rather
         # than the pid: the detached server is a child of this long-lived test process, so once it
         # exits it lingers as an unreaped zombie for which os.kill(pid, 0) still succeeds.)
@@ -387,7 +426,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         """A start-up conf passed by the first caller reaches the daemon's SparkConf."""
         warehouse = os.path.join(self._tmpdir, "seeded-wh")
         opts = {"spark.sql.warehouse.dir": warehouse}
-        endpoint = RemoteSparkSession._reuse_or_start_local_connect_server("local[2]", opts)
+        endpoint = local_server.reuse_or_start_local_connect_server("local[2]", opts)
         spark = None
         try:
             spark = RemoteSparkSession.builder.remote(endpoint).create()
@@ -433,15 +472,14 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
         Reproduces the CI failure mode of test_terminate_reaps_daemon_and_jvm: the daemon exits
         on SIGTERM promptly while its JVM is still shutting down (or wedged) past the grace
-        period. _terminate_local_connect_server must not return while the group has live members.
+        period. _terminate_server must not return while the group has live members.
         """
         if shutil.which("ps") is None:
             self.skipTest("ps is needed to inspect process group members")
 
         # A session leader that exits on SIGTERM after spawning a SIGTERM-immune child into its
         # process group -- the child stands in for a JVM that outlives the daemon.
-        leader_prog = textwrap.dedent(
-            """
+        leader_prog = textwrap.dedent("""
             import signal
             import subprocess
             import sys
@@ -460,8 +498,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             print("pid:%d" % child.pid, flush=True)
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
             time.sleep(600)
-            """
-        )
+            """)
         proc = subprocess.Popen(
             [sys.executable, "-c", leader_prog],
             stdout=subprocess.PIPE,
@@ -475,11 +512,11 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             self.assertIn(b"ready", lines)
             child_pid = int(next(ln for ln in lines if ln.startswith(b"pid:"))[4:])
 
-            RemoteSparkSession._terminate_local_connect_server(proc)
+            local_server._terminate_server(proc)
 
             self.assertTrue(
                 self._wait_process_group_gone(pgid, timeout=10),
-                "process group survived _terminate_local_connect_server",
+                "process group survived _terminate_server",
             )
             # The SIGTERM-immune child no longer runs, proving the SIGKILL escalation fired.
             self.assertNotIn(
@@ -496,7 +533,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "process-group reaping is POSIX-only")
     def test_terminate_reaps_daemon_and_jvm(self) -> None:
-        """_terminate_local_connect_server kills the daemon *and* its child JVM.
+        """_terminate_server kills the daemon *and* its child JVM.
 
         The test waits until the daemon has launched the JVM, then checks that the whole process
         group exits.
@@ -504,18 +541,14 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         if shutil.which("pgrep") is None:
             self.skipTest("pgrep is needed to detect the child JVM")
 
-        import pyspark.sql.connect.session as session_mod
-
-        daemon = os.path.join(os.path.dirname(session_mod.__file__), "local_server.py")
         cmd = [
             sys.executable,
-            daemon,
+            "-m",
+            "pyspark.sql.connect.local_server",
             "--master",
             "local[2]",
             "--port",
             "0",  # ephemeral, so a stray server elsewhere cannot interfere
-            "--token",
-            "reap-test",
             "--discovery",
             self._discovery,
             "--idle-timeout",
@@ -554,11 +587,11 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 time.sleep(0.5)
             self.assertTrue(kids, "daemon never launched a JVM; cannot exercise the orphan case")
 
-            RemoteSparkSession._terminate_local_connect_server(proc)
+            local_server._terminate_server(proc)
 
             self.assertTrue(
                 self._wait_process_group_gone(pgid, timeout=30),
-                "process group survived _terminate_local_connect_server",
+                "process group survived _terminate_server",
             )
         finally:
             try:
