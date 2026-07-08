@@ -123,6 +123,18 @@ object MathUtils {
     if (r < 0) (r + n) % n else r
   }
 
+  // Casts a rounded double (the result of Math.ceil/Math.floor) to long, throwing an arithmetic
+  // overflow error when the value cannot be represented as a long. NaN is passed through to the
+  // JVM cast (which yields 0), matching the previous behavior. Shared by the eval and codegen
+  // paths of `Ceil`/`Floor` so the two never diverge.
+  def doubleToLong(value: Double, context: QueryContext): Long = {
+    if (!value.isNaN &&
+        (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      throw ExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+    value.toLong
+  }
+
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f
