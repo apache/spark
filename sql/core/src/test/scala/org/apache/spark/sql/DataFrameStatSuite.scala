@@ -605,6 +605,50 @@ class DataFrameStatSuite extends SharedSparkSession {
     val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
     checkAnswer(df, Row(BigDecimal(0)) :: Nil)
   }
+
+  test("SPARK-57849: DataFrame approxQuantile should support time type columns") {
+    val df = sql(
+      "SELECT * FROM VALUES (CAST('06:00:00' AS TIME(9))), (CAST('06:00:00' AS TIME(9))), " +
+        "(CAST('08:00:00' AS TIME(9))), (CAST('08:00:00' AS TIME(9))), " +
+        "(CAST('08:00:00' AS TIME(9))), (CAST('10:00:00' AS TIME(9)));"
+    )
+
+    val res = df.stat.approxQuantile("col1", Array(0.1, 0.5, 0.9), 0.01)
+    assert(res.length === 3)
+    assert(res.count(_.isNaN) === 0)
+    assert(res(1) === 28800.0)
+  }
+
+  test("SPARK-57849: DataFrame approxQuantile on TIME preserves sub-second precision") {
+    val df = sql(
+      "SELECT * FROM VALUES (CAST('00:00:00.000000001' AS TIME(9))), " +
+        "(CAST('23:59:59.999999999' AS TIME(9)));"
+    )
+
+    val Array(min, max) = df.stat.approxQuantile("col1", Array(0.0, 1.0), 0.0)
+    assert(min === 1e-9 +- 1e-12)
+    assert(max === 86399.999999999 +- 1e-6)
+  }
+
+  test("SPARK-57849: summary() computes typed TIME percentiles") {
+    val df = sql(
+      "SELECT * FROM VALUES (CAST('06:00:00' AS TIME(9))), (CAST('08:00:00' AS TIME(9))), " +
+        "(CAST('10:00:00' AS TIME(9))) AS tab(t);"
+    )
+    val expectedMedian = df.selectExpr("CAST(t AS STRING)").as[String].collect().sorted.apply(1)
+
+    val summaryDf = df.summary("min", "50%", "max")
+    val median = summaryDf.filter($"summary" === "50%").select("t").head().getString(0)
+    assert(median === expectedMedian)
+  }
+
+  test("SPARK-57849: summary() nulls out mean/stddev for TIME columns") {
+    val df = sql("SELECT * FROM VALUES (CAST('06:00:00' AS TIME(9))) AS tab(t);")
+
+    val summaryDf = df.summary("mean", "stddev")
+    val values = summaryDf.select("t").collect().map(_.getString(0))
+    assert(values === Array(null, null))
+  }
 }
 
 
