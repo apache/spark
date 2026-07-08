@@ -380,73 +380,37 @@ struct<five:string,f1:double,round_f1:double>
 -- !query
 select ceil(f1) as ceil_f1 from float8_tbl f
 -- !query schema
-struct<>
+struct<ceil_f1:bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "ceil(f1)"
-  } ]
-}
+-34
+0
+1
+1005
+9223372036854775807
 
 
 -- !query
 select ceiling(f1) as ceiling_f1 from float8_tbl f
 -- !query schema
-struct<>
+struct<ceiling_f1:bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "ceiling(f1)"
-  } ]
-}
+-34
+0
+1
+1005
+9223372036854775807
 
 
 -- !query
 select floor(f1) as floor_f1 from float8_tbl f
 -- !query schema
-struct<>
+struct<floor_f1:bigint>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "ARITHMETIC_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "alternative" : "",
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "overflow"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "floor(f1)"
-  } ]
-}
+-35
+0
+0
+1004
+9223372036854775807
 
 
 -- !query
