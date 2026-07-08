@@ -1431,15 +1431,40 @@ class SparkSession:
 
     @staticmethod
     def _terminate_local_connect_server(proc: Any) -> None:
-        """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM."""
-        if SparkSession._signal_local_connect_server(proc.pid, signal.SIGTERM):
+        """Terminate a daemon started by ``_start_persistent_local_connect_server`` and its JVM.
+
+        The group SIGTERM asks the daemon and its JVM to shut down gracefully, but the daemon
+        exiting does not mean the JVM is gone: its graceful shutdown can outlive the daemon. On
+        POSIX this therefore waits for the whole process group to disappear and escalates to a
+        group SIGKILL if any member outlives the grace period.
+        """
+        if not SparkSession._signal_local_connect_server(proc.pid, signal.SIGTERM):
+            return
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+        if os.name != "posix":
+            if proc.poll() is None:
+                proc.kill()
+            return
+        # The group id stays valid while any member (i.e. the JVM) is alive, even after the
+        # daemon leader has been reaped, so poll and signal the group id directly rather than
+        # via _signal_local_connect_server (whose getpgid lookup needs a live leader). Signalling
+        # this group is safe: it was created above us by this launch, not read from disk.
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            proc.poll()  # reap the daemon if it exited, so only live members keep the group
             try:
-                proc.wait(timeout=10)
-            except Exception:
-                if os.name == "posix":
-                    SparkSession._signal_local_connect_server(proc.pid, signal.SIGKILL)
-                else:
-                    proc.kill()
+                os.killpg(proc.pid, 0)
+            except OSError:
+                return
+            time.sleep(0.2)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.poll()
 
     @staticmethod
     def _start_persistent_local_connect_server(master: str, opts: Dict[str, Any]) -> str:

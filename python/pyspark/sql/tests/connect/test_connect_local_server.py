@@ -398,6 +398,94 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 self._release(spark)
             # tearDown stops the server and waits for the port to close.
 
+    @staticmethod
+    def _wait_process_group_gone(pgid: int, timeout: float) -> bool:
+        """Wait until no process in ``pgid`` can be signalled; True if that happened in time.
+
+        ProcessLookupError means the group is empty. PermissionError also counts as gone: on
+        macOS, a dead group member lingering as a zombie (reparented to launchd) yields EPERM
+        even though nothing in the group is running.
+        """
+        deadline = time.time() + timeout
+        while True:
+            try:
+                os.killpg(pgid, 0)
+            except (ProcessLookupError, PermissionError):
+                return True
+            if time.time() >= deadline:
+                return False
+            time.sleep(0.2)
+
+    @unittest.skipUnless(os.name == "posix", "process-group reaping is POSIX-only")
+    def test_terminate_escalates_when_group_outlives_daemon(self) -> None:
+        """SIGKILL escalation covers group members that survive the daemon.
+
+        Reproduces the CI failure mode of test_terminate_reaps_daemon_and_jvm: the daemon exits
+        on SIGTERM promptly while its JVM is still shutting down (or wedged) past the grace
+        period. _terminate_local_connect_server must not return while the group has live members.
+        """
+        # A session leader that exits on SIGTERM after spawning a SIGTERM-immune child into its
+        # process group -- the child stands in for a JVM that outlives the daemon.
+        leader_prog = textwrap.dedent(
+            """
+            import signal
+            import subprocess
+            import sys
+            import time
+
+            child = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    "import signal, time; "
+                    "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                    "print('ready', flush=True); "
+                    "time.sleep(600)",
+                ]
+            )
+            print("pid:%d" % child.pid, flush=True)
+            signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+            time.sleep(600)
+            """
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", leader_prog],
+            stdout=subprocess.PIPE,
+            start_new_session=True,
+        )
+        pgid = os.getpgid(proc.pid)
+        try:
+            # One line comes from the leader (the child's pid) and one from the child itself,
+            # printed only after it has ignored SIGTERM -- reading both closes the start-up race.
+            lines = {proc.stdout.readline().strip() for _ in range(2)}
+            self.assertIn(b"ready", lines)
+            child_pid = int(next(ln for ln in lines if ln.startswith(b"pid:"))[4:])
+
+            RemoteSparkSession._terminate_local_connect_server(proc)
+
+            self.assertTrue(
+                self._wait_process_group_gone(pgid, timeout=10),
+                "process group survived _terminate_local_connect_server",
+            )
+            # The SIGTERM-immune child must be dead, proving the SIGKILL escalation fired.
+            # os.kill(pid, 0) still succeeds for a zombie until init/launchd reaps it, so poll
+            # briefly rather than asserting on the first probe.
+            deadline = time.time() + 10
+            child_gone = False
+            while time.time() < deadline and not child_gone:
+                try:
+                    os.kill(child_pid, 0)
+                    time.sleep(0.2)
+                except OSError:
+                    child_gone = True
+            self.assertTrue(child_gone, "SIGTERM-immune child survived the SIGKILL escalation")
+        finally:
+            proc.stdout.close()
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except OSError:
+                pass
+
     @unittest.skipUnless(os.name == "posix", "process-group reaping is POSIX-only")
     def test_terminate_reaps_daemon_and_jvm(self) -> None:
         """_terminate_local_connect_server kills the daemon *and* its child JVM.
@@ -460,16 +548,10 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
             RemoteSparkSession._terminate_local_connect_server(proc)
 
-            # killpg(sig 0) raises ProcessLookupError once no process in the group remains.
-            deadline = time.time() + 30
-            while time.time() < deadline:
-                try:
-                    os.killpg(pgid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.5)
-            with self.assertRaises(ProcessLookupError):
-                os.killpg(pgid, 0)
+            self.assertTrue(
+                self._wait_process_group_gone(pgid, timeout=30),
+                "process group survived _terminate_local_connect_server",
+            )
         finally:
             try:
                 os.killpg(pgid, signal.SIGKILL)
