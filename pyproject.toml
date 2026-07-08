@@ -192,13 +192,9 @@ dev = [
     {include-group = "sql"},
     {include-group = "connect"},
     {include-group = "ml"},
+    {include-group = "ml_extra"},
     {include-group = "mllib"},
     {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
     {include-group = "pipelines"},
-]
-
-all = [
-    {include-group = "dev"},
-    {include-group = "ml_extra"},
 ]
