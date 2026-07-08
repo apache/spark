@@ -1519,7 +1519,7 @@ class Analyzer(
             case None =>
               throw QueryCompilationErrors.missingStaticPartitionColumn(name)
           }
-        }.reduce(And)
+        }.reduce(And.apply)
       }
     }
   }
@@ -3777,7 +3777,7 @@ class Analyzer(
           val inputNullCheck = inputPrimitivesPair.collect {
             case (isPrimitive, input) if isPrimitive && input.nullable =>
               IsNull(input)
-          }.reduceLeftOption[Expression](Or)
+          }.reduceLeftOption[Expression](Or.apply)
 
           if (inputNullCheck.isDefined) {
             // Once we add an `If` check above the udf, it is safe to mark those checked inputs

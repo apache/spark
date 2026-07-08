@@ -392,8 +392,8 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val (targetPredicates, joinPredicates) = predicates.partition { predicate =>
       predicate.references.subsetOf(targetTable.outputSet)
     }
-    val targetCond = targetPredicates.reduceOption(And).getOrElse(TrueLiteral)
-    val joinCond = joinPredicates.reduceOption(And).getOrElse(TrueLiteral)
+    val targetCond = targetPredicates.reduceOption(And.apply).getOrElse(TrueLiteral)
+    val joinCond = joinPredicates.reduceOption(And.apply).getOrElse(TrueLiteral)
     (Filter(targetCond, targetTable), joinCond)
   }
 

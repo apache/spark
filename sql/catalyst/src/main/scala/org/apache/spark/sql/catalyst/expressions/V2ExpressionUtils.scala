@@ -245,21 +245,21 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   private def convertPredicate(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "IS_NULL" => convertUnaryExpr(expr, IsNull)
-      case "IS_NOT_NULL" => convertUnaryExpr(expr, IsNotNull)
-      case "NOT" => convertUnaryExpr(expr, Not)
-      case "=" => convertBinaryExpr(expr, EqualTo)
-      case "<=>" => convertBinaryExpr(expr, EqualNullSafe)
-      case ">" => convertBinaryExpr(expr, GreaterThan)
-      case ">=" => convertBinaryExpr(expr, GreaterThanOrEqual)
-      case "<" => convertBinaryExpr(expr, LessThan)
-      case "<=" => convertBinaryExpr(expr, LessThanOrEqual)
+      case "IS_NULL" => convertUnaryExpr(expr, IsNull.apply)
+      case "IS_NOT_NULL" => convertUnaryExpr(expr, IsNotNull.apply)
+      case "NOT" => convertUnaryExpr(expr, Not.apply)
+      case "=" => convertBinaryExpr(expr, EqualTo.apply)
+      case "<=>" => convertBinaryExpr(expr, EqualNullSafe.apply)
+      case ">" => convertBinaryExpr(expr, GreaterThan.apply)
+      case ">=" => convertBinaryExpr(expr, GreaterThanOrEqual.apply)
+      case "<" => convertBinaryExpr(expr, LessThan.apply)
+      case "<=" => convertBinaryExpr(expr, LessThanOrEqual.apply)
       case "<>" => convertBinaryExpr(expr, (left, right) => Not(EqualTo(left, right)))
-      case "AND" => convertBinaryExpr(expr, And)
-      case "OR" => convertBinaryExpr(expr, Or)
-      case "STARTS_WITH" => convertBinaryExpr(expr, StartsWith)
-      case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith)
-      case "CONTAINS" => convertBinaryExpr(expr, Contains)
+      case "AND" => convertBinaryExpr(expr, And.apply)
+      case "OR" => convertBinaryExpr(expr, Or.apply)
+      case "STARTS_WITH" => convertBinaryExpr(expr, StartsWith.apply)
+      case "ENDS_WITH" => convertBinaryExpr(expr, EndsWith.apply)
+      case "CONTAINS" => convertBinaryExpr(expr, Contains.apply)
       case "IN" => convertExpr(expr, children => In(children.head, children.tail))
       case "BOOLEAN_EXPRESSION" => toCatalyst(expr.children().head)
       case _ => None
@@ -297,9 +297,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case "/" => convertBinaryExpr(expr, Divide(_, _, evalMode = EvalMode.ANSI))
       case "%" => convertBinaryExpr(expr, Remainder(_, _, evalMode = EvalMode.ANSI))
       case "ABS" => convertUnaryExpr(expr, Abs(_, failOnError = true))
-      case "COALESCE" => convertExpr(expr, Coalesce)
-      case "GREATEST" => convertExpr(expr, Greatest)
-      case "LEAST" => convertExpr(expr, Least)
+      case "COALESCE" => convertExpr(expr, Coalesce.apply)
+      case "GREATEST" => convertExpr(expr, Greatest.apply)
+      case "LEAST" => convertExpr(expr, Least.apply)
       case "RAND" =>
         if (expr.children.isEmpty) {
           Some(new Rand())
@@ -308,20 +308,20 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
         } else {
           None
         }
-      case "LOG" => convertBinaryExpr(expr, Logarithm)
-      case "LOG10" => convertUnaryExpr(expr, Log10)
-      case "LOG2" => convertUnaryExpr(expr, Log2)
-      case "LN" => convertUnaryExpr(expr, Log)
-      case "EXP" => convertUnaryExpr(expr, Exp)
-      case "POWER" => convertBinaryExpr(expr, Pow)
-      case "SQRT" => convertUnaryExpr(expr, Sqrt)
-      case "FLOOR" => convertUnaryExpr(expr, Floor)
-      case "CEIL" => convertUnaryExpr(expr, Ceil)
+      case "LOG" => convertBinaryExpr(expr, Logarithm.apply)
+      case "LOG10" => convertUnaryExpr(expr, Log10.apply)
+      case "LOG2" => convertUnaryExpr(expr, Log2.apply)
+      case "LN" => convertUnaryExpr(expr, Log.apply)
+      case "EXP" => convertUnaryExpr(expr, Exp.apply)
+      case "POWER" => convertBinaryExpr(expr, Pow.apply)
+      case "SQRT" => convertUnaryExpr(expr, Sqrt.apply)
+      case "FLOOR" => convertUnaryExpr(expr, Floor.apply)
+      case "CEIL" => convertUnaryExpr(expr, Ceil.apply)
       case "ROUND" => convertBinaryExpr(expr, Round(_, _, ansiEnabled = true))
-      case "CBRT" => convertUnaryExpr(expr, Cbrt)
-      case "DEGREES" => convertUnaryExpr(expr, ToDegrees)
-      case "RADIANS" => convertUnaryExpr(expr, ToRadians)
-      case "SIGN" => convertUnaryExpr(expr, Signum)
+      case "CBRT" => convertUnaryExpr(expr, Cbrt.apply)
+      case "DEGREES" => convertUnaryExpr(expr, ToDegrees.apply)
+      case "RADIANS" => convertUnaryExpr(expr, ToRadians.apply)
+      case "SIGN" => convertUnaryExpr(expr, Signum.apply)
       case "WIDTH_BUCKET" =>
         convertExpr(
           expr,
@@ -332,30 +332,30 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   private def convertTrigonometricFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "SIN" => convertUnaryExpr(expr, Sin)
-      case "SINH" => convertUnaryExpr(expr, Sinh)
-      case "COS" => convertUnaryExpr(expr, Cos)
-      case "COSH" => convertUnaryExpr(expr, Cosh)
-      case "TAN" => convertUnaryExpr(expr, Tan)
-      case "TANH" => convertUnaryExpr(expr, Tanh)
-      case "COT" => convertUnaryExpr(expr, Cot)
-      case "ASIN" => convertUnaryExpr(expr, Asin)
-      case "ASINH" => convertUnaryExpr(expr, Asinh)
-      case "ACOS" => convertUnaryExpr(expr, Acos)
-      case "ACOSH" => convertUnaryExpr(expr, Acosh)
-      case "ATAN" => convertUnaryExpr(expr, Atan)
-      case "ATANH" => convertUnaryExpr(expr, Atanh)
-      case "ATAN2" => convertBinaryExpr(expr, Atan2)
+      case "SIN" => convertUnaryExpr(expr, Sin.apply)
+      case "SINH" => convertUnaryExpr(expr, Sinh.apply)
+      case "COS" => convertUnaryExpr(expr, Cos.apply)
+      case "COSH" => convertUnaryExpr(expr, Cosh.apply)
+      case "TAN" => convertUnaryExpr(expr, Tan.apply)
+      case "TANH" => convertUnaryExpr(expr, Tanh.apply)
+      case "COT" => convertUnaryExpr(expr, Cot.apply)
+      case "ASIN" => convertUnaryExpr(expr, Asin.apply)
+      case "ASINH" => convertUnaryExpr(expr, Asinh.apply)
+      case "ACOS" => convertUnaryExpr(expr, Acos.apply)
+      case "ACOSH" => convertUnaryExpr(expr, Acosh.apply)
+      case "ATAN" => convertUnaryExpr(expr, Atan.apply)
+      case "ATANH" => convertUnaryExpr(expr, Atanh.apply)
+      case "ATAN2" => convertBinaryExpr(expr, Atan2.apply)
       case _ => None
     }
   }
 
   private def convertBitwiseFunc(expr: GeneralScalarExpression): Option[Expression] = {
     expr.name match {
-      case "~" => convertUnaryExpr(expr, BitwiseNot)
-      case "&" => convertBinaryExpr(expr, BitwiseAnd)
-      case "|" => convertBinaryExpr(expr, BitwiseOr)
-      case "^" => convertBinaryExpr(expr, BitwiseXor)
+      case "~" => convertUnaryExpr(expr, BitwiseNot.apply)
+      case "&" => convertBinaryExpr(expr, BitwiseAnd.apply)
+      case "|" => convertBinaryExpr(expr, BitwiseOr.apply)
+      case "^" => convertBinaryExpr(expr, BitwiseXor.apply)
       case _ => None
     }
   }

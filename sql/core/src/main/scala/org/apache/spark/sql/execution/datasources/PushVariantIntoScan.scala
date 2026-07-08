@@ -421,7 +421,7 @@ object PushVariantIntoScan extends Rule[LogicalPlan] {
     val newRelation = relation.copy(relation = newHadoopFsRelation, output = newOutput.toIndexedSeq)
 
     val withFilter = if (filters.nonEmpty) {
-      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And), newRelation)
+      Filter(filters.map(variants.rewriteExpr(_, attributeMap)).reduce(And.apply), newRelation)
     } else {
       newRelation
     }

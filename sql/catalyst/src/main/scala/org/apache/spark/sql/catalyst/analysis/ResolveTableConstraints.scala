@@ -57,7 +57,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
           val genColInvariants = buildGeneratedColumnConstraints(r, v2Write)
           val allInvariants = tableCheckInvariants ++ genColInvariants
           // Combine the check invariants into a single expression using conjunctive AND.
-          allInvariants.reduceOption(And).fold(v2Write)(
+          allInvariants.reduceOption(And.apply).fold(v2Write)(
             condition => v2Write.withNewQuery(Filter(condition, v2Write.query)))
         case _ =>
           v2Write

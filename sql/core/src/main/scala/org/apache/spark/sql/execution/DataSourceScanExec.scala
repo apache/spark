@@ -395,7 +395,7 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     if (dynamicPartitionFilters.nonEmpty) {
       val startTime = System.nanoTime()
       // call the file index for the files matching all filters except dynamic partition filters
-      val predicate = dynamicPartitionFilters.reduce(And)
+      val predicate = dynamicPartitionFilters.reduce(And.apply)
       val partitionColumns = relation.partitionSchema
       val boundPredicate = Predicate.create(predicate.transform {
         case a: AttributeReference =>

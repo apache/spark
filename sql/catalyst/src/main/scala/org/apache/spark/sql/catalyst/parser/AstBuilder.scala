@@ -3551,7 +3551,7 @@ class AstBuilder extends DataTypeAstBuilder
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or.apply)
             }
           case Some(SqlBaseParser.ALL) =>
             if (ctx.expression.isEmpty) {
@@ -3569,7 +3569,7 @@ class AstBuilder extends DataTypeAstBuilder
               }
             } else {
               ctx.expression.asScala.map(expression)
-                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And)
+                .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(And.apply)
             }
           case _ =>
             val escapeChar = Option(ctx.escapeChar)
@@ -7259,7 +7259,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitCall(ctx: CallContext): LogicalPlan = withOrigin(ctx) {
-    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure)
+    val procedure = withIdentClause(ctx.identifierReference, UnresolvedProcedure.apply)
     val args = ctx.functionArgument.asScala.map {
       case expr if expr.namedArgumentExpression != null =>
         val namedExpr = expr.namedArgumentExpression

@@ -479,7 +479,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case other =>
           residuals += other
       }
-      val residual = residuals.reduceOption(And)
+      val residual = residuals.reduceOption(And.apply)
       (leftKeys.toSeq, rightKeys.toSeq, residual)
     }
 
