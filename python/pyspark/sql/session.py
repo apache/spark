@@ -539,12 +539,9 @@ class SparkSession(SparkConversionMixin):
                                 # one on the first run) instead of booting a fresh in-process server
                                 # every process. See `pyspark.sql.connect.local_server`.
                                 url = reuse_or_start_local_connect_server(url, opts)
-                                for k in (
-                                    "spark.local.connect.reuse",
-                                    "spark.local.connect.server.port",
-                                    "spark.local.connect.server.idleTimeout",
-                                ):
-                                    opts.pop(k, None)
+                                for k in list(opts):
+                                    if k.startswith("spark.local.connect."):
+                                        opts.pop(k)
                             elif url.startswith("local") or (
                                 is_api_mode_connect and not url.startswith("sc://")
                             ):

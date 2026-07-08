@@ -311,9 +311,10 @@ $SPARK_HOME/sbin/stop-connect-server.sh
 ### Let PySpark manage the server (opt-in)
 
 If you would rather keep your code as `SparkSession.builder.remote("local[*]").getOrCreate()` and not
-manage a server by hand, enable the opt-in reuse path. The first run starts a **detached** local
-Connect server and records it in a discovery file; later runs reconnect to it in a fraction of a
-second:
+manage a server by hand, enable the opt-in reuse path. The first run starts one persistent local
+Connect server through the standard `sbin/start-connect-server.sh` script -- the same daemon you
+would start by hand above -- and records it in a discovery file; later runs reconnect to it in a
+fraction of a second:
 
 ```bash
 export SPARK_LOCAL_CONNECT_REUSE=1     # or .config("spark.local.connect.reuse", "true")
@@ -335,11 +336,13 @@ This is **off by default**; nothing changes unless you opt in. A few details:
   Unix-like systems, PySpark uses a file lock around first startup. On platforms without `fcntl`,
   concurrent startups can race; callers that lose the race reconnect to the server recorded in the
   discovery file.
-- The server self-terminates once it has been idle for `spark.local.connect.server.idleTimeout`
-  seconds (default `1800`, i.e. 30 minutes; set `0` to disable). To stop it sooner, run
-  `python -m pyspark.sql.connect.local_server --stop` or terminate the `pid` recorded in the
-  discovery file. If an old discovery file is rejected after a Spark upgrade, stop the old recorded
-  `pid` if you do not want to wait for the idle timeout.
+- The server is a regular `spark-daemon.sh`-managed process and runs until you stop it with
+  `python -m pyspark.sql.connect.local_server --stop` (or `sbin/stop-connect-server.sh`, or by
+  terminating the `pid` recorded in the discovery file). Its pid file and logs live next to the
+  discovery file (`~/.spark` and `~/.spark/logs` by default), which is where to look if a start-up
+  fails. After a Spark upgrade the old server is rejected on its recorded version; stop it the same
+  way. Because this path drives the `sbin/` shell scripts, it is unavailable on Windows -- there,
+  start a server manually and connect to it with `.remote("sc://...")`.
 
 ## Use Spark Connect in standalone applications
 
