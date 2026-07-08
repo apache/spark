@@ -872,11 +872,12 @@ class Analyzer(
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
-        // The unresolved grouping id will be resolved by ResolveReferences
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
           expression = cond,
           groupByExpressions = groupingExprs,
-          gid = VirtualColumn.groupingIdAttribute,
+          gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs),
           newAlias = (child, name, qualifier) =>
             Alias(child, name.get)(qualifier = qualifier)
         )
@@ -886,8 +887,9 @@ class Analyzer(
       case s @ Sort(order, _, child, _)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
-        val gid = VirtualColumn.groupingIdAttribute
-        // The unresolved grouping id will be resolved by ResolveReferences
+        val gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs)
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newOrder = order.map { expression =>
           GroupingAnalyticsTransformer.replaceGroupingFunction(
             expression = expression,
