@@ -260,6 +260,24 @@ private object CeilFloor {
     }
     value.toLong
   }
+
+  def doubleToLongCode(
+      input: String,
+      funcName: String,
+      result: String,
+      roundedValue: String,
+      errorContext: String): String = {
+    s"""
+       |double $roundedValue = java.lang.Math.$funcName($input);
+       |if (!java.lang.Double.isNaN($roundedValue) &&
+       |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
+       |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
+       |  throw QueryExecutionErrors.arithmeticOverflowError(
+       |    "long overflow", "", $errorContext);
+       |}
+       |$result = (long) $roundedValue;
+       |""".stripMargin
+  }
 }
 
 case class Ceil(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
@@ -296,16 +314,7 @@ case class Ceil(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnable
         nullSafeCodeGen(ctx, ev, c => {
           val roundedValue = ctx.freshName("roundedValue")
           val errorContext = getContextOrNullCode(ctx)
-          s"""
-             |double $roundedValue = java.lang.Math.${funcName}($c);
-             |if (!java.lang.Double.isNaN($roundedValue) &&
-             |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
-             |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
-             |  throw QueryExecutionErrors.arithmeticOverflowError(
-             |    "long overflow", "", $errorContext);
-             |}
-             |${ev.value} = (long) $roundedValue;
-             |""".stripMargin
+          CeilFloor.doubleToLongCode(c, funcName, ev.value, roundedValue, errorContext)
         })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
@@ -597,16 +606,7 @@ case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabl
         nullSafeCodeGen(ctx, ev, c => {
           val roundedValue = ctx.freshName("roundedValue")
           val errorContext = getContextOrNullCode(ctx)
-          s"""
-             |double $roundedValue = java.lang.Math.${funcName}($c);
-             |if (!java.lang.Double.isNaN($roundedValue) &&
-             |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
-             |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
-             |  throw QueryExecutionErrors.arithmeticOverflowError(
-             |    "long overflow", "", $errorContext);
-             |}
-             |${ev.value} = (long) $roundedValue;
-             |""".stripMargin
+          CeilFloor.doubleToLongCode(c, funcName, ev.value, roundedValue, errorContext)
         })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
