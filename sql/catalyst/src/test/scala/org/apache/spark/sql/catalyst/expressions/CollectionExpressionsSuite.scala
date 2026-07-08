@@ -1357,6 +1357,15 @@ class CollectionExpressionsSuite
       Literal(tm(8, 0, 0), timeType),
       Literal(tm(10, 0, 0), timeType),
       Literal(Period.ofMonths(1))).checkInputDataTypes().isFailure)
+
+    // TIME sequences do not wrap around midnight: a positive step from a later start to an
+    // earlier stop is an illegal boundary, not a wrap. (Relevant once SPARK-57853 lands.)
+    checkExceptionInExpression[Exception](
+      new Sequence(
+        Literal(tm(23, 0, 0), timeType),
+        Literal(tm(1, 0, 0), timeType),
+        Literal(Duration.ofHours(1))),
+      EmptyRow, "boundaries")
   }
 
   test("Sequence on DST boundaries") {

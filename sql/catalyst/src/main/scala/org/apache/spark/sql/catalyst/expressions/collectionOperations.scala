@@ -3598,7 +3598,7 @@ object Sequence {
       val i = ctx.freshName("i")
       val stepNanos = ctx.freshName("stepNanos")
       s"""
-         |final long $stepNanos = $step * ${NANOS_PER_MICROS}L;
+         |final long $stepNanos = Math.multiplyExact($step, ${NANOS_PER_MICROS}L);
          |${genSequenceLengthCode(ctx, start, stop, stepNanos, stepNanos, i)}
          |$arr = new $elemType[$i];
          |while ($i > 0) {
