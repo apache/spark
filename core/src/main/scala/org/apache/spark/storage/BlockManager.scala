@@ -252,9 +252,8 @@ private[spark] class BlockManager(
    * together with speculation or stage retries).
    */
   private def newRddBlockChecksum(blockId: BlockId, compute: Boolean): Option[Checksum] = {
-    // Compute when either the caller asks for it (e.g. a local checkpoint that will be sealed) or
-    // the global switch is on (checksum every serialized RDD block, e.g. to log divergence).
-    if ((compute || rddBlockChecksumEnabled) && blockId.isRDD) {
+    // Compute when the global switch is on, or when the caller asks for it for this block.
+    if ((rddBlockChecksumEnabled || compute) && blockId.isRDD) {
       Some(ShuffleChecksumHelper.getChecksumByAlgorithm(rddBlockChecksumAlgorithm))
     } else {
       None
@@ -1049,14 +1048,11 @@ private[spark] class BlockManager(
         logDebug(s"Block $blockId was not found")
         None
       case Some(info) =>
-        // Only blocks on the local-checkpoint seal path (`verifySealed`) consult the master's
-        // sealed checksum; a block checksummed only by the global compute switch is served without
-        // any read-path master round-trip. If such a sealed block is sealed to a value the local
-        // copy does not match, the local copy is a stale replica that the seal asked this executor
-        // to drop, but that removal is asynchronous (fire-and-forget) and may not have landed yet,
-        // or was lost - so skip the local copy and fall through to a remote (authoritative)
-        // location. This self-check is what makes correctness independent of the removal landing.
-        // A not-yet-sealed block imposes no such constraint.
+        // For a sealed block whose local copy does not match the sealed checksum, skip the local
+        // copy and fall through to a remote (authoritative) location: it is a stale replica the
+        // seal is evicting, but that eviction is async and may not have landed. This self-check
+        // makes correctness independent of the eviction landing. Only `verifySealed` blocks are
+        // checked; an unsealed block, or one checksummed only for observation, is served as-is.
         if (info.verifySealed && !localCopyMatchesSeal(blockId, info)) {
           releaseLock(blockId, Option(TaskContext.get()))
           return None
@@ -1748,8 +1744,8 @@ private[spark] class BlockManager(
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
-      // Only a caller-requested checksum (the local-checkpoint seal path) subjects this block to
-      // the read-side seal self-check; a checksum computed only by the global switch does not.
+      // The caller requests a checksum only on the seal path; a checksum from the global switch
+      // alone does not opt the block into the read-side seal self-check.
       info.verifySealed = computeChecksum
       // Size of the block in bytes
       var size = 0L

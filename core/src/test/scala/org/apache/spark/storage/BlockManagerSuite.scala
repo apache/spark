@@ -2558,23 +2558,27 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store2.getLocalValues(blockId).isEmpty)
   }
 
-  test("spark.storage.rddBlockChecksum.enabled computes checksums without any seal request") {
-    // The global switch is independent of the local-checkpoint seal: with it on, a serialized RDD
-    // block gets a checksum at store time even though the caller did not request one
-    // (computeChecksum defaults to false), and that checksum reaches the master.
+  test("verifySealed tracks the seal request, not merely the presence of a checksum") {
+    // A seal-path store (computeChecksum = true) marks the block for the read-side self-check.
+    val sealStore = makeBlockManager(20000, "exec1")
+    val sealBlock = RDDBlockId(21, 0)
+    sealStore.getOrElseUpdateRDDBlock(
+      1L, sealBlock, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator,
+      computeChecksum = true)
+    val sealInfo = sealStore.blockInfoManager.get(sealBlock).get
+    assert(sealInfo.checksum.isDefined)
+    assert(sealInfo.verifySealed)
+
+    // A compute-only store (global flag on, no seal request) also gets a checksum, but must NOT be
+    // marked for the self-check - having a checksum alone does not opt a block in.
     val checksumConf = new SparkConf(false).set(STORAGE_RDD_BLOCK_CHECKSUM_ENABLED, true)
-    val store = makeBlockManager(20000, "exec1", testConf = Some(checksumConf))
-    val blockId = RDDBlockId(21, 0)
-    store.getOrElseUpdateRDDBlock(
-      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator)
-    // The block is not on the seal path (computeChecksum defaulted false), so even though it now
-    // carries a checksum, a local read serves it directly and is not opted into the read-side seal
-    // self-check - it is served with the block unsealed (no seal exists for it here).
-    assert(store.getLocalValues(blockId).isDefined)
-    // The recorded checksum still reaches the master, so if the RDD were later sealed it would be
-    // found (0 unchecksummed) rather than reported as an uncovered partition.
-    assert(master.sealRddChecksums(21) === 0)
-    assert(master.getSealedChecksum(blockId).isDefined)
+    val computeStore = makeBlockManager(20000, "exec2", testConf = Some(checksumConf))
+    val computeBlock = RDDBlockId(21, 1)
+    computeStore.getOrElseUpdateRDDBlock(
+      2L, computeBlock, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator)
+    val computeInfo = computeStore.blockInfoManager.get(computeBlock).get
+    assert(computeInfo.checksum.isDefined)
+    assert(!computeInfo.verifySealed)
   }
 
   test("global checksum flag records divergent replicas without evicting or skipping them") {

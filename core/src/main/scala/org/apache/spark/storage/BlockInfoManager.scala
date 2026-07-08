@@ -85,26 +85,20 @@ private[storage] class BlockInfo(
 
   /**
    * Content checksum of this block's serialized+compressed (pre-encryption) bytes, computed at
-   * store time when RDD block checksums are enabled (either the local-checkpoint seal path or the
-   * global compute switch). Two task attempts that produced divergent bytes for the same
-   * `RDDBlockId` get different checksums, which lets a consumer detect a block that was
-   * materialized inconsistently. `None` when the feature is off or the block was not serialized at
-   * store time.
+   * store time when a checksum was requested for it. Two task attempts that produced divergent
+   * bytes for the same `RDDBlockId` get different checksums. `None` when no checksum was computed.
    */
   var checksum: Option[Long] = None
 
   /**
-   * Whether this block belongs to an RDD marked for local-checkpoint sealing (i.e. the store was
-   * on the seal path, not merely the global "checksum every block" switch). Only such blocks are
-   * subject to the read-side seal self-check; a block that was only checksummed for observation is
-   * served without consulting the master.
+   * Whether this block is subject to the read-side seal self-check (see `getLocalValues`). Set for
+   * blocks stored on the seal path; a block merely checksummed for observation is not.
    */
   var verifySealed: Boolean = false
 
   /**
-   * Cached authoritative sealed checksum for this block, pulled from the master once on the first
-   * read of a seal-verified block (see `BlockManager`). `None` until pulled, or if the block is
-   * not sealed. Immutable once set, so no invalidation is needed.
+   * Cached sealed checksum for this block, pulled from the master once on first read and reused.
+   * `None` until pulled, or if the block is not sealed.
    */
   var sealedChecksum: Option[Long] = None
 
