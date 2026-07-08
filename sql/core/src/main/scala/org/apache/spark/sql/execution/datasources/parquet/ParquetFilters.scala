@@ -167,6 +167,11 @@ class ParquetFilters(
         parquetSchemaType.logicalTypeAnnotation, parquetSchemaType.primitiveTypeName)
   }
 
+  // SPARK-53368: TIME(MICROS, isAdjustedToUTC=true) is not registered in the framework's
+  // filterOps (which only covers isAdjustedToUTC=false), so it is matched explicitly here.
+  private val ParquetTimeMicrosTypeAdjToUTC =
+    ParquetSchemaType(LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS), INT64, 0)
+
   private def dateToDays(date: Any): Int = {
     val gregorianDays = date match {
       case d: Date => DateTimeUtils.fromJavaDate(d)
@@ -268,6 +273,10 @@ class ParquetFilters(
         Option(v).map(timestampToMillis).orNull)
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeEq(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.eq(
+        longColumn(n),
+        Option(v).map(localTimeToMicros).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.eq(
@@ -319,6 +328,10 @@ class ParquetFilters(
         Option(v).map(timestampToMillis).orNull)
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeNotEq(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.notEq(
+        longColumn(n),
+        Option(v).map(localTimeToMicros).orNull)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) => FilterApi.notEq(
@@ -361,6 +374,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), timestampToMillis(v))
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeLt(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.lt(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -400,6 +415,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), timestampToMillis(v))
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeLtEq(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.ltEq(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -439,6 +456,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), timestampToMillis(v))
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeGt(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.gt(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -478,6 +497,8 @@ class ParquetFilters(
       (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), timestampToMillis(v))
     case FrameworkFilterOps(ops) =>
       (n: Array[String], v: Any) => ops.makeGtEq(n, v)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], v: Any) => FilterApi.gtEq(longColumn(n), localTimeToMicros(v))
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], v: Any) =>
@@ -569,6 +590,13 @@ class ParquetFilters(
 
     case FrameworkFilterOps(ops) =>
       (n: Array[String], values: Array[Any]) => ops.makeIn(n, values)
+    case ParquetTimeMicrosTypeAdjToUTC =>
+      (n: Array[String], values: Array[Any]) =>
+        val set = new HashSet[JLong]()
+        for (value <- values) {
+          set.add(Option(value).map(localTimeToMicros).orNull)
+        }
+        FilterApi.in(longColumn(n), set)
 
     case ParquetSchemaType(_: DecimalLogicalTypeAnnotation, INT32, _) if pushDownDecimal =>
       (n: Array[String], values: Array[Any]) =>
@@ -668,6 +696,7 @@ class ParquetFilters(
       case ParquetTimestampMicrosType | ParquetTimestampMillisType =>
         value.isInstanceOf[Timestamp] || value.isInstanceOf[Instant]
       case FrameworkFilterOps(ops) => ops.acceptsValue(value)
+      case ParquetTimeMicrosTypeAdjToUTC => value.isInstanceOf[LocalTime]
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT32, _) =>
         isDecimalMatched(value, decimalType)
       case ParquetSchemaType(decimalType: DecimalLogicalTypeAnnotation, INT64, _) =>
