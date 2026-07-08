@@ -743,11 +743,13 @@ def title_similarity(pr_title, summary):
     >>> round(title_similarity("[SPARK-1] Ceil and floor overflow", "Handle floor overflow"), 2)
     0.5
 
-    A [FOLLOWUP] tag is stripped like any other bracket tag, so a follow-up whose
-    title still matches the ticket scores the same as the untagged title:
+    A follow-up title usually describes the fix it adds, not the original ticket, so
+    it scores low against the JIRA summary even though it references the right ticket
+    (the caller skips the low-similarity warning for [FOLLOWUP] PRs -- see
+    format_jira_verification):
 
-    >>> title_similarity("[SPARK-1][FOLLOWUP] Add a cache", "Add a cache")
-    1.0
+    >>> title_similarity("[SPARK-1][FOLLOWUP] Fix a typo", "Add a cache")
+    0.0
 
     A Revert PR keeps its title verbatim (the "Revert" prefix and quotes are not
     tags), so the extra word lowers the score but a genuine match still scores high:
@@ -769,7 +771,7 @@ def title_similarity(pr_title, summary):
 
 
 def format_jira_verification(
-    pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False
+    pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False, is_followup=False
 ):
     """Render the JIRA-vs-PR match block shown before merging.
 
@@ -780,6 +782,12 @@ def format_jira_verification(
     formatting so it is covered by the inline doctests. ``use_color`` wraps the
     warnings in the same red as ``print_error``; it is left off in the doctests so
     the expected output stays plain text.
+
+    ``is_followup`` suppresses the low-similarity warning: a [FOLLOWUP] PR title
+    describes the fix it adds, not the original ticket, so it legitimately scores
+    low against the JIRA summary. The score is still shown for reference, but with
+    a note instead of a warning so the expected divergence isn't flagged as a
+    likely wrong ticket. The Resolved/Closed warning still applies.
 
     >>> print(format_jira_verification(
     ...     42,
@@ -810,6 +818,24 @@ def format_jira_verification(
       Status:  In Progress
       Type:    Bug
       Match:   1.00
+
+    A [FOLLOWUP] title scores low but is not warned about (only noted):
+
+    >>> print(format_jira_verification(
+    ...     42,
+    ...     "[SPARK-1][FOLLOWUP] Fix a typo",
+    ...     "SPARK-1",
+    ...     "Add a cache",
+    ...     "In Progress",
+    ...     "Bug",
+    ...     is_followup=True,
+    ... ))
+    === Verify JIRA matches PR #42 ===
+    PR title:  [SPARK-1][FOLLOWUP] Fix a typo
+    JIRA SPARK-1: Add a cache
+      Status:  In Progress
+      Type:    Bug
+      Match:   0.00   (FOLLOWUP: title intentionally differs, not checked)
     """
     status_warning = ""
     if status in ("Resolved", "Closed"):
@@ -817,11 +843,16 @@ def format_jira_verification(
         if use_color:
             status_warning = red(status_warning)
     score = title_similarity(pr_title, summary)
-    match_warning = ""
-    if score < SIMILARITY_WARN_THRESHOLD:
-        match_warning = "   <-- WARNING: low title similarity, wrong ticket?"
+    if is_followup:
+        # A follow-up title describes its own fix, not the original ticket, so a low
+        # score is expected and not a wrong-ticket signal. Note it, don't warn.
+        match_suffix = "   (FOLLOWUP: title intentionally differs, not checked)"
+    elif score < SIMILARITY_WARN_THRESHOLD:
+        match_suffix = "   <-- WARNING: low title similarity, wrong ticket?"
         if use_color:
-            match_warning = red(match_warning)
+            match_suffix = red(match_suffix)
+    else:
+        match_suffix = ""
     return "\n".join(
         [
             "=== Verify JIRA matches PR #%s ===" % pr_num,
@@ -829,7 +860,7 @@ def format_jira_verification(
             "JIRA %s: %s" % (jira_id, summary),
             "  Status:  %s%s" % (status, status_warning),
             "  Type:    %s" % issuetype,
-            "  Match:   %.2f%s" % (score, match_warning),
+            "  Match:   %.2f%s" % (score, match_suffix),
         ]
     )
 
@@ -1690,6 +1721,9 @@ def main():
     # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
     # Show the PR title next to each ticket's summary, warn when a ticket is already
     # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
+    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
+    # its low similarity to the JIRA summary is expected and the warning is suppressed.
+    is_followup = "FOLLOWUP" in title_components
     for jira_id, issue in linked_issues:
         print()
         print(
@@ -1701,6 +1735,7 @@ def main():
                 issue.fields.status.name,
                 issue.fields.issuetype.name,
                 use_color=True,
+                is_followup=is_followup,
             )
         )
         if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
