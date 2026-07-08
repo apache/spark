@@ -75,13 +75,13 @@ class StreamingShuffleWriter[K, V](
     s"Streaming shuffle writer memory budget ($MAX_BUFFER_BYTES bytes) is invalid for " +
       s"$numPartitions partitions; increase ${STREAMING_SHUFFLE_WRITER_MAX_MEMORY.key} or " +
       "reduce the number of partitions.")
-  // The per-partition floor (2 buffers per partition) can exceed the configured writerMaxMemory
-  // when the partition count is high; surface the effective budget so operators can see that the
-  // limit they set is not the one in force.
-  if (numPartitions.toLong * BUFFER_SIZE * 2 >
-      conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong - TOTAL_TCPBUF_BYTES) {
+  // The per-partition floor (2 buffers per partition) can push the total in-force budget above
+  // the configured writerMaxMemory when the partition count is high; surface the effective total
+  // (including TCP buffers) so operators can see the limit they set is not the one in force.
+  val effectiveBudget = MAX_BUFFER_BYTES + TOTAL_TCPBUF_BYTES
+  if (effectiveBudget > conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong) {
     logWarning(log"Streaming shuffle writer effective memory budget " +
-      log"${MDC(LogKeys.MAX_MEMORY_SIZE, Utils.bytesToString(MAX_BUFFER_BYTES))} exceeds the " +
+      log"${MDC(LogKeys.MAX_MEMORY_SIZE, Utils.bytesToString(effectiveBudget))} exceeds the " +
       log"configured ${MDC(LogKeys.CONFIG, STREAMING_SHUFFLE_WRITER_MAX_MEMORY.key)}=" +
       log"${MDC(LogKeys.MEMORY_SIZE, Utils.bytesToString(
         conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong))} because the per-partition " +

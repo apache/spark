@@ -147,7 +147,12 @@ class StreamingShuffleWriterSuite
         succeededFuture
       }
     when(client.send(any[ByteBuf])).thenAnswer { invocation =>
-      onSend(invocation.getArgument[ByteBuf](0))
+      val sent = invocation.getArgument[ByteBuf](0)
+      onSend(sent)
+      // Emulate the transport's ownership transfer: the real send(ByteBuf) releases the buffer
+      // once the write completes, dropping the composite's retainedSlice on the data buffer so
+      // rawBuffer.refCnt() is back to 1 at the done() callback (the normal recycling path).
+      sent.release()
       succeededFuture
     }
     writer.transportServerHandler.futureClients(shardId).complete(client)
@@ -204,7 +209,11 @@ class StreamingShuffleWriterSuite
               .operationComplete(failedFuture)
             failedFuture
           }
-        when(client.send(any[ByteBuf])).thenReturn(failedFuture)
+        when(client.send(any[ByteBuf])).thenAnswer { invocation =>
+          // The transport frees the buffer on completion, including on a failed write.
+          invocation.getArgument[ByteBuf](0).release()
+          failedFuture
+        }
         writer.transportServerHandler.futureClients(0).complete(client)
 
         writer.shards(0).send(new TerminationControlMessage(0, 0))
@@ -268,6 +277,9 @@ class StreamingShuffleWriterSuite
         expectedCrc.update(payload.nioBuffer(payload.readerIndex(), payload.readableBytes()))
         dataMessage.checksum should be(expectedCrc.getValue)
         dataMessage.checksum should not be 0L
+        // The mock released the sent buffer (as the transport would), so the writer's normal
+        // recycling path ran (rawBuffer.refCnt() == 1) and recorded no error.
+        writer.errorNotifier.getError() shouldBe empty
 
         dataMessage.release()
         sentBuffers.forEach(_.release())
