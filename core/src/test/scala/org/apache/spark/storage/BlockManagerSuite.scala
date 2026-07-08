@@ -2495,10 +2495,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // which must agree across the disk and _SER store paths so the seal keeps both replicas.
     diskStore.getOrElseUpdateRDDBlock(
       1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => data.iterator,
-      computeChecksum = true)
+      verifySealedChecksum = true)
     serStore.getOrElseUpdateRDDBlock(
       2L, blockId, StorageLevel.MEMORY_ONLY_SER, classTag[Int], () => data.iterator,
-      computeChecksum = true)
+      verifySealedChecksum = true)
     assert(master.getLocations(blockId).toSet ===
       Set(diskStore.blockManagerId, serStore.blockManagerId))
 
@@ -2542,13 +2542,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // same block id (as a non-deterministic recompute by a speculative or zombie attempt would).
     store1.getOrElseUpdateRDDBlock(
       1L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
-      () => dataA.iterator, computeChecksum = true)
+      () => dataA.iterator, verifySealedChecksum = true)
     store3.getOrElseUpdateRDDBlock(
       3L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
-      () => dataA.iterator, computeChecksum = true)
+      () => dataA.iterator, verifySealedChecksum = true)
     store2.getOrElseUpdateRDDBlock(
       2L, blockId, StorageLevel.DISK_ONLY, classTag[Int],
-      () => dataB.iterator, computeChecksum = true)
+      () => dataB.iterator, verifySealedChecksum = true)
 
     // The seal keeps the plurality (dataA, two copies) and evicts the divergent dataB copy.
     assert(master.sealRddChecksums(20) === 0)
@@ -2559,15 +2559,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("verifySealed tracks the seal request, not merely the presence of a checksum") {
-    // A seal-path store (computeChecksum = true) marks the block for the read-side self-check.
+    // A seal-path store (verifySealedChecksum = true) marks the block for the read-side self-check.
     val sealStore = makeBlockManager(20000, "exec1")
     val sealBlock = RDDBlockId(21, 0)
     sealStore.getOrElseUpdateRDDBlock(
       1L, sealBlock, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator,
-      computeChecksum = true)
+      verifySealedChecksum = true)
     val sealInfo = sealStore.blockInfoManager.get(sealBlock).get
     assert(sealInfo.checksum.isDefined)
-    assert(sealInfo.verifySealed)
+    assert(sealInfo.verifySealedChecksum)
 
     // A compute-only store (global flag on, no seal request) also gets a checksum, but must NOT be
     // marked for the self-check - having a checksum alone does not opt a block in.
@@ -2578,7 +2578,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       2L, computeBlock, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator)
     val computeInfo = computeStore.blockInfoManager.get(computeBlock).get
     assert(computeInfo.checksum.isDefined)
-    assert(!computeInfo.verifySealed)
+    assert(!computeInfo.verifySealedChecksum)
   }
 
   test("global checksum flag records divergent replicas without evicting or skipping them") {
@@ -2589,8 +2589,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val store1 = makeBlockManager(20000, "exec1", testConf = Some(checksumConf))
     val store2 = makeBlockManager(20000, "exec2", testConf = Some(checksumConf))
     val blockId = RDDBlockId(22, 0)
-    // No computeChecksum flag: only the global switch drives the checksum, so neither block is on
-    // the seal path.
+    // No verifySealedChecksum flag: only the global switch drives the checksum, so neither block is
+    // on the seal path.
     store1.getOrElseUpdateRDDBlock(
       1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => Seq(1, 2, 3, 4).iterator)
     store2.getOrElseUpdateRDDBlock(

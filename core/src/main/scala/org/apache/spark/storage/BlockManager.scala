@@ -251,9 +251,10 @@ private[spark] class BlockManager(
    * detect a block produced inconsistently by more than one task attempt (Spark non-determinism
    * together with speculation or stage retries).
    */
-  private def newRddBlockChecksum(blockId: BlockId, compute: Boolean): Option[Checksum] = {
-    // Compute when the global switch is on, or when the caller asks for it for this block.
-    if ((rddBlockChecksumEnabled || compute) && blockId.isRDD) {
+  private def newRddBlockChecksum(
+      blockId: BlockId, verifySealedChecksum: Boolean): Option[Checksum] = {
+    // Compute when the global switch is on, or when this block will be sealed.
+    if ((rddBlockChecksumEnabled || verifySealedChecksum) && blockId.isRDD) {
       Some(ShuffleChecksumHelper.getChecksumByAlgorithm(rddBlockChecksumAlgorithm))
     } else {
       None
@@ -267,7 +268,7 @@ private[spark] class BlockManager(
    * yet imposes no constraint - the local copy is served as usual; only once a block is sealed
    * does a non-matching local copy become a stale replica to skip in favor of a remote one.
    */
-  private def localCopyMatchesSeal(blockId: BlockId, info: BlockInfo): Boolean = {
+  private def localCopyMatchesSealedChecksum(blockId: BlockId, info: BlockInfo): Boolean = {
     if (info.sealedChecksum.isEmpty) {
       info.sealedChecksum = master.getSealedChecksum(blockId)
     }
@@ -1053,7 +1054,7 @@ private[spark] class BlockManager(
         // seal is evicting, but that eviction is async and may not have landed. This self-check
         // makes correctness independent of the eviction landing. Only `verifySealed` blocks are
         // checked; an unsealed block, or one checksummed only for observation, is served as-is.
-        if (info.verifySealed && !localCopyMatchesSeal(blockId, info)) {
+        if (info.verifySealedChecksum && !localCopyMatchesSealedChecksum(blockId, info)) {
           releaseLock(blockId, Option(TaskContext.get()))
           return None
         }
@@ -1468,10 +1469,10 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
-      computeChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
+      verifySealedChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
     val isCacheVisible = isRDDBlockVisible(blockId)
     val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible,
-      computeChecksum = computeChecksum)
+      verifySealedChecksum = verifySealedChecksum)
     if (res.isLeft && !isCacheVisible) {
       // Block exists but not visible, report taskId -> blockId info to master.
       master.updateRDDBlockTaskInfo(blockId, taskId)
@@ -1493,7 +1494,7 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
       isCacheVisible: Boolean,
-      computeChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
+      verifySealedChecksum: Boolean = false): Either[BlockResult, Iterator[T]] = {
     // Track whether the data is computed or not, force to do the computation later if need to.
     // The reason we push the force computing later is that once the executor is decommissioned we
     // will have a better chance to replicate the cache block because of the `checkShouldStore`
@@ -1519,7 +1520,7 @@ private[spark] class BlockManager(
     //  the cached results.
     // Initially we hold no locks on this block.
     doPutIterator(blockId, iterator, level, classTag, keepReadLock = true,
-      computeChecksum = computeChecksum) match {
+      verifySealedChecksum = verifySealedChecksum) match {
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
@@ -1740,13 +1741,11 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false,
-      computeChecksum: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
+      verifySealedChecksum: Boolean = false): Option[PartiallyUnrolledIterator[T]] = {
     doPut(blockId, level, classTag, tellMaster = tellMaster, keepReadLock = keepReadLock) { info =>
       val startTimeNs = System.nanoTime()
       var iteratorFromFailedMemoryStorePut: Option[PartiallyUnrolledIterator[T]] = None
-      // The caller requests a checksum only on the seal path; a checksum from the global switch
-      // alone does not opt the block into the read-side seal self-check.
-      info.verifySealed = computeChecksum
+      info.verifySealedChecksum = verifySealedChecksum
       // Size of the block in bytes
       var size = 0L
       if (level.useMemory) {
@@ -1763,7 +1762,7 @@ private[spark] class BlockManager(
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
                 logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
-                val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
+                val checksumOpt = newRddBlockChecksum(blockId, verifySealedChecksum)
                 diskStore.put(blockId) { channel =>
                   val rawOut = Channels.newOutputStream(channel)
                   val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut))
@@ -1777,7 +1776,7 @@ private[spark] class BlockManager(
               }
           }
         } else { // !level.deserialized
-          val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
+          val checksumOpt = newRddBlockChecksum(blockId, verifySealedChecksum)
           memoryStore.putIteratorAsBytes(
             blockId, iterator(), classTag, level.memoryMode, checksumOpt) match {
             case Right(s) =>
@@ -1799,7 +1798,7 @@ private[spark] class BlockManager(
         }
 
       } else if (level.useDisk) {
-        val checksumOpt = newRddBlockChecksum(blockId, computeChecksum)
+        val checksumOpt = newRddBlockChecksum(blockId, verifySealedChecksum)
         diskStore.put(blockId) { channel =>
           val rawOut = Channels.newOutputStream(channel)
           val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut)).getOrElse(rawOut)

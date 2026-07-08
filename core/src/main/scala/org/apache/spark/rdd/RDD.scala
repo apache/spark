@@ -376,11 +376,39 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Set by `localCheckpoint` (when verification is enabled) to mark this RDD's cache blocks for
-   * content-checksum + seal. Read in `getOrCompute` to decide whether to compute a checksum, and at
-   * the checkpoint commit point to decide whether to seal. Travels with the RDD to executors.
+   * Set (when verification is enabled) to mark this RDD's cache blocks for content-checksum + seal.
+   * Read in `getOrCompute` to decide whether to compute a checksum, and at the commit point to
+   * decide whether to seal. Travels with the RDD to executors.
    */
-  private[spark] var verifySealedChecksum: Boolean = false
+  private[rdd] var verifySealedChecksum: Boolean = false
+
+  /**
+   * Seal this RDD's checksummed blocks so every later read sees a single consistent version, even
+   * if Spark non-determinism plus speculation or stage retries materialized a partition into more
+   * than one divergent copy. The master keeps the plurality checksum per partition, evicts the
+   * divergent copies, and rejects future divergent registrations; reads then self-check against the
+   * sealed checksum. No-op unless this RDD is marked for verification. Relies on the per-replica
+   * checksums recorded by BlockManager at store time (see `SerializerManager.wrapForChecksum`).
+   */
+  private[rdd] def sealChecksumIfEnabled(): Unit = {
+    if (verifySealedChecksum) {
+      val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(id)
+      if (unverified > 0) {
+        // A non-zero count means some materialized partitions carry no checksum, so could not be
+        // sealed: either a deserialized storage level (in-memory objects are not checksummed), or
+        // blocks materialized before this RDD was marked for verification.
+        if (getStorageLevel.deserialized) {
+          logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but its " +
+            log"storage level is deserialized, so ${MDC(NUM_PARTITIONS, unverified)} in-memory " +
+            log"partition(s) were left unverified.")
+        } else {
+          logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but " +
+            log"${MDC(NUM_PARTITIONS, unverified)} partition(s) were materialized before it was " +
+            log"marked and were left unverified.")
+        }
+      }
+    }
+  }
 
   /**
    * Gets or computes an RDD partition. Used by RDD.iterator() when an RDD is cached.
@@ -394,7 +422,7 @@ abstract class RDD[T: ClassTag](
         readCachedBlock = false
         computeOrReadCheckpoint(partition, context)
       },
-      computeChecksum = verifySealedChecksum
+      verifySealedChecksum = verifySealedChecksum
     ) match {
       // Block hit.
       case Left(blockResult) =>

@@ -2898,13 +2898,8 @@ package object config {
     ConfigBuilder("spark.storage.rddBlockChecksum.enabled")
       .internal()
       .doc("When true, the BlockManager computes a content checksum over the serialized bytes " +
-        "of every serialized RDD cache block at store time and reports it to the driver. This " +
-        "is the raw checksum-computation switch; on its own it only records checksums (a " +
-        "consumer may use them, e.g. to log divergent replicas). Sealing local checkpoints to a " +
-        "single consistent version is governed separately by " +
-        "spark.checkpoint.local.verifyChecksum.enabled, which turns on checksum computation for " +
-        "its RDDs regardless of this flag. Only serialized blocks are covered; deserialized " +
-        "in-memory blocks are not checksummed.")
+        "of every serialized RDD cache block at store time and reports it to the driver. Only " +
+        "serialized blocks are covered; deserialized in-memory blocks are not checksummed.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(false)
