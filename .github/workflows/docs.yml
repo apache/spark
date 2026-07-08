@@ -76,7 +76,7 @@ jobs:
             docs-maven-${{ runner.os }}-
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@4dc28cf14d77b0afa6832d9765ac422dbf0dfedd
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
           working-directory: docs
