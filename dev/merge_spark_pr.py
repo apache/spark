@@ -690,58 +690,134 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
 
 
+# Common words carry no signal when comparing a PR title to a JIRA summary, so they are
+# dropped before scoring. Kept deliberately small: over-aggressive stopword removal makes
+# unrelated titles look similar. Component tags ([SQL], [CORE], ...) are stripped separately.
+_SIMILARITY_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "to",
+        "for",
+        "of",
+        "in",
+        "on",
+        "and",
+        "or",
+        "with",
+        "is",
+        "are",
+        "be",
+        "when",
+        "should",
+        "make",
+        "add",
+        "fix",
+        "fixes",
+        "support",
+        "enable",
+        "use",
+        "using",
+    }
+)
+_SIMILARITY_WORD_RE = re.compile(r"[a-z0-9]+")
+# Below this Jaccard word-overlap score, warn that the PR title and JIRA summary look
+# unrelated. Tuned to flag clear mismatches (an unrelated ticket scores ~0) while leaving
+# paraphrases and reworded summaries (which still share key nouns) above the line.
+SIMILARITY_WARN_THRESHOLD = 0.2
+
+
+def title_similarity(pr_title, summary):
+    """Jaccard word-overlap between a PR title and a JIRA summary, in [0.0, 1.0].
+
+    Component/version tags ([SQL], [4.x], ...) and the leading SPARK id are stripped,
+    words are lowercased, and common stopwords are dropped, so the score reflects the
+    substantive words the two share. 1.0 means identical word sets; 0.0 means none in
+    common (or an empty side).
+
+    >>> title_similarity("[SPARK-1][SQL] Compute stable checksum", "Compute a stable checksum")
+    1.0
+    >>> title_similarity("[SPARK-1][SQL] Compute stable checksum", "Refactor the logging backend")
+    0.0
+    >>> round(title_similarity("[SPARK-1] Ceil and floor overflow", "Handle floor overflow"), 2)
+    0.5
+    """
+
+    def tokens(text):
+        text = re.sub(r"\[[^\]]*\]", " ", text)
+        words = _SIMILARITY_WORD_RE.findall(text.lower())
+        return {w for w in words if w not in _SIMILARITY_STOPWORDS}
+
+    a = tokens(pr_title)
+    b = tokens(summary)
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
 def format_jira_verification(
     pr_num, pr_title, jira_id, summary, status, issuetype, use_color=False
 ):
     """Render the JIRA-vs-PR match block shown before merging.
 
     Places the PR title next to the linked ticket's summary so the committer can
-    eyeball whether they match, and flags a ticket that is already Resolved/Closed
-    (a fresh merge should target an open ticket). Pure formatting so it is covered
-    by the inline doctests. ``use_color`` wraps the Resolved/Closed warning in the
-    same red as ``print_error``; it is left off in the doctests so the expected
-    output stays plain text.
+    eyeball whether they match, flags a ticket that is already Resolved/Closed
+    (a fresh merge should target an open ticket), and scores how much the PR title
+    and the JIRA summary overlap -- a low score suggests the wrong ticket. Pure
+    formatting so it is covered by the inline doctests. ``use_color`` wraps the
+    warnings in the same red as ``print_error``; it is left off in the doctests so
+    the expected output stays plain text.
 
     >>> print(format_jira_verification(
     ...     42,
-    ...     "[SPARK-2222][SQL] Feature B",
+    ...     "[SPARK-2222][SQL] Compute stable checksum",
     ...     "SPARK-1111",
-    ...     "Feature A (unrelated)",
+    ...     "Refactor the logging backend",
     ...     "Resolved",
     ...     "Improvement",
     ... ))
     === Verify JIRA matches PR #42 ===
-    PR title:  [SPARK-2222][SQL] Feature B
-    JIRA SPARK-1111: Feature A (unrelated)
+    PR title:  [SPARK-2222][SQL] Compute stable checksum
+    JIRA SPARK-1111: Refactor the logging backend
       Status:  Resolved   <-- WARNING: already Resolved/Closed
       Type:    Improvement
+      Match:   0.00   <-- WARNING: low title similarity, wrong ticket?
 
     >>> print(format_jira_verification(
     ...     42,
-    ...     "[SPARK-2222][SQL] Feature B",
+    ...     "[SPARK-2222][SQL] Compute stable checksum",
     ...     "SPARK-2222",
-    ...     "Feature B",
+    ...     "Compute a stable checksum",
     ...     "In Progress",
     ...     "Bug",
     ... ))
     === Verify JIRA matches PR #42 ===
-    PR title:  [SPARK-2222][SQL] Feature B
-    JIRA SPARK-2222: Feature B
+    PR title:  [SPARK-2222][SQL] Compute stable checksum
+    JIRA SPARK-2222: Compute a stable checksum
       Status:  In Progress
       Type:    Bug
+      Match:   1.00
     """
-    warning = ""
+    status_warning = ""
     if status in ("Resolved", "Closed"):
-        warning = "   <-- WARNING: already Resolved/Closed"
+        status_warning = "   <-- WARNING: already Resolved/Closed"
         if use_color:
-            warning = red(warning)
+            status_warning = red(status_warning)
+    score = title_similarity(pr_title, summary)
+    match_warning = ""
+    if score < SIMILARITY_WARN_THRESHOLD:
+        match_warning = "   <-- WARNING: low title similarity, wrong ticket?"
+        if use_color:
+            match_warning = red(match_warning)
     return "\n".join(
         [
             "=== Verify JIRA matches PR #%s ===" % pr_num,
             "PR title:  %s" % pr_title,
             "JIRA %s: %s" % (jira_id, summary),
-            "  Status:  %s%s" % (status, warning),
+            "  Status:  %s%s" % (status, status_warning),
             "  Type:    %s" % issuetype,
+            "  Match:   %.2f%s" % (score, match_warning),
         ]
     )
 
