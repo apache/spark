@@ -171,7 +171,8 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     // another date-only value: preferDate=true re-infers `Date` and the merge stays `Date`;
     // preferDate=false skips date inference so the value falls through to `Timestamp`, and the
     // merge widens `Date` to `Timestamp`. This guards the `tryParseTime` branch, which the
-    // incremental-vs-legacy parity test does not cover (it runs only at the default preferDate=true).
+    // incremental-vs-legacy parity test does not cover (it runs only at the default
+    // preferDate=true).
     assert(newInferSchema(Map("preferDate" -> "true"))
       .inferFrom("2024-01-15", DateType) == DateType)
     assert(newInferSchema(Map("preferDate" -> "false"))
