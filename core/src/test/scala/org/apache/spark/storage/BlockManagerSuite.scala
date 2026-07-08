@@ -2558,6 +2558,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store2.getLocalValues(blockId).isEmpty)
   }
 
+  test("spark.storage.rddBlockChecksum.enabled computes checksums without any seal request") {
+    // The global switch is independent of the local-checkpoint seal: with it on, a serialized RDD
+    // block gets a checksum at store time even though the caller did not request one
+    // (computeChecksum defaults to false), and that checksum reaches the master.
+    val checksumConf = new SparkConf(false).set(STORAGE_RDD_BLOCK_CHECKSUM_ENABLED, true)
+    val store = makeBlockManager(20000, "exec1", testConf = Some(checksumConf))
+    val blockId = RDDBlockId(21, 0)
+    store.getOrElseUpdateRDDBlock(
+      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator)
+    // A checksum was recorded even though no seal was requested; sealRddChecksums finds it (0
+    // unchecksummed) rather than reporting the partition as uncovered.
+    assert(master.sealRddChecksums(21) === 0)
+    assert(master.getSealedChecksum(blockId).isDefined)
+  }
+
   test("SPARK-41497: mark rdd block as visible") {
     val store = makeBlockManager(8000, "executor1")
     val blockId = RDDBlockId(rddId = 1, splitIndex = 1)

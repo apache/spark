@@ -2894,6 +2894,21 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.storage.rddBlockChecksum.enabled")
+      .internal()
+      .doc("When true, the BlockManager computes a content checksum over the serialized bytes " +
+        "of every serialized RDD cache block at store time and reports it to the driver. This " +
+        "is the raw checksum-computation switch; on its own it only records checksums (a " +
+        "consumer may use them, e.g. to log divergent replicas). Sealing local checkpoints to a " +
+        "single consistent version is governed separately by " +
+        "spark.checkpoint.local.verifyChecksum.enabled, which turns on checksum computation for " +
+        "its RDDs regardless of this flag. Only serialized blocks are covered; deserialized " +
+        "in-memory blocks are not checksummed.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM =
     ConfigBuilder("spark.storage.rddBlockChecksum.algorithm")
       .internal()
@@ -2912,9 +2927,10 @@ package object config {
         "partitions at store time and, at the checkpoint commit point, detects partitions that " +
         "were materialized inconsistently by more than one task attempt (Spark non-determinism " +
         "combined with retries/speculation) and seals each partition to a single version. Guards " +
-        "against silently inconsistent local checkpoints. Only serialized blocks materialized " +
-        "after localCheckpoint() is called are covered; deserialized in-memory blocks are not " +
-        "checksummed (a warning is logged).")
+        "against silently inconsistent local checkpoints. This implies checksum computation for " +
+        "the checkpointed RDD regardless of spark.storage.rddBlockChecksum.enabled. Only " +
+        "serialized blocks materialized after localCheckpoint() is called are covered; " +
+        "deserialized in-memory blocks are not checksummed (a warning is logged).")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(true)

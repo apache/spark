@@ -231,6 +231,10 @@ private[spark] class BlockManager(
   /** Whether rdd cache visibility tracking is enabled. */
   private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
+  /** Whether to compute a content checksum for every serialized RDD cache block at store time. */
+  private val rddBlockChecksumEnabled: Boolean =
+    conf.get(config.STORAGE_RDD_BLOCK_CHECKSUM_ENABLED)
+
   /** Algorithm used for RDD block checksums (a built-in JDK checksum, shared with shuffle). */
   private val rddBlockChecksumAlgorithm: String =
     conf.get(config.STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM)
@@ -248,7 +252,9 @@ private[spark] class BlockManager(
    * together with speculation or stage retries).
    */
   private def newRddBlockChecksum(blockId: BlockId, compute: Boolean): Option[Checksum] = {
-    if (compute && blockId.isRDD) {
+    // Compute when either the caller asks for it (e.g. a local checkpoint that will be sealed) or
+    // the global switch is on (checksum every serialized RDD block, e.g. to log divergence).
+    if ((compute || rddBlockChecksumEnabled) && blockId.isRDD) {
       Some(ShuffleChecksumHelper.getChecksumByAlgorithm(rddBlockChecksumAlgorithm))
     } else {
       None
