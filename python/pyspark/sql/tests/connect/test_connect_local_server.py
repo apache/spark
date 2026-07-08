@@ -399,18 +399,29 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             # tearDown stops the server and waits for the port to close.
 
     @staticmethod
-    def _wait_process_group_gone(pgid: int, timeout: float) -> bool:
-        """Wait until no process in ``pgid`` can be signalled; True if that happened in time.
+    def _running_group_members(pgid: int) -> list:
+        """Pids in process group ``pgid`` that are still running, excluding zombies.
 
-        ProcessLookupError means the group is empty. PermissionError also counts as gone: on
-        macOS, a dead group member lingering as a zombie (reparented to launchd) yields EPERM
-        even though nothing in the group is running.
+        Zombies count as gone: they are already dead, so nothing can leak. Signal-based checks
+        like ``killpg(pgid, 0)`` cannot be used instead, because a zombie keeps its group
+        signalable, and orphans reparented to a pid 1 that never reaps (e.g. minimal CI
+        containers) stay zombies indefinitely.
         """
+        out = subprocess.run(
+            ["ps", "-A", "-o", "pid=,pgid=,stat="], capture_output=True, text=True
+        ).stdout
+        members = []
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[1] == str(pgid) and not parts[2].startswith("Z"):
+                members.append(int(parts[0]))
+        return members
+
+    def _wait_process_group_gone(self, pgid: int, timeout: float) -> bool:
+        """Wait until nothing in ``pgid`` is still running; True if that happened in time."""
         deadline = time.time() + timeout
         while True:
-            try:
-                os.killpg(pgid, 0)
-            except (ProcessLookupError, PermissionError):
+            if not self._running_group_members(pgid):
                 return True
             if time.time() >= deadline:
                 return False
@@ -424,6 +435,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         on SIGTERM promptly while its JVM is still shutting down (or wedged) past the grace
         period. _terminate_local_connect_server must not return while the group has live members.
         """
+        if shutil.which("ps") is None:
+            self.skipTest("ps is needed to inspect process group members")
+
         # A session leader that exits on SIGTERM after spawning a SIGTERM-immune child into its
         # process group -- the child stands in for a JVM that outlives the daemon.
         leader_prog = textwrap.dedent(
@@ -467,18 +481,12 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 self._wait_process_group_gone(pgid, timeout=10),
                 "process group survived _terminate_local_connect_server",
             )
-            # The SIGTERM-immune child must be dead, proving the SIGKILL escalation fired.
-            # os.kill(pid, 0) still succeeds for a zombie until init/launchd reaps it, so poll
-            # briefly rather than asserting on the first probe.
-            deadline = time.time() + 10
-            child_gone = False
-            while time.time() < deadline and not child_gone:
-                try:
-                    os.kill(child_pid, 0)
-                    time.sleep(0.2)
-                except OSError:
-                    child_gone = True
-            self.assertTrue(child_gone, "SIGTERM-immune child survived the SIGKILL escalation")
+            # The SIGTERM-immune child no longer runs, proving the SIGKILL escalation fired.
+            self.assertNotIn(
+                child_pid,
+                self._running_group_members(pgid),
+                "SIGTERM-immune child survived the SIGKILL escalation",
+            )
         finally:
             proc.stdout.close()
             try:
