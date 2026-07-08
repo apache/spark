@@ -141,8 +141,8 @@ class SorterSuite extends SparkFunSuite {
     val arrayToSortSize = 1091482190
     // Memory held by the previous test (e.g. the ~256 MB int array in "SPARK-5984
     // TimSort bug") may not be reclaimed before this >1 GB allocation, causing flaky
-    // OOM in CI. Force a GC and retry once on OOM.
-    val arrayToSort = retryOnOOM(new Array[Byte](arrayToSortSize))
+    // OOM in CI. Force a GC and retry a few times on OOM.
+    val arrayToSort = retryOnOOM()(new Array[Byte](arrayToSortSize))
     var sum: Int = -1
     for (i <- runLengths) {
       sum += i

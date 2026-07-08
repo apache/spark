@@ -47,6 +47,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
     ArrayType,
     MapType,
     StructType,
@@ -410,6 +411,13 @@ def from_arrow_type(
             spark_type = TimestampType()
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
+    elif at.id == 21:  # Arrow Type.INTERVAL_MONTHS
+        # The JVM serializes Spark's YearMonthIntervalType to an Arrow YEAR_MONTH interval
+        # (an integer number of months); see ArrowUtils.scala / ArrowWriter.scala. Unlike
+        # DayTimeIntervalType (sent as an Arrow Duration), PyArrow exposes no factory or
+        # is_*() helper for this type -- only MONTH_DAY_NANO is in pyarrow.types -- so match
+        # on the stable Arrow type id (Type::INTERVAL_MONTHS == 21).
+        spark_type = YearMonthIntervalType()
     elif types.is_list(at):
         spark_type = ArrayType(
             elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),

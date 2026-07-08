@@ -5647,7 +5647,7 @@
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
-      "Cannot specify time travel in both the time travel clause and options."
+      "Cannot specify time travel in more than one of: the '@' suffix in the table name, the time travel clause, and the read options."
     ],
     "sqlState" : "42K0E"
   },
@@ -8577,6 +8577,11 @@
       "TIME_TRAVEL" : {
         "message" : [
           "Time travel on the relation: <relationId>."
+        ]
+      },
+      "TIME_TRAVEL_AT_SYNTAX" : {
+        "message" : [
+          "Time travel using the '@' suffix in table names. Set <config> to true to enable it."
         ]
       },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
