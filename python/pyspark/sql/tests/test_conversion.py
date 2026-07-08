@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import datetime
+import decimal
 import unittest
 import unittest.mock
 from zoneinfo import ZoneInfo
@@ -899,6 +900,37 @@ class ArrowColumnToPylistTests(unittest.TestCase):
             pa.array([], type=pa.list_(pa.int32())),
             pa.array([None, None], type=pa.list_(pa.string())),
             pa.array([[1, 2], None], type=pa.list_(pa.int64(), 2)),
+            # non-list leaves keep as_py semantics (native to_pylist)
+            pa.array([b"", None, b"\x00\xff"], type=pa.binary()),
+            pa.array([datetime.date(2020, 1, 2), None], type=pa.date32()),
+            pa.array([decimal.Decimal("1.23"), None], type=pa.decimal128(10, 2)),
+            pa.array([[b"x", None], None, [b""]], type=pa.list_(pa.binary())),
+            pa.array([[True, None], [False]], type=pa.list_(pa.bool_())),
+            # struct and map bulk paths
+            pa.array(
+                [{"a": 1, "b": "x"}, None, {"a": None, "b": None}],
+                type=pa.struct([("a", pa.int64()), ("b", pa.string())]),
+            ),
+            pa.array(
+                [{"s": {"a": 1}, "l": [1, None]}, None],
+                type=pa.struct(
+                    [("s", pa.struct([("a", pa.int32())])), ("l", pa.list_(pa.int64()))]
+                ),
+            ),
+            pa.array([{}, None, {}], type=pa.struct([])),
+            pa.array([None] * 4, type=pa.struct([("a", pa.int32())])),
+            pa.array(
+                [[("k1", [1, None]), ("k2", None)], None, []],
+                type=pa.map_(pa.string(), pa.list_(pa.int32())),
+            ),
+            pa.array(
+                [{"m": [("k", 1)]}, None],
+                type=pa.struct([("m", pa.map_(pa.string(), pa.int64()))]),
+            ),
+            pa.array(
+                [[{"a": 1}, None], None],
+                type=pa.list_(pa.struct([("a", pa.int64())])),
+            ),
         ]
         for column in columns:
             views = [column, column.slice(1), column.slice(0, max(len(column) - 1, 0))]
@@ -921,6 +953,20 @@ class ArrowColumnToPylistTests(unittest.TestCase):
         )
         self.assertEqual(result, [[1, None, 3]])
         self.assertEqual([type(v) for v in result[0]], [int, type(None), int])
+
+    def test_struct_duplicate_field_names_still_raises(self):
+        import pyarrow as pa
+
+        dup = pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["a", "b"])], names=["x", "x"])
+        with self.assertRaises(ValueError):
+            ArrowTableToRowsConversion._to_pylist(dup)
+
+    def test_struct_rows_are_distinct_dicts(self):
+        import pyarrow as pa
+
+        result = ArrowTableToRowsConversion._to_pylist(pa.array([{}, {}], type=pa.struct([])))
+        self.assertEqual(result, [{}, {}])
+        self.assertIsNot(result[0], result[1])
 
     def test_convert_table_with_list_columns(self):
         import pyarrow as pa
