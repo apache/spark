@@ -617,9 +617,7 @@ class SparkSession:
                     (
                         TimestampType()
                         if is_datetime64_dtype(t) or isinstance(t, pd.DatetimeTZDtype)
-                        else DayTimeIntervalType()
-                        if is_timedelta64_dtype(t)
-                        else None
+                        else DayTimeIntervalType() if is_timedelta64_dtype(t) else None
                     )
                     for t in data.dtypes
                 ]
@@ -990,6 +988,10 @@ class SparkSession:
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
+
+            # A pooled local server is single-use by design: tear it down (asynchronously) as
+            # soon as the run that claimed it stops its session.
+            SparkSession._release_pooled_local_connect_server()
 
     @property
     def is_stopped(self) -> bool:
@@ -1407,6 +1409,8 @@ class SparkSession:
             "spark.local.connect.reuse",
             "spark.local.connect.server.port",
             "spark.local.connect.server.idleTimeout",
+            "spark.local.connect.pool",
+            "spark.local.connect.pool.size",
         ):
             conf.pop(k, None)
         return conf
@@ -1589,6 +1593,533 @@ class SparkSession:
         except OSError:
             pass
         return stopped
+
+    # PoC: pool of pre-warmed, SINGLE-USE local Spark Connect servers.
+    #
+    # The reuse path above keeps one long-lived server that every run reconnects to; state backed
+    # by its shared SparkContext/JVM therefore carries across runs. The pool path instead keeps N
+    # never-used servers warm: each run *claims* one exclusively (an atomic rename of its
+    # discovery file), a replacement is spawned asynchronously, and the claimed server is torn
+    # down asynchronously when the session stops (or the client process exits). No JVM ever
+    # serves two runs, so cross-run state carry-over is impossible by construction, while the
+    # visible startup cost is just the claim + gRPC connect.
+    #
+    # Pool directory layout (default ``~/.spark/connect-local-pool``):
+    #   pending-<uid>.json         an in-flight launch (daemon pid, spawn time, fingerprint)
+    #   conf-<uid>.json            start-up confs for that launch, read once by the daemon
+    #   server-<uid>.json          a warm, ready, never-used server (written by the daemon)
+    #   claimed-<clientpid>-<uid>.json   a server owned by a live client run
+    #   retired-<uid>.json         a served server being torn down (janitor escalates/reaps)
+    #   .lock                      serializes spawn accounting across processes (fcntl only)
+
+    _pooled_server: ClassVar[Optional[Dict[str, Any]]] = None
+    _pooled_release_registered: ClassVar[bool] = False
+
+    @staticmethod
+    def _hard_kill_signal() -> int:
+        """SIGKILL where it exists; SIGTERM on Windows, which has no SIGKILL."""
+        return signal.SIGKILL if os.name == "posix" else signal.SIGTERM
+
+    @staticmethod
+    def _acquire_local_connect_pool_lock(pool_dir: str) -> Any:
+        """Exclusive file lock serializing pool spawn accounting across processes.
+
+        Only refill decisions need it (claims are atomic renames): without it, N racing cold
+        starters each spawn a full complement of servers instead of sharing one. Returns ``None``
+        on platforms without ``fcntl``; those callers may transiently over-spawn, and the extra
+        members are reclaimed by the idle timeout -- the same graceful degradation as the reuse
+        path's start lock.
+        """
+        try:
+            import fcntl
+        except ImportError:
+            return None
+        os.makedirs(pool_dir, mode=0o700, exist_ok=True)
+        fd = os.open(os.path.join(pool_dir, ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return fd
+
+    @staticmethod
+    def _release_local_connect_pool_lock(fd: Any) -> None:
+        if fd is None:
+            return
+        try:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+    @staticmethod
+    def _local_connect_pool_dir() -> str:
+        override = os.environ.get("SPARK_LOCAL_CONNECT_POOL_DIR")
+        if override:
+            return override
+        return os.path.join(os.path.expanduser("~"), ".spark", "connect-local-pool")
+
+    @staticmethod
+    def _local_connect_pool_target(opts: Dict[str, Any]) -> int:
+        try:
+            return max(
+                1,
+                int(
+                    opts.get(
+                        "spark.local.connect.pool.size",
+                        os.environ.get("SPARK_LOCAL_CONNECT_POOL_SIZE", "2"),
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            return 2
+
+    @staticmethod
+    def _local_connect_pool_fingerprint(master: str, seed_conf: Dict[str, Any]) -> str:
+        """Identity of a pool server: the master plus the start-up confs it was seeded with.
+
+        A run only claims servers whose fingerprint matches its own, so a pre-warmed JVM is never
+        handed to a run whose static confs differ from what that JVM was booted with.
+        """
+        import hashlib
+
+        canonical = json.dumps([master, sorted((str(k), str(v)) for k, v in seed_conf.items())])
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _read_json_quietly(path: str) -> Optional[Any]:
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _unlink_quietly(path: str) -> None:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return True  # exists but not ours to signal
+
+    @staticmethod
+    def _spawn_local_connect_pool_server(
+        pool_dir: str, master: str, seed_conf: Dict[str, Any], fingerprint: str
+    ) -> None:
+        """Fire-and-forget launch of one pool server; readiness is its discovery file appearing.
+
+        A ``pending-<uid>.json`` marker makes the in-flight launch visible to other runs so they
+        do not over-spawn; the janitor removes it once the server is ready or its daemon dies.
+        The marker is written before the conf seed so no janitor can remove the seed while the
+        daemon may still need to read it.
+        """
+        import subprocess
+
+        uid = uuid.uuid4().hex[:12]
+        os.makedirs(pool_dir, mode=0o700, exist_ok=True)
+
+        def _write_pending(daemon_pid: int) -> None:
+            payload = {"daemon_pid": daemon_pid, "created": time.time(), "fingerprint": fingerprint}
+            tmp = os.path.join(pool_dir, "pending-{}.json.{}.tmp".format(uid, os.getpid()))
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps(payload))
+            os.replace(tmp, os.path.join(pool_dir, "pending-{}.json".format(uid)))
+
+        _write_pending(-1)
+        conf_file = None
+        if seed_conf:
+            conf_file = os.path.join(pool_dir, "conf-{}.json".format(uid))
+            fd = os.open(conf_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(seed_conf, f)
+
+        daemon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_server.py")
+        cmd = [
+            sys.executable,
+            daemon,
+            "--master",
+            master,
+            # Every pool member binds an ephemeral port so members coexist and never port-race.
+            "--port",
+            "0",
+            "--token",
+            str(uuid.uuid4()),
+            "--discovery",
+            os.path.join(pool_dir, "server-{}.json".format(uid)),
+            "--fingerprint",
+            fingerprint,
+            "--exit-after-use",
+            "--poll-interval",
+            "2",
+            "--idle-timeout",
+            os.environ.get("SPARK_LOCAL_CONNECT_POOL_IDLE_TIMEOUT", "1800"),
+        ]
+        if conf_file is not None:
+            cmd += ["--conf-file", conf_file]
+
+        env = dict(os.environ)
+        for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
+            env.pop(var, None)
+        popen_kwargs: Dict[str, Any] = dict(
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if os.name == "posix":
+            popen_kwargs["start_new_session"] = True
+        else:
+            detached = getattr(subprocess, "DETACHED_PROCESS", 0)
+            new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            popen_kwargs["creationflags"] = detached | new_group
+        try:
+            proc = subprocess.Popen(cmd, **popen_kwargs)
+        except OSError as e:
+            # Failed to even fork the daemon: withdraw this launch's marker and conf seed so
+            # they neither suppress other refills nor linger for the janitor's timeout.
+            SparkSession._unlink_quietly(os.path.join(pool_dir, "pending-{}.json".format(uid)))
+            if conf_file is not None:
+                SparkSession._unlink_quietly(conf_file)
+            logger.warning("Failed to launch a pooled local Connect server: {}".format(e))
+            return
+        _write_pending(proc.pid)
+
+    @staticmethod
+    def _claim_local_connect_pool_server(
+        pool_dir: str, fingerprint: str
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically claim one ready, fingerprint-matching pool server for exclusive use.
+
+        The claim is an ``os.rename`` of the server's discovery file to a
+        ``claimed-<clientpid>-<uid>.json`` name: exactly one racing client wins, the rest move on
+        to the next candidate. Returns the claimed discovery dict with ``claim_path`` added, or
+        ``None`` if nothing is claimable right now.
+        """
+        try:
+            entries = sorted(os.listdir(pool_dir))
+        except OSError:
+            return None
+        for name in entries:
+            if not (name.startswith("server-") and name.endswith(".json")):
+                continue
+            path = os.path.join(pool_dir, name)
+            disc = SparkSession._read_json_quietly(path)
+            if not isinstance(disc, dict) or not all(
+                k in disc for k in ("host", "port", "token", "pid", "spark_version")
+            ):
+                continue
+            if disc.get("conf_fingerprint") != fingerprint:
+                continue
+            if not SparkSession._local_connect_server_is_reusable(disc):
+                continue  # dead or unreachable; the janitor will reap it
+            uid = name[len("server-") : -len(".json")]
+            claim_path = os.path.join(pool_dir, "claimed-{}-{}.json".format(os.getpid(), uid))
+            try:
+                os.rename(path, claim_path)
+            except OSError:
+                continue  # another client won the race for this one
+            # The claim consumes this launch: drop its pending marker and conf seed now, or the
+            # marker keeps counting as an in-flight member (its daemon is alive, serving us) and
+            # every refill under-spawns, silently draining the pool below target.
+            SparkSession._unlink_quietly(os.path.join(pool_dir, "pending-{}.json".format(uid)))
+            SparkSession._unlink_quietly(os.path.join(pool_dir, "conf-{}.json".format(uid)))
+            disc["claim_path"] = claim_path
+            return disc
+        return None
+
+    @staticmethod
+    def _local_connect_pool_janitor(pool_dir: str) -> None:
+        """Best-effort cleanup of the pool directory; every rule is safe to run concurrently.
+
+        - pending markers: dropped once their server is ready/claimed or their daemon died;
+          killed and dropped after 3 minutes (a launch should never take that long);
+        - ready servers: killed and dropped when dead, unreachable, or version-mismatched;
+        - claimed servers: killed and dropped when the claiming client process is dead -- this is
+          what reaps servers whose client was SIGKILLed and never released its claim;
+        - retired servers (released, SIGTERM already sent): dropped once dead; hard-killed if
+          still alive 30s after retirement, so a JVM that hangs in shutdown cannot leak;
+        - conf seeds: dropped once no pending marker references them (the daemon reads its conf
+          before writing its discovery file, and the pending marker outlives that write).
+        """
+        try:
+            entries = os.listdir(pool_dir)
+        except OSError:
+            return
+        names = set(entries)
+        for name in entries:
+            path = os.path.join(pool_dir, name)
+            if name.startswith("pending-") and name.endswith(".json"):
+                uid = name[len("pending-") : -len(".json")]
+                data = SparkSession._read_json_quietly(path)
+                served = "server-{}.json".format(uid) in names or any(
+                    n.startswith("claimed-") and n.endswith("-{}.json".format(uid)) for n in names
+                )
+                if not isinstance(data, dict) or served:
+                    SparkSession._unlink_quietly(path)
+                    continue
+                try:
+                    daemon_pid = int(data.get("daemon_pid", -1))
+                except (TypeError, ValueError):
+                    daemon_pid = -1
+                age = time.time() - float(data.get("created", 0) or 0)
+                if daemon_pid > 0 and not SparkSession._pid_alive(daemon_pid):
+                    SparkSession._unlink_quietly(path)
+                elif age > 180:
+                    if daemon_pid > 0:
+                        SparkSession._signal_local_connect_server(
+                            daemon_pid, SparkSession._hard_kill_signal()
+                        )
+                    SparkSession._unlink_quietly(path)
+            elif name.startswith("server-") and name.endswith(".json"):
+                disc = SparkSession._read_json_quietly(path)
+                if (
+                    not isinstance(disc, dict)
+                    or not all(k in disc for k in ("host", "port", "token", "pid", "spark_version"))
+                    or not SparkSession._local_connect_server_is_reusable(disc)
+                ):
+                    if isinstance(disc, dict):
+                        try:
+                            SparkSession._signal_local_connect_server(
+                                int(disc.get("pid", -1)), signal.SIGTERM
+                            )
+                        except (TypeError, ValueError):
+                            pass
+                    SparkSession._unlink_quietly(path)
+            elif name.startswith("claimed-") and name.endswith(".json"):
+                claimer = name[len("claimed-") :].split("-", 1)[0]
+                client_pid = int(claimer) if claimer.isdigit() else -1
+                if client_pid == os.getpid():
+                    continue  # our own live claim
+                disc = SparkSession._read_json_quietly(path)
+                try:
+                    server_pid = int(disc.get("pid", -1)) if isinstance(disc, dict) else -1
+                except (TypeError, ValueError):
+                    server_pid = -1
+                if not SparkSession._pid_alive(client_pid):
+                    if server_pid > 0:
+                        SparkSession._signal_local_connect_server(server_pid, signal.SIGTERM)
+                    SparkSession._unlink_quietly(path)
+                elif not SparkSession._pid_alive(server_pid):
+                    SparkSession._unlink_quietly(path)
+            elif name.startswith("retired-") and name.endswith(".json"):
+                data = SparkSession._read_json_quietly(path)
+                try:
+                    server_pid = int(data.get("pid", -1)) if isinstance(data, dict) else -1
+                except (TypeError, ValueError):
+                    server_pid = -1
+                age = (
+                    time.time() - float(data.get("retired", 0) or 0)
+                    if isinstance(data, dict)
+                    else 601
+                )
+                if not SparkSession._pid_alive(server_pid):
+                    SparkSession._unlink_quietly(path)
+                elif age > 600:
+                    # Unkillable (e.g. not ours to signal): stop tracking rather than loop.
+                    SparkSession._unlink_quietly(path)
+                elif age > 30:
+                    SparkSession._signal_local_connect_server(
+                        server_pid, SparkSession._hard_kill_signal()
+                    )
+        for name in entries:
+            if name.startswith("conf-") and name.endswith(".json"):
+                uid = name[len("conf-") : -len(".json")]
+                if not os.path.exists(os.path.join(pool_dir, "pending-{}.json".format(uid))):
+                    SparkSession._unlink_quietly(os.path.join(pool_dir, name))
+
+    @staticmethod
+    def _refill_local_connect_pool(
+        pool_dir: str, master: str, seed_conf: Dict[str, Any], fingerprint: str, target: int
+    ) -> None:
+        """Asynchronously top the pool back up to ``target`` matching warm/in-flight servers."""
+        try:
+            entries = os.listdir(pool_dir)
+        except OSError:
+            entries = []
+        available = 0
+        for name in entries:
+            if name.startswith("server-") and name.endswith(".json"):
+                disc = SparkSession._read_json_quietly(os.path.join(pool_dir, name))
+                if isinstance(disc, dict) and disc.get("conf_fingerprint") == fingerprint:
+                    available += 1
+            elif name.startswith("pending-") and name.endswith(".json"):
+                data = SparkSession._read_json_quietly(os.path.join(pool_dir, name))
+                if isinstance(data, dict) and data.get("fingerprint") == fingerprint:
+                    available += 1
+        for _ in range(max(0, target - available)):
+            SparkSession._spawn_local_connect_pool_server(pool_dir, master, seed_conf, fingerprint)
+
+    @staticmethod
+    def _local_connect_pool_has_live_pending(pool_dir: str, fingerprint: str) -> bool:
+        """Whether any matching launch is still in flight with a live daemon process."""
+        try:
+            entries = os.listdir(pool_dir)
+        except OSError:
+            return False
+        for name in entries:
+            if name.startswith("pending-") and name.endswith(".json"):
+                data = SparkSession._read_json_quietly(os.path.join(pool_dir, name))
+                if not isinstance(data, dict) or data.get("fingerprint") != fingerprint:
+                    continue
+                try:
+                    daemon_pid = int(data.get("daemon_pid", -1))
+                except (TypeError, ValueError):
+                    daemon_pid = -1
+                if SparkSession._pid_alive(daemon_pid):
+                    return True
+        return False
+
+    @staticmethod
+    def _acquire_pooled_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
+        """Claim a fresh, never-used local Connect server from the pool and schedule a
+        replacement.
+
+        The pooled counterpart of ``_reuse_or_start_local_connect_server``: same wire-up
+        (endpoint + token), but no server ever serves two runs. On a cold pool (first run, conf
+        change, or all members consumed) it spawns a full complement and waits for the first
+        member to become ready, which costs one regular cold start.
+        """
+        # getOrCreate() may be re-entered while this process already holds a live pooled server
+        # (the connect layer then returns the existing session); acquiring again would claim --
+        # and strand -- a second server, so hand back the one we already own.
+        state = SparkSession._pooled_server
+        if state is not None and SparkSession._pid_alive(int(state["pid"])):
+            os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = state["token"]
+            return state["endpoint"]
+
+        pool_dir = SparkSession._local_connect_pool_dir()
+        os.makedirs(pool_dir, mode=0o700, exist_ok=True)
+        seed_conf = SparkSession._local_connect_server_conf(opts)
+        fingerprint = SparkSession._local_connect_pool_fingerprint(master, seed_conf)
+        target = SparkSession._local_connect_pool_target(opts)
+
+        # Janitor + claim + refill run under the pool lock so racing cold starters share one
+        # complement of spawned servers instead of each launching their own. Claims themselves
+        # are atomic renames; the lock only serializes the spawn *accounting*.
+        lock_fd = SparkSession._acquire_local_connect_pool_lock(pool_dir)
+        try:
+            SparkSession._local_connect_pool_janitor(pool_dir)
+            disc = SparkSession._claim_local_connect_pool_server(pool_dir, fingerprint)
+            SparkSession._refill_local_connect_pool(
+                pool_dir, master, seed_conf, fingerprint, target
+            )
+        finally:
+            SparkSession._release_local_connect_pool_lock(lock_fd)
+
+        if disc is None:
+            # Cold pool: wait (without holding the lock) for one of the in-flight launches.
+            deadline = time.time() + 120
+            while disc is None and time.time() < deadline:
+                time.sleep(0.25)
+                disc = SparkSession._claim_local_connect_pool_server(pool_dir, fingerprint)
+                if disc is None and not SparkSession._local_connect_pool_has_live_pending(
+                    pool_dir, fingerprint
+                ):
+                    break  # every in-flight launch died; fail fast instead of waiting out 120s
+            if disc is None:
+                raise PySparkRuntimeError(
+                    errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+                    messageParameters={
+                        "reason": "no pooled local server became ready within the wait window"
+                    },
+                )
+            # This claim consumed a member the earlier refill did not account for; top up again.
+            lock_fd = SparkSession._acquire_local_connect_pool_lock(pool_dir)
+            try:
+                SparkSession._refill_local_connect_pool(
+                    pool_dir, master, seed_conf, fingerprint, target
+                )
+            finally:
+                SparkSession._release_local_connect_pool_lock(lock_fd)
+
+        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = disc["token"]
+        SparkSession._register_pooled_server(disc)
+        return "sc://{}:{}".format(disc["host"], disc["port"])
+
+    @staticmethod
+    def _register_pooled_server(disc: Dict[str, Any]) -> None:
+        import atexit
+
+        SparkSession._pooled_server = {
+            "pid": int(disc["pid"]),
+            "claim_path": disc["claim_path"],
+            "token": disc["token"],
+            "endpoint": "sc://{}:{}".format(disc["host"], disc["port"]),
+        }
+        if not SparkSession._pooled_release_registered:
+            atexit.register(SparkSession._release_pooled_local_connect_server)
+            SparkSession._pooled_release_registered = True
+
+    @staticmethod
+    def _release_pooled_local_connect_server() -> None:
+        """Asynchronous teardown of this process's claimed pooled server (no-op when none).
+
+        Fires SIGTERM at the server's process group and returns immediately -- the JVM winds down
+        in the background while the client moves on. The shutdown is tracked in a
+        ``retired-<uid>.json`` file so the janitor can escalate to a hard kill if the JVM hangs;
+        we deliberately do not wait for it here. Called from ``stop()`` and registered via
+        ``atexit`` so a client that never stops its session still releases its server; the
+        server-side ``--exit-after-use`` reaper and the janitor cover clients that die uncleanly.
+        """
+        state = SparkSession._pooled_server
+        SparkSession._pooled_server = None
+        if state is None:
+            return
+        pid = int(state["pid"])
+        SparkSession._signal_local_connect_server(pid, signal.SIGTERM)
+        claim_path = state["claim_path"]
+        base = os.path.basename(claim_path)
+        uid = base[len("claimed-") : -len(".json")].split("-", 1)[-1]
+        retired = os.path.join(os.path.dirname(claim_path), "retired-{}.json".format(uid))
+        try:
+            fd = os.open(retired, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(json.dumps({"pid": pid, "retired": time.time()}))
+        except OSError:
+            pass
+        SparkSession._unlink_quietly(claim_path)
+
+    @staticmethod
+    def _purge_local_connect_pool() -> int:
+        """Kill every pool server -- warm, in-flight, or claimed -- and empty the pool directory.
+
+        The force-clean escape hatch: after this, nothing pre-warmed survives and the next run
+        boots from scratch exactly like the default path. Returns the number of processes
+        signalled. Safe to call at any time::
+
+            python -c "from pyspark.sql.connect.session import SparkSession; \\
+                print(SparkSession._purge_local_connect_pool())"
+        """
+        pool_dir = SparkSession._local_connect_pool_dir()
+        try:
+            entries = os.listdir(pool_dir)
+        except OSError:
+            return 0
+        killed = 0
+        for name in entries:
+            path = os.path.join(pool_dir, name)
+            data = SparkSession._read_json_quietly(path)
+            if isinstance(data, dict):
+                for key in ("pid", "daemon_pid"):
+                    try:
+                        pid = int(data.get(key, -1))
+                    except (TypeError, ValueError):
+                        continue
+                    if pid > 0 and pid != os.getpid():
+                        if SparkSession._signal_local_connect_server(pid, signal.SIGTERM):
+                            killed += 1
+            SparkSession._unlink_quietly(path)
+        return killed
 
     @property
     def session_id(self) -> str:

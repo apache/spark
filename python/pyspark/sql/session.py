@@ -530,7 +530,30 @@ class SparkSession(SparkConversionMixin):
                                 )
                             ).lower() in ("1", "true")
 
-                            if url.startswith("local") and reuse_local:
+                            pool_local = str(
+                                opts.get(
+                                    "spark.local.connect.pool",
+                                    os.environ.get("SPARK_LOCAL_CONNECT_POOL", ""),
+                                )
+                            ).lower() in ("1", "true")
+
+                            if url.startswith("local") and pool_local:
+                                # PoC opt-in: claim a fresh, never-used server from a pool of
+                                # pre-warmed local Connect servers, instead of reusing one
+                                # long-lived server (`spark.local.connect.reuse`) or booting one
+                                # in process. See `_acquire_pooled_local_connect_server`.
+                                url = RemoteSparkSession._acquire_pooled_local_connect_server(
+                                    url, opts
+                                )
+                                for k in (
+                                    "spark.local.connect.pool",
+                                    "spark.local.connect.pool.size",
+                                    "spark.local.connect.reuse",
+                                    "spark.local.connect.server.port",
+                                    "spark.local.connect.server.idleTimeout",
+                                ):
+                                    opts.pop(k, None)
+                            elif url.startswith("local") and reuse_local:
                                 # Opt-in: reconnect to a persistent local Connect server (starting
                                 # one on the first run) instead of booting a fresh in-process server
                                 # every process. See `_reuse_or_start_local_connect_server`.

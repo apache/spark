@@ -52,7 +52,9 @@ import time
 from typing import Any
 
 
-def _write_discovery(path: str, host: str, port: int, token: str, version: str) -> None:
+def _write_discovery(
+    path: str, host: str, port: int, token: str, version: str, fingerprint: str = None
+) -> None:
     """Atomically write the discovery file with ``0600`` perms (it holds the auth token)."""
     parent = os.path.dirname(path)
     if parent and not os.path.isdir(parent):
@@ -64,6 +66,8 @@ def _write_discovery(path: str, host: str, port: int, token: str, version: str) 
         "pid": os.getpid(),
         "spark_version": version,
     }
+    if fingerprint is not None:
+        payload["conf_fingerprint"] = fingerprint
     tmp = "{}.{}.tmp".format(path, os.getpid())
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
@@ -132,6 +136,18 @@ def main() -> None:
         help="seconds with no active session after which the server self-terminates; <=0 disables",
     )
     parser.add_argument("--poll-interval", type=float, default=60.0)
+    parser.add_argument(
+        "--fingerprint",
+        default=None,
+        help="opaque identity of the start-up confs this server was seeded with; echoed into the"
+        " discovery file so pool clients only claim servers matching their own confs",
+    )
+    parser.add_argument(
+        "--exit-after-use",
+        action="store_true",
+        help="single-use (pool) mode: self-terminate once at least one client session has been"
+        " observed and all sessions are gone again; the server never serves a second run",
+    )
     args = parser.parse_args()
 
     # Build a CLASSIC session: the connect-mode env vars would otherwise divert us into a client.
@@ -163,7 +179,9 @@ def main() -> None:
     spark = builder.getOrCreate()
 
     bound_port = _bound_port(spark, args.port)
-    _write_discovery(args.discovery, "localhost", bound_port, args.token, __version__)
+    _write_discovery(
+        args.discovery, "localhost", bound_port, args.token, __version__, args.fingerprint
+    )
     print(
         "SPARK-CONNECT-LOCAL-SERVER READY port={} pid={}".format(bound_port, os.getpid()),
         flush=True,
@@ -185,11 +203,12 @@ def main() -> None:
     poll_interval = max(1.0, args.poll_interval)
     last_active = time.monotonic()
     last_poll = 0.0
+    seen_active = False
     try:
         # Sleep in short slices so a SIGTERM is observed promptly regardless of the poll interval.
         while not stop["flag"]:
             time.sleep(1.0)
-            if idle_timeout <= 0:
+            if idle_timeout <= 0 and not args.exit_after_use:
                 continue
             now = time.monotonic()
             if now - last_poll < poll_interval:
@@ -200,8 +219,13 @@ def main() -> None:
             except Exception:
                 active = True  # fail open: never reap a server we cannot inspect
             if active:
+                seen_active = True
                 last_active = now
-            elif now - last_active > idle_timeout:
+            elif args.exit_after_use and seen_active:
+                # Single-use mode: our one client has come and gone. This is only a backstop --
+                # the client normally SIGTERMs us on session.stop()/interpreter exit.
+                break
+            elif idle_timeout > 0 and now - last_active > idle_timeout:
                 break
     finally:
         _remove_discovery_if_ours(args.discovery)
