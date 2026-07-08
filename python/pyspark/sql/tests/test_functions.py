@@ -3538,8 +3538,8 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(9)))),
             ['{"a":1,"z":9}', '{"b":2,"z":9}'],
         )
-        # Duplicate key is caught -> NULL (df.path is an existing key in each row).
         check(df.select(F.to_json(F.try_variant_insert(v, df.path, F.lit(9)))), [None, None])
+        check(df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(None)))), [None, None])
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 

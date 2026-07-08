@@ -1328,8 +1328,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("variant_insert") {
-    // Every success case is asserted for both `variant_insert` and `try_variant_insert`: the two
-    // agree whenever the insertion is valid.
     def checkInsert(input: String, path: String, value: Expression, expected: String): Unit = {
       Seq(true, false).foreach { failOnError =>
         val expr = VariantInsert(
@@ -1424,7 +1422,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsert(
       "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
 
-    // NULL-intolerant: any NULL argument yields NULL (for both functions).
     Seq(true, false).foreach { failOnError =>
       checkEvaluation(
         VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1), failOnError),
@@ -1434,7 +1431,6 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
     checkInsert("""{"a": 1}""", "$.b", Literal.create(null, NullType), null)
 
-    // Dynamic (non-foldable) path, for both functions.
     Seq(true, false).foreach { failOnError =>
       val dynamic = VariantInsert(
         Literal(parseJson("""{"a": 1}""")),
@@ -1471,7 +1467,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
 
-    // Structs and maps are rejected at analysis for both functions.
+    // Structs and maps are rejected at analysis.
     Seq(
       Literal.create(null, MapType(StringType, IntegerType)),
       Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
@@ -1483,9 +1479,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    // Non-catchable errors: both functions throw. A malformed path is rejected during parsing
-    // (before the insert), and a size overflow is raised whether it comes from a huge structure
-    // or a huge value.
+    // Non-catchable errors: both functions throw.
     checkInsertUncaughtError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "$", "functionName" -> s"`$name`"))

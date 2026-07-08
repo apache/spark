@@ -822,9 +822,6 @@ case class VariantInsert(
   override def third: Expression = value
 
   override def nullIntolerant: Boolean = true
-
-  // `try_variant_insert` (failOnError = false) can return NULL for non-NULL inputs when it catches
-  // an error, so it is always nullable.
   override def nullable: Boolean = !failOnError || children.exists(_.nullable)
 
   override def dataType: DataType = VariantType
@@ -882,7 +879,6 @@ case class VariantInsert(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
     val fromArg = ctx.addReferenceObj("from", value.dataType)
-    // The `insertAtPath(...)` call for the evaluated child value names.
     def call(vVal: String, pVal: String, valVal: String): String = foldablePath match {
       case Some(parsed) =>
         val parsedArg = ctx.addReferenceObj("insertPath", parsed)
@@ -893,11 +889,8 @@ case class VariantInsert(
         s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
     if (failOnError) {
-      // `variant_insert` never returns null for non-null inputs.
       nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
     } else {
-      // `try_variant_insert` may return null (a caught error). It is always nullable, so `ev.isNull`
-      // is a mutable variable that the guard below can set.
       val resultType = CodeGenerator.javaType(VariantType)
       val tmp = ctx.freshName("insertResult")
       nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
@@ -945,8 +938,8 @@ abstract class VariantInsertExpressionBuilderBase(failOnError: Boolean) extends 
   usage = "_FUNC_(v, path, val) - Inserts a value into a variant at the given JSONPath " +
     "location. An object path adds a new field (error if it already exists); an array path " +
     "inserts at the index, shifting later elements right. Missing intermediate keys are created. " +
-    "Throws an error if a path segment hits an incompatible value. Returns NULL if any argument " +
-    "is NULL.",
+    "Throws an error if a path segment hits a value of an incompatible type. Returns NULL if any " +
+    "argument is NULL.",
   arguments = """
     Arguments:
       * v - A variant value to mutate.
@@ -983,7 +976,7 @@ object VariantInsertExpressionBuilder extends VariantInsertExpressionBuilderBase
   usage = "_FUNC_(v, path, val) - Inserts a value into a variant at the given JSONPath " +
     "location. An object path adds a new field; an array path inserts at the index, shifting " +
     "later elements right. Missing intermediate keys are created. Returns NULL if the field " +
-    "already exists or a path segment hits an incompatible value, or if any argument is " +
+    "already exists or a path segment hits a value of an incompatible type, or if any argument is " +
     "NULL.",
   arguments = """
     Arguments:
@@ -997,9 +990,17 @@ object VariantInsertExpressionBuilder extends VariantInsertExpressionBuilderBase
     Examples:
       > SELECT _FUNC_(parse_json('{"a": 1}'), '$.b', 2);
        {"a":1,"b":2}
+      > SELECT _FUNC_(parse_json('{}'), '$.a.b', 1);
+       {"a":{"b":1}}
+      > SELECT _FUNC_(parse_json('["a","b","c"]'), '$[1]', 'z');
+       ["a","z","b","c"]
+      > SELECT _FUNC_(parse_json('["a","b"]'), '$[5]', 'z');
+       ["a","b",null,null,null,"z"]
       > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', 2);
        NULL
       > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a.b', 2);
+       NULL
+      > SELECT _FUNC_(parse_json('{}'), '$.a', null);
        NULL
   """,
   since = "4.3.0",

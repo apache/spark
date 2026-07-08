@@ -9825,7 +9825,7 @@ object functions {
    * Inserts a value into a variant at the given JSONPath location. An object path adds a new
    * field (error if it already exists); an array path inserts at the index, shifting later
    * elements right. Missing intermediate keys are created. Throws an error if a path segment hits
-   * an incompatible value. Returns NULL if any argument is NULL.
+   * a value of an incompatible type. Returns NULL if any argument is NULL.
    *
    * @param v
    *   a variant column.
@@ -9845,7 +9845,7 @@ object functions {
    * Inserts a value into a variant at the given JSONPath location. An object path adds a new
    * field (error if it already exists); an array path inserts at the index, shifting later
    * elements right. Missing intermediate keys are created. Throws an error if a path segment hits
-   * an incompatible value. Returns NULL if any argument is NULL.
+   * a value of an incompatible type. Returns NULL if any argument is NULL.
    *
    * @param v
    *   a variant column.
@@ -9864,8 +9864,8 @@ object functions {
   /**
    * Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
    * an array path inserts at the index, shifting later elements right. Missing intermediate keys
-   * are created. Returns NULL if the field already exists or a path segment hits an incompatible
-   * value, or if any argument is NULL.
+   * are created. Returns NULL if the field already exists or a path segment hits a value of an
+   * incompatible type, or if any argument is NULL.
    *
    * @param v
    *   a variant column.
@@ -9884,8 +9884,8 @@ object functions {
   /**
    * Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
    * an array path inserts at the index, shifting later elements right. Missing intermediate keys
-   * are created. Returns NULL if the field already exists or a path segment hits an incompatible
-   * value, or if any argument is NULL.
+   * are created. Returns NULL if the field already exists or a path segment hits a value of an
+   * incompatible type, or if any argument is NULL.
    *
    * @param v
    *   a variant column.

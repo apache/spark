@@ -21731,8 +21731,8 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     """
     Inserts a value into a variant at the given JSONPath location. An object path adds a new field
     (error if it already exists); an array path inserts at the index, shifting later elements
-    right. Missing intermediate keys are created. Throws an error if a path segment hits an
-    incompatible value. Returns NULL if any argument is NULL.
+    right. Missing intermediate keys are created. Throws an error if a path segment hits a value
+    of an incompatible type. Returns NULL if any argument is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -21794,8 +21794,8 @@ def try_variant_insert(
     """
     Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
     an array path inserts at the index, shifting later elements right. Missing intermediate keys
-    are created. Returns NULL if the field already exists or a path segment hits an incompatible
-    value, or if any argument is NULL.
+    are created. Returns NULL if the field already exists or a path segment hits a value of an
+    incompatible type, or if any argument is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -21823,6 +21823,12 @@ def try_variant_insert(
     >>> v = parse_json(df.json)
     >>> df.select(to_json(try_variant_insert(v, "$.b", lit(2))).alias("r")).collect()
     [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
     >>> df.select(to_json(try_variant_insert(v, "$.a", lit(2))).alias("r")).collect()
     [Row(r=None)]
     >>> df.select(to_json(try_variant_insert(v, "$.a.b", lit(2))).alias("r")).collect()
