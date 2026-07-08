@@ -180,16 +180,22 @@ def _extract_tar(tar: tarfile.TarFile, package_name: str, dest: str) -> None:
 
     Guards against path traversal ("zip slip"): ``os.path.relpath`` does not
     strip ``..`` segments, so a crafted member could otherwise resolve outside
-    ``dest``. Extraction uses tarfile's ``'data'`` filter (PEP 706), which
-    rejects members that would escape ``dest`` as well as absolute paths,
-    unsafe links, and special files.
+    ``dest``. Any member whose resolved destination escapes ``dest`` is
+    rejected instead of extracted.
     """
+    dest_root = os.path.realpath(dest)
     for member in tar.getmembers():
         if member.name == package_name:
             # Skip the root directory.
             continue
         member.name = os.path.relpath(member.name, package_name + os.path.sep)
-        tar.extract(member, dest, filter="data")
+        resolved = os.path.realpath(os.path.join(dest, member.name))
+        if resolved != dest_root and not resolved.startswith(dest_root + os.sep):
+            raise ValueError(
+                "Archive member '%s' would extract outside of the destination "
+                "directory; refusing to extract." % member.name
+            )
+        tar.extract(member, dest)
 
 
 def get_preferred_mirrors() -> list[str]:

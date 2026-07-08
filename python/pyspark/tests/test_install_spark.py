@@ -103,7 +103,7 @@ class SparkInstallationTestCase(unittest.TestCase):
             evil_dest = os.path.join(tmp_dir, "evil_dest")
             os.makedirs(evil_dest)
             with tarfile.open(evil_tar, "r") as tar:
-                with self.assertRaises(tarfile.OutsideDestinationError):
+                with self.assertRaisesRegex(ValueError, "outside of the destination"):
                     _extract_tar(tar, package_name, evil_dest)
             self.assertEqual([], os.listdir(evil_dest))
 
