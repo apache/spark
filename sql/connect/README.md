@@ -24,7 +24,7 @@ Python-specific development guidelines are located in [python/docs/source/develo
 To generate the Python client code from the proto files:
 
 First, make sure to have a Python environment with the installed dependencies.
-Specifically, install `ruff` and dependencies from the "Spark Connect python proto generation plugin (optional)" section.
+Specifically, install `black` and dependencies from the "Spark Connect python proto generation plugin (optional)" section.
 
 
 ```
