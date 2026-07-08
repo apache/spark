@@ -96,8 +96,15 @@ object ArrowWriter {
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
         new IntervalMonthDayNanoWriter(vector)
+      // Lossless struct representation of CalendarInterval (ArrowUtils.toArrowField with
+      // losslessInternalTypes = true).
+      case (CalendarIntervalType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new CalendarIntervalStructWriter(vector, children.toArray)
       // Lossless struct representation of nanosecond timestamps (ArrowUtils.toArrowField with
-      // losslessTimestampNanos = true). The native TimeStampNano(TZ)Vector writers are created by
+      // losslessInternalTypes = true). The native TimeStampNano(TZ)Vector writers are created by
       // the TypeOps hook; only the struct-backed shape reaches this default matching.
       case (_: TimestampNTZNanosType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
@@ -557,7 +564,7 @@ private[arrow] class GeometryWriter(
 /**
  * Writes a nanosecond timestamp into its lossless Arrow struct representation
  * (epochMicros: int64, nanosWithinMicro: int16), built by `ArrowUtils.toArrowField` with
- * `losslessTimestampNanos = true`. The two components of TimestampNanosVal are stored as-is with
+ * `losslessInternalTypes = true`. The two components of TimestampNanosVal are stored as-is with
  * no unit conversion, so unlike the Timestamp(NANOSECOND) writers there is no overflow: the full
  * domain of the Spark types (years 0001-9999) round-trips.
  */
@@ -594,6 +601,32 @@ private[arrow] class TimestampLTZNanosStructWriter(
   override protected def getTimestampNanos(
       input: SpecializedGetters, ordinal: Int): TimestampNanosVal =
     input.getTimestampLTZNanos(ordinal)
+}
+
+/**
+ * Writes a CalendarInterval into its lossless Arrow struct representation
+ * (months: int32, days: int32, microseconds: int64), built by `ArrowUtils.toArrowField` with
+ * `losslessInternalTypes = true`. The three components are stored as-is with no unit conversion,
+ * so unlike IntervalMonthDayNanoWriter there is no nanosecond multiplication and no overflow:
+ * the full Long microsecond domain round-trips.
+ */
+private[arrow] class CalendarIntervalStructWriter(
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+
+  // Reused across rows; this writer is single-threaded like the vector it wraps.
+  private val row = new GenericInternalRow(3)
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setIndexDefined(count)
+    val ci = input.getInterval(ordinal)
+    row.update(0, ci.months)
+    row.update(1, ci.days)
+    row.update(2, ci.microseconds)
+    children(0).write(row, 0)
+    children(1).write(row, 1)
+    children(2).write(row, 2)
+  }
 }
 
 private[arrow] class MapWriter(
@@ -672,6 +705,17 @@ private[arrow] class IntervalMonthDayNanoWriter(val valueVector: IntervalMonthDa
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val ci = input.getInterval(ordinal)
-    valueVector.setSafe(count, ci.months, ci.days, Math.multiplyExact(ci.microseconds, 1000L))
+    // Arrow's IntervalMonthDayNano stores the sub-day component as int64 nanoseconds, so the
+    // conversion overflows for |microseconds| > Long.MaxValue / 1000. Translate that into the
+    // structured DATETIME_OVERFLOW at the conversion site (like the nanosecond timestamp writers
+    // above) so the raw ArithmeticException never escapes -- catching it any wider risks
+    // re-labeling unrelated arithmetic failures raised by lazily-evaluated upstream input.
+    val nanos = try {
+      Math.multiplyExact(ci.microseconds, 1000L)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.calendarIntervalArrowNanosOverflowError(ci)
+    }
+    valueVector.setSafe(count, ci.months, ci.days, nanos)
   }
 }
