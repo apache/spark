@@ -19,6 +19,8 @@ package org.apache.spark.sql.util
 
 import java.time.ZoneId
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.arrow.vector.types.{IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
@@ -219,6 +221,40 @@ class ArrowUtilsSuite extends SparkFunSuite {
     assert(ArrowUtils.fromArrowField(taggedStructField(Some("5"))) === TimestampNTZNanosType(9))
     assert(ArrowUtils.fromArrowField(taggedStructField(None)) === TimestampNTZNanosType(9))
 
+    // Only the exact canonical shape is recognized: the struct writer fills children
+    // positionally while ArrowColumnVector reads them by name, so a tagged-but-non-canonical
+    // schema (reordered, wrong width, or extra children) must NOT be treated as a nanosecond
+    // timestamp -- it falls back to generic (order-faithful) struct handling.
+    def taggedNanosStruct(children: Seq[(String, Int)]): Field = {
+      val fields = children.map { case (name, bitWidth) =>
+        val md = if (name == "epochMicros") {
+          java.util.Collections.singletonMap("SPARK::timestampNanos::struct", "ntz")
+        } else {
+          null
+        }
+        new Field(
+          name,
+          new FieldType(false, new ArrowType.Int(bitWidth, true), null, md),
+          java.util.Collections.emptyList[Field]())
+      }
+      new Field(
+        "value",
+        new FieldType(true, ArrowType.Struct.INSTANCE, null, null),
+        fields.asJava)
+    }
+    // Reordered children.
+    assert(!ArrowUtils.isTimestampNanosStructField(
+      taggedNanosStruct(Seq("nanosWithinMicro" -> 16, "epochMicros" -> 64))))
+    // Wrong child width.
+    assert(!ArrowUtils.isTimestampNanosStructField(
+      taggedNanosStruct(Seq("epochMicros" -> 64, "nanosWithinMicro" -> 32))))
+    // Extra child.
+    assert(!ArrowUtils.isTimestampNanosStructField(
+      taggedNanosStruct(Seq("epochMicros" -> 64, "nanosWithinMicro" -> 16, "extra" -> 32))))
+    // The canonical shape built by the same helper is recognized (sanity check of the helper).
+    assert(ArrowUtils.isTimestampNanosStructField(
+      taggedNanosStruct(Seq("epochMicros" -> 64, "nanosWithinMicro" -> 16))))
+
     // A plain struct that merely uses the same child names, but carries no tag, stays a struct.
     val untagged = new StructType().add(
       "value",
@@ -285,6 +321,44 @@ class ArrowUtilsSuite extends SparkFunSuite {
     assert(
       ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(untagged, null, true, false)) ===
         untagged)
+
+    // Only the exact canonical shape is recognized: CalendarIntervalStructWriter fills children
+    // positionally while ArrowColumnVector reads them by name, so a tagged-but-reordered schema
+    // (which would silently swap months and days) or other non-canonical shapes must NOT be
+    // treated as a CalendarInterval.
+    def taggedIntervalStruct(children: Seq[(String, Int)]): Field = {
+      val fields = children.map { case (name, bitWidth) =>
+        val md = if (name == "months") {
+          java.util.Collections.singletonMap("SPARK::calendarInterval::struct", "true")
+        } else {
+          null
+        }
+        new Field(
+          name,
+          new FieldType(false, new ArrowType.Int(bitWidth, true), null, md),
+          java.util.Collections.emptyList[Field]())
+      }
+      new Field(
+        "value",
+        new FieldType(true, ArrowType.Struct.INSTANCE, null, null),
+        fields.asJava)
+    }
+    // Reordered children.
+    assert(!ArrowUtils.isCalendarIntervalStructField(
+      taggedIntervalStruct(Seq("days" -> 32, "months" -> 32, "microseconds" -> 64))))
+    // Wrong child width.
+    assert(!ArrowUtils.isCalendarIntervalStructField(
+      taggedIntervalStruct(Seq("months" -> 32, "days" -> 64, "microseconds" -> 64))))
+    // Extra child.
+    assert(!ArrowUtils.isCalendarIntervalStructField(
+      taggedIntervalStruct(
+        Seq("months" -> 32, "days" -> 32, "microseconds" -> 64, "extra" -> 32))))
+    // Missing child.
+    assert(!ArrowUtils.isCalendarIntervalStructField(
+      taggedIntervalStruct(Seq("months" -> 32, "days" -> 32))))
+    // The canonical shape built by the same helper is recognized (sanity check of the helper).
+    assert(ArrowUtils.isCalendarIntervalStructField(
+      taggedIntervalStruct(Seq("months" -> 32, "days" -> 32, "microseconds" -> 64))))
 
     // The default mapping is untouched when the flag is off: still IntervalMonthDayNano.
     val defaultSchema = ArrowUtils.toArrowSchema(

@@ -461,20 +461,35 @@ private[sql] object ArrowUtils {
     }
   }
 
+  // Both lossless-struct recognizers below accept only the exact canonical shape built by
+  // `toArrowField` (child count, order, types, and nullability), not merely the presence of the
+  // tag and child names. The struct writers fill children positionally while ArrowColumnVector's
+  // accessors read them by name, so a permissive match on, say, a tagged but reordered schema
+  // would silently swap component values. Anything non-canonical falls back to the generic
+  // struct handling, which is order-faithful.
+  private def isCanonicalStructChild(
+      child: Field,
+      name: String,
+      arrowType: ArrowType): Boolean = {
+    child.getName == name && child.getType == arrowType && !child.isNullable
+  }
+
   /**
    * Whether the Arrow struct field is the lossless representation of a nanosecond timestamp built
    * by `toArrowField` with `losslessInternalTypes = true`. Also callable from Java
    * (ArrowColumnVector) to select the timestamp accessor for such structs.
    */
   def isTimestampNanosStructField(field: Field): Boolean = {
-    field.getType.isInstanceOf[ArrowType.Struct] &&
-    field.getChildren.asScala
-      .map(_.getName)
-      .asJava
-      .containsAll(Seq("epochMicros", "nanosWithinMicro").asJava) &&
-    field.getChildren.asScala.exists { child =>
-      child.getName == "epochMicros" &&
-      Set("ntz", "ltz").contains(child.getMetadata.getOrDefault(timestampNanosStructKey, ""))
+    field.getType.isInstanceOf[ArrowType.Struct] && {
+      val children = field.getChildren
+      children.size == 2 &&
+      isCanonicalStructChild(children.get(0), "epochMicros", new ArrowType.Int(8 * 8, true)) &&
+      isCanonicalStructChild(
+        children.get(1),
+        "nanosWithinMicro",
+        new ArrowType.Int(8 * 2, true)) &&
+      Set("ntz", "ltz").contains(
+        children.get(0).getMetadata.getOrDefault(timestampNanosStructKey, ""))
     }
   }
 
@@ -484,14 +499,13 @@ private[sql] object ArrowUtils {
    * (ArrowColumnVector) to select the interval accessor for such structs.
    */
   def isCalendarIntervalStructField(field: Field): Boolean = {
-    field.getType.isInstanceOf[ArrowType.Struct] &&
-    field.getChildren.asScala
-      .map(_.getName)
-      .asJava
-      .containsAll(Seq("months", "days", "microseconds").asJava) &&
-    field.getChildren.asScala.exists { child =>
-      child.getName == "months" &&
-      child.getMetadata.getOrDefault(calendarIntervalStructKey, "false") == "true"
+    field.getType.isInstanceOf[ArrowType.Struct] && {
+      val children = field.getChildren
+      children.size == 3 &&
+      isCanonicalStructChild(children.get(0), "months", new ArrowType.Int(8 * 4, true)) &&
+      isCanonicalStructChild(children.get(1), "days", new ArrowType.Int(8 * 4, true)) &&
+      isCanonicalStructChild(children.get(2), "microseconds", new ArrowType.Int(8 * 8, true)) &&
+      children.get(0).getMetadata.getOrDefault(calendarIntervalStructKey, "false") == "true"
     }
   }
 

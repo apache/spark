@@ -27,6 +27,7 @@ import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.{Geography => InternalGeography, Geometry => InternalGeometry}
 import org.apache.spark.sql.types._
@@ -339,6 +340,27 @@ class ArrowWriterSuite extends SparkFunSuite {
     }
     assert(e.getCondition === "DATETIME_OVERFLOW")
     assert(e.getMessage.contains("IntervalMonthDayNano"))
+
+    // The other half of the invariant: an arithmetic exception raised by upstream evaluation
+    // (here, a lazily-throwing getInterval standing in for e.g. an ANSI DIVIDE_BY_ZERO from a
+    // WholeStageCodegen iterator) must escape unchanged -- the same instance, not relabeled as
+    // DATETIME_OVERFLOW. SparkArithmeticException extends ArithmeticException, so this pins the
+    // catch to the Math.multiplyExact expression: a future refactor that widened the try to
+    // cover input.getInterval would fail here.
+    val upstreamError = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "spark.sql.ansi.enabled"),
+      context = Array.empty,
+      summary = "")
+    val throwingRow = new GenericInternalRow(Array[Any](new CalendarInterval(0, 0, 0L))) {
+      override def getInterval(ordinal: Int): CalendarInterval = throw upstreamError
+    }
+    val escaped = intercept[SparkArithmeticException] {
+      writer.write(throwingRow)
+    }
+    assert(escaped eq upstreamError,
+      "the upstream exception must escape unchanged, not be wrapped or relabeled")
+    assert(escaped.getCondition === "DIVIDE_BY_ZERO")
     writer.root.close()
   }
 
