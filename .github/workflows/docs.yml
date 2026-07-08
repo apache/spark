@@ -75,15 +75,15 @@ jobs:
           restore-keys: |
             docs-maven-${{ runner.os }}-
 
-      - name: Set up Ruby 3
-        uses: ruby/setup-ruby@v1
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@4dc28cf14d77b0afa6832d9765ac422dbf0dfedd
         with:
           ruby-version: '3.4'
           working-directory: docs
           bundler: 2.4.22
           bundler-cache: true
 
-      - name: Install Python 3.12
+      - name: Install Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -91,7 +91,7 @@ jobs:
           cache-dependency-path: dev/requirements.txt
 
       - name: Install Python requirements
-        run: python3.12 -m pip install --upgrade -r dev/requirements.txt
+        run: python3 -m pip install --upgrade -r dev/requirements.txt
 
       - name: Register javadoc problem matcher
         run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
