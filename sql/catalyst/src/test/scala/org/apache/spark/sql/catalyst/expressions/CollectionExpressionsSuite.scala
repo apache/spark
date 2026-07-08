@@ -1296,6 +1296,69 @@ class CollectionExpressionsSuite
         Timestamp.valueOf("2018-01-01 00:00:00.000")))
   }
 
+  test("SPARK-57852: Sequence of times") {
+    val timeType = TimeType()
+    def tm(h: Int, m: Int, s: Int, micros: Int = 0): Long =
+      DateTimeTestUtils.localTime(h.toByte, m.toByte, s.toByte, micros)
+
+    // Null in any argument yields null.
+    checkEvaluation(new Sequence(
+      Literal(null, timeType), Literal(tm(10, 0, 0), timeType)), null)
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType), Literal(null, timeType)), null)
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(null, DayTimeIntervalType())), null)
+
+    // Ascending with an explicit 30-minute step (the ticket's acceptance criterion).
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0), tm(8, 30, 0), tm(9, 0, 0), tm(9, 30, 0), tm(10, 0, 0)))
+
+    // Descending with a negative step.
+    checkEvaluation(new Sequence(
+      Literal(tm(10, 0, 0), timeType),
+      Literal(tm(8, 0, 0), timeType),
+      Literal(Duration.ofMinutes(-30))),
+      Seq(tm(10, 0, 0), tm(9, 30, 0), tm(9, 0, 0), tm(8, 30, 0), tm(8, 0, 0)))
+
+    // Stop not exactly reachable by the step: stops at the last value within bounds.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(9, 10, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0), tm(8, 30, 0), tm(9, 0, 0)))
+
+    // Single element when start equals stop.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(8, 0, 0), timeType),
+      Literal(Duration.ofMinutes(30))),
+      Seq(tm(8, 0, 0)))
+
+    // No step defaults to 1 second.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(8, 0, 3), timeType)),
+      Seq(tm(8, 0, 0), tm(8, 0, 1), tm(8, 0, 2), tm(8, 0, 3)))
+
+    // Sub-second steps preserve the endpoint precision exactly.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0, 0), timeType),
+      Literal(tm(8, 0, 0, 300000), timeType),
+      Literal(Duration.ofMillis(100))),
+      Seq(tm(8, 0, 0, 0), tm(8, 0, 0, 100000), tm(8, 0, 0, 200000), tm(8, 0, 0, 300000)))
+
+    // A non day-time interval step (year-month) is rejected at analysis time.
+    assert(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(Period.ofMonths(1))).checkInputDataTypes().isFailure)
+  }
+
   test("Sequence on DST boundaries") {
     val timeZone = TimeZone.getTimeZone("Europe/Prague")
 

@@ -3327,6 +3327,9 @@ case class Sequence(
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
+          case _: TimeType =>
+            // TIME lives within a single day, so only a day-time interval step is meaningful.
+            stepOpt.isEmpty || DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || DataTypeUtils.sameType(stepType, startType)
           case _ => false
@@ -3339,7 +3342,8 @@ case class Sequence(
         errorSubClass = "SEQUENCE_WRONG_INPUT_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "startType" -> toSQLType(TypeCollection(TimestampType, TimestampNTZType, DateType)),
+          "startType" -> toSQLType(
+            TypeCollection(TimestampType, TimestampNTZType, DateType, AnyTimeType)),
           "stepType" -> toSQLType(
             TypeCollection(CalendarIntervalType, YearMonthIntervalType, DayTimeIntervalType)),
           "otherStartType" -> toSQLType(IntegralType)
@@ -3386,6 +3390,9 @@ case class Sequence(
       } else {
         new DurationSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       }
+
+    case TimeType(precision) =>
+      new TimeSequenceImpl(precision)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -3548,6 +3555,55 @@ object Sequence {
          |while ($i > 0) {
          |  $i--;
          |  $arr[$i] = ($elemType) ($start + $step * $i);
+         |}
+         """.stripMargin
+    }
+  }
+
+  private class TimeSequenceImpl(precision: Int) extends InternalSequence {
+
+    // A sequence over TIME stays within the day domain [0, NANOS_PER_DAY) by construction: every
+    // produced value lies between the in-day start and stop endpoints. So a plain integral walk in
+    // nanoseconds is sufficient - no calendar, DST, or time zone arithmetic is involved.
+    override val defaultStep: DefaultStep = new DefaultStep(
+      PhysicalDataType.ordering(LongType).lteq _,
+      DayTimeIntervalType(),
+      // Default increment when no step is given: 1 second, expressed as the interval's micros.
+      MICROS_PER_SECOND)
+
+    override def eval(input1: Any, input2: Any, input3: Any): Array[Long] = {
+      val start = input1.asInstanceOf[Long]
+      val stop = input2.asInstanceOf[Long]
+      // TIME is stored as nanos-of-day, while a day-time interval is stored as microseconds.
+      val stepNanos = Math.multiplyExact(input3.asInstanceOf[Long], NANOS_PER_MICROS)
+
+      var i: Int = getSequenceLength(start, stop, stepNanos, stepNanos)
+      val arr = new Array[Long](i)
+      while (i > 0) {
+        i -= 1
+        arr(i) = truncateTimeToPrecision(start + stepNanos * i, precision)
+      }
+      arr
+    }
+
+    private val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+
+    override def genCode(
+        ctx: CodegenContext,
+        start: String,
+        stop: String,
+        step: String,
+        arr: String,
+        elemType: String): String = {
+      val i = ctx.freshName("i")
+      val stepNanos = ctx.freshName("stepNanos")
+      s"""
+         |final long $stepNanos = $step * ${NANOS_PER_MICROS}L;
+         |${genSequenceLengthCode(ctx, start, stop, stepNanos, stepNanos, i)}
+         |$arr = new $elemType[$i];
+         |while ($i > 0) {
+         |  $i--;
+         |  $arr[$i] = $dtu.truncateTimeToPrecision($start + $stepNanos * $i, $precision);
          |}
          """.stripMargin
     }
