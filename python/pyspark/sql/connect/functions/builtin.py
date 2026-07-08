@@ -2227,6 +2227,16 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
 variant_insert.__doc__ = pysparkfuncs.variant_insert.__doc__
 
 
+def try_variant_insert(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function("try_variant_insert", _to_col(v), path_col, _to_col(value))
+
+
+try_variant_insert.__doc__ = pysparkfuncs.try_variant_insert.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):
