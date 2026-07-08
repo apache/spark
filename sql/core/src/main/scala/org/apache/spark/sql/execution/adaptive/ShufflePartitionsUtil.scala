@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.internal.SQLConf
 
 object ShufflePartitionsUtil extends Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
@@ -47,28 +48,11 @@ object ShufflePartitionsUtil extends Logging {
       advisoryTargetSize: Long,
       minNumPartitions: Int,
       minPartitionSize: Long,
-      shuffleStageIds: Seq[Int] = Seq.empty): Seq[Seq[ShufflePartitionSpec]] = {
-    coalescePartitions(
-      mapOutputStatistics,
-      inputPartitionSpecs,
-      advisoryTargetSize,
-      minNumPartitions,
-      minPartitionSize,
-      shuffleStageIds,
-      Int.MaxValue)
-  }
-
-  def coalescePartitions(
-      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
-      inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
-      advisoryTargetSize: Long,
-      minNumPartitions: Int,
-      minPartitionSize: Long,
-      shuffleStageIds: Seq[Int],
-      maxReducerPartitionsPerTask: Int): Seq[Seq[ShufflePartitionSpec]] = {
+      shuffleStageIds: Seq[Int] = Seq.empty,
+      maxReducerPartitionsPerTask: Int =
+        SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK.defaultValue.get
+  ): Seq[Seq[ShufflePartitionSpec]] = {
     assert(mapOutputStatistics.length == inputPartitionSpecs.length)
-    require(maxReducerPartitionsPerTask > 0,
-      "maxReducerPartitionsPerTask must be positive")
 
     if (mapOutputStatistics.isEmpty) {
       return Seq.empty
@@ -88,7 +72,8 @@ object ShufflePartitionsUtil extends Logging {
       log"${MDC(LogKeys.PARTITION_SIZE, minPartitionSize)}")
     if (maxReducerPartitionsPerTask < Int.MaxValue) {
       logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_IDS, shuffleIds)}), maximum reducer " +
-        log"partitions per task: ${MDC(LogKeys.NUM_PARTITIONS, maxReducerPartitionsPerTask)}")
+        log"partitions per task: " +
+        log"${MDC(LogKeys.MAX_NUM_PARTITIONS, maxReducerPartitionsPerTask)}")
     }
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
@@ -296,8 +281,8 @@ object ShufflePartitionsUtil extends Logging {
       }
     }
 
-    def isWithinMaxReducerPartitions(start: Int, end: Int): Boolean = {
-      end - start <= maxReducerPartitionsPerTask
+    def isWithinMaxReducerPartitions(rangeStart: Int, rangeEnd: Int): Boolean = {
+      rangeEnd - rangeStart <= maxReducerPartitionsPerTask
     }
 
     while (i < end) {
@@ -312,8 +297,7 @@ object ShufflePartitionsUtil extends Logging {
       // The reducer-partition limit is a hard bound, so it takes precedence over the size-based
       // packing and minimum partition size. Advance the split point even for an empty range so
       // empty reducer partitions count toward the bound without creating an empty task.
-      if (i > latestSplitPoint &&
-          i - latestSplitPoint >= maxReducerPartitionsPerTask) {
+      if (i > latestSplitPoint && i - latestSplitPoint >= maxReducerPartitionsPerTask) {
         createPartitionSpec()
         latestSplitPoint = i
         latestPartitionSize = coalescedSize
