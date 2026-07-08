@@ -77,6 +77,13 @@ private[spark] class TaskContextImpl(
   @transient private val onInterruptCallbacks = new Stack[TaskInterruptListener]
 
   /**
+   * List of callback functions to invoke after the task's status update has been sent
+   * to the driver. Used for operations like push-based shuffle block push that should only
+   * begin after the driver has been notified of the task result.
+   */
+  @transient private val onPostStatusUpdateCallbacks = new Stack[PostStatusUpdateListener]
+
+  /**
    * The thread currently executing task completion or failure listeners, if any.
    *
    * `invokeListeners()` uses this to ensure listeners are called sequentially.
@@ -142,6 +149,19 @@ private[spark] class TaskContextImpl(
       invokeTaskInterruptListeners(reason, new TaskKilledException(reason))
     }
     this
+  }
+
+  override def addPostStatusUpdateListener(listener: PostStatusUpdateListener): this.type = {
+    synchronized {
+      onPostStatusUpdateCallbacks.push(listener)
+    }
+    this
+  }
+
+  private[spark] def invokePostStatusUpdateListeners(): Unit = {
+    invokeListeners(onPostStatusUpdateCallbacks, "PostStatusUpdateListener", None) {
+      _.onStatusUpdateSent(this)
+    }
   }
 
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {

@@ -21,6 +21,7 @@ import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.util.PostStatusUpdateListener
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -79,8 +80,29 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
                 log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
               logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
-              new ShuffleBlockPusher(SparkEnv.get.conf)
-                .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, mapIndex)
+              val blockPusher = new ShuffleBlockPusher(SparkEnv.get.conf)
+              // Register a post-status-update listener to defer push until after the task
+              // result has been sent to the driver. This ensures the driver processes the
+              // task result (and can mark stale partitions from speculative duplicates)
+              // before any push data reaches the merger, avoiding stale data being merged
+              // without detection.
+              //
+              // The listener callback runs on the Task thread and only does a lightweight
+              // submitTask; actual push I/O runs on BLOCK_PUSHER_POOL threads.
+              context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+                override def onStatusUpdateSent(context: TaskContext): Unit = {
+                  if (!context.isInterrupted() && !context.isFailed()) {
+                    logDebug(s"Task ${context.taskAttemptId()} status update sent, " +
+                      s"proceeding with shuffle block push for shuffle ${dep.shuffleId}")
+                    blockPusher.initiateBlockPush(
+                      dataFile, writer.getPartitionLengths(), dep, mapIndex)
+                  } else {
+                    logInfo(s"Task ${context.taskAttemptId()} was " +
+                      s"${if (context.isInterrupted()) "killed" else "failed"}, " +
+                      s"skipping shuffle block push for shuffle ${dep.shuffleId}")
+                  }
+                }
+              })
             case _ =>
           }
         }
