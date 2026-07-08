@@ -390,22 +390,25 @@ abstract class RDD[T: ClassTag](
    * sealed checksum. No-op unless this RDD is marked for verification. Relies on the per-replica
    * checksums recorded by BlockManager at store time (see `SerializerManager.wrapForChecksum`).
    */
-  private[rdd] def sealChecksumIfEnabled(): Unit = {
-    if (verifySealedChecksum) {
-      val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(id)
-      if (unverified > 0) {
-        // A non-zero count means some materialized partitions carry no checksum, so could not be
-        // sealed: either a deserialized storage level (in-memory objects are not checksummed), or
-        // blocks materialized before this RDD was marked for verification.
-        if (getStorageLevel.deserialized) {
-          logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but its " +
-            log"storage level is deserialized, so ${MDC(NUM_PARTITIONS, unverified)} in-memory " +
-            log"partition(s) were left unverified.")
-        } else {
-          logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but " +
-            log"${MDC(NUM_PARTITIONS, unverified)} partition(s) were materialized before it was " +
-            log"marked and were left unverified.")
-        }
+  private[rdd] def sealChecksums(): Unit = {
+    if (!verifySealedChecksum) {
+      logWarning(log"sealChecksums called on RDD ${MDC(RDD_ID, id)} that was not marked for " +
+        log"checksum verification; nothing to seal.")
+      return
+    }
+    val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(id)
+    if (unverified > 0) {
+      // A non-zero count means some materialized partitions carry no checksum, so could not be
+      // sealed: either a deserialized storage level (in-memory objects are not checksummed), or
+      // blocks materialized before this RDD was marked for verification.
+      if (getStorageLevel.deserialized) {
+        logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but its " +
+          log"storage level is deserialized, so ${MDC(NUM_PARTITIONS, unverified)} in-memory " +
+          log"partition(s) were left unverified.")
+      } else {
+        logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but " +
+          log"${MDC(NUM_PARTITIONS, unverified)} partition(s) were materialized before it was " +
+          log"marked and were left unverified.")
       }
     }
   }

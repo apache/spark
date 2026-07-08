@@ -57,7 +57,9 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val 
 
     // The checkpoint is not yet exposed to readers (markCheckpointed runs after doCheckpoint
     // returns), so this is the point to finalize one consistent version per partition.
-    rdd.sealChecksumIfEnabled()
+    if (rdd.verifySealedChecksum) {
+      rdd.sealChecksums()
+    }
 
     new LocalCheckpointRDD[T](rdd)
   }
