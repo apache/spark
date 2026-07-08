@@ -91,14 +91,16 @@ not — i.e. a normal materialized parent of the group.
     requirement. Gang admission applies only to a group of two or more stages connected by pipelined
     edges.
 - **Slot check.** The group's aggregate concurrent-task demand — the sum of `numTasks` over member
-  stages — is compared against the number of available slots in the cluster (a slot is one task's
-  worth of capacity, so this is the maximum number of tasks that can run at once). If the group
-  needs more slots than the cluster can offer, the submission fails fast, since the group could
-  never become fully co-resident.
-  - *What "available slots" is:* the cluster's concurrent-task capacity — the number of tasks it can
-    run at once — reusing the value the barrier slot check already uses (`sc.maxNumConcurrentTasks`),
-    not `spark.default.parallelism` (a default partition count, unrelated to how many tasks can run
-    concurrently).
+  stages — is compared against the number of **currently-free** slots: the cluster's total
+  concurrent-task capacity minus the tasks already running. If the group needs more than are free,
+  admission fails fast, since the group could never become fully co-resident. (Free rather than
+  total is essential once more than one group can be admitted; §4.1 explains why.)
+  - *How capacity is measured:* the total concurrent-task capacity is the value barrier's slot check
+    uses (`sc.maxNumConcurrentTasks` — task slots summed over active executors), not
+    `spark.default.parallelism` (a default partition count, unrelated to how many tasks can run
+    concurrently). Note this diverges from barrier in one way: barrier compares demand against that
+    *total*, whereas a pipelined group compares against *free* capacity (total minus running tasks).
+    Computing free capacity is therefore a new computation, not barrier's check reused verbatim.
 - **Single resource profile per group (v1).** A resource profile is the executor/task resource
   requirement (cores, memory, GPUs, ...) a stage runs under; the number of concurrent slots is
   defined *per profile* (a cluster may run many concurrent CPU tasks but few GPU tasks). Comparing
@@ -115,16 +117,15 @@ not — i.e. a normal materialized parent of the group.
 A pipelined group holds its slots for its whole run, so admission is decided against currently-free
 slots, and a group that does not fit is failed rather than queued.
 
-- **Capacity is free slots, not total.** The slot check counts only slots not occupied by running
-  tasks — running groups' and regular jobs' tasks are subtracted — so a group is admitted only if its
-  full demand fits in the slots free at admission time.
-  - *How free capacity is measured:* the cluster's concurrent-task capacity (the number of tasks it
-    can run at once — what an all-at-once gang admission must check against, see §4) minus the tasks
-    currently running.
+- **Why free slots, not total** (the slot check itself is defined in §4). Free capacity subtracts
+  the tasks already running — for every running group and regular job — so a group is admitted only
+  if its full demand fits in what the others leave free. This is what makes co-residency safe:
+  comparing against *total* capacity would let two groups each pass the check yet fail to co-fit,
+  which is exactly the partial co-residency gang admission forbids. (This is why the §4 slot check
+  diverges from barrier's total-capacity check.)
 - **No waiting queue, no partial reservation.** A group that doesn't fit fails its admission; it never
   sits in a queue holding slots incrementally. This keeps the scheduler change minimal and cannot
-  deadlock (a group never occupies slots a sibling is blocked on), matching barrier, which also fails
-  its slot check rather than queuing.
+  deadlock (a group never occupies slots a sibling is blocked on).
 - **Two failure reasons, one path.** Demand > total capacity can never fit (a plan/sizing error);
   demand > free slots but ≤ total could fit later. Both fail admission.
 - **Retry is the caller's decision.** The scheduler does not automatically retry a failed admission —
