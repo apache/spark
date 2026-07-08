@@ -55,12 +55,29 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
     }
   }
 
-  private def createLocalRead(plan: SparkPlan): AQEShuffleReadExec = {
-    plan match {
+  private def createLocalRead(plan: SparkPlan): SparkPlan = {
+    val (shuffleStage, advisoryParallelism) = plan match {
       case c @ AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
-        AQEShuffleReadExec(s, getPartitionSpecs(s, Some(c.partitionSpecs.length)))
+        (s, Some(c.partitionSpecs.length))
       case s: ShuffleQueryStageExec =>
-        AQEShuffleReadExec(s, getPartitionSpecs(s, None))
+        (s, None)
+    }
+    val partitionSpecs = getPartitionSpecs(shuffleStage, advisoryParallelism)
+    val maxReducerPartitionsPerTask =
+      conf.getConf(SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK)
+    val exceedsReducerPartitionLimit = partitionSpecs.exists {
+      case spec: PartialMapperPartitionSpec =>
+        spec.endReducerIndex - spec.startReducerIndex > maxReducerPartitionsPerTask
+      case spec: CoalescedMapperPartitionSpec =>
+        spec.numReducers > maxReducerPartitionsPerTask
+      case _ => false
+    }
+    // Local reads use mapper-oriented specs, whose reducer spans can differ from the bounded
+    // coalesced specs they replace. Keep the existing read if the rewrite would exceed the limit.
+    if (exceedsReducerPartitionLimit) {
+      plan
+    } else {
+      AQEShuffleReadExec(shuffleStage, partitionSpecs)
     }
   }
 

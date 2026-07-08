@@ -293,6 +293,35 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Preserve the reducer partition limit through local shuffle read optimization") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10",
+        SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK.key -> "2") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+      assert(findTopLevelBroadcastHashJoin(adaptivePlan).size == 1)
+
+      // The two shuffle sides exercise both mapper-oriented local-read spec types. Neither rewrite
+      // is safe with this reducer limit, so the bounded coalesced reads must remain in the plan.
+      val localReads = collect(adaptivePlan) {
+        case read: AQEShuffleReadExec if read.isLocalRead => read
+      }
+      assert(localReads.isEmpty)
+
+      val coalescedReads = collect(adaptivePlan) {
+        case read: AQEShuffleReadExec if read.hasCoalescedPartition => read
+      }
+      assert(coalescedReads.nonEmpty)
+      coalescedReads.flatMap(_.partitionSpecs).foreach {
+        case spec: CoalescedPartitionSpec =>
+          assert(spec.endReducerIndex - spec.startReducerIndex <= 2)
+        case spec => fail(s"Unexpected shuffle partition spec: $spec")
+      }
+    }
+  }
+
   test("Reuse the default parallelism in local shuffle read") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
