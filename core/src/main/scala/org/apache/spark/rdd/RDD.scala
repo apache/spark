@@ -379,7 +379,9 @@ abstract class RDD[T: ClassTag](
    * Set (when verification is enabled) to mark this RDD's cache blocks for content-checksum + seal.
    * Read in `getOrCompute`, it drives checksum computation at store time and is recorded on the
    * executor-local `BlockInfo` so the read-side self-check enforces the seal on that block; at the
-   * checkpoint commit point it decides whether to seal. Travels with the RDD to executors.
+   * checkpoint commit point it decides whether to seal. Travels with the RDD to executors because
+   * they need to know in advance - before storing/reading a block - whether to compute its checksum
+   * and later apply the read-side sealed-checksum self-check.
    */
   private[rdd] var verifyCheckpointChecksums: Boolean = false
 
