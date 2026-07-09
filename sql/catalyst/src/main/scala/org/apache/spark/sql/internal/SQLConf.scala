@@ -3699,6 +3699,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.withKeys.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate with grouping keys. Takes effect only " +
+        s"when ${ENABLE_SORT_AGGREGATE_CODEGEN.key} is enabled.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
     buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
       .internal()
