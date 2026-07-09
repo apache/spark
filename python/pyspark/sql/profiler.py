@@ -144,7 +144,7 @@ class WorkerSamplingProfiler:
         self,
         sampling_interval: float = 10,
     ) -> None:
-        self._data = {}
+        self._callstack_data = {}
         self._sampling_interval = sampling_interval
         self._stop_event = threading.Event()
 
@@ -163,7 +163,7 @@ class WorkerSamplingProfiler:
         WorkerSamplingProfiler._sampling_thread = None
 
     def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
-        accumulator.add(self._data)
+        accumulator.add({"callstack": self._callstack_data})
 
     def _start_sampling_thread(self) -> None:
         if self._sampling_thread is not None:
@@ -179,14 +179,14 @@ class WorkerSamplingProfiler:
                     self._add_sample(tid, frame)
 
     def _add_sample(self, tid: int, frame: Optional[FrameType]) -> None:
-        if tid not in self._data:
-            self._data[tid] = {}
+        if tid not in self._callstack_data:
+            self._callstack_data[tid] = {}
         frames: list[FrameType] = []
         while frame is not None:
             frames.append(frame)
             frame = frame.f_back
 
-        d = self._data[tid]
+        d = self._callstack_data[tid]
         for f in reversed(frames):
             ident = self._get_ident_from_frame(f)
             if ident not in d:
