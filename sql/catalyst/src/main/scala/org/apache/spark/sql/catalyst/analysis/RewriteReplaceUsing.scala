@@ -85,15 +85,7 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
     val carryoverJoin = Join(readRelation, scopeRef, LeftAnti, Some(antiJoinCond), JoinHint.NONE)
     val carryover = addOperationColumn(COPY_OPERATION, carryoverJoin)
 
-    // All source rows are inserted. Carryover supplies target metadata; insert rows null it out.
-    val insertData = rowAttrs.indices.map { i =>
-      Alias(insertRef.output(i), rowAttrs(i).name)()
-    }
-    val insertMetadata = metadataAttrs.map(attr => Alias(Literal(null, attr.dataType), attr.name)())
-    val insertOutput = operationAlias(INSERT_OPERATION) +: (insertData ++ insertMetadata)
-    val inserts = Project(insertOutput, insertRef)
-
-    val replacementQuery = Union(carryover :: inserts :: Nil)
+    val replacementQuery = buildReplacementQuery(carryover, insertRef, rowAttrs, metadataAttrs)
     val projections = buildReplaceDataProjections(replacementQuery, rowAttrs, metadataAttrs)
 
     val groupFilterCond = if (groupFilterEnabled) {
@@ -110,6 +102,22 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
       ReplaceData(writeRelation, TrueLiteral, replacementQuery, relation, projections,
         groupFilterCond)
     WithCTE(replaceData, sourceCte :: Nil)
+  }
+
+  // The COW replacement is the carryover (retained target rows) unioned with every source row
+  // re-emitted as an insert. Insert rows have no target metadata, so metadata columns are nulled.
+  private def buildReplacementQuery(
+      carryover: LogicalPlan,
+      insertRef: CTERelationRef,
+      rowAttrs: Seq[Attribute],
+      metadataAttrs: Seq[Attribute]): LogicalPlan = {
+    val insertData = rowAttrs.indices.map { i =>
+      Alias(insertRef.output(i), rowAttrs(i).name)()
+    }
+    val insertMetadata = metadataAttrs.map(attr => Alias(Literal(null, attr.dataType), attr.name)())
+    val insertOutput = operationAlias(INSERT_OPERATION) +: (insertData ++ insertMetadata)
+    val inserts = Project(insertOutput, insertRef)
+    Union(carryover :: inserts :: Nil)
   }
 
   // Build a merge-on-read delta from matched-row deletes and inserted source rows.
@@ -212,8 +220,8 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
   }
 
   private def scopeEquality(
-      targetOutput: Seq[Attribute],
-      sourceOutput: Seq[Attribute],
+      targetOutput: Seq[Expression],
+      sourceOutput: Seq[Expression],
       scopeOrdinals: Seq[Int]): Expression = {
     scopeOrdinals
       .map(ordinal => EqualNullSafe(targetOutput(ordinal), sourceOutput(ordinal)): Expression)
@@ -225,12 +233,10 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
       relation: DataSourceV2Relation,
       sourceRef: CTERelationRef,
       scopeOrdinals: Seq[Int]): Expression = {
-    val cond = scopeOrdinals
-      .map { ordinal =>
-        EqualNullSafe(OuterReference(relation.output(ordinal)), sourceRef.output(ordinal))
-          : Expression
-      }
-      .reduce(And)
+    // scopeEquality indexes both sides by scope ordinal, so the target must be the full row
+    // output (outer-referenced), not only the scope columns.
+    val outerTarget = relation.output.map(attr => OuterReference(attr))
+    val cond = scopeEquality(outerTarget, sourceRef.output, scopeOrdinals)
     val outerRefs = scopeOrdinals.map(ordinal => relation.output(ordinal))
     Exists(Filter(cond, sourceRef), outerRefs)
   }
