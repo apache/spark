@@ -7141,8 +7141,9 @@ object SQLConf {
       .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
         "travel suffix: 'name@v123' reads version 123 of the table, and " +
         "'name@20240101000000000' (format yyyyMMddHHmmssSSS, interpreted in the session " +
-        "time zone) reads the table as of that timestamp. When false, '@' in table names " +
-        "fails at parse time.")
+        "time zone) reads the table as of that timestamp, to millisecond precision (use " +
+        "TIMESTAMP AS OF for finer granularity). When false, '@' in table names fails at " +
+        "parse time.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

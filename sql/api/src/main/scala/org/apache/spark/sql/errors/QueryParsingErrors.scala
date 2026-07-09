@@ -879,7 +879,9 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def invalidAtSyntaxTimestamp(
-      timestamp: String, format: String, ctx: ParserRuleContext): Throwable = {
+      timestamp: String,
+      format: String,
+      ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
       messageParameters = Map("timestamp" -> timestamp, "format" -> format),

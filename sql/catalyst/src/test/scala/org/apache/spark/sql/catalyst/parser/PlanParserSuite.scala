@@ -2214,6 +2214,16 @@ class PlanParserSuite extends AnalysisTest {
           Some(Literal(micros, TimestampType)),
           None)))
 
+    val microsWithMillis = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58.123"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    assertEqual("SELECT * FROM a.b.c@20190129003758123",
+      Project(Seq(UnresolvedStar(None)),
+        RelationTimeTravel(
+          UnresolvedRelation(Seq("a", "b", "c")),
+          Some(Literal(microsWithMillis, TimestampType)),
+          None)))
+
     assertEqual("SELECT * FROM `t@v1`",
       Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("t@v1"))))
 
@@ -2256,6 +2266,18 @@ class PlanParserSuite extends AnalysisTest {
       condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
       parameters = Map("timestamp" -> "20191301000000000", "format" -> "yyyyMMddHHmmssSSS"),
       context = ExpectedContext(fragment = "t@20191301000000000", start = 14, stop = 32))
+
+    // Wrong-length timestamps are rejected.
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129003758"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20190129003758", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20190129003758", start = 14, stop = 29))
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20190129", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20190129", start = 14, stop = 23))
 
     assert(intercept[ParseException] {
       parsePlan("INSERT INTO t@v1 VALUES (1)")
