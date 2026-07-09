@@ -18,7 +18,9 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, SharedTablesInMemoryRowLevelOperationTableCatalog, TableCatalog}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -1080,4 +1082,229 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
       }
     }
   }
+
+  // ===========================================================================
+  // AUTO CDC syntax registration and execution.
+  //
+  // Two SQL forms register an [[AutoCdcFlow]] into the dataflow graph:
+  //   1. CREATE STREAMING TABLE <name> FLOW AUTO CDC FROM <source> KEYS (...) SEQUENCE BY <expr>
+  //   2. CREATE FLOW <name> AS AUTO CDC INTO <target> FROM <source> KEYS (...) SEQUENCE BY <expr>
+  // SQL AUTO CDC only supports SCD Type 1.
+  // ===========================================================================
+
+  /** Returns the single unresolved [[AutoCdcFlow]] registered for the given flow identifier. */
+  private def autoCdcFlowFor(graph: DataflowGraph, name: String): AutoCdcFlow = {
+    val ident = fullyQualifiedIdentifier(name)
+    graph.flows.collect {
+      case f: AutoCdcFlow if f.identifier == ident => f
+    }.headOption.getOrElse(
+      fail(s"No AutoCdcFlow registered for identifier ${ident.unquotedString}")
+    )
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC registers a streaming table and an AutoCDC flow") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |""".stripMargin
+    )
+
+    // The streaming table is registered as a table.
+    assert(graph.tables.exists(_.identifier == fullyQualifiedIdentifier("st")))
+
+    // The backing flow is an AutoCdcFlow whose flow and destination are the streaming table.
+    val flow = autoCdcFlowFor(graph, "st")
+    assert(flow.destinationIdentifier == fullyQualifiedIdentifier("st"))
+    assert(flow.changeArgs.keys.map(_.name) == Seq("id"))
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+    assert(flow.changeArgs.deleteCondition.isEmpty)
+    assert(flow.changeArgs.columnSelection.isEmpty)
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO registers an AutoCDC flow targeting a streaming table") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE target;
+                   |CREATE FLOW f AS AUTO CDC INTO target
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |""".stripMargin
+    )
+
+    assert(graph.tables.exists(_.identifier == fullyQualifiedIdentifier("target")))
+
+    // The flow identifier is the named flow, and its destination is the target streaming table.
+    val flow = autoCdcFlowFor(graph, "f")
+    assert(flow.destinationIdentifier == fullyQualifiedIdentifier("target"))
+    assert(flow.changeArgs.keys.map(_.name) == Seq("id"))
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  test("AUTO CDC optional clauses map onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE target;
+                   |CREATE FLOW f AS AUTO CDC INTO target
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |APPLY AS DELETE WHEN id = 0
+                   |SEQUENCE BY id
+                   |COLUMNS * EXCEPT (id)
+                   |""".stripMargin
+    )
+
+    val flow = autoCdcFlowFor(graph, "f")
+    assert(flow.changeArgs.deleteCondition.isDefined)
+    flow.changeArgs.columnSelection match {
+      case Some(ColumnSelection.ExcludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
+      case other => fail(s"Expected ExcludeColumns(id), got $other")
+    }
+  }
+
+  test("AUTO CDC COLUMNS include list maps onto ChangeArgs") {
+    val graph = unresolvedDataflowGraphFromSql(
+      sqlText = s"""
+                   |CREATE STREAMING TABLE st
+                   |FLOW AUTO CDC
+                   |FROM STREAM $externalTable1Ident
+                   |KEYS (id)
+                   |SEQUENCE BY id
+                   |COLUMNS (id)
+                   |""".stripMargin
+    )
+
+    autoCdcFlowFor(graph, "st").changeArgs.columnSelection match {
+      case Some(ColumnSelection.IncludeColumns(cols)) => assert(cols.map(_.name) == Seq("id"))
+      case other => fail(s"Expected IncludeColumns(id), got $other")
+    }
+  }
+
+  test("Multipart AUTO CDC flow name is not supported") {
+    Seq("a.b", "a.b.c").foreach { flowIdentifier =>
+      val ex = intercept[AnalysisException] {
+        unresolvedDataflowGraphFromSql(
+          sqlText = s"""
+                       |CREATE STREAMING TABLE target;
+                       |CREATE FLOW $flowIdentifier AS AUTO CDC INTO target
+                       |FROM STREAM $externalTable1Ident
+                       |KEYS (id)
+                       |SEQUENCE BY id
+                       |""".stripMargin
+        )
+      }
+      checkError(
+        exception = ex,
+        condition = "MULTIPART_FLOW_NAME_NOT_SUPPORTED",
+        parameters = Map("flowName" -> flowIdentifier)
+      )
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // End-to-end execution. AutoCDC applies its microbatch to the target via the DataFrame
+  // MERGE API, which requires a row-level-operation-capable v2 catalog, so these tests scaffold
+  // one inline (mirroring the AutoCDC E2E suites) rather than using the default `spark_catalog`.
+  // ---------------------------------------------------------------------------
+
+  private val rowLevelCatalog: String = "cat"
+  private val rowLevelNamespace: String = "ns1"
+
+  private def withRowLevelAutoCdcCatalog(testBody: => Unit): Unit = {
+    spark.conf.set(
+      s"spark.sql.catalog.$rowLevelCatalog",
+      classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName
+    )
+    // Surface flow failures on the first attempt instead of retrying.
+    spark.conf.set(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key, "0")
+    spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $rowLevelCatalog.$rowLevelNamespace")
+    try {
+      testBody
+    } finally {
+      SharedTablesInMemoryRowLevelOperationTableCatalog.reset()
+      spark.sessionState.catalogManager.reset()
+      spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$rowLevelCatalog")
+      spark.sessionState.conf.unsetConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key)
+    }
+  }
+
+  /** Build a target row's `_cdc_metadata` struct value (deleteSequence, upsertSequence). */
+  private def cdcMeta(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =
+    Row(deleteSeq.orNull, upsertSeq.orNull)
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC upserts rows into the target end-to-end") {
+    withRowLevelAutoCdcCatalog {
+      // Source and target both live in the row-level catalog. Streaming over a static table
+      // replays all rows in one microbatch, exercising the SCD1 upsert path. Two versions of
+      // key 1 test latest-wins.
+      val source = s"$rowLevelCatalog.$rowLevelNamespace.cdc_source"
+      spark.sql(s"CREATE TABLE $source (id INT, name STRING, version BIGINT)")
+      spark.sql(
+        s"INSERT INTO $source VALUES (1, 'alice', 1), (1, 'alice2', 2), (2, 'bob', 1)")
+
+      val target = s"$rowLevelCatalog.$rowLevelNamespace.target"
+      val graph = unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE $target
+                     |FLOW AUTO CDC
+                     |FROM STREAM $source
+                     |KEYS (id)
+                     |SEQUENCE BY version
+                     |""".stripMargin
+      )
+
+      startPipelineAndWaitForCompletion(graph)
+
+      // Key 1 converges to the highest-sequenced upsert (alice2 @ v2); key 2 lands as-is.
+      checkAnswer(
+        spark.table(target),
+        Seq(
+          Row(1, "alice2", 2L, cdcMeta(None, Some(2L))),
+          Row(2, "bob", 1L, cdcMeta(None, Some(1L)))
+        )
+      )
+    }
+  }
+
+  test("CREATE FLOW AS AUTO CDC INTO applies deletes and column exclusion end-to-end") {
+    withRowLevelAutoCdcCatalog {
+      // Source carries a control column `op` that drives the delete condition and is excluded
+      // from the target projection.
+      val source = s"$rowLevelCatalog.$rowLevelNamespace.cdc_source"
+      spark.sql(s"CREATE TABLE $source (id INT, name STRING, version BIGINT, op STRING)")
+      spark.sql(
+        s"""INSERT INTO $source VALUES
+           |  (1, 'alice', 1, 'UPSERT'),
+           |  (2, 'bob', 1, 'UPSERT'),
+           |  (2, 'bob', 2, 'DELETE')
+           |""".stripMargin)
+
+      val target = s"$rowLevelCatalog.$rowLevelNamespace.target"
+      val graph = unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE $target;
+                     |CREATE FLOW f AS AUTO CDC INTO $target
+                     |FROM STREAM $source
+                     |KEYS (id)
+                     |APPLY AS DELETE WHEN op = 'DELETE'
+                     |SEQUENCE BY version
+                     |COLUMNS * EXCEPT (op)
+                     |""".stripMargin
+      )
+
+      startPipelineAndWaitForCompletion(graph)
+
+      // Key 2's delete @ v2 supersedes its upsert @ v1; only key 1 remains. The `op` column is
+      // excluded from the target schema.
+      checkAnswer(
+        spark.table(target),
+        Seq(Row(1, "alice", 1L, cdcMeta(None, Some(1L))))
+      )
+    }
+  }
+
 }

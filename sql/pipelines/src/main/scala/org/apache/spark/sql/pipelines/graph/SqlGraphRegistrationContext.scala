@@ -20,12 +20,16 @@ import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.logical.{CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcIntoCommand, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
 import org.apache.spark.sql.pipelines.Language
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -162,6 +166,10 @@ class SqlGraphRegistrationContext(
       case createStreamingTableCommand: CreateStreamingTable =>
         // CREATE STREAMING TABLE [ streaming_table_name ] [ options ]
         CreateStreamingTableHandler.handle(createStreamingTableCommand, queryOrigin)
+      case createStreamingTableAutoCdcCommand: CreateStreamingTableAutoCdc =>
+        // CREATE STREAMING TABLE [ streaming_table_name ] [ options ]
+        //   FLOW AUTO CDC FROM [ source ] KEYS ( ... ) SEQUENCE BY [ expr ] ...
+        CreateStreamingTableAutoCdcHandler.handle(createStreamingTableAutoCdcCommand, queryOrigin)
       case createFlowCommand: CreateFlowCommand =>
         // CREATE FLOW [ flow_name ] AS INSERT INTO [ destination_name ] BY NAME
         CreateFlowHandler.handle(createFlowCommand, queryOrigin)
@@ -250,6 +258,108 @@ class SqlGraphRegistrationContext(
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
             objectType = Option(QueryOriginType.Flow.toString)
+          )
+        )
+      )
+    }
+  }
+
+  /**
+   * Converts the parse-time AUTO CDC parameters (catalyst expressions and unresolved attributes)
+   * into the [[ChangeArgs]] consumed by an [[AutoCdcFlow]]. Shared by the two SQL AUTO CDC entry
+   * points: `CREATE STREAMING TABLE ... FLOW AUTO CDC ...` and `CREATE FLOW ... AS AUTO CDC INTO`.
+   *
+   * SQL AUTO CDC syntax only supports SCD Type 1, so [[ChangeArgs.storedAsScdType]] is always
+   * [[ScdType.Type1]]. [[includeColumns]] and [[excludeColumns]] are mutually exclusive at the
+   * grammar level; the guard here is defensive.
+   */
+  private def buildChangeArgs(
+      keys: Seq[UnresolvedAttribute],
+      sequenceByExpr: Expression,
+      deleteCondition: Option[Expression],
+      includeColumns: Option[Seq[UnresolvedAttribute]],
+      excludeColumns: Option[Seq[UnresolvedAttribute]],
+      queryOrigin: QueryOrigin): ChangeArgs = {
+    val columnSelection: Option[ColumnSelection] = (includeColumns, excludeColumns) match {
+      case (Some(_), Some(_)) =>
+        throw SqlGraphElementRegistrationException(
+          msg = "AUTO CDC cannot specify both COLUMNS and COLUMNS * EXCEPT.",
+          queryOrigin = queryOrigin
+        )
+      case (Some(included), None) =>
+        Option(ColumnSelection.IncludeColumns(included.map(toUnqualifiedColumnName)))
+      case (None, Some(excluded)) =>
+        Option(ColumnSelection.ExcludeColumns(excluded.map(toUnqualifiedColumnName)))
+      case (None, None) =>
+        None
+    }
+
+    ChangeArgs(
+      keys = keys.map(toUnqualifiedColumnName),
+      sequencing = Column(sequenceByExpr),
+      storedAsScdType = ScdType.Type1,
+      deleteCondition = deleteCondition.map(Column(_)),
+      columnSelection = columnSelection
+    )
+  }
+
+  private def toUnqualifiedColumnName(attr: UnresolvedAttribute): UnqualifiedColumnName =
+    UnqualifiedColumnName(attr.nameParts)
+
+  private object CreateStreamingTableAutoCdcHandler {
+    def handle(cst: CreateStreamingTableAutoCdc, queryOrigin: QueryOrigin): Unit = {
+      val stIdentifier = GraphIdentifierManager
+        .parseAndQualifyTableIdentifier(
+          rawTableIdentifier = IdentifierHelper.toTableIdentifier(cst.name),
+          currentCatalog = context.getCurrentCatalogOpt,
+          currentDatabase = context.getCurrentDatabaseOpt
+        )
+        .identifier
+
+      // Register the streaming table as a table. The streaming table is itself the target of the
+      // CDC operation.
+      graphRegistrationContext.registerTable(
+        Table(
+          identifier = stIdentifier,
+          comment = cst.tableSpec.comment,
+          specifiedSchema =
+            Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
+          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
+          clusterCols = None,
+          properties = cst.tableSpec.properties,
+          origin = queryOrigin.copy(
+            objectName = Option(stIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Table.toString)
+          ),
+          format = cst.tableSpec.provider,
+          normalizedPath = None,
+          isStreamingTable = true
+        )
+      )
+
+      // Register the AutoCDC flow that backs this streaming table. Both the flow and its
+      // destination are the streaming table itself.
+      graphRegistrationContext.registerFlow(
+        AutoCdcFlow(
+          identifier = stIdentifier,
+          destinationIdentifier = stIdentifier,
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cst.source),
+          sqlConf = context.getSqlConf,
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin.copy(
+            objectName = Option(stIdentifier.unquotedString),
+            objectType = Option(QueryOriginType.Flow.toString)
+          ),
+          changeArgs = buildChangeArgs(
+            keys = cst.keys,
+            sequenceByExpr = cst.sequenceByExpr,
+            deleteCondition = cst.deleteCondition,
+            includeColumns = cst.includeColumns,
+            excludeColumns = cst.excludeColumns,
+            queryOrigin = queryOrigin
           )
         )
       )
@@ -415,7 +525,7 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
-      val (flowTargetDatasetIdentifier, flowQueryLogicalPlan) = cf.flowOperation match {
+      cf.flowOperation match {
         case i: InsertIntoStatement =>
           validateInsertIntoFlow(i, queryOrigin)
           val flowTargetDatasetName = i.table match {
@@ -427,44 +537,61 @@ class SqlGraphRegistrationContext(
                 queryOrigin = queryOrigin
               )
           }
-          val qualifiedFlowTargetDatasetName = GraphIdentifierManager
-            .parseAndQualifyTableIdentifier(
-              rawTableIdentifier = flowTargetDatasetName,
-              currentCatalog = context.getCurrentCatalogOpt,
-              currentDatabase = context.getCurrentDatabaseOpt
+          graphRegistrationContext.registerFlow(
+            UntypedFlow(
+              identifier = flowIdentifier,
+              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(i.query),
+              sqlConf = context.getSqlConf,
+              once = false,
+              queryContext = QueryContext(
+                currentCatalog = context.getCurrentCatalogOpt,
+                currentDatabase = context.getCurrentDatabaseOpt
+              ),
+              origin = queryOrigin
             )
-            .identifier
-          (qualifiedFlowTargetDatasetName, i.query)
+          )
+        case a: AutoCdcIntoCommand =>
+          val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
+          graphRegistrationContext.registerFlow(
+            AutoCdcFlow(
+              identifier = flowIdentifier,
+              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(a.source),
+              sqlConf = context.getSqlConf,
+              queryContext = QueryContext(
+                currentCatalog = context.getCurrentCatalogOpt,
+                currentDatabase = context.getCurrentDatabaseOpt
+              ),
+              origin = queryOrigin,
+              changeArgs = buildChangeArgs(
+                keys = a.keys,
+                sequenceByExpr = a.sequenceByExpr,
+                deleteCondition = a.deleteCondition,
+                includeColumns = a.includeColumns,
+                excludeColumns = a.excludeColumns,
+                queryOrigin = queryOrigin
+              )
+            )
+          )
         case _ =>
           throw SqlGraphElementRegistrationException(
-            msg = "Unable flow type. Only INSERT INTO flows are supported.",
+            msg = "Unable flow type. Only INSERT INTO and AUTO CDC INTO flows are supported.",
             queryOrigin = queryOrigin
           )
       }
+    }
 
-      val qualifiedDestinationIdentifier = GraphIdentifierManager
+    /** Qualifies a raw flow target dataset identifier against the current catalog/database. */
+    private def qualifyDestinationIdentifier(
+        flowTargetDatasetIdentifier: TableIdentifier): TableIdentifier =
+      GraphIdentifierManager
         .parseAndQualifyFlowIdentifier(
           rawFlowIdentifier = flowTargetDatasetIdentifier,
           currentCatalog = context.getCurrentCatalogOpt,
           currentDatabase = context.getCurrentDatabaseOpt
         )
         .identifier
-
-      graphRegistrationContext.registerFlow(
-        UntypedFlow(
-          identifier = flowIdentifier,
-          destinationIdentifier = qualifiedDestinationIdentifier,
-          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
-          sqlConf = context.getSqlConf,
-          once = false,
-          queryContext = QueryContext(
-            currentCatalog = context.getCurrentCatalogOpt,
-            currentDatabase = context.getCurrentDatabaseOpt
-          ),
-          origin = queryOrigin
-        )
-      )
-    }
 
     private def validateInsertIntoFlow(
         insertIntoStatement: InsertIntoStatement,
