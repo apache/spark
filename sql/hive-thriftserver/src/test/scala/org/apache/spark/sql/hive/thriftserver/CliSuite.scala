@@ -587,14 +587,10 @@ class CliSuite extends SparkFunSuite {
       "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
       "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
       "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
-      // SPARK-56147: the new ANTLR-based splitter correctly handles
-      // nested bracketed comments, so `;` inside any nesting level is
-      // ignored as long as every level is closed. The previous regex-based
-      // scanner had a bug that mis-handled `/*/*` (it treated the third
-      // char `/` together with the preceding `*` as a closing `*/`),
-      // which made `/*/* multi-level bracketed*/ SELECT 'test';` look
-      // like a closed comment followed by a real statement -- now that
-      // input is correctly recognized as an unclosed nested comment.
+      // Nested bracketed comments are honored: a `;` inside any nesting
+      // level is ignored as long as every level is closed, so the fully
+      // closed `/* outer; /* inner; */ outer; */` is skipped and only the
+      // trailing `SELECT 'test'` executes.
       "/* outer; /* inner; */ outer; */ SELECT 'test';" -> "test"
     )
   }
@@ -626,17 +622,11 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-37471: spark-sql support nested bracketed comment ") {
-    // SPARK-56147: the original input here was
-    //   `/* SELECT /*+ HINT() */ 4; */`
-    // which relied on the old regex-based scanner treating `/*+` as opening a
-    // nested bracketed comment (so the whole thing was one closed nested
-    // comment). The new parser-based [[SqlStatementSplitter]] uses the actual
-    // ANTLR lexer, which correctly treats `/*+` as a hint marker (NOT a
-    // nested comment opener), so under that input the outer `/*` would close
-    // at the first `*/` and the trailing `4; */` would be a parse error.
-    // Updated to use truly-nested syntax (`/* outer /* inner */ outer */`)
-    // so the test verifies nested bracketed comment support under the new
-    // lexer's actual nesting rules.
+    // `/* outer /* inner */ outer */` is a truly-nested bracketed comment: the
+    // inner `/* ... */` opens and closes an extra nesting level, and the outer
+    // comment closes only at the final `*/`. The whole comment is skipped and
+    // the following `SELECT 'nested-comment'` executes. (Note `/*+` is a hint
+    // marker, not a nested comment opener, so nesting must use `/*`.)
     runCliWithin(1.minute)(
       """
         |/* outer /* inner */ outer */
@@ -646,23 +636,10 @@ class CliSuite extends SparkFunSuite {
   }
 
   testRetry("SPARK-37555: spark-sql should pass last unclosed comment to backend") {
-    // Historical note: the original test also exercised the input
-    //   `/* SELECT /*+ HINT() 4; */;`
-    // expecting `Syntax error at or near ';'`. That case was a false-positive
-    // from the old regex-based `StringUtils.splitSemiColon` scanner, which
-    // mistakenly counted `/*+` as opening a *nested* bracketed comment and so
-    // treated the whole input as unclosed -- the scanner then forwarded the
-    // (incorrectly-flagged) input to the backend, which rejected the lone
-    // trailing `;`. The new parser-based [[SqlStatementSplitter]] uses the
-    // actual ANTLR lexer, which correctly treats `/*+` as a hint marker (NOT a
-    // nested comment opener), so the comment IS properly closed and the input
-    // collapses to an empty statement. The case was therefore removed because
-    // the old behavior was a bug, not a feature. The remaining cases still
-    // verify that genuinely-unclosed comments are surfaced to the backend.
     runCliWithin(1.minute)(
-      // A closed bracketed comment whose `/*+` looks like a hint marker but
-      // does NOT open a nested comment, followed by a real query. The
-      // splitter recognises the comment and the query correctly.
+      // A fully closed bracketed comment. `/*+` inside it is a hint marker,
+      // not a nested comment opener, so the comment closes at the first `*/`;
+      // the comment is skipped and the trailing `SELECT 1` executes.
       "/* SELECT /*+ HINT() 4; */ SELECT 1;".stripMargin -> "1",
       // Genuinely unclosed comment with a query inside it. The splitter
       // detects the un-terminated bracketed comment and flushes the partial
@@ -937,9 +914,9 @@ class CliSuite extends SparkFunSuite {
   }
 
   test("SPARK-56147: `\\;` at end of line is a Hive-compat line continuation marker") {
-    // `\;` at the end of an interactive line defers execution and shows the
-    // continuation prompt for the next line, matching pre-PR behavior. The
-    // queried-once joined input is then sent to the backend; the `\;` chunk
+    // `\;` at the end of an interactive line is a Hive-compat continuation
+    // marker: it defers execution and shows the continuation prompt for the
+    // next line. The joined input is then sent to the backend; the `\;` chunk
     // reattachment in `processLine` reinjects a literal `;` in the middle,
     // so the backend reports a parse error. Asserting the parse error here
     // also confirms the continuation prompt for the second line was reached
@@ -948,6 +925,27 @@ class CliSuite extends SparkFunSuite {
     runCliWithin(2.minutes, errorResponses = Nil)(
       """SELECT 'first' \;
         |, 'second';""".stripMargin -> "PARSE_SYNTAX_ERROR"
+    )
+  }
+
+  test("SPARK-56147: interactive BEGIN ... END block buffers across lines " +
+      "and runs as a single statement") {
+    // The interactive loop is line-level. A multi-line `BEGIN ... END` SQL
+    // scripting block carries internal `;` delimiters (after `DECLARE`, `SET`,
+    // the `WHILE ... END WHILE`, etc.), but the parser-based splitter recognises
+    // the whole block as one compound statement, so the CLI keeps buffering on
+    // the continuation prompt until the closing `END;` instead of firing early
+    // at an internal `;`. Feeding the block line-by-line and asserting the
+    // trailing `SELECT` produces the value computed by the loop confirms the
+    // block executed as a single statement.
+    runCliWithin(2.minutes)(
+      """BEGIN
+        |  DECLARE c INT = 0;
+        |  WHILE c < 3 DO
+        |    SET c = c + 1;
+        |  END WHILE;
+        |  SELECT 'loop-ran-' || CAST(c AS STRING) AS r;
+        |END;""".stripMargin -> "loop-ran-3"
     )
   }
 }

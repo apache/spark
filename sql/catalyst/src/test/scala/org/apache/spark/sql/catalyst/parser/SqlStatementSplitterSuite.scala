@@ -647,8 +647,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
   //
   // The splitter achieves this via its `FailedNonEof` fall-back: when the
   // vanilla parser cannot consume a candidate prefix, the splitter reverts to
-  // a token-level walk and emits at the next `;` -- matching the behavior of
-  // the old `StringUtils.splitSemiColon` scanner exactly. Quoted strings and
+  // a token-level walk and emits at the next `;`. Quoted strings and
   // comments are still honored (they are part of the lexer, not the parser),
   // so semicolons inside them remain non-delimiters.
 
@@ -711,8 +710,7 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     // splitter takes the failedNonEof fall-back. The fall-back walks tokens
     // and checks `token.getType == SEMICOLON`; the `;`s inside `'a;b;c'` are
     // part of a single STRING_LITERAL token (not separate SEMICOLON tokens),
-    // so they are correctly preserved -- mirroring the behavior of the old
-    // `StringUtils.splitSemiColon` scanner.
+    // so they are correctly preserved as part of the statement text.
     val sql = "ALTER TABLE t ADD PARTITION FIELD names('a;b;c');"
     val result = split(sql)
     assert(result.completeStatements == Seq(
@@ -927,9 +925,9 @@ class SqlStatementSplitterSuite extends SparkFunSuite {
     // an extension statement. The splitter's vanilla parser cannot recognise
     // the extension, so it cannot confirm the whole block as a single
     // compound statement and falls back to per-`;` splitting. The result is
-    // multiple broken chunks rather than one block -- a known limitation
-    // (the same as the old `StringUtils.splitSemiColon` behavior, which also
-    // could not preserve compound-block boundaries).
+    // multiple broken chunks rather than one block -- a known limitation:
+    // preserving compound-block boundaries requires a parser that recognises
+    // the extension grammar, which the vanilla splitter does not use.
     val sql =
       """BEGIN
         |  ALTER TABLE t ADD PARTITION FIELD bucket(16, id);

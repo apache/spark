@@ -1248,8 +1248,9 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("splitStatements: SET-in-batch-then-${var}-inside-BEGIN..END (C3)") {
-    // The original splitter design substituted the whole batch up front,
-    // which would replace `${x}` with the pre-`SET` (default / empty) value
+    // The block's body references `${x}`, whose value comes from the earlier
+    // `SET x=1` in the same batch. Substituting `${x}` up front (before the
+    // `SET` runs) would replace it with the pre-`SET` (default / empty) value
     // and break the block's parse. The placeholder-validation hybrid leaves
     // `${x}` in the emitted text but still recognizes the block boundary.
     val sql = "SET x=1; BEGIN SELECT ${x}; SELECT 1; END;"

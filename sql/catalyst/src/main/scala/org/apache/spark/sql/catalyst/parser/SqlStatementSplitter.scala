@@ -98,13 +98,13 @@ case class SqlStatementSplitResult(
  * (the default), the splitter behaves as a pure original-text splitter.
  *
  * Performance note: for a single `BEGIN ... END` block with k internal `;`,
- * the splitter calls `tryParseSegment` O(k) times on growing prefixes -- an
+ * the splitter calls `tryParseRegion` O(k) times on growing prefixes -- an
  * O(k^2) cost in the worst case (incomplete block on every keystroke in
  * interactive mode). Ordinary non-scripting SQL is O(n). A non-EOF terminated
  * single-statement rule (read `ctx.getStop` once per region) would make this
  * O(n), but Spark's `setResetStatement` has `SET .*?` / `RESET .*?` wildcards
- * that need an EOF anchor to terminate deterministically, so the simple
- * rule-rewrite the reviewer suggested does not drop in cleanly. Tracked as a
+ * that need an EOF anchor to terminate deterministically, so such a
+ * single-statement rule-rewrite does not drop in cleanly. Tracked as a
  * follow-up.
  */
 object SqlStatementSplitter {
@@ -241,8 +241,7 @@ object SqlStatementSplitter {
           // back-ticked identifiers as part of the surrounding STRING_LITERAL
           // / SIMPLE_COMMENT / BRACKETED_COMMENT / BACKQUOTED_IDENTIFIER
           // token rather than as a separate SEMICOLON token, those embedded
-          // `;` are NOT split-points -- matching the behavior of the old
-          // `StringUtils.splitSemiColon` scanner. A valid `BEGIN ... END`
+          // `;` are NOT split-points. A valid `BEGIN ... END`
           // block is always confirmed by the parser (ParsedOk), so this
           // fall-back never splits a well-formed compound block at an
           // internal `;`.

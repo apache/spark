@@ -242,10 +242,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Accumulated input that has not yet formed a complete statement. The
     // interactive loop is line-level: we buffer input until the user types a
     // line ending with `;`, then ask the parser-based [[SqlStatementSplitter]]
-    // to split the buffered text into statements. This matches the pre-PR
-    // behavior so multi-line input like an un-closed bracketed comment that
-    // spans several lines (SPARK-33100, SPARK-37471) still buffers until the
-    // user actually signals end-of-statement with `;`.
+    // to split the buffered text into statements. Line-level buffering keeps
+    // multi-line input accumulating until the user signals end-of-statement
+    // with `;`, so constructs that span several lines -- an un-closed
+    // bracketed comment (SPARK-33100, SPARK-37471) or a `BEGIN ... END`
+    // scripting block -- are assembled in full before being split.
     var buffer = ""
 
     def currentDB = {
@@ -650,8 +651,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Splits SQL into individual statements via the parser-based
   // [[org.apache.spark.sql.catalyst.parser.SqlStatementSplitter]]. The returned
   // list contains the text of every complete statement (without its terminator)
-  // followed by the trailing partial statement, if any. This matches the legacy
-  // shape that [[processLine]] expects.
+  // followed by the trailing partial statement, if any -- the shape that
+  // [[processLine]] consumes.
   // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
   private[hive] def splitStatements(line: String): List[String] = {
     val result = SparkSQLEnv.sparkSession.sessionState.sqlParser.splitStatements(line)
