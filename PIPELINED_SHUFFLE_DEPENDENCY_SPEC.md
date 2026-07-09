@@ -205,12 +205,6 @@ success), a group failure needs only to emit them as *failure* — there is no p
 to retract. Already-emitted task events stand as-is (they were true), consistent with how Spark
 treats task events from a stage attempt that is later discarded.
 
-Open question for reviewers: whether `SparkListenerStageCompleted` for a member should be deferred to
-group commit (above) or emitted in real time when the member's tasks finish. Deferring keeps the
-listener's notion of "completed" consistent with the atomic-commit model at the cost of an inflated
-stage duration on the timeline; real-time emission gives crisper per-stage timings but reports a
-member as completed before the group has committed.
-
 ---
 
 ## 6. Failure
