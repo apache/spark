@@ -110,14 +110,9 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         }
         Filter(transformedCond, relation)
 
-      case MERGE =>
-        // rewrite the group filter subquery as joins
-        val filter = Filter(cond, relation)
-        RewritePredicateSubquery(filter)
-
-      case REPLACE =>
-        // REPLACE group filters are expressed as correlated subqueries and must be rewritten
-        // before the dynamic pruning query is planned.
+      case MERGE | REPLACE =>
+        // MERGE and REPLACE group filters are expressed as correlated subqueries and must be
+        // rewritten as joins before the dynamic pruning query is planned.
         val filter = Filter(cond, relation)
         RewritePredicateSubquery(filter)
     }

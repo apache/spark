@@ -536,11 +536,9 @@ case class WriteDelta(
 
   private def isMetadataNullabilityPreserved(attr: Attribute): Boolean = {
     operation.command match {
-      case DELETE =>
-        MetadataAttribute.isPreservedOnDelete(attr)
-      case REPLACE =>
+      case DELETE | REPLACE =>
         // REPLACE emits delete rows for matched target rows and insert rows for source rows.
-        // Insert rows carry no metadata, so metadata nullability only needs delete preservation.
+        // Insert rows carry no metadata, so like DELETE it only needs delete preservation.
         MetadataAttribute.isPreservedOnDelete(attr)
       case UPDATE | MERGE if operation.representUpdateAsDeleteAndInsert =>
         MetadataAttribute.isPreservedOnDelete(attr) && MetadataAttribute.isPreservedOnReinsert(attr)
