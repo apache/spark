@@ -12933,7 +12933,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
         A column that evaluates to a date.
     dayOfWeek : literal string
         day of the week, case-insensitive, accepts:
-            "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
+        "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
         A column that evaluates to a string.
 
     Returns

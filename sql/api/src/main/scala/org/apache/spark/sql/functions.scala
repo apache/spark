@@ -877,10 +877,12 @@ object functions {
   /**
    * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
    *
-   * @param hour the hour to represent, from 0 to 23. A column that evaluates to an integer.
-   * @param minute the minute to represent, from 0 to 59. A column that evaluates to an integer.
-   * @param second the second to represent, from 0 to 59.999999. A column that evaluates to a
-   *   decimal.
+   * @param hour
+   *   the hour to represent, from 0 to 23. A column that evaluates to an integer.
+   * @param minute
+   *   the minute to represent, from 0 to 59. A column that evaluates to an integer.
+   * @param second
+   *   the second to represent, from 0 to 59.999999. A column that evaluates to a decimal.
    * @group datetime_funcs
    * @since 4.1.0
    * @return
@@ -3359,8 +3361,8 @@ object functions {
 
   /**
    * @return
-   *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
-   *   Returns a column that evaluates to a double.
+   *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos` Returns a column
+   *   that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3378,8 +3380,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic cosine of `e`
-   *   Returns a column that evaluates to a double.
+   *   inverse hyperbolic cosine of `e` Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3397,8 +3398,8 @@ object functions {
 
   /**
    * @return
-   *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
-   *   Returns a column that evaluates to a double.
+   *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin` Returns a column
+   *   that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3416,8 +3417,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic sine of `e`
-   *   Returns a column that evaluates to a double.
+   *   inverse hyperbolic sine of `e` Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3435,8 +3435,8 @@ object functions {
 
   /**
    * @return
-   *   inverse tangent of `e` as if computed by `java.lang.Math.atan`
-   *   Returns a column that evaluates to a double.
+   *   inverse tangent of `e` as if computed by `java.lang.Math.atan` Returns a column that
+   *   evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3453,13 +3453,14 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   * @param y coordinate on y-axis. A column that evaluates to a double.
-   * @param x coordinate on x-axis. A column that evaluates to a double.
+   * @param y
+   *   coordinate on y-axis. A column that evaluates to a double.
+   * @param x
+   *   coordinate on x-axis. A column that evaluates to a double.
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *   Returns a column that evaluates to a double.
+   *   `java.lang.Math.atan2` Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3574,8 +3575,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic tangent of `e`
-   *   Returns a column that evaluates to a double.
+   *   inverse hyperbolic tangent of `e` Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3685,10 +3685,11 @@ object functions {
     Column.fn("conv", num, lit(fromBase), lit(toBase))
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cosine of the angle, as if computed by `java.lang.Math.cos`
-   *   Returns a column that evaluates to a double.
+   *   cosine of the angle, as if computed by `java.lang.Math.cos` Returns a column that evaluates
+   *   to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3707,10 +3708,11 @@ object functions {
   def cos(columnName: String): Column = cos(Column(columnName))
 
   /**
-   * @param e hyperbolic angle. A column that evaluates to a double.
+   * @param e
+   *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
-   *   Returns a column that evaluates to a double.
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh` Returns a column
+   *   that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3729,10 +3731,10 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cotangent of the angle
-   *   Returns a column that evaluates to a double.
+   *   cotangent of the angle Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -3740,10 +3742,10 @@ object functions {
   def cot(e: Column): Column = Column.fn("cot", e)
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cosecant of the angle
-   *   Returns a column that evaluates to a double.
+   *   cosecant of the angle Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -4251,10 +4253,10 @@ object functions {
   def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   secant of the angle
-   *   Returns a column that evaluates to a double.
+   *   secant of the angle Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -4354,10 +4356,11 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   sine of the angle, as if computed by `java.lang.Math.sin`
-   *   Returns a column that evaluates to a double.
+   *   sine of the angle, as if computed by `java.lang.Math.sin` Returns a column that evaluates
+   *   to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4376,10 +4379,11 @@ object functions {
   def sin(columnName: String): Column = sin(Column(columnName))
 
   /**
-   * @param e hyperbolic angle. A column that evaluates to a double.
+   * @param e
+   *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
-   *   Returns a column that evaluates to a double.
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh` Returns a
+   *   column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4398,10 +4402,11 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   tangent of the given value, as if computed by `java.lang.Math.tan`
-   *   Returns a column that evaluates to a double.
+   *   tangent of the given value, as if computed by `java.lang.Math.tan` Returns a column that
+   *   evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4420,10 +4425,11 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * @param e hyperbolic angle. A column that evaluates to a double.
+   * @param e
+   *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
-   *   Returns a column that evaluates to a double.
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh` Returns a
+   *   column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4459,10 +4465,11 @@ object functions {
    * Converts an angle measured in radians to an approximately equivalent angle measured in
    * degrees.
    *
-   * @param e angle in radians. A column that evaluates to a double.
+   * @param e
+   *   angle in radians. A column that evaluates to a double.
    * @return
-   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`
-   *   Returns a column that evaluates to a double.
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees` Returns a column that
+   *   evaluates to a double.
    *
    * @group math_funcs
    * @since 2.1.0
@@ -4501,10 +4508,11 @@ object functions {
    * Converts an angle measured in degrees to an approximately equivalent angle measured in
    * radians.
    *
-   * @param e angle in degrees. A column that evaluates to a double.
+   * @param e
+   *   angle in degrees. A column that evaluates to a double.
    * @return
-   *   angle in radians, as if computed by `java.lang.Math.toRadians`
-   *   Returns a column that evaluates to a double.
+   *   angle in radians, as if computed by `java.lang.Math.toRadians` Returns a column that
+   *   evaluates to a double.
    *
    * @group math_funcs
    * @since 2.1.0
@@ -4530,14 +4538,18 @@ object functions {
    * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
    * method will return null.
    *
-   * @param v value to compute a bucket number in the histogram. A column that evaluates to a double
-   *   or interval.
-   * @param min minimum value of the histogram. A column that evaluates to a double or interval.
-   * @param max maximum value of the histogram. A column that evaluates to a double or interval.
-   * @param numBucket the number of buckets. A column that evaluates to a long.
+   * @param v
+   *   value to compute a bucket number in the histogram. A column that evaluates to a double or
+   *   interval.
+   * @param min
+   *   minimum value of the histogram. A column that evaluates to a double or interval.
+   * @param max
+   *   maximum value of the histogram. A column that evaluates to a double or interval.
+   * @param numBucket
+   *   the number of buckets. A column that evaluates to a long.
    * @return
-   *   the bucket number into which the value would fall after being evaluated
-   *   Returns a column that evaluates to a long.
+   *   the bucket number into which the value would fall after being evaluated Returns a column
+   *   that evaluates to a long.
    * @group math_funcs
    * @since 3.5.0
    */
@@ -4614,8 +4626,10 @@ object functions {
    * Calculates the SHA-2 family of hash functions of a binary column and returns the value as a
    * hex string.
    *
-   * @param e column to compute SHA-2 on. A column that evaluates to a binary.
-   * @param numBits one of 224, 256, 384, or 512. A column that evaluates to an integer.
+   * @param e
+   *   column to compute SHA-2 on. A column that evaluates to a binary.
+   * @param numBits
+   *   one of 224, 256, 384, or 512. A column that evaluates to an integer.
    *
    * @group hash_funcs
    * @since 1.5.0
@@ -4733,17 +4747,23 @@ object functions {
    * for encryption, the identical AAD value must be provided for decryption. The default mode is
    * GCM.
    *
-   * @param input The binary value to encrypt. A column that evaluates to a binary.
-   * @param key The passphrase to use to encrypt the data. A column that evaluates to a binary.
-   * @param mode Specifies which block cipher mode should be used to encrypt messages. Valid modes:
-   *   ECB, GCM, CBC. A column that evaluates to a string.
-   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
-   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
-   *   PKCS for CBC. A column that evaluates to a string.
-   * @param iv Optional initialization vector. Only supported for CBC and GCM modes. Valid values:
-   *   None or "". 16-byte array for CBC mode. 12-byte array for GCM mode. A column that evaluates
-   *   to a binary.
-   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   * @param input
+   *   The binary value to encrypt. A column that evaluates to a binary.
+   * @param key
+   *   The passphrase to use to encrypt the data. A column that evaluates to a binary.
+   * @param mode
+   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
+   *   GCM, CBC. A column that evaluates to a string.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC. A column that evaluates to a string.
+   * @param iv
+   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
+   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode. A column that evaluates to a
+   *   binary.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
    *   free-form input and must be provided for both encryption and decryption. A column that
    *   evaluates to a binary.
    *
@@ -4819,14 +4839,19 @@ object functions {
    * only supported for GCM. If provided for encryption, the identical AAD value must be provided
    * for decryption. The default mode is GCM.
    *
-   * @param input The binary value to decrypt. A column that evaluates to a binary.
-   * @param key The passphrase to use to decrypt the data. A column that evaluates to a binary.
-   * @param mode Specifies which block cipher mode should be used to decrypt messages. Valid modes:
-   *   ECB, GCM, CBC. A column that evaluates to a string.
-   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
-   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
-   *   PKCS for CBC. A column that evaluates to a string.
-   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   * @param input
+   *   The binary value to decrypt. A column that evaluates to a binary.
+   * @param key
+   *   The passphrase to use to decrypt the data. A column that evaluates to a binary.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC. A column that evaluates to a string.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC. A column that evaluates to a string.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
    *   free-form input and must be provided for both encryption and decryption. A column that
    *   evaluates to a binary.
    *
@@ -4883,14 +4908,19 @@ object functions {
    * This is a special version of `aes_decrypt` that performs the same operation, but returns a
    * NULL value instead of raising an error if the decryption cannot be performed.
    *
-   * @param input The binary value to decrypt. A column that evaluates to a binary.
-   * @param key The passphrase to use to decrypt the data. A column that evaluates to a binary.
-   * @param mode Specifies which block cipher mode should be used to decrypt messages. Valid modes:
-   *   ECB, GCM, CBC. A column that evaluates to a string.
-   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
-   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
-   *   PKCS for CBC. A column that evaluates to a string.
-   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   * @param input
+   *   The binary value to decrypt. A column that evaluates to a binary.
+   * @param key
+   *   The passphrase to use to decrypt the data. A column that evaluates to a binary.
+   * @param mode
+   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
+   *   GCM, CBC. A column that evaluates to a string.
+   * @param padding
+   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
+   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
+   *   for CBC. A column that evaluates to a string.
+   * @param aad
+   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
    *   free-form input and must be provided for both encryption and decryption. A column that
    *   evaluates to a binary.
    *
@@ -5427,8 +5457,7 @@ object functions {
    * Computes the Levenshtein distance of the two given string columns if it's less than or equal
    * to a given threshold.
    * @return
-   *   result distance, or -1
-   *   Returns a column that evaluates to an integer.
+   *   result distance, or -1 Returns a column that evaluates to an integer.
    * @group string_funcs
    * @since 3.5.0
    */
@@ -5807,9 +5836,11 @@ object functions {
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str a string expression to split
-   * @param pattern a string representing a regular expression. The regex string should be a Java
-   *   regular expression.
+   * @param str
+   *   a string expression to split
+   * @param pattern
+   *   a string representing a regular expression. The regex string should be a Java regular
+   *   expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -6120,11 +6151,14 @@ object functions {
   /**
    * Replaces all occurrences of `search` with `replace`.
    *
-   * @param src A column of string to be replaced. A column that evaluates to a string.
-   * @param search A column of string, If `search` is not found in `str`, `str` is returned
-   *   unchanged. A column that evaluates to a string.
-   * @param replace A column of string, If `replace` is not specified or is an empty string, nothing
-   *   replaces the string that is removed from `str`. A column that evaluates to a string.
+   * @param src
+   *   A column of string to be replaced. A column that evaluates to a string.
+   * @param search
+   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged. A
+   *   column that evaluates to a string.
+   * @param replace
+   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   the string that is removed from `str`. A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -7786,14 +7820,16 @@ object functions {
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
-   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
-   *   can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a date.
-   * @param numMonths The number of months to add to `startDate`, can be negative to subtract
-   *   months. A column that evaluates to an integer.
+   * @param startDate
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param numMonths
+   *   The number of months to add to `startDate`, can be negative to subtract months. A column
+   *   that evaluates to an integer.
    * @return
-   *   A date, or null if `startDate` was a string that could not be cast to a date
-   *   Returns a column that evaluates to a date.
+   *   A date, or null if `startDate` was a string that could not be cast to a date Returns a
+   *   column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7876,14 +7912,16 @@ object functions {
    * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
    * Patterns</a> for valid date and time format patterns
    *
-   * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that can
-   *   be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a timestamp or time.
-   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`. A column that
-   *   evaluates to a string.
+   * @param dateExpr
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a timestamp or time.
+   * @param format
+   *   A pattern `dd.MM.yyyy` would return a string like `18.03.1993`. A column that evaluates to
+   *   a string.
    * @return
-   *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp
-   *   Returns a column that evaluates to a string.
+   *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp Returns
+   *   a column that evaluates to a string.
    * @note
    *   Use specialized functions like [[year]] whenever possible as they benefit from a
    *   specialized implementation.
@@ -7898,14 +7936,16 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param days The number of days to add to `start`, can be negative to subtract days. A column
-   *   that evaluates to an integer, short, or byte.
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param days
+   *   The number of days to add to `start`, can be negative to subtract days. A column that
+   *   evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date
-   *   Returns a column that evaluates to a date.
+   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7929,14 +7969,16 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param days A column of the number of days to add to `start`, can be negative to subtract days.
-   *   A column that evaluates to an integer, short, or byte.
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param days
+   *   A column of the number of days to add to `start`, can be negative to subtract days. A
+   *   column that evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date
-   *   Returns a column that evaluates to a date.
+   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7945,14 +7987,16 @@ object functions {
   /**
    * Returns the date that is `days` days before `start`
    *
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param days The number of days to subtract from `start`, can be negative to add days. A column
-   *   that evaluates to an integer, short, or byte.
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param days
+   *   The number of days to subtract from `start`, can be negative to add days. A column that
+   *   evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date
-   *   Returns a column that evaluates to a date.
+   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7983,16 +8027,17 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
-   *   date. Negative if `end` is before `start`
-   *   Returns a column that evaluates to an integer.
+   *   date. Negative if `end` is before `start` Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8007,16 +8052,17 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
-   *   date. Negative if `end` is before `start`
-   *   Returns a column that evaluates to an integer.
+   *   date. Negative if `end` is before `start` Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8035,8 +8081,8 @@ object functions {
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8045,8 +8091,8 @@ object functions {
   /**
    * Extracts the quarter as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8055,8 +8101,8 @@ object functions {
   /**
    * Extracts the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8066,8 +8112,8 @@ object functions {
    * Extracts the day of the week as an integer from a given date/timestamp/string. Ranges from 1
    * for a Sunday through to 7 for a Saturday
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -8076,8 +8122,8 @@ object functions {
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8086,8 +8132,8 @@ object functions {
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8096,8 +8142,8 @@ object functions {
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8108,8 +8154,8 @@ object functions {
    * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8118,11 +8164,13 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field selects which part of the source should be extracted.
-   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @param field
+   *   selects which part of the source should be extracted.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source
-   *   Returns a column that evaluates to a double.
+   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8133,12 +8181,14 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field selects which part of the source should be extracted, and supported string values
-   *   are as same as the fields of the equivalent function `extract`.
-   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `extract`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source
-   *   Returns a column that evaluates to a double.
+   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8149,12 +8199,14 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field selects which part of the source should be extracted, and supported string values
-   *   are as same as the fields of the equivalent function `EXTRACT`.
-   * @param source a date/timestamp or interval column from where `field` should be extracted.
+   * @param field
+   *   selects which part of the source should be extracted, and supported string values are as
+   *   same as the fields of the equivalent function `EXTRACT`.
+   * @param source
+   *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source
-   *   Returns a column that evaluates to a double.
+   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8166,12 +8218,13 @@ object functions {
    * Returns the last day of the month which the given date belongs to. For example, input
    * "2015-07-27" returns "2015-07-31" since July 31 is the last day of the month in July 2015.
    *
-   * @param e A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
+   * @param e
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
    * @return
-   *   A date, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to a date.
+   *   A date, or null if the input was a string that could not be cast to a date Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8182,8 +8235,8 @@ object functions {
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8201,8 +8254,7 @@ object functions {
 
   /**
    * @return
-   *   A date created from year, month and day fields.
-   *   Returns a column that evaluates to a date.
+   *   A date created from year, month and day fields. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.3.0
    */
@@ -8223,14 +8275,15 @@ object functions {
    * months_between("2017-06-01", "2017-06-16 12:00:00")  // returns -0.5
    * }}}
    *
-   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start A date, timestamp or string. If a string, the data must be in a format that can
-   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param end
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start
+   *   A date, timestamp or string. If a string, the data must be in a format that can cast to a
+   *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return
    *   A double, or null if either `end` or `start` were strings that could not be cast to a
-   *   timestamp. Negative if `end` is before `start`
-   *   Returns a column that evaluates to a double.
+   *   timestamp. Negative if `end` is before `start` Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8253,15 +8306,16 @@ object functions {
    * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
    * Sunday after 2015-07-27.
    *
-   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param dayOfWeek Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
-   *   "Sun". A column that evaluates to a string.
+   * @param date
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param dayOfWeek
+   *   Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun". A column
+   *   that evaluates to a string.
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
-   *   was an invalid value
-   *   Returns a column that evaluates to a date.
+   *   was an invalid value Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8294,8 +8348,8 @@ object functions {
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a timestamp
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a timestamp Returns
+   *   a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8308,8 +8362,8 @@ object functions {
    * as defined by ISO 8601
    *
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date
-   *   Returns a column that evaluates to an integer.
+   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8320,11 +8374,12 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the yyyy-MM-dd
    * HH:mm:ss format.
    *
-   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
-   *   negative for timestamps before the unix epoch
+   * @param ut
+   *   A number of a type that is castable to a long, such as string or integer. Can be negative
+   *   for timestamps before the unix epoch
    * @return
-   *   A string, or null if the input was a string that could not be cast to a long
-   *   Returns a column that evaluates to a string.
+   *   A string, or null if the input was a string that could not be cast to a long Returns a
+   *   column that evaluates to a string.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8403,10 +8458,11 @@ object functions {
   /**
    * Parses a string value to a time value.
    *
-   * @param str A string to be parsed to time.
+   * @param str
+   *   A string to be parsed to time.
    * @return
-   *   A time, or raises an error if the input is malformed.
-   *   Returns a column that evaluates to a string.
+   *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a
+   *   string.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8438,9 +8494,10 @@ object functions {
   /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
-   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+   * @param s
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a string, date, timestamp, timestamp_ntz, or numeric.
    * @return
    *   A timestamp, or null if the input was a string that could not be cast to a timestamp
    *   Returns a column that evaluates to a timestamp.
@@ -8471,10 +8528,10 @@ object functions {
   /**
    * Parses a string value to a time value.
    *
-   * @param str A string to be parsed to time.
+   * @param str
+   *   A string to be parsed to time.
    * @return
-   *   A time, or null if the input is malformed.
-   *   Returns a column that evaluates to a string.
+   *   A time, or null if the input is malformed. Returns a column that evaluates to a string.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8632,16 +8689,17 @@ object functions {
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
    *
-   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
-   *   to a date.
-   * @param format: 'year', 'yyyy', 'yy' to truncate by year, or 'month', 'mon', 'mm' to truncate by
-   *   month Other options are: 'week', 'quarter'. A column that evaluates to a string.
+   * @param date
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
+   *   date.
+   * @param format:
+   *   'year', 'yyyy', 'yy' to truncate by year, or 'month', 'mon', 'mm' to truncate by month
+   *   Other options are: 'week', 'quarter'. A column that evaluates to a string.
    *
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or `format` was an
-   *   invalid value
-   *   Returns a column that evaluates to a date.
+   *   invalid value Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8652,16 +8710,17 @@ object functions {
    *
    * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format: 'year', 'yyyy', 'yy' to truncate by year, 'month', 'mon', 'mm' to truncate by
-   *   month, 'day', 'dd' to truncate by day, Other options are: 'microsecond', 'millisecond',
-   *   'second', 'minute', 'hour', 'week', 'quarter'. A column that evaluates to a string.
-   * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
-   *   can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a timestamp.
+   * @param format:
+   *   'year', 'yyyy', 'yy' to truncate by year, 'month', 'mon', 'mm' to truncate by month, 'day',
+   *   'dd' to truncate by day, Other options are: 'microsecond', 'millisecond', 'second',
+   *   'minute', 'hour', 'week', 'quarter'. A column that evaluates to a string.
+   * @param timestamp
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a timestamp.
    * @return
    *   A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp or
-   *   `format` was an invalid value
-   *   Returns a column that evaluates to a timestamp.
+   *   `format` was an invalid value Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -8673,19 +8732,20 @@ object functions {
    * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14
    * 03:40:00.0'.
    *
-   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a timestamp.
-   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
-   *   be in the format of either region-based zone IDs or zone offsets. Region IDs must have the
-   *   form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   * @param ts
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a timestamp.
+   * @param tz
+   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
+   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
+   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
    *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
    *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous. A
    *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
-   *   an invalid value
-   *   Returns a column that evaluates to a timestamp.
+   *   an invalid value Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8706,19 +8766,20 @@ object functions {
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
    *
-   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
-   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
-   *   evaluates to a timestamp.
-   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
-   *   be in the format of either region-based zone IDs or zone offsets. Region IDs must have the
-   *   form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   * @param ts
+   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
+   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
+   *   a timestamp.
+   * @param tz
+   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
+   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
+   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
    *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
    *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous. A
    *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
-   *   an invalid value
-   *   Returns a column that evaluates to a timestamp.
+   *   an invalid value Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8899,11 +8960,12 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *   The time column must be of TimestampType or TimestampNTZType.
-   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`, `1
-   *   second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
-   *   identifiers.
+   * @param timeColumn
+   *   The column or the expression to use as the timestamp for windowing by time. The time column
+   *   must be of TimestampType or TimestampNTZType.
+   * @param gapDuration
+   *   A string specifying the timeout of the session, e.g. `10 minutes`, `1 second`. Check
+   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
    *
    * @group datetime_funcs
    * @since 3.2.0
@@ -9044,14 +9106,17 @@ object functions {
    * Returns the difference between two times, measured in specified units. Throws a
    * SparkIllegalArgumentException, in case the specified unit is not supported.
    *
-   * @param unit A STRING representing the unit of the time difference. Supported units are: "HOUR",
-   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A column
-   *   that evaluates to a string.
-   * @param start A starting TIME. A column that evaluates to a time.
-   * @param end An ending TIME. A column that evaluates to a time.
+   * @param unit
+   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A
+   *   column that evaluates to a string.
+   * @param start
+   *   A starting TIME. A column that evaluates to a time.
+   * @param end
+   *   An ending TIME. A column that evaluates to a time.
    * @return
-   *   The difference between `end` and `start` times, measured in specified units.
-   *   Returns a column that evaluates to a long.
+   *   The difference between `end` and `start` times, measured in specified units. Returns a
+   *   column that evaluates to a long.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @group datetime_funcs
@@ -9064,13 +9129,14 @@ object functions {
   /**
    * Returns `time` truncated to the `unit`.
    *
-   * @param unit A STRING representing the unit to truncate the time to. Supported units are:
-   *   "HOUR", "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A
+   * @param unit
+   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A
    *   column that evaluates to a string.
-   * @param time A TIME to truncate. A column that evaluates to a time.
+   * @param time
+   *   A TIME to truncate. A column that evaluates to a time.
    * @return
-   *   A TIME truncated to the specified unit.
-   *   Returns a column that evaluates to a time.
+   *   A TIME truncated to the specified unit. Returns a column that evaluates to a time.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @throws IllegalArgumentException
@@ -9264,9 +9330,12 @@ object functions {
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
    *
-   * @param x the array column to be sliced. A column that evaluates to an array.
-   * @param start the starting index. A column that evaluates to an integer.
-   * @param length the length of the slice. A column that evaluates to an integer.
+   * @param x
+   *   the array column to be sliced. A column that evaluates to an array.
+   * @param start
+   *   the starting index. A column that evaluates to an integer.
+   * @param length
+   *   the length of the slice. A column that evaluates to an integer.
    *
    * @group array_funcs
    * @since 2.4.0
@@ -9523,8 +9592,10 @@ object functions {
    *   df.select(transform(col("i"), x => x + 1))
    * }}}
    *
-   * @param column the input array column. A column that evaluates to an array.
-   * @param f col => transformed_col, the lambda function to transform the input column.
+   * @param column
+   *   the input array column. A column that evaluates to an array.
+   * @param f
+   *   col => transformed_col, the lambda function to transform the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -9559,8 +9630,10 @@ object functions {
    *   df.select(exists(col("i"), _ % 2 === 0))
    * }}}
    *
-   * @param column the input array column. A column that evaluates to an array.
-   * @param f col => predicate, the Boolean predicate to check the input column.
+   * @param column
+   *   the input array column. A column that evaluates to an array.
+   * @param f
+   *   col => predicate, the Boolean predicate to check the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -9576,8 +9649,10 @@ object functions {
    *   df.select(forall(col("i"), x => x % 2 === 0))
    * }}}
    *
-   * @param column the input array column. A column that evaluates to an array.
-   * @param f col => predicate, the Boolean predicate to check the input column.
+   * @param column
+   *   the input array column. A column that evaluates to an array.
+   * @param f
+   *   col => predicate, the Boolean predicate to check the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -9593,8 +9668,10 @@ object functions {
    *   df.select(filter(col("s"), x => x % 2 === 0))
    * }}}
    *
-   * @param column the input array column. A column that evaluates to an array.
-   * @param f col => predicate, the Boolean predicate to filter the input column.
+   * @param column
+   *   the input array column. A column that evaluates to an array.
+   * @param f
+   *   col => predicate, the Boolean predicate to filter the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -9630,12 +9707,16 @@ object functions {
    *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
    * }}}
    *
-   * @param expr the input array column. A column that evaluates to an array.
-   * @param initialValue the initial value. A column of any type.
-   * @param merge (combined_value, input_value) => combined_value, the merge function to merge an
-   *   input value to the combined_value.
-   * @param finish combined_value => final_value, the lambda function to convert the combined value
-   *   of all inputs to final result.
+   * @param expr
+   *   the input array column. A column that evaluates to an array.
+   * @param initialValue
+   *   the initial value. A column of any type.
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value.
+   * @param finish
+   *   combined_value => final_value, the lambda function to convert the combined value of all
+   *   inputs to final result.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -9677,12 +9758,16 @@ object functions {
    *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
    * }}}
    *
-   * @param expr the input array column. A column that evaluates to an array.
-   * @param initialValue the initial value. A column of any type.
-   * @param merge (combined_value, input_value) => combined_value, the merge function to merge an
-   *   input value to the combined_value.
-   * @param finish combined_value => final_value, the lambda function to convert the combined value
-   *   of all inputs to final result.
+   * @param expr
+   *   the input array column. A column that evaluates to an array.
+   * @param initialValue
+   *   the initial value. A column of any type.
+   * @param merge
+   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
+   *   to the combined_value.
+   * @param finish
+   *   combined_value => final_value, the lambda function to convert the combined value of all
+   *   inputs to final result.
    *
    * @group collection_funcs
    * @since 3.5.0
@@ -9724,9 +9809,12 @@ object functions {
    *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
    * }}}
    *
-   * @param left the left input array column. A column that evaluates to an array.
-   * @param right the right input array column. A column that evaluates to an array.
-   * @param f (lCol, rCol) => col, the lambda function to merge two input columns into one column.
+   * @param left
+   *   the left input array column. A column that evaluates to an array.
+   * @param right
+   *   the right input array column. A column that evaluates to an array.
+   * @param f
+   *   (lCol, rCol) => col, the lambda function to merge two input columns into one column.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -10088,10 +10176,13 @@ object functions {
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema. Returns
    * `null`, in the case of an unparseable string.
    *
-   * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string
-   * @param options options to control how the json is parsed. accepts the same options and the json
-   *   data source. See <a href=
+   * @param e
+   *   a string column containing JSON data.
+   * @param schema
+   *   the schema to use when parsing the json string
+   * @param options
+   *   options to control how the json is parsed. accepts the same options and the json data
+   *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
@@ -10114,7 +10205,8 @@ object functions {
    * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
    * a valid JSON value.
    *
-   * @param json a string column that contains JSON data.
+   * @param json
+   *   a string column that contains JSON data.
    *
    * @group variant_funcs
    * @since 4.0.0
@@ -10126,7 +10218,8 @@ object functions {
   /**
    * Parses a JSON string and constructs a Variant value.
    *
-   * @param json a string column that contains JSON data. A column that evaluates to a string.
+   * @param json
+   *   a string column that contains JSON data. A column that evaluates to a string.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -10139,7 +10232,8 @@ object functions {
    * structs are converted to variant objects which are unordered unlike SQL structs. Input maps
    * can only have string keys.
    *
-   * @param col a column with a nested schema or column name.
+   * @param col
+   *   a column with a nested schema or column name.
    * @group variant_funcs
    * @since 4.0.0
    * @return
@@ -10361,14 +10455,16 @@ object functions {
   /**
    * Parses a JSON string and infers its schema in DDL format using options.
    *
-   * @param json a foldable string column containing JSON data.
-   * @param options options to control how the json is parsed. accepts the same options and the json
-   *   data source. See <a href=
+   * @param json
+   *   a foldable string column containing JSON data.
+   * @param options
+   *   options to control how the json is parsed. accepts the same options and the json data
+   *   source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
-   *   a column with string literal containing schema in DDL format.
-   *   Returns a column that evaluates to an integer.
+   *   a column with string literal containing schema in DDL format. Returns a column that
+   *   evaluates to an integer.
    *
    * @group json_funcs
    * @since 3.0.0
@@ -10404,9 +10500,11 @@ object functions {
    * a JSON string with the specified schema. Throws an exception, in the case of an unsupported
    * type.
    *
-   * @param e a column containing a struct, an array, a map, or a variant.
-   * @param options options to control how the struct column is converted into a json string.
-   *   accepts the same options and the json data source. See <a href=
+   * @param e
+   *   a column containing a struct, an array, a map, or a variant.
+   * @param options
+   *   options to control how the struct column is converted into a json string. accepts the same
+   *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
@@ -10424,9 +10522,11 @@ object functions {
    * a JSON string with the specified schema. Throws an exception, in the case of an unsupported
    * type.
    *
-   * @param e a column containing a struct, an array, a map, or a variant.
-   * @param options options to control how the struct column is converted into a json string.
-   *   accepts the same options and the json data source. See <a href=
+   * @param e
+   *   a column containing a struct, an array, a map, or a variant.
+   * @param options
+   *   options to control how the struct column is converted into a json string. accepts the same
+   *   options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
@@ -10442,7 +10542,8 @@ object functions {
    * Converts a column containing a `StructType`, `ArrayType` or a `MapType` into a JSON string
    * with the specified schema. Throws an exception, in the case of an unsupported type.
    *
-   * @param e a column containing a struct, an array, a map, or a variant.
+   * @param e
+   *   a column containing a struct, an array, a map, or a variant.
    *
    * @group json_funcs
    * @since 2.1.0
@@ -10457,7 +10558,8 @@ object functions {
    * with 'n'. This can be useful for creating copies of tables with sensitive information
    * removed.
    *
-   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param input
+   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
    *
    * @group string_funcs
    * @since 3.5.0
@@ -11209,12 +11311,14 @@ object functions {
    * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
    * `targetTz`.
    *
-   * @param sourceTz the time zone for the input timestamp. If it is missed, the current session
-   *   time zone is used as the source time zone. A column that evaluates to a string.
-   * @param targetTz the time zone to which the input timestamp should be converted. A column that
-   *   evaluates to a string.
-   * @param sourceTs a timestamp without time zone. A column that evaluates to a timestamp_ntz or
-   *   timestamp.
+   * @param sourceTz
+   *   the time zone for the input timestamp. If it is missed, the current session time zone is
+   *   used as the source time zone. A column that evaluates to a string.
+   * @param targetTz
+   *   the time zone to which the input timestamp should be converted. A column that evaluates to
+   *   a string.
+   * @param sourceTs
+   *   a timestamp without time zone. A column that evaluates to a timestamp_ntz or timestamp.
    * @group datetime_funcs
    * @since 3.5.0
    * @return
