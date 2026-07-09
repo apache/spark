@@ -18,9 +18,13 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
+
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
@@ -32,6 +36,12 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val workDir = new File(parent.workDir.toURI.normalize().getPath)
   private val supportedLogTypes = Set("stderr", "stdout")
   private val defaultBytes = 100 * 1024
+
+  // URL-encode a single request-supplied value before embedding it in a log page query string, so
+  // characters such as '&', '=', '#' and whitespace cannot change the structure of the subsequent
+  // /log requests (parameter injection / query truncation).
+  private def encodeParam(value: String): String =
+    URLEncoder.encode(String.valueOf(value), UTF_8.name())
 
   def renderLog(request: HttpServletRequest): String = {
     val appId = Option(request.getParameter("appId"))
@@ -65,11 +75,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt)
       .getOrElse(defaultBytes)
 
+    // The identifiers below flow both into a filesystem path (logDir, kept raw and guarded by
+    // Utils.isInDirectory in getLog) and into the query string of the generated /log requests
+    // (params). URL-encode the query-string copy so request-supplied values cannot inject extra
+    // parameters or truncate the request.
     val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
-        (s"${workDir.getPath}/$a/$e/", s"appId=$a&executorId=$e", s"$a/$e")
+        (s"${workDir.getPath}/$a/$e/",
+          s"appId=${encodeParam(a)}&executorId=${encodeParam(e)}", s"$a/$e")
       case (None, None, Some(d)) =>
-        (s"${workDir.getPath}/$d/", s"driverId=$d", d)
+        (s"${workDir.getPath}/$d/", s"driverId=${encodeParam(d)}", d)
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
@@ -97,9 +112,13 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
         End of Log
       </div>
 
-    val logParams = "?%s&logType=%s".format(params, logType)
+    val logParams = "?%s&logType=%s".format(params, encodeParam(logType))
+    // logParams carries request-supplied values into an inline script literal, so escape it for a
+    // JavaScript string context before embedding it via Unparsed below (defense in depth on top of
+    // the URL-encoding above).
     val jsOnload = "window.onload = " +
-      s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+      s"initLogPage('${StringEscapeUtils.escapeEcmaScript(logParams)}', " +
+      s"$curLogLength, $startByte, $endByte, $logLength, $byteLength);"
 
     val content =
       <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
