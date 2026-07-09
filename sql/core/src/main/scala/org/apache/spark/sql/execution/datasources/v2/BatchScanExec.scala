@@ -51,8 +51,9 @@ case class BatchScanExec(
     val name = "number of output rows"
     val metric = table match {
       // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE or
-      // REPLACE, so that the driver-side derivation `numDeletedRows = numScannedRows -
-      // numCopiedRows` in `ReplaceDataExec` stays correct under stage retries.
+      // INSERT INTO ... REPLACE USING, so that the driver-side derivation
+      // `numDeletedRows = numScannedRows - numCopiedRows` in `ReplaceDataExec` stays correct under
+      // stage retries.
       case rlot: RowLevelOperationTable
           if rlot.operation.command() == DELETE || rlot.operation.command() == REPLACE =>
         SQLLastAttemptMetrics.createMetric(sparkContext, name)
