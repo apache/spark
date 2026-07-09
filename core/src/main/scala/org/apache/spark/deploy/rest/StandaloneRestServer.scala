@@ -174,6 +174,10 @@ private[rest] class StandaloneSubmitRequestServlet(
     conf: SparkConf)
   extends SubmitRequestServlet {
 
+  override protected def maxRequestSizeBytes: Long =
+    Option(conf).map(_.get(config.MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE))
+      .getOrElse(super.maxRequestSizeBytes)
+
   private def replacePlaceHolder(variable: String) = variable match {
     case s"{{$name}}" if System.getenv(name) != null => System.getenv(name)
     case _ => variable

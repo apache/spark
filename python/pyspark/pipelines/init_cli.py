@@ -58,7 +58,7 @@ def init(name: str) -> None:
 
     # Write the spec file to the project directory
     spec_file = project_dir / "spark-pipeline.yml"
-    with open(spec_file, "w") as f:
+    with open(spec_file, "w", encoding="utf-8") as f:
         spec_content = SPEC.replace("{{ name }}", name).replace("{{ storage_root }}", storage_path)
         f.write(spec_content)
 
@@ -68,12 +68,12 @@ def init(name: str) -> None:
 
     # Create the Python example file
     python_example_file = transformations_dir / "example_python_materialized_view.py"
-    with open(python_example_file, "w") as f:
+    with open(python_example_file, "w", encoding="utf-8") as f:
         f.write(PYTHON_EXAMPLE)
 
     # Create the SQL example file
     sql_example_file = transformations_dir / "example_sql_materialized_view.sql"
-    with open(sql_example_file, "w") as f:
+    with open(sql_example_file, "w", encoding="utf-8") as f:
         f.write(SQL_EXAMPLE)
 
     print(f"Pipeline project '{name}' created successfully. To run your pipeline:")

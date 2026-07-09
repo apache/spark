@@ -608,6 +608,64 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(df.select(timestamp_nanos(col("n"))), Row(null))
     checkAnswer(df.selectExpr("timestamp_nanos(n)"), Row(null))
   }
+
+  test("SPARK-57809: listagg(distinct cast(ts as string)) within group (order by ts) " +
+    "over nanosecond-precision timestamps") {
+    // isCastEqualityPreserving: NTZ nanos is safe (UTC, no DST ambiguity), LTZ nanos is unsafe
+    // (same DST fall-back risk as micro TIMESTAMP_LTZ). This mirrors the micro-precision behavior:
+    // TimestampNTZType -> true, TimestampType -> false.
+    Seq(7, 8, 9).foreach { p =>
+      val ntzDF = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(
+          Row(LocalDateTime.parse("2020-01-01T12:00:00.100000000")),
+          Row(LocalDateTime.parse("2020-01-02T12:00:00.200000000")))),
+        new StructType().add("ts", TimestampNTZNanosType(p)))
+
+      // NTZ nanos: cast to string is equality-preserving, so LISTAGG(DISTINCT ...) is allowed.
+      withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "true") {
+        val result = ntzDF.selectExpr(
+          "listagg(distinct cast(ts as string), ', ') within group (order by ts)").collect()
+        assert(result.length == 1 && result.head.getString(0) != null,
+          s"NTZ nanos p=$p: listagg should succeed with a non-null result")
+      }
+
+      val ltzDF = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(
+          Row(Instant.parse("2020-01-01T20:00:00.100000000Z")),
+          Row(Instant.parse("2020-01-02T20:00:00.200000000Z")))),
+        new StructType().add("ts", TimestampLTZNanosType(p)))
+
+      withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "true") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            ltzDF.selectExpr(
+              "listagg(distinct cast(ts as string)) within group (order by ts)")
+          },
+          condition =
+            "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+          parameters = Map(
+            "funcName" -> "`listagg`",
+            "inputType" -> s""""TIMESTAMP_LTZ($p)"""",
+            "castType" -> "\"STRING\""
+          )
+        )
+      }
+      withSQLConf(SQLConf.LISTAGG_ALLOW_DISTINCT_CAST_WITH_ORDER.key -> "false") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            ltzDF.selectExpr(
+              "listagg(distinct cast(ts as string)) within group (order by ts)")
+          },
+          condition = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+          parameters = Map(
+            "funcName" -> "`listagg`",
+            "funcArg" -> "\"CAST(ts AS STRING)\"",
+            "orderingExpr" -> "\"ts\""
+          )
+        )
+      }
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

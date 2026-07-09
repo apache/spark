@@ -151,10 +151,18 @@ object DataTypeProtoConverter {
     }
 
     if (t.hasJvmClass) {
-      SparkClassUtils
-        .classForName[UserDefinedType[_]](t.getJvmClass)
-        .getConstructor()
-        .newInstance()
+      // Verify the class is a UserDefinedType before constructing it. newInstance() runs the
+      // class's no-arg constructor, so load it without initializing and check the type first,
+      // rather than instantiating an arbitrary client-provided class name and relying on a
+      // later cast (which happens only after the constructor has already run).
+      val clazz =
+        SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
+      if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.UDT_JVM_CLASS_NOT_UDT",
+          Map("jvmClass" -> t.getJvmClass))
+      }
+      clazz.getConstructor().newInstance()
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
         throw InvalidPlanInput("CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS", Map.empty)

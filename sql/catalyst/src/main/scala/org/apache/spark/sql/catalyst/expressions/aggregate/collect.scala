@@ -747,7 +747,7 @@ case class ListAgg(
   private def isCastEqualityPreserving(dt: DataType): Boolean = dt match {
     case _: IntegerType | LongType | ShortType | ByteType => true
     case _: DecimalType => true
-    case _: DateType | TimestampNTZType => true
+    case _: DateType | TimestampNTZType | _: TimestampNTZNanosType => true
     case _: TimeType => true
     case _: CalendarIntervalType => true
     case _: YearMonthIntervalType => true
@@ -757,8 +757,8 @@ case class ListAgg(
     case st: StringType => st.isUTF8BinaryCollation
     case _: DoubleType | FloatType => false
     // During DST fall-back, two distinct UTC epochs can format to the same local time string
-    // because the default format omits the timezone offset. TimestampNTZType is safe (uses UTC).
-    case _: TimestampType => false
+    // because the default format omits the timezone offset. NTZ types are safe (use UTC).
+    case _: TimestampType | _: TimestampLTZNanosType => false
     case _ => false
   }
 

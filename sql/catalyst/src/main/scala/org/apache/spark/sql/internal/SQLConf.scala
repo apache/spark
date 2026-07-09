@@ -292,6 +292,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE =
+    buildConf("spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, a grand-total GROUP BY GROUPING SETS (()) (and the equivalent empty " +
+        "CUBE() / ROLLUP()) is lowered to a global aggregate during analysis, so it returns " +
+        "one row over empty input, matching an aggregation with no GROUP BY clause. When false, " +
+        "falls back to the legacy Expand-based lowering that returns no rows over empty input.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
       .internal()
@@ -1144,6 +1157,17 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
+
+  val COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK =
+    buildConf("spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask")
+      .doc("The maximum number of contiguous reducer partitions that may be coalesced into a " +
+        "single task. This puts a hard limit on the reducer-partition fan-in of a coalesced " +
+        "shuffle task, independent of the advisory partition size.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The maximum number of reducer partitions per task must be positive.")
+      .createWithDefault(Int.MaxValue)
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
@@ -3869,6 +3893,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BYPASS_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.bypassPartialAggregation")
+    .doc("When true, skips the pre-shuffle partial aggregation and runs a single Complete-mode " +
+      "aggregation after the shuffle. Bypassing partial aggregation can improve performance " +
+      "when group cardinality is high and the pre-shuffle reduction ratio is low. " +
+      "When false (default), uses a two-phase Partial+Final aggregation across a shuffle. " +
+      "This setting has no effect on queries containing DISTINCT aggregate functions, where " +
+      "the partial aggregation phases are required for correctness and are always applied.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -3891,8 +3927,9 @@ object SQLConf {
     buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
       .internal()
       .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
-        "replaces repeated simple named get_json_object paths over the same input " +
-        "with one shared parse.")
+        "replaces repeated simple named and array-index get_json_object paths over the same " +
+        "input with one shared parse, including mutually exclusive object/array coalesce " +
+        "branches.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -5440,6 +5477,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GENERATED_COLUMN_ALLOW_NULLABLE_INGEST =
+    buildConf("spark.sql.generatedColumn.allowNullableIngest.enabled")
+      .doc("When true, writing to a table with generated columns allows omitting nullable " +
+        "non-generated columns from the input. Missing nullable columns are filled with null. " +
+        "When false, all non-generated columns must be provided.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")
       .internal()
@@ -5498,6 +5545,30 @@ object SQLConf {
       .version("3.0.0")
       .stringConf
       .createWithDefault("parquet,orc")
+
+  val STRUCT_PREDICATE_DECOMPOSE_ENABLED =
+    buildConf("spark.sql.sources.structPredicateDecompose.enabled")
+      .doc("When true, struct equality predicates (= and <=>) are decomposed into " +
+        "field-level equality predicates for filter pushdown to data sources. The " +
+        "decomposed predicates are pushed as additional hints for data skipping (e.g. " +
+        "Parquet row-group filtering). The original struct predicate is always retained " +
+        "as a post-scan filter for correctness.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS =
+    buildConf("spark.sql.sources.structPredicateDecompose.maxFields")
+      .internal()
+      .doc("The maximum number of leaf fields a struct type may have for its equality " +
+        "predicates to be decomposed into field-level predicates for pushdown. Structs " +
+        "exceeding this limit are not decomposed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ > 0, "The threshold must be positive.")
+      .createWithDefault(100)
 
   val SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED =
     buildConf("spark.sql.optimizer.serializer.nestedSchemaPruning.enabled")
@@ -7112,6 +7183,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val TIME_TRAVEL_AT_SYNTAX_ENABLED =
+    buildConf("spark.sql.timeTravel.atSyntax.enabled")
+      .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
+        "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
+        "table names fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val OPERATOR_PIPE_SYNTAX_ENABLED =
     buildConf("spark.sql.operatorPipeSyntaxEnabled")
       .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +
@@ -7534,6 +7615,21 @@ object SQLConf {
         "option."
       )
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING =
+    buildConf("spark.sql.xml.schemaInference.incrementalTypeCasting.enabled")
+      .internal()
+      .doc(
+        "When true (default), XML schema inference refines the type inferred for each field " +
+        "incrementally: each value is parsed starting from the type inferred for that field so " +
+        "far, rather than probing every candidate type from scratch. This avoids redundant parse " +
+        "attempts once a field has widened to a broader type. This matches the incremental " +
+        "inference already used by the CSV datasource. Set to false to restore the legacy " +
+        "behavior of inferring each value independently and merging afterwards.")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
@@ -8340,6 +8436,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
 
+  def bypassPartialAggregation: Boolean = getConf(BYPASS_PARTIAL_AGGREGATION)
+
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
@@ -8615,6 +8713,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useNullsForMissingDefaultColumnValues: Boolean =
     getConf(SQLConf.USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES)
 
+  def generatedColumnAllowNullableIngest: Boolean =
+    getConf(SQLConf.GENERATED_COLUMN_ALLOW_NULLABLE_INGEST)
+
   def unionIsResolvedWhenDuplicatesPerChildResolved: Boolean =
     getConf(SQLConf.UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED)
 
@@ -8745,6 +8846,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
   def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
+
+  def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
+
+  def structPredicateDecomposeMaxFields: Int = getConf(STRUCT_PREDICATE_DECOMPOSE_MAX_FIELDS)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
@@ -8920,6 +9025,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def xmlVariantRespectInferSchema: Boolean =
     getConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA)
+
+  def xmlSchemaInferenceIncrementalTypeCasting: Boolean =
+    getConf(SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING)
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)

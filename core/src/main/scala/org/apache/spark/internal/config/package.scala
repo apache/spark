@@ -2106,6 +2106,17 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
+  private[spark] val MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE =
+    ConfigBuilder("spark.master.rest.maxRequestBodySize")
+      .doc("The maximum size of the request body accepted by the Spark Master REST API. " +
+        "Requests whose body exceeds this size are rejected with HTTP 413 " +
+        "(Request Entity Too Large).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The max request body size must be positive.")
+      .createWithDefaultString("100m")
+
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
     .intConf

@@ -482,7 +482,7 @@ class TorchDistributor(Distributor):
         tail: collections.deque = collections.deque(maxlen=_TAIL_LINES_TO_KEEP)
         try:
             for line in task.stdout:  # type: ignore
-                decoded = line.decode()
+                decoded = line.decode("utf-8")
                 tail.append(decoded)
                 if redirect_to_stdout:
                     if (
@@ -883,7 +883,7 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:
+            with open(schema_file_path, "w", encoding="utf-8") as f:
                 f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
@@ -1088,7 +1088,7 @@ def _get_spark_partition_data_loader(
     arrow_file = os.environ[SPARK_PARTITION_ARROW_DATA_FILE]
     schema_file = os.environ[SPARK_DATAFRAME_SCHEMA_FILE]
 
-    with open(schema_file, "r") as fp:
+    with open(schema_file, "r", encoding="utf-8") as fp:
         schema = StructType.fromJson(json.load(fp))
 
     dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)

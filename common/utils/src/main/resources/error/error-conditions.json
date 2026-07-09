@@ -1455,6 +1455,11 @@
           "Struct literal is not set."
         ]
       },
+      "UDT_JVM_CLASS_NOT_UDT" : {
+        "message" : [
+          "The 'jvm_class' <jvmClass> in the UDT is not a subclass of UserDefinedType."
+        ]
+      },
       "UDT_TYPE_FIELD_INVALID" : {
         "message" : [
           "UserDefinedType requires the 'type' field to be 'udt', but got '<udtType>'."
@@ -5652,7 +5657,7 @@
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
-      "Cannot specify time travel in both the time travel clause and options."
+      "Cannot specify time travel in more than one of: the '@' suffix in the table name, the time travel clause, and the read options."
     ],
     "sqlState" : "42K0E"
   },
@@ -8584,6 +8589,11 @@
           "Time travel on the relation: <relationId>."
         ]
       },
+      "TIME_TRAVEL_AT_SYNTAX" : {
+        "message" : [
+          "Time travel using the '@' suffix in table names. Set <config> to true to enable it."
+        ]
+      },
       "TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS" : {
         "message" : [
           "UDF class with <num> type arguments."
@@ -8753,6 +8763,12 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_OPERATION_FOR_CONTINUOUS_MEMORY_SINK" : {
+    "message" : [
+      "The operation <operation> is not supported for ContinuousMemorySink."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_OVERWRITE" : {
     "message" : [
@@ -9154,6 +9170,12 @@
     ],
     "sqlState" : "22023"
   },
+  "VARIANT_PATH_TYPE_MISMATCH" : {
+    "message" : [
+      "The path '<path>' is incompatible with the variant value at '<failedAt>' in <functionName>."
+    ],
+    "sqlState" : "22023"
+  },
   "VARIANT_SIZE_LIMIT" : {
     "message" : [
       "Cannot build variant bigger than <sizeLimit> in <functionName>.",
@@ -9441,11 +9463,6 @@
   "_LEGACY_ERROR_TEMP_1018" : {
     "message" : [
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1021" : {
-    "message" : [
-      "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1031" : {
@@ -10005,11 +10022,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1255" : {
-    "message" : [
-      "Cannot drop built-in function '<functionName>'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1256" : {
     "message" : [
       "Cannot refresh built-in function <functionName>."
@@ -10510,11 +10522,6 @@
   "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2106" : {
-    "message" : [
-      "Can't acquire <size> bytes memory to build hash relation, got <got> bytes."
     ]
   },
   "_LEGACY_ERROR_TEMP_2107" : {
@@ -11500,11 +11507,6 @@
   "_LEGACY_ERROR_TEMP_3109" : {
     "message" : [
       "<message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3110" : {
-    "message" : [
-      "Cannot bind a V1 function."
     ]
   },
   "_LEGACY_ERROR_TEMP_3113" : {

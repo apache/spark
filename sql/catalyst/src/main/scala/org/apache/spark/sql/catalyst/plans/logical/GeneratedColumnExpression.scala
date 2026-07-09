@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSIO
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.GenerationExpression
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, TimeType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -107,6 +107,11 @@ case class GeneratedColumnExpression(
 
     if (!child.deterministic) {
       throw unsupportedExpressionError("generation expression is not deterministic")
+    }
+
+    if (targetDataType.existsRecursively(_.isInstanceOf[TimeType]) ||
+        child.exists(_.dataType.existsRecursively(_.isInstanceOf[TimeType]))) {
+      throw unsupportedExpressionError("TIME type is not supported in generated columns")
     }
 
     if (!Cast.canUpCast(child.dataType, targetDataType)) {

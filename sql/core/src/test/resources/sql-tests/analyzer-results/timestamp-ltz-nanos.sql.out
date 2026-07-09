@@ -971,3 +971,66 @@ SELECT typeof(CASE WHEN true
 -- !query analysis
 Project [typeof(CASE WHEN true THEN cast(cast(1969-12-31 23:59:59.1234567 as timestamp_ntz(7)) as timestamp_ltz(9)) ELSE cast(1970-01-01 00:00:00.123456789 UTC as timestamp_ltz(9)) END) AS typeof(CASE WHEN true THEN CAST(1969-12-31 23:59:59.1234567 AS TIMESTAMP_NTZ(7)) ELSE CAST(1970-01-01 00:00:00.123456789 UTC AS TIMESTAMP_LTZ(9)) END)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT v FROM (
+    SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000001000' AS v
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999'
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001') ORDER BY v
+-- !query analysis
+Sort [v#x ASC NULLS FIRST], true
++- Project [v#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Union false, false
+         :  :- Project [2020-01-01 00:00:00.000001 AS v#x]
+         :  :  +- OneRowRelation
+         :  +- Project [2020-01-01 00:00:00.000000999 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999'#x]
+         :     +- OneRowRelation
+         +- Project [2020-01-01 00:00:00.000000001 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001'#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT v, row_number() OVER (ORDER BY v) AS rn FROM (
+    SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500') ORDER BY rn
+-- !query analysis
+Sort [rn#x ASC NULLS FIRST], true
++- Project [v#x, rn#x]
+   +- Project [v#x, rn#x, rn#x]
+      +- Window [row_number() windowspecdefinition(v#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [v#x ASC NULLS FIRST]
+         +- Project [v#x]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Union false, false
+                  :- Union false, false
+                  :  :- Project [2020-01-01 00:00:00.0000009 AS v#x]
+                  :  :  +- OneRowRelation
+                  :  +- Project [2020-01-01 00:00:00.0000001 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'#x]
+                  :     +- OneRowRelation
+                  +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500'#x]
+                     +- OneRowRelation
+
+
+-- !query
+SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
+    SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900' AS v
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500') ORDER BY v
+-- !query analysis
+Sort [v#x ASC NULLS FIRST], true
++- Project [v#x, next_v#x]
+   +- Project [v#x, next_v#x, next_v#x]
+      +- Window [lead(v#x, 1, null) windowspecdefinition(v#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS next_v#x], [v#x ASC NULLS FIRST]
+         +- Project [v#x]
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Union false, false
+                  :- Union false, false
+                  :  :- Project [2020-01-01 00:00:00.0000009 AS v#x]
+                  :  :  +- OneRowRelation
+                  :  +- Project [2020-01-01 00:00:00.0000001 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'#x]
+                  :     +- OneRowRelation
+                  +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500'#x]
+                     +- OneRowRelation
