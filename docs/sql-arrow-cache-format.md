@@ -153,17 +153,21 @@ Arrow cache supports the following data types:
 - DateType
 - TimestampType
 - TimestampNTZType
+- Nanosecond-precision timestamps (`TIMESTAMP_NTZ(p)` / `TIMESTAMP(p)` with `p` in 7..9)
 - TimeType
 
 ### Interval Types
 - YearMonthIntervalType
 - DayTimeIntervalType
-- CalendarIntervalType (see the value-range note below)
+- CalendarIntervalType
 
-`CalendarIntervalType` is stored through Arrow's nanosecond-based interval representation, so its
-microsecond component must fit within +/-(`Long.MaxValue` / 1000). Caching a value beyond that range
-fails with a clear error rather than silently corrupting the value. The default cache serializer
-does not have this restriction.
+Nanosecond-precision timestamps and `CalendarIntervalType` are stored in lossless internal
+Arrow representations (structs of the types' own components) rather than the standard Arrow
+interchange encodings, so their full Spark value domains round-trip through the cache -- the
+same domains the default cache serializer supports. The standard interchange encodings pack
+these values into a single int64 of nanoseconds and therefore cover only a reduced range
+(roughly years 1677-2262 for timestamps, +/-292 years of microseconds for intervals); that
+limitation applies to Arrow interchange paths such as `toPandas`, not to this cache.
 
 ### String and Binary
 - StringType (including collated strings)
@@ -197,6 +201,7 @@ Arrow cache automatically collects min/max statistics for the following types:
 - Numeric types (Byte, Short, Int, Long, Float, Double)
 - Decimal
 - Date, Timestamp, and Timestamp without time zone (TIMESTAMP_NTZ)
+- Nanosecond-precision timestamps
 - Time
 - Year-month and day-time intervals
 - String (using collation-aware comparison for collated strings)

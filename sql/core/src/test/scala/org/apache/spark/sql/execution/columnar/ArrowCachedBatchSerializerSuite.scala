@@ -26,11 +26,10 @@ import org.apache.arrow.vector.{
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
-import org.apache.spark.{SparkArithmeticException, SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -40,7 +39,6 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, VariantVal}
-import org.apache.spark.util.Utils
 
 /** UDT whose sqlType is Arrow-supported (ArrayType(DoubleType)). */
 private class SupportedUDT extends UserDefinedType[Array[Double]] {
@@ -1596,45 +1594,35 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("calculateMinMaxTimestampNanos upper bound is never below the actual max value written " +
-      "through the public write path") {
-    // Guard test for a fragility MaxGekk flagged on PR #56334: calculateMinMaxTimestampNanos
-    // floor-truncates its bounds to the column's declared precision (epochNanosToTimestampNanos),
-    // while ArrowColumnVector's read path (decodeEpochNanos) does not truncate. Floor-truncating
-    // the *upper* bound down would be unsound for pruning if a sub-precision value ever reached
-    // the vector. That can't happen today only because every write path that populates a
-    // precision-p nanos-timestamp column already truncates to p before the value reaches the
-    // vector (DateTimeUtils.truncateTimestampNanosToPrecision / makeTimestampNTZNanos), so this
-    // stat's own truncation is a no-op on values it actually sees. This test drives that
-    // guarantee through the public write path (rather than poking a raw untruncated value into
-    // the vector directly, which -- by design -- the current write path can never produce) so a
-    // future write path that stopped pre-truncating would be caught by the upper bound no longer
-    // matching the max value round-tripped back out.
-    val schema = StructType(Seq(StructField("ts", TimestampNTZNanosType(7))))
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, "UTC", false, false)
+  test("calculateMinMaxTimestampNanos returns the exact stored values as bounds") {
+    // The cache stores nanosecond timestamps in the lossless struct representation, so the stat
+    // bounds are the exact stored TimestampNanosVal components with no conversion or precision
+    // truncation anywhere -- the fragility MaxGekk flagged on the int64 representation (a
+    // floor-truncated upper bound could under-report the actual max) is structurally gone. This
+    // pins that: the bounds must equal the extreme written values exactly, including values far
+    // outside the int64 epoch-nanoseconds window.
+    val schema = StructType(Seq(StructField("ts", TimestampNTZNanosType(9))))
+    val arrowSchema =
+      ArrowUtils.toArrowSchema(schema, "UTC", false, false, losslessInternalTypes = true)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     val arrowWriter = ArrowWriter.create(root)
     try {
-      // nanosWithinMicro=789 is not a multiple of 100ns, so precision=7 must truncate it away.
-      // truncateTimestampNanosToPrecision is the exact function real write paths call before a
-      // value reaches the vector (see e.g. CAST(... AS TIMESTAMP_NTZ(p))).
-      val untruncated = TimestampNanosVal.fromParts(1577836800123456L, 789.toShort)
-      val value = DateTimeUtils.truncateTimestampNanosToPrecision(untruncated, 7)
-      val row = new GenericInternalRow(Array[Any](value))
-      arrowWriter.write(row)
+      // ~year 9999 and ~year 1: both overflow the int64 epoch-nanoseconds encoding, so these
+      // also prove the stats path handles the full domain.
+      val maxValue = TimestampNanosVal.fromParts(253402300799999999L, 999.toShort)
+      val minValue = TimestampNanosVal.fromParts(-62135596800000000L, 1.toShort)
+      val midValue = TimestampNanosVal.fromParts(1577836800123456L, 789.toShort)
+      Seq(midValue, maxValue, minValue).foreach { v =>
+        arrowWriter.write(new GenericInternalRow(Array[Any](v)))
+      }
       arrowWriter.finish()
 
       val vector = root.getVector("ts").asInstanceOf[org.apache.arrow.vector.FieldVector]
-      val (_, upper) = ArrowCachedBatchSerializer.calculateMinMaxTimestampNanos(
-        vector, 1, precision = 7)
-      val upperEpochNanos = DateTimeUtils.timestampNanosToEpochNanos(
-        upper.asInstanceOf[TimestampNanosVal])
-      val actualEpochNanos = DateTimeUtils.timestampNanosToEpochNanos(value)
-
-      assert(upperEpochNanos == actualEpochNanos,
-        "the upper bound must match the actual max value written through the public write " +
-          s"path, or pruning could wrongly skip it: got upper=$upperEpochNanos, " +
-          s"actual=$actualEpochNanos")
+      val (lower, upper) = ArrowCachedBatchSerializer.calculateMinMaxTimestampNanos(vector, 3)
+      assert(lower === minValue,
+        s"the lower bound must be the exact stored min value: got $lower, expected $minValue")
+      assert(upper === maxValue,
+        s"the upper bound must be the exact stored max value: got $upper, expected $maxValue")
     } finally {
       root.close()
     }
@@ -2190,43 +2178,38 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
-  test("CalendarInterval microsecond overflow produces a clear diagnostic") {
-    // Arrow stores intervals in nanoseconds, so a CalendarInterval whose microseconds exceed
-    // Long.MaxValue/1000 overflows when written. The serializer must surface a clear error naming
-    // the type/limit rather than an opaque "long overflow" ArithmeticException. A normal-range
-    // value must still cache fine.
-    val normal = new CalendarInterval(1, 2, 3000000L)
-    val normalDf = singlePartDf(Seq(normal), CalendarIntervalType).cache()
+  test("CalendarInterval caches losslessly over the full microsecond domain") {
+    // The cache stores CalendarInterval in the lossless struct representation
+    // (losslessInternalTypes = true), the type's own (months, days, microseconds) layout, so
+    // values whose microseconds exceed the standard Arrow encoding's +/-(Long.MaxValue / 1000)
+    // nanosecond-conversion limit -- which previously required an overflow diagnostic -- now
+    // simply round-trip, matching the default cache serializer's behavior.
+    val values = Seq(
+      new CalendarInterval(1, 2, 3000000L),
+      // beyond the standard IntervalMonthDayNano encoding's nanosecond-conversion limit
+      new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L),
+      new CalendarInterval(0, 0, Long.MaxValue),
+      new CalendarInterval(Int.MinValue, Int.MinValue, Long.MinValue))
+    val df = singlePartDf(values, CalendarIntervalType).cache()
     try {
-      assert(normalDf.count() == 1)
+      assert(df.count() == values.length)
+      val read = df.collect().map(_.get(0))
+      assert(read.toSet == values.toSet,
+        s"expected all interval values to round-trip, got: ${read.mkString(", ")}")
     } finally {
-      normalDf.unpersist()
+      df.unpersist()
       InMemoryRelation.clearSerializer()
     }
 
-    val overflow = new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L)
-    val overflowDf = singlePartDf(Seq(overflow), CalendarIntervalType).cache()
+    // Nested intervals go through the same recursive lossless writers, so the full domain
+    // round-trips inside complex types too.
+    val nested = Seq(Seq(new CalendarInterval(0, 0, Long.MaxValue / 1000L + 1L)))
+    val nestedDf = singlePartDf(nested, ArrayType(CalendarIntervalType)).cache()
     try {
-      val e = intercept[SparkArithmeticException](overflowDf.count())
-      assert(e.getCondition == "DATETIME_OVERFLOW",
-        s"expected DATETIME_OVERFLOW, got ${e.getCondition}")
-      assert(Utils.exceptionString(e).contains("CalendarInterval"),
-        s"expected a clear CalendarInterval overflow message, got: ${Utils.exceptionString(e)}")
-    } finally {
-      overflowDf.unpersist()
-      InMemoryRelation.clearSerializer()
-    }
-
-    // The same diagnostic must cover intervals nested inside complex types: the recursive Arrow
-    // writers reach the same nanosecond conversion, so hasCalendarInterval must detect them.
-    val nestedDf =
-      singlePartDf(Seq(Seq(overflow)), ArrayType(CalendarIntervalType)).cache()
-    try {
-      val e = intercept[SparkArithmeticException](nestedDf.count())
-      assert(e.getCondition == "DATETIME_OVERFLOW",
-        s"expected DATETIME_OVERFLOW, got ${e.getCondition}")
-      assert(Utils.exceptionString(e).contains("CalendarInterval"),
-        s"expected the clear diagnostic for a nested interval, got: ${Utils.exceptionString(e)}")
+      assert(nestedDf.count() == 1)
+      val readNested = nestedDf.collect().head.getSeq[CalendarInterval](0)
+      assert(readNested == nested.head,
+        s"expected the nested interval to round-trip, got: $readNested")
     } finally {
       nestedDf.unpersist()
       InMemoryRelation.clearSerializer()

@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatchSerializer}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.execution.arrow.ArrowWriter
@@ -43,7 +42,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -235,56 +234,6 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
 private object ArrowCachedBatchSerializer {
 
   /**
-   * Run an Arrow write block, translating a CalendarInterval microsecond overflow into a clear
-   * error. Arrow's IntervalMonthDayNano representation is nanosecond-based, so writing a
-   * CalendarInterval multiplies its microseconds by 1000 with Math.multiplyExact; Spark allows the
-   * full Long microsecond domain, so values beyond Long.MaxValue/1000 overflow and otherwise abort
-   * with an opaque "long overflow" ArithmeticException. The catch is only installed when the schema
-   * actually contains a CalendarInterval column (hasInterval), so there is no per-row cost and no
-   * effect on schemas without intervals; the try is entered once per batch, not per row.
-   */
-  def withIntervalOverflowTranslation[T](hasInterval: Boolean)(block: => T): T = {
-    if (!hasInterval) {
-      block
-    } else {
-      try {
-        block
-      } catch {
-        case e: ArithmeticException =>
-          // Caching a CalendarInterval whose microseconds exceed Arrow's representable range is a
-          // user-facing limitation (the value cannot be losslessly converted), not an internal
-          // invariant violation, so use the same structured DATETIME_OVERFLOW condition the
-          // analogous nanos-timestamp write overflow uses (see
-          // QueryExecutionErrors.timestampNanosEpochNanosOverflowError).
-          throw ExecutionErrors.datetimeOverflowError(
-            "write a CalendarInterval to the Arrow cache: Arrow stores intervals in " +
-              "nanoseconds, so the microseconds component must fit in " +
-              s"+/-(Long.MaxValue / 1000). Original error: ${e.getMessage}")
-      }
-    }
-  }
-
-  /**
-   * Whether the schema contains a CalendarInterval anywhere, including nested inside arrays,
-   * structs, maps, and UDT sql types (mirroring isSupportedByArrow's traversal): the nested Arrow
-   * writers reach the same nanosecond conversion, so a nested interval can overflow just like a
-   * top-level one. DataType.existsRecursively is not used because it does not descend into
-   * UserDefinedType.sqlType.
-   */
-  def hasCalendarInterval(schema: Seq[Attribute]): Boolean =
-    schema.exists(attr => typeContainsCalendarInterval(attr.dataType))
-
-  private def typeContainsCalendarInterval(dt: DataType): Boolean = dt match {
-    case CalendarIntervalType => true
-    case ArrayType(elementType, _) => typeContainsCalendarInterval(elementType)
-    case StructType(fields) => fields.exists(f => typeContainsCalendarInterval(f.dataType))
-    case MapType(keyType, valueType, _) =>
-      typeContainsCalendarInterval(keyType) || typeContainsCalendarInterval(valueType)
-    case udt: UserDefinedType[_] => typeContainsCalendarInterval(udt.sqlType)
-    case _ => false
-  }
-
-  /**
    * Fail fast, once per partition on the driver-facing entry points, if any column type cannot be
    * represented by the Arrow cache. This is the actual capability gate (supportsColumnarInput only
    * chooses the input path). Without it, an unsupported type would otherwise surface as a less
@@ -470,10 +419,8 @@ private object ArrowCachedBatchSerializer {
         case LongType => calculateMinMaxLong(vector, rowCount)
         case TimestampType => calculateMinMaxTimestamp(vector, rowCount)
         case TimestampNTZType => calculateMinMaxTimestampNTZ(vector, rowCount)
-        case t: TimestampNTZNanosType =>
-          calculateMinMaxTimestampNanos(vector, rowCount, t.precision)
-        case t: TimestampLTZNanosType =>
-          calculateMinMaxTimestampNanos(vector, rowCount, t.precision)
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+          calculateMinMaxTimestampNanos(vector, rowCount)
         case FloatType => calculateMinMaxFloat(vector, rowCount)
         case DoubleType => calculateMinMaxDouble(vector, rowCount)
         case st: StringType => calculateMinMaxString(vector, rowCount, st.collationId)
@@ -686,48 +633,30 @@ private object ArrowCachedBatchSerializer {
 
   def calculateMinMaxTimestampNanos(
       vector: org.apache.arrow.vector.FieldVector,
-      rowCount: Int,
-      precision: Int): (Any, Any) = {
-    // Both TimeStampNanoVector (NTZ) and TimeStampNanoTZVector (LTZ) extend TimeStampVector and
-    // store epoch nanoseconds as a long; min/max over the longs matches TimestampNanosVal's
-    // calendar order. Convert the bounds back to TimestampNanosVal since that is the stat schema's
-    // bound type for these columns.
-    //
-    // Note epochNanosToTimestampNanos floor-truncates the sub-microsecond part to `precision`,
-    // while ArrowColumnVector's read path (decodeEpochNanos) does not truncate. Floor-truncating
-    // the *upper* bound down would be unsound for pruning if a value with sub-precision nanos ever
-    // reached this vector. That can't happen today: every write path that populates a
-    // precision-`p` nanos-timestamp column already truncates to `p` (see
-    // DateTimeUtils.truncateTimestampNanosToPrecision / makeTimestampNTZNanos), so the values
-    // this loop sees are always already at-or-below their column's precision and truncation here
-    // is a no-op. But that invariant lives entirely on the write side; if a future write path ever
-    // stopped truncating, this stat could silently under-report the upper bound. See
-    // ArrowCachedBatchSerializerSuite's "calculateMinMaxTimestampNanos upper bound is never below
-    // the actual max value written through the public write path" test for a regression guard.
-    var min = Long.MaxValue
-    var max = Long.MinValue
-    var hasValue = false
+      rowCount: Int): (Any, Any) = {
+    // The cache stores nanosecond timestamps in the lossless struct representation
+    // (losslessInternalTypes = true): child 0 holds epochMicros (int64) and child 1 holds
+    // nanosWithinMicro (int16) -- TimestampNanosVal's own components, no unit conversion. The
+    // bounds are therefore the exact stored values, compared with TimestampNanosVal's own
+    // ordering; no precision truncation is involved on either the stat or the read path, so the
+    // two cannot disagree.
+    val struct = vector.asInstanceOf[org.apache.arrow.vector.complex.StructVector]
+    val micros =
+      struct.getChild("epochMicros").asInstanceOf[org.apache.arrow.vector.BigIntVector]
+    val nanos =
+      struct.getChild("nanosWithinMicro").asInstanceOf[org.apache.arrow.vector.SmallIntVector]
+    var min: TimestampNanosVal = null
+    var max: TimestampNanosVal = null
 
     (0 until rowCount).foreach { i =>
       if (!vector.isNull(i)) {
-        val value = vector.asInstanceOf[org.apache.arrow.vector.TimeStampVector].get(i)
-        if (!hasValue) {
-          min = value
-          max = value
-          hasValue = true
-        } else {
-          if (value < min) min = value
-          if (value > max) max = value
-        }
+        val value = TimestampNanosVal.fromParts(micros.get(i), nanos.get(i))
+        if (min == null || value.compareTo(min) < 0) min = value
+        if (max == null || value.compareTo(max) > 0) max = value
       }
     }
 
-    if (hasValue) {
-      (DateTimeUtils.epochNanosToTimestampNanos(min, precision),
-        DateTimeUtils.epochNanosToTimestampNanos(max, precision))
-    } else {
-      (null, null)
-    }
+    (min, max)
   }
 
   def calculateMinMaxFloat(
@@ -937,7 +866,8 @@ private class InternalRowToArrowCachedBatchIterator(
     0,
     Long.MaxValue)
 
-  private val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, false, false)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
   private val root = VectorSchemaRoot.create(arrowSchema, allocator)
   private val arrowWriter = ArrowWriter.create(root)
   private val unloader = new VectorUnloader(root, true, compressionCodec, true)
@@ -946,9 +876,6 @@ private class InternalRowToArrowCachedBatchIterator(
   private val statsCollectors: Array[ColumnStats] = schema.map { attr =>
     ArrowCachedBatchSerializer.createColumnStats(attr.dataType)
   }.toArray
-
-  // Computed once: only CalendarInterval columns can overflow when written to Arrow nanoseconds.
-  private val hasCalendarInterval = ArrowCachedBatchSerializer.hasCalendarInterval(schema)
 
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
@@ -985,22 +912,20 @@ private class InternalRowToArrowCachedBatchIterator(
       def recordLimitReached: Boolean = maxRecordsPerBatch > 0 && rowCount >= maxRecordsPerBatch
       def byteLimitReached: Boolean =
         maxBytesPerBatch > 0 && arrowWriter.sizeInBytes() >= maxBytesPerBatch
-      ArrowCachedBatchSerializer.withIntervalOverflowTranslation(hasCalendarInterval) {
-        while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
-          val row = rowIter.next()
-          arrowWriter.write(row)
+      while (rowIter.hasNext && (rowCount == 0 || (!recordLimitReached && !byteLimitReached))) {
+        val row = rowIter.next()
+        arrowWriter.write(row)
 
-          // Collect statistics for this row
-          var i = 0
-          while (i < statsCollectors.length) {
-            statsCollectors(i).gatherStats(row, i)
-            i += 1
-          }
-
-          rowCount += 1
+        // Collect statistics for this row
+        var i = 0
+        while (i < statsCollectors.length) {
+          statsCollectors(i).gatherStats(row, i)
+          i += 1
         }
-        arrowWriter.finish()
+
+        rowCount += 1
       }
+      arrowWriter.finish()
 
       // Get the Arrow RecordBatch with compression
       val recordBatch = unloader.getRecordBatch()
@@ -1048,10 +973,8 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     0,
     Long.MaxValue)
 
-  private val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, false, false)
-
-  // Computed once: only CalendarInterval columns can overflow when written to Arrow nanoseconds.
-  private val hasCalendarInterval = ArrowCachedBatchSerializer.hasCalendarInterval(schema)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    sparkSchema, timeZoneId, false, false, losslessInternalTypes = true)
 
   // Register cleanup
   Option(TaskContext.get()).foreach { tc =>
@@ -1077,15 +1000,21 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       val rowCount = batch.numRows()
 
       // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
-      // input vectors but serializes them under a schema built with largeVarTypes=false, and the
-      // read path reconstructs that same non-large schema. Large var-width vectors use 64-bit
-      // offsets, so reading them back under a 32-bit-offset schema would silently corrupt data.
-      // Fall back to the row-based conversion (which always produces standard var-width vectors)
-      // whenever any input vector is, or nests, a large var-width vector.
+      // input vectors but serializes them under the cache's own schema, and the read path
+      // reconstructs that same schema, so the input vectors' physical shape must match it:
+      //  - the cache schema is built with largeVarTypes=false, so large var-width vectors
+      //    (64-bit offsets) would be silently corrupted when read back under 32-bit offsets;
+      //  - the cache schema is built with losslessInternalTypes=true, so nanosecond timestamps
+      //    and CalendarInterval are lossless structs, and interchange-shaped input vectors
+      //    (TimeStampNano(TZ)Vector, IntervalMonthDayNanoVector, e.g. from a Python UDF output)
+      //    would not match the reconstructed struct schema.
+      // Fall back to the row-based conversion (which rewrites through ArrowWriter under the
+      // cache schema) whenever any input vector is, or nests, such a mismatched shape.
       val vectors = (0 until batch.numCols()).map(batch.column)
       val zeroCopyEligible = vectors.forall {
         case acv: ArrowColumnVector =>
-          !ColumnarBatchToArrowCachedBatchIterator.containsLargeVarType(acv.getValueVector)
+          !ColumnarBatchToArrowCachedBatchIterator.containsCacheSchemaMismatch(
+            acv.getValueVector)
         case _ => false
       }
       if (zeroCopyEligible) {
@@ -1105,15 +1034,10 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       rowCount: Int,
       schema: Seq[Attribute],
       vectors: Seq[ColumnVector]): ArrowCachedBatch = {
-    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector.
-    // This path deliberately does not run withIntervalOverflowTranslation (CalendarInterval) or
-    // any equivalent nanos-timestamp overflow guard: it reuses vectors that came from an
-    // upstream Arrow source (ArrowColumnVector.getValueVector), and those vectors already store
-    // int64 epoch-nanos/nanos-since-epoch values that were written by an ArrowWriter (or
-    // equivalent) that itself enforced the guard. There is no conversion here that can newly
-    // overflow. If a future caller could reach this path with vectors that were populated
-    // without going through the guarded write path, this comment's assumption would need
-    // revisiting.
+    // Zero-copy path: extract Arrow vectors directly from ArrowColumnVector. Vectors reaching
+    // this path have already passed containsCacheSchemaMismatch, so nanosecond timestamp and
+    // CalendarInterval columns are in the lossless struct shape matching the cache schema; no
+    // value conversion happens here, so no overflow is possible.
     val arrowVectors = vectors.map(
       _.asInstanceOf[ArrowColumnVector].getValueVector.asInstanceOf[
         org.apache.arrow.vector.FieldVector])
@@ -1153,13 +1077,11 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val unloader = new VectorUnloader(root, true, compressionCodec, true)
 
     Utils.tryWithSafeFinally {
-      ArrowCachedBatchSerializer.withIntervalOverflowTranslation(hasCalendarInterval) {
-        val rowIterator = batch.rowIterator().asScala
-        while (rowIterator.hasNext) {
-          arrowWriter.write(rowIterator.next())
-        }
-        arrowWriter.finish()
+      val rowIterator = batch.rowIterator().asScala
+      while (rowIterator.hasNext) {
+        arrowWriter.write(rowIterator.next())
       }
+      arrowWriter.finish()
 
       val recordBatch = unloader.getRecordBatch()
       Utils.tryWithSafeFinally {
@@ -1191,10 +1113,23 @@ private object ColumnarBatchToArrowCachedBatchIterator {
    * eligible for the zero-copy path because that path serializes and reloads under a schema built
    * with largeVarTypes=false; reinterpreting 64-bit offset buffers as 32-bit would corrupt data.
    */
-  def containsLargeVarType(vector: org.apache.arrow.vector.ValueVector): Boolean = vector match {
+  /**
+   * Whether the vector tree contains any shape the cache schema cannot serialize as-is: large
+   * var-width vectors (the cache schema uses 32-bit offsets) or interchange-shaped nanosecond
+   * timestamp / CalendarInterval vectors (the cache schema uses the lossless struct
+   * representations from losslessInternalTypes=true). Such input must take the row-conversion
+   * path, which rewrites values through ArrowWriter under the cache schema. The lossless struct
+   * vectors themselves (e.g. from re-caching a projection of a cached relation) match the cache
+   * schema and stay zero-copy eligible.
+   */
+  def containsCacheSchemaMismatch(
+      vector: org.apache.arrow.vector.ValueVector): Boolean = vector match {
     case _: LargeVarCharVector | _: LargeVarBinaryVector => true
+    case _: org.apache.arrow.vector.TimeStampNanoVector |
+        _: org.apache.arrow.vector.TimeStampNanoTZVector |
+        _: org.apache.arrow.vector.IntervalMonthDayNanoVector => true
     case fv: FieldVector =>
-      fv.getChildrenFromFields.asScala.exists(containsLargeVarType)
+      fv.getChildrenFromFields.asScala.exists(containsCacheSchemaMismatch)
     case _ => false
   }
 }
@@ -1217,7 +1152,8 @@ private class ArrowCachedBatchToColumnarBatchIterator(
     0,
     Long.MaxValue)
 
-  private val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
 
   // Track only the previous root to close it when next batch is produced
   private var previousRoot: VectorSchemaRoot = null
@@ -1497,7 +1433,8 @@ private class ArrowCachedBatchToInternalRowIterator(
   private var currentRowCount: Int = 0
 
   private val numFields = selectedSchema.length
-  private val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
+  private val arrowSchema = ArrowUtils.toArrowSchema(
+    cacheSchema, timeZoneId, false, false, losslessInternalTypes = true)
 
   // Pre-build typed readers per column at init time -- no per-row pattern match
   private val columnReaders: Array[ArrowColumnReader] =
