@@ -269,11 +269,14 @@ private[spark] class BlockManager(
    * does a non-matching local copy become a stale replica to skip in favor of a remote one.
    */
   private def localCopyMatchesSealedChecksum(blockId: BlockId, info: BlockInfo): Boolean = {
-    // The sealed value is cached once known (immutable thereafter). While still unsealed we
-    // re-pull on each read rather than caching a "not sealed" sentinel: a seal may land between
-    // reads and must then be observed. This costs a driver round-trip per pre-seal read, but the
-    // only pre-seal reader is the producing job itself (the eager store-time readback), so the
-    // window is bounded.
+    // The sealed value is cached once known (immutable thereafter). While still unsealed we re-pull
+    // on each read rather than caching a "not sealed" sentinel: the seal is applied on the driver
+    // and can land between two reads of the same local block, so a cached "unsealed" would let a
+    // later read serve a now-divergent copy without checking - a correctness hole. Resolving once
+    // up front (e.g. at `getOrElseUpdateRDDBlock` entry, as visibility tracking does) does not help
+    // either: the block is typically produced and read back within that same call, before the seal
+    // exists. This costs a driver round-trip per pre-seal read, but the only pre-seal reader is the
+    // producing job itself (the eager store-time readback), so the window is bounded.
     if (info.sealedChecksum.isEmpty) {
       info.sealedChecksum = master.getSealedChecksum(blockId)
     }
@@ -1059,6 +1062,9 @@ private[spark] class BlockManager(
         // seal is evicting, but that eviction is async and may not have landed. This self-check
         // makes correctness independent of the eviction landing. Only `verifySealed` blocks are
         // checked; an unsealed block, or one checksummed only for observation, is served as-is.
+        // This is only used with localCheckpoint, whose lineage is cut once sealed, so a lost block
+        // is never recomputed: there is no later, differently-checksummed re-materialization to
+        // reconcile here - a skipped local copy means the block is genuinely gone, not superseded.
         if (info.verifySealedChecksum && !localCopyMatchesSealedChecksum(blockId, info)) {
           releaseLock(blockId, Option(TaskContext.get()))
           return None

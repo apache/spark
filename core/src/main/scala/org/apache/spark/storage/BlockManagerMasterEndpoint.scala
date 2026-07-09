@@ -859,6 +859,10 @@ class BlockManagerMasterEndpoint(
           bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
           () // fire-and-forget; correctness comes from the directory + read-side self-check
         }
+        // Return true (report accepted), not false: false means "re-register", which would
+        // re-report this same block and hit this reject again, looping. The copy is intentionally
+        // left out of the directory and reclaimed above; the read-side self-check keeps reads
+        // correct meanwhile.
         return true
       }
       val firstBlock = locations.isEmpty

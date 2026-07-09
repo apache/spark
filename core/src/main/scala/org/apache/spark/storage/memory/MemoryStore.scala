@@ -746,7 +746,7 @@ private class SerializedValuesHolder[T](
     val autoPick = !blockId.isInstanceOf[StreamBlockId]
     val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
     // Optionally fold a content checksum over the serialized+compressed plaintext (composed above
-    // the sink, below compression -- same as the disk path).
+    // the sink, below compression).
     val sink = checksum.map(serializerManager.wrapForChecksum(_, redirectableStream))
       .getOrElse(redirectableStream)
     ser.serializeStream(serializerManager.wrapForCompression(blockId, sink))
