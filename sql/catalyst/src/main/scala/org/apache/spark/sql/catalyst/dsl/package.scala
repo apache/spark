@@ -532,11 +532,9 @@ package object dsl extends SQLConfHelper {
         appendedAttributes: Seq[Attribute],
         binWidthMicros: Long = 300000000L,
         originMicros: Long = 0L,
-        unrequiredChildIndex: Seq[Int] = Nil,
         timeZoneId: Option[String] = Some("UTC")): LogicalPlan =
         BinBy(binWidthMicros, rangeStart, rangeEnd, originMicros, distributeColumns,
-          scaledDistributeColumns, appendedAttributes, unrequiredChildIndex, logicalPlan,
-          timeZoneId)
+          scaledDistributeColumns, appendedAttributes, logicalPlan, timeZoneId)
 
       def insertInto(tableName: String): LogicalPlan = insertInto(table(tableName))
 

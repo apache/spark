@@ -1804,7 +1804,6 @@ case class UnresolvedBinBy(
  *                            `ExprId`s, same names/types as `distributeColumns`); they replace
  *                            `distributeColumns` in `output`.
  * @param appendedAttributes  The three output attributes appended after the child columns.
- * @param unrequiredChildIndex Child-output positions not forwarded to `output`.
  * @param child               Input relation.
  * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
  *                            Required when `rangeStart.dataType` is `TimestampType`; must be
@@ -1818,7 +1817,6 @@ case class BinBy(
     distributeColumns: Seq[Attribute],
     scaledDistributeColumns: Seq[Attribute],
     appendedAttributes: Seq[Attribute],
-    unrequiredChildIndex: Seq[Int],
     child: LogicalPlan,
     timeZoneId: Option[String])
   extends UnaryNode {
@@ -1836,14 +1834,8 @@ case class BinBy(
   private lazy val distributeReplacements: AttributeMap[Attribute] =
     AttributeMap(distributeColumns.zip(scaledDistributeColumns))
 
-  /** Forwarded child columns after column pruning. */
-  lazy val requiredChildOutput: Seq[Attribute] = {
-    val unrequiredSet = unrequiredChildIndex.toSet
-    child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
-  }
-
   override def output: Seq[Attribute] =
-    requiredChildOutput.map(a => distributeReplacements.getOrElse(a, a)) ++ appendedAttributes
+    child.output.map(a => distributeReplacements.getOrElse(a, a)) ++ appendedAttributes
 
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)

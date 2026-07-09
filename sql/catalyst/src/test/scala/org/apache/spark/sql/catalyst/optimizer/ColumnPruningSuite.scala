@@ -503,12 +503,10 @@ class ColumnPruningSuite extends PlanTest {
 
     val optimized = Optimize.execute(query)
 
-    // `label` is pruned from the child; the range columns stay in the child (the kernel reads
-    // them) but unforwarded, so they are unrequired; `value` stays (DISTRIBUTE, scaled in place).
+    // `label` is pruned from the child; the range and DISTRIBUTE inputs the kernel reads stay.
     val correctAnswer = relation
       .select(tsStart, tsEnd, value)
-      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio),
-        unrequiredChildIndex = Seq(0, 1))
+      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio))
       .select(binStart)
 
     comparePlans(optimized, correctAnswer, checkAnalysis = false)
