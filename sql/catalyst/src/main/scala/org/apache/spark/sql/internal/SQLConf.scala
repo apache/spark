@@ -3705,6 +3705,7 @@ object SQLConf {
       .doc("When true, enable code-gen for sort aggregate with grouping keys. Takes effect only " +
         s"when ${ENABLE_SORT_AGGREGATE_CODEGEN.key} is enabled.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
