@@ -682,9 +682,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     unsupportedTableOperationError(tableName, "INSERT INTO ... REPLACE ON/USING")
   }
 
-  def insertReplaceUsingNonDeterministicSource(): Throwable = {
+  def insertReplaceUsingNonDeterministicSourceQueryNotSupported(): Throwable = {
     new AnalysisException(
-      errorClass = "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE",
+      errorClass = "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE_QUERY_NOT_SUPPORTED",
       messageParameters = Map.empty)
   }
 

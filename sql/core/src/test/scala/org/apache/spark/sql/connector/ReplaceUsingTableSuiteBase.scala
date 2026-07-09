@@ -257,7 +257,7 @@ abstract class ReplaceUsingTableSuiteBase extends RowLevelOperationSuiteBase {
              |SELECT * FROM VALUES (1, 1, 'hr') AS t(pk, id, dep) WHERE rand() > 0.5
              |""".stripMargin)
       },
-      condition = "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE",
+      condition = "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE_QUERY_NOT_SUPPORTED",
       parameters = Map.empty[String, String])
   }
 

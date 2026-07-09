@@ -3229,11 +3229,11 @@
     ],
     "sqlState" : "42701"
   },
-  "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE" : {
+  "INSERT_REPLACE_USING_NON_DETERMINISTIC_SOURCE_QUERY_NOT_SUPPORTED" : {
     "message" : [
-      "INSERT INTO ... REPLACE USING requires a deterministic source query because the source determines both which target rows are deleted and which rows are inserted. Remove non-deterministic expressions (e.g. rand()) from the source."
+      "INSERT INTO ... REPLACE USING does not support a non-deterministic source query. The source determines both which target rows are deleted and which rows are inserted, so it must be deterministic."
     ],
-    "sqlState" : "42K0E"
+    "sqlState" : "0A000"
   },
   "INSERT_REPLACE_USING_NOT_ENABLED" : {
     "message" : [

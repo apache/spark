@@ -50,7 +50,7 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
       // Evaluating a non-deterministic source in those independent plan locations could produce
       // mutually inconsistent results.
       if (!source.deterministic) {
-        throw QueryCompilationErrors.insertReplaceUsingNonDeterministicSource()
+        throw QueryCompilationErrors.insertReplaceUsingNonDeterministicSourceQueryNotSupported()
       }
 
       val (rel, operationTable) = buildReplaceOperationTable(aliasedTable)
