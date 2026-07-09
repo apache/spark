@@ -517,6 +517,273 @@ AS INSERT INTO customers_us
 SELECT * FROM STREAM(customers_us_east);
 ```
 
+## Change Data Capture (CDC) with Auto CDC
+
+Many source systems emit a stream of *change events* rather than a snapshot of the current data: each record describes an insert, update, or delete to a row, identified by a key. Applying these events correctly to a target table by hand is tricky. You have to match events to existing rows, apply them in the right order, and handle out-of-order and duplicate events without corrupting the table.
+
+**Auto CDC** does this for you. You point it at a source of change events and tell it how to identify and order them, and SDP maintains a target streaming table that always reflects the latest state for each key.
+
+### What Auto CDC does
+
+Given an ordered stream of change events, Auto CDC keeps the target table in sync with the source:
+
+- **Inserts and updates** - For each key, the event with the highest sequence value wins. If no row exists for the key, it's inserted; if one exists, it's overwritten with the latest values.
+- **Deletes** - Events that match a delete condition you supply remove the corresponding row from the target.
+- **Out-of-order events** - Events don't have to arrive in order. Auto CDC uses the sequencing expression to determine the latest state per key, so a late-arriving event with a lower sequence value doesn't overwrite newer data.
+
+This behavior implements **Slowly Changing Dimensions (SCD) Type 1**: the target keeps only the current version of each row, with no history of prior values. SCD Type 1 is the only mode currently supported.
+
+For example, given these change events (ordered by `version`):
+
+| id | name     | version | op     |
+|----|----------|---------|--------|
+| 1  | alice    | 1       | UPSERT |
+| 2  | bob      | 1       | UPSERT |
+| 1  | alice_v2 | 2       | UPSERT |
+| 2  | bob      | 2       | DELETE |
+| 3  | carol    | 1       | UPSERT |
+
+Auto CDC, keyed on `id` and sequenced by `version`, produces this target table:
+
+| id | name     | version |
+|----|----------|---------|
+| 1  | alice_v2 | 2       |
+| 3  | carol    | 1       |
+
+Row 1 is updated to its latest version, row 2 is deleted, and row 3 is inserted.
+
+### Requirements
+
+- The **target must be a streaming table** that already exists in the pipeline. Create it with `create_streaming_table` (Python) or `CREATE STREAMING TABLE` (SQL) before defining the Auto CDC flow, or use the combined SQL form shown below that does both at once.
+- The **source must be a streaming source** (read with `spark.readStream` in Python or `STREAM(...)` in SQL). CDC is an incremental operation over newly arriving change events.
+- You must provide a **key** (one or more columns that identify a row) and a **sequencing expression** (used to order events per key).
+
+### Defining an Auto CDC Flow in Python
+
+Use `create_auto_cdc_flow` to write change events into a target streaming table. Create the target with `create_streaming_table` first.
+
+```python
+from pyspark import pipelines as dp
+
+# The source of change events: a streaming read of the CDC feed.
+@dp.table
+def cdc_events():
+    return spark.readStream.table("cdc_source")
+
+# The target that Auto CDC keeps in sync. It must be a streaming table.
+dp.create_streaming_table("customers")
+
+# The Auto CDC flow that applies the change events to the target.
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+    except_column_list=["op"],
+    stored_as_scd_type=1,
+)
+```
+
+`create_auto_cdc_flow` accepts the following arguments:
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `target` | Yes | Name of the target streaming table that receives the changes. It must already be defined in the pipeline. |
+| `source` | Yes | Name of the CDC source dataset to stream change events from. |
+| `keys` | Yes | The column or columns that uniquely identify a row. A list of column names (strings) or `Column` objects, given as unqualified identifiers (for example `["id"]`, not `col("source.id")`). |
+| `sequence_by` | Yes | An expression used to order change events for each key. The highest value wins. A SQL expression string or a `Column`. |
+| `apply_as_deletes` | No | A boolean expression identifying events that represent deletes. Matching rows are removed from the target. A SQL expression string or a `Column`. |
+| `column_list` | No | The columns to include in the target. Mutually exclusive with `except_column_list`. |
+| `except_column_list` | No | The columns to exclude from the target; all other columns are included. Mutually exclusive with `column_list`. Commonly used to drop operation/metadata columns such as `op`. |
+| `stored_as_scd_type` | No | The SCD type of the target. Only `1` (or `"1"`) is supported. |
+| `name` | No | The name of the flow. Defaults to the target table name. |
+
+If you specify neither `column_list` nor `except_column_list`, all columns from the source are written to the target.
+
+`keys`, `sequence_by`, `column_list`, and `except_column_list` must be given as unqualified column identifiers. They cannot be qualified references such as `col("cdc_events.id")`.
+
+### Defining an Auto CDC Flow in SQL
+
+SQL provides two forms. The first attaches an Auto CDC flow to a streaming table you have already declared:
+
+```sql
+CREATE STREAMING TABLE customers;
+
+CREATE FLOW customers_cdc AS AUTO CDC INTO customers
+FROM STREAM(cdc_events)
+KEYS (id)
+APPLY AS DELETE WHEN op = 'DELETE'
+SEQUENCE BY version
+COLUMNS * EXCEPT (op);
+```
+
+The second declares the streaming table and its Auto CDC flow together:
+
+```sql
+CREATE STREAMING TABLE customers
+FLOW AUTO CDC
+FROM STREAM(cdc_events)
+KEYS (id)
+APPLY AS DELETE WHEN op = 'DELETE'
+SEQUENCE BY version
+COLUMNS * EXCEPT (op);
+```
+
+The clauses must appear in this order:
+
+- `FROM STREAM(source)` - the streaming CDC source. **Required.**
+- `KEYS (col, ...)` - the key columns that identify a row. **Required.**
+- `APPLY AS DELETE WHEN condition` - marks events that represent deletes. Optional.
+- `SEQUENCE BY expr` - the expression that orders events per key. **Required.**
+- `COLUMNS (col, ...)` or `COLUMNS * EXCEPT (col, ...)` - selects or excludes columns. Optional; if omitted, all source columns are written.
+
+`CREATE FLOW ... AS AUTO CDC INTO` also accepts an optional `COMMENT`, and `CREATE STREAMING TABLE ... FLOW AUTO CDC` accepts `IF NOT EXISTS`. Both forms target SCD Type 1; there is no SQL clause to select the SCD type.
+
+### End-to-End Example
+
+This example builds a small pipeline that ingests a stream of customer change events and maintains a `customers` table containing the latest state of each customer. It uses Delta as the table format, but Auto CDC works with any format that supports the required row-level operations.
+
+Create a pipeline project:
+
+```bash
+spark-pipelines init --name cdc_demo
+cd cdc_demo
+```
+
+Add a transformation that defines the CDC source, the target streaming table, and the Auto CDC flow. Place the following in `transformations/customers_cdc.py`:
+
+```python
+from pyspark import pipelines as dp
+
+# Ingest the raw change events as a streaming table. In a real pipeline this
+# would read from Kafka, cloud storage, or a CDC feed; here it reads a Delta
+# table that another process appends change events to.
+@dp.table(name="cdc_events", format="delta")
+def cdc_events():
+    return spark.readStream.format("delta").load("/path/to/cdc_source")
+
+# Declare the target streaming table that Auto CDC will maintain.
+dp.create_streaming_table("customers", format="delta")
+
+# Apply the change events to the target.
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+    except_column_list=["op"],
+    stored_as_scd_type=1,
+)
+```
+
+Suppose the source receives two batches of change events. The first batch inserts two customers:
+
+| id | name  | version | op     |
+|----|-------|---------|--------|
+| 1  | alice | 1       | UPSERT |
+| 2  | bob   | 1       | UPSERT |
+
+The second batch updates one customer, deletes another, and inserts a new one:
+
+| id | name     | version | op     |
+|----|----------|---------|--------|
+| 1  | alice_v2 | 2       | UPSERT |
+| 2  | bob      | 2       | DELETE |
+| 3  | carol    | 1       | UPSERT |
+
+Run the pipeline:
+
+```bash
+spark-pipelines run
+```
+
+After the run, the `customers` table reflects the latest state of each key, with the `op` column excluded:
+
+| id | name     | version |
+|----|----------|---------|
+| 1  | alice_v2 | 2       |
+| 3  | carol    | 1       |
+
+`alice` was updated to `alice_v2`, `bob` was deleted, and `carol` was inserted.
+
+### How-Tos
+
+#### Handling deletes
+
+Change feeds usually mark deletes with an operation column or a tombstone flag rather than removing the row. Give Auto CDC a boolean expression that identifies delete events with `apply_as_deletes` (Python) or `APPLY AS DELETE WHEN` (SQL):
+
+```python
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    apply_as_deletes="op = 'DELETE'",
+)
+```
+
+When an event matches the delete condition, the row for its key is removed from the target. If you don't supply a delete condition, every event is treated as an insert or update.
+
+#### Selecting which columns land in the target
+
+CDC feeds often carry metadata columns (the operation type, a timestamp, source offsets) that you don't want in the target table. Use `except_column_list` / `COLUMNS * EXCEPT` to drop them, or `column_list` / `COLUMNS` to name exactly the columns to keep. The two options are mutually exclusive.
+
+```python
+# Keep everything except the operation column.
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    except_column_list=["op"],
+)
+
+# Or keep only an explicit set of columns.
+dp.create_auto_cdc_flow(
+    target="customers",
+    source="cdc_events",
+    keys=["id"],
+    sequence_by="version",
+    column_list=["id", "name"],
+)
+```
+
+#### Handling out-of-order and duplicate events
+
+You don't need to sort or de-duplicate the source. Auto CDC uses `sequence_by` to determine the latest event per key, so a late-arriving event with a lower sequence value is ignored, and re-delivered events converge to the same result. Choose a `sequence_by` expression that strictly orders changes for a key, such as a monotonically increasing version number or a commit timestamp.
+
+#### Using a composite key
+
+Pass multiple columns to `keys` when a single column doesn't uniquely identify a row:
+
+```python
+dp.create_auto_cdc_flow(
+    target="orders",
+    source="order_events",
+    keys=["region", "order_id"],
+    sequence_by="event_ts",
+)
+```
+
+#### Changing the key set
+
+The set and types of `keys` are part of the flow's persisted state. Changing keys across incremental runs - renaming, swapping, adding, removing, or changing the type of a key column - is not supported and produces undefined results. To change the key set, [fully refresh](#spark-pipelines-run) the target table so it is recomputed from scratch:
+
+```bash
+spark-pipelines run --full-refresh customers
+```
+
+### Auto CDC Considerations
+
+- **SCD Type 1 only** - Auto CDC currently maintains only the current version of each row. SCD Type 2 (retaining history) is not supported.
+- **Target must be a streaming table** - You cannot apply an Auto CDC flow to a materialized view or an external table.
+- **Streaming source required** - The source must be read as a stream.
+- **Immutable key set** - Changing `keys` between incremental runs requires a full refresh (see above).
+- **Unqualified column identifiers** - `keys`, `sequence_by`, and the column lists must be plain, unqualified column names.
+- **Table format** - The target format must support the row-level operations Auto CDC performs (updates and deletes). Formats such as Delta support this.
+
 ## Writing Data to External Targets with Sinks
 
 Sinks in SDP provide a way to write transformed data to external destinations beyond the default streaming tables and materialized views. Sinks are particularly useful for operational use cases that require low-latency data processing, reverse ETL operations, or writing to external systems. 
