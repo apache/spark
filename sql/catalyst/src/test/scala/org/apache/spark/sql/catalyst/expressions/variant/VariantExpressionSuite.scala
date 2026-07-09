@@ -1338,8 +1338,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    // A catchable error: `variant_insert` throws, but `try_variant_insert` returns NULL.
-    def checkInsertCaughtError(
+    // A recoverable error: `variant_insert` throws, but `try_variant_insert` returns NULL.
+    def checkInsertRecoverableError(
         input: String,
         path: String,
         value: Expression,
@@ -1355,9 +1355,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         null)
     }
 
-    // A non-catchable error (a malformed path or a size overflow): both functions throw, and only
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
     // the `functionName` in the error message differs.
-    def checkInsertUncaughtError(
+    def checkInsertUnrecoverableError(
         input: String,
         path: String,
         value: Expression,
@@ -1443,27 +1443,27 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         InternalRow(UTF8String.fromString("$.b")))
     }
 
-    // Catchable errors: `variant_insert` throws; `try_variant_insert` returns NULL. A duplicate
-    // key and every shape of path type mismatch are all caught.
-    checkInsertCaughtError("""{"a": 1}""", "$.a", Literal(2),
+    // Recoverable errors: `variant_insert` throws; `try_variant_insert` returns NULL. A duplicate
+    // key and every shape of path type mismatch are all recoverable.
+    checkInsertRecoverableError("""{"a": 1}""", "$.a", Literal(2),
       "VARIANT_DUPLICATE_KEY",
       Map("key" -> "a"))
-    checkInsertCaughtError("""{"a": 1}""", "$.a.b", Literal(2),
+    checkInsertRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-    checkInsertCaughtError("""{"a": 1}""", "$[0]", Literal(2),
+    checkInsertRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
-    checkInsertCaughtError("""{"a": [1, 2]}""", "$.a.b", Literal(2),
+    checkInsertRecoverableError("""{"a": [1, 2]}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-    checkInsertCaughtError("""{"a": 5}""", "$.a[0]", Literal(2),
+    checkInsertRecoverableError("""{"a": 5}""", "$.a[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-    checkInsertCaughtError("5", "$.a", Literal(2),
+    checkInsertRecoverableError("5", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
-    checkInsertCaughtError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
+    checkInsertRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
 
@@ -1479,19 +1479,19 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    // Non-catchable errors: both functions throw.
-    checkInsertUncaughtError("{}", "$", Literal(1),
+    // Unrecoverable errors: both functions throw.
+    checkInsertUnrecoverableError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "$", "functionName" -> s"`$name`"))
-    checkInsertUncaughtError("{}", "abc", Literal(1),
+    checkInsertUnrecoverableError("{}", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
       name => Map("path" -> "abc", "functionName" -> s"`$name`"))
 
     val tooBig = "x".repeat(16 * 1024 * 1024)
-    checkInsertUncaughtError("{}", "$.a[2000000000]", Literal(1),
+    checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
-    checkInsertUncaughtError("{}", "$.a", Literal(tooBig),
+    checkInsertUnrecoverableError("{}", "$.a", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
       name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
   }

@@ -153,13 +153,13 @@ object VariantExpressionEvalUtils {
       new VariantVal(out.getValue, out.getMetadata)
     } catch {
       case _: VariantPathTypeMismatchException if !failOnError => null
+      case e: SparkRuntimeException if !failOnError && e.getCondition == "VARIANT_DUPLICATE_KEY" =>
+        null
       case e: VariantPathTypeMismatchException =>
         throw QueryExecutionErrors.variantPathTypeMismatch(
           path, renderVariantPath(javaSegments.take(e.depth)), functionName)
       case _: VariantSizeLimitException =>
         throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
-      case e: SparkRuntimeException if !failOnError && e.getCondition == "VARIANT_DUPLICATE_KEY" =>
-        null
     }
   }
 
