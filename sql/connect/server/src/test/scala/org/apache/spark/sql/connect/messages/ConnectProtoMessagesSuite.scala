@@ -20,7 +20,7 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.types.IntegerType
 
 class ConnectProtoMessagesSuite extends SparkFunSuite {
@@ -85,5 +85,19 @@ class ConnectProtoMessagesSuite extends SparkFunSuite {
     assert(fun.getArgumentsCount == 1)
     assert(fun.hasPythonUdf == true)
     assert(pythonUdf.getPythonVer == "3.10")
+  }
+
+  test("SPARK-58042: UDT jvm_class must be a UserDefinedType") {
+    // A jvm_class that is not a UserDefinedType must be rejected before it is instantiated.
+    val udt = proto.DataType.UDT
+      .newBuilder()
+      .setType("udt")
+      .setJvmClass("java.lang.String")
+      .build()
+    val dataType = proto.DataType.newBuilder().setUdt(udt).build()
+    val exception = intercept[InvalidPlanInput] {
+      DataTypeProtoConverter.toCatalystType(dataType)
+    }
+    assert(exception.getMessage.contains("is not a subclass of UserDefinedType"))
   }
 }
