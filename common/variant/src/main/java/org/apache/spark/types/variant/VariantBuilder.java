@@ -162,9 +162,9 @@ public class VariantBuilder {
 
   // Return a new variant with `val` appended to the array at `segments`, where an empty `segments`
   // refers to the whole variant. If the path does not match (missing key or out-of-range index), a
-  // semantically equivalent variant is returned. A target that is not an array, or a segment applied
-  // to an incompatible container type, throws VariantPathTypeMismatchException, which the caller maps
-  // to VARIANT_PATH_TYPE_MISMATCH.
+  // semantically equivalent variant is returned. A target that is not an array, or a segment
+  // applied to an incompatible container type, throws VariantPathTypeMismatchException, which the
+  // caller maps to VARIANT_PATH_TYPE_MISMATCH.
   public static Variant arrayAppendAtPath(Variant v, PathSegment[] segments, Variant val) {
     VariantBuilder builder = new VariantBuilder(false);
     builder.appendWithArrayAppendImpl(v.value, v.metadata, v.pos, segments, 0, val);
