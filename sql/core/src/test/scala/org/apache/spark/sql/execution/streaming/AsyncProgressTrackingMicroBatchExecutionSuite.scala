@@ -370,10 +370,12 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       .start()
     try assert(asyncOnly.isActive) finally asyncOnly.stop()
 
-    // Sink evolution on, async progress tracking off.
+    // Sink evolution on, async progress tracking off. The sink must be named when sink evolution
+    // is enabled, otherwise the query is rejected before execution regardless of async tracking.
     withSQLConf(SQLConf.ENABLE_STREAMING_SINK_EVOLUTION.key -> "true") {
       val evolutionOnly = ds.writeStream
         .format("noop")
+        .name("evolution_only_sink")
         .start()
       try assert(evolutionOnly.isActive) finally evolutionOnly.stop()
     }
