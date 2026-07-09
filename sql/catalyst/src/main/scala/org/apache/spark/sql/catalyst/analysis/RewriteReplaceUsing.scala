@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.IntegerType
 object RewriteReplaceUsing extends RewriteRowLevelCommand {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r @ ReplaceUsingTable(aliasedTable, scopeColumns, source)
+    case r @ ReplaceUsingTable(aliasedTable, replaceUsingCols, source)
         if r.resolved && source.resolved =>
 
       // The source feeds the delete decision, insert payload, and runtime group filter.
@@ -54,7 +54,7 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
       }
 
       val (rel, operationTable) = buildReplaceOperationTable(aliasedTable)
-      val scopeOrdinals = resolveScopeOrdinals(rel, scopeColumns)
+      val scopeOrdinals = resolveScopeOrdinals(rel, replaceUsingCols)
       operationTable.operation match {
         case _: SupportsDelta =>
           buildWriteDeltaPlan(rel, operationTable, scopeOrdinals, source)
@@ -192,10 +192,10 @@ object RewriteReplaceUsing extends RewriteRowLevelCommand {
 
   private def resolveScopeOrdinals(
       relation: DataSourceV2Relation,
-      scopeColumns: Seq[String]): Seq[Int] = {
+      replaceUsingCols: Seq[String]): Seq[Int] = {
 
     val seen = scala.collection.mutable.HashSet.empty[Int]
-    scopeColumns.map { name =>
+    replaceUsingCols.map { name =>
       val resolved = relation.resolve(Seq(name), conf.resolver).getOrElse {
         throw QueryCompilationErrors.unresolvedColumnError(name, relation.output.map(_.name))
       }

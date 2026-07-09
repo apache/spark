@@ -1227,13 +1227,13 @@ case class MergeIntoTable(
  * [[RowLevelOperation.Command.REPLACE]] so connectors can distinguish this scope-level replacement
  * from per-row MERGE semantics.
  *
- * @param targetTable the target relation to replace rows in
- * @param scopeColumns unqualified target column names whose values define a replace scope tuple
- * @param query        the source query, already aligned to the target table output
+ * @param targetTable    the target relation to replace rows in
+ * @param replaceUsingCols unqualified target column names whose values define a replace scope tuple
+ * @param query          the source query, already aligned to the target table output
  */
 case class ReplaceUsingTable(
     targetTable: LogicalPlan,
-    scopeColumns: Seq[String],
+    replaceUsingCols: Seq[String],
     query: LogicalPlan)
     extends BinaryCommand with SupportsSubquery with TransactionalWrite {
 
