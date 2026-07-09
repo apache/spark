@@ -33,7 +33,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * <p>
  * Scheme keys are normalized to lowercase ({@link Locale#ROOT}) at construction time, and
  * lookups via {@link #forScheme(String)} are case-insensitive. If the supplied map contains
- * keys that differ only by case, the last entry (in iteration order) wins.
+ * keys that differ only by case, an {@link IllegalArgumentException} is thrown.
  * <p>
  * This class is transmitted to executors and does <b>not</b> contain any reference
  * to {@link UserContext} or raw identity tokens. It is immutable and {@link Serializable}.
@@ -51,15 +51,23 @@ public final class UserCredentials implements Serializable {
    * Constructs a new {@code UserCredentials} bundle.
    * <p>
    * Scheme keys are normalized to lowercase using {@link Locale#ROOT}. If multiple keys
-   * collide after lowercasing, the last entry in iteration order wins.
+   * collide after lowercasing (e.g. {@code "s3a"} and {@code "S3A"}), an
+   * {@link IllegalArgumentException} is thrown rather than silently keeping one of them.
    *
    * @param credentials per-scheme map of service credentials (must not be null; defensively copied)
+   * @throws IllegalArgumentException if two keys collide after case normalization
    */
   public UserCredentials(Map<String, ServiceCredential> credentials) {
     Objects.requireNonNull(credentials, "credentials must not be null");
     Map<String, ServiceCredential> normalized = new HashMap<>(credentials.size());
     for (Map.Entry<String, ServiceCredential> entry : credentials.entrySet()) {
-      normalized.put(entry.getKey().toLowerCase(Locale.ROOT), entry.getValue());
+      Objects.requireNonNull(entry.getKey(), "scheme key must not be null");
+      String scheme = entry.getKey().toLowerCase(Locale.ROOT);
+      if (normalized.containsKey(scheme)) {
+        throw new IllegalArgumentException(
+            "Duplicate scheme after case normalization: " + entry.getKey());
+      }
+      normalized.put(scheme, entry.getValue());
     }
     this.credentials = normalized;
   }

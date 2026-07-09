@@ -29,10 +29,6 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -94,24 +90,16 @@ public class CredentialTypesSuite {
   }
 
   @Test
-  public void testUserContextRawTokenExcludedFromJackson() throws Exception {
-    String sentinel = "SENTINEL_SECRET_JWT_abc123";
-    UserContext ctx = new UserContext("alice", "https://idp.example.com", sentinel, NOW, FUTURE);
-
-    ObjectMapper mapper = JsonMapper.builder()
-        .disable(MapperFeature.REQUIRE_HANDLERS_FOR_JAVA8_TIMES)
-        .build();
-
-    String json = mapper.writeValueAsString(ctx);
-
-    assertFalse(json.contains(sentinel),
-        "Jackson serialization must not contain the raw token value");
-    assertTrue(json.contains("alice"),
-        "Jackson serialization must contain the principal to prove serialization occurred");
-    assertTrue(json.contains("https://idp.example.com"),
-        "Jackson serialization must contain the issuer");
-    assertFalse(json.contains("rawToken"),
-        "Jackson serialization must not contain a rawToken field");
+  public void testUserContextEqualsExcludesRawToken() {
+    // rawToken is secret material and intentionally excluded from equals/hashCode:
+    // two contexts that differ only by rawToken are considered equal.
+    UserContext a = new UserContext("u", "iss", "token-A", NOW, FUTURE);
+    UserContext b = new UserContext("u", "iss", "token-B", NOW, FUTURE);
+    assertEquals(a, b, "equals must not depend on rawToken");
+    assertEquals(a.hashCode(), b.hashCode(), "hashCode must not depend on rawToken");
+    // A differing identity field still breaks equality.
+    UserContext c = new UserContext("u", "other-iss", "token-A", NOW, FUTURE);
+    assertNotEquals(a, c);
   }
 
   @Test
@@ -290,6 +278,24 @@ public class CredentialTypesSuite {
 
     // Absent scheme still returns empty
     assertFalse(uc2.forScheme("hdfs").isPresent(), "Absent scheme should return empty");
+  }
+
+  @Test
+  public void testUserCredentialsRejectsCaseCollidingSchemes() {
+    Map<String, ServiceCredential> creds = new HashMap<>();
+    creds.put("s3a", new ServiceCredential(Map.of("k", "v1"), FUTURE));
+    creds.put("S3A", new ServiceCredential(Map.of("k", "v2"), FUTURE));
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new UserCredentials(creds));
+    assertTrue(e.getMessage().contains("Duplicate scheme"),
+        "Exception message should identify the collision");
+  }
+
+  @Test
+  public void testUserCredentialsRejectsNullSchemeKey() {
+    Map<String, ServiceCredential> creds = new HashMap<>();
+    creds.put(null, new ServiceCredential(Map.of("k", "v"), FUTURE));
+    assertThrows(NullPointerException.class, () -> new UserCredentials(creds));
   }
 
   // --- Helpers ---

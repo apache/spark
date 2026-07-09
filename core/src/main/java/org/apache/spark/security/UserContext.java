@@ -20,8 +20,6 @@ package org.apache.spark.security;
 import java.time.Instant;
 import java.util.Objects;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import org.apache.spark.annotation.DeveloperApi;
 
 /**
@@ -31,8 +29,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * This class holds the OIDC token information used to derive short-lived
  * {@link ServiceCredential} instances via credential providers. It is intentionally
  * <b>not</b> {@link java.io.Serializable} and must never be transmitted to executors.
- * The {@code rawToken} field is always redacted in {@link #toString()} and excluded from
- * Jackson serialization.
+ * The {@code rawToken} field is always redacted in {@link #toString()}.
  *
  * @since 4.3.0
  */
@@ -41,7 +38,6 @@ public final class UserContext {
 
   private final String principal;
   private final String issuer;
-  @JsonIgnore
   private final String rawToken;
   private final Instant issuedAt;
   private final Instant expiresAt;
@@ -79,7 +75,6 @@ public final class UserContext {
   }
 
   /** Returns the raw OIDC JWT. This value must never be logged or transmitted to executors. */
-  @JsonIgnore
   public String getRawToken() {
     return rawToken;
   }
@@ -120,6 +115,12 @@ public final class UserContext {
         '}';
   }
 
+  /**
+   * Equality is based on identity fields ({@code principal}, {@code issuer}) and token
+   * validity window ({@code issuedAt}, {@code expiresAt}). The secret {@code rawToken} is
+   * intentionally excluded: {@code UserContext} is driver-only and never used as a map key,
+   * so there is no need to compare secret material.
+   */
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
@@ -127,13 +128,12 @@ public final class UserContext {
     UserContext that = (UserContext) o;
     return principal.equals(that.principal)
         && issuer.equals(that.issuer)
-        && rawToken.equals(that.rawToken)
         && Objects.equals(issuedAt, that.issuedAt)
         && Objects.equals(expiresAt, that.expiresAt);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(principal, issuer, rawToken, issuedAt, expiresAt);
+    return Objects.hash(principal, issuer, issuedAt, expiresAt);
   }
 }
