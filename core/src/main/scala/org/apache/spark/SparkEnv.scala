@@ -46,6 +46,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
@@ -158,7 +159,9 @@ class SparkEnv (
         // Get or Else synchronized to protect
         // against concurrent creation requests.
         udfDispatcherManager.getOrElse {
-          createUDFDispatcherManager()
+          val created = createUDFDispatcherManager()
+          udfDispatcherManager = Some(created)
+          created
         }
       }
     }
@@ -181,6 +184,7 @@ class SparkEnv (
       pythonWorkers.values.foreach(_.stop())
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
+      _streamingShuffleOutputTracker.foreach(_.stop())
       if (shuffleManager != null) {
         shuffleManager.stop()
       }
@@ -299,12 +303,61 @@ class SparkEnv (
       // Signal that the ShuffleManager has been initialized
       shuffleManagerInitLatch.countDown()
     }
+    initializeStreamingShuffleOutputTracker()
   }
 
-  private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
+  // Holds the streaming shuffle output tracker, which is only present when the configured
+  // shuffle manager requires it (i.e., StreamingShuffleManager or MultiShuffleManager).
+  @volatile private var _streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
+    None
+
+  def streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
+    _streamingShuffleOutputTracker
+
+  /**
+   * Initialize the StreamingShuffleOutputTracker if the configured shuffle manager requires one
+   * and one does not already exist. This method is idempotent -- calling it multiple times is safe.
+   */
+  private def initializeStreamingShuffleOutputTracker(): Unit = {
+    if (_streamingShuffleOutputTracker.isDefined) {
+      return
+    }
+
+    val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
+    if (shuffleManagerName == classOf[StreamingShuffleManager].getName
+        || shuffleManagerName == classOf[MultiShuffleManager].getName) {
+      val tracker = if (SparkContext.isDriver(executorId)) {
+        new StreamingShuffleOutputTrackerMaster(conf)
+      } else {
+        new StreamingShuffleOutputTrackerWorker(conf)
+      }
+
+      if (SparkContext.isDriver(executorId)) {
+        tracker.trackerEndpoint = rpcEnv.setupEndpoint(
+          StreamingShuffleOutputTracker.ENDPOINT_NAME,
+          new StreamingShuffleOutputTrackerMasterEndpoint(
+            rpcEnv,
+            tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster],
+            conf))
+      } else {
+        tracker.trackerEndpoint = RpcUtils.makeDriverRef(
+          StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
+      }
+      _streamingShuffleOutputTracker = Some(tracker)
+    }
+  }
+
+  private[spark] def initializeMemoryManager(
+      numUsableCores: Int,
+      offHeapAllowed: Boolean = true): Unit = {
     Preconditions.checkState(null == memoryManager,
       "Memory manager already initialized to %s", _memoryManager)
-    _memoryManager = UnifiedMemoryManager(conf, numUsableCores)
+    val memoryManagerConf = if (offHeapAllowed) {
+      conf
+    } else {
+      conf.clone.set(MEMORY_OFFHEAP_ENABLED, false).set(MEMORY_OFFHEAP_SIZE, 0L)
+    }
+    _memoryManager = UnifiedMemoryManager(memoryManagerConf, numUsableCores)
   }
 }
 

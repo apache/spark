@@ -41,9 +41,10 @@ import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -306,6 +307,20 @@ private[parquet] class ParquetRowConverter(
       parquetType: Type,
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // Passes all ParquetRowConverter constructor params to the extended newConverter overload
+    // so struct-backed types can create recursive converters.
+    ParquetTypeOps(catalystType)
+      .map(_.newConverter(
+        parquetType, updater, schemaConverter, convertTz,
+        datetimeRebaseSpec, int96RebaseSpec))
+      .getOrElse(newConverterDefault(parquetType, catalystType, updater))
+  }
+
+  private def newConverterDefault(
+      parquetType: Type,
+      catalystType: DataType,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
       parquetType.getLogicalTypeAnnotation match {
@@ -500,17 +515,6 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
-      case _: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val nanos = DateTimeUtils.microsToNanos(value)
-            this.updater.setLong(nanos)
-          }
-        }
-
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
       // elements where the element type is the type of the field.
@@ -624,7 +628,7 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeometryVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 
@@ -660,7 +664,7 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeographyVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 

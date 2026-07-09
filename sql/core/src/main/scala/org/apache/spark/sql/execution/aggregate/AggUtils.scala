@@ -75,13 +75,12 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = Aggregate.supportsHashAggregate(
+    val useHash = child.conf.useHashAggregation && Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
-    val forceSortAggregate = forceApplySortAggregate(child.conf)
 
-    if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
+    if (useHash && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         isStreaming = isStreaming,
@@ -97,7 +96,7 @@ object AggUtils {
       val useObjectHash = Aggregate.supportsObjectHashAggregate(
         aggregateExpressions, groupingExpressions)
 
-      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
+      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash)) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           isStreaming = isStreaming,
@@ -129,6 +128,36 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
+
+    // When partial aggregation is bypassed, skip the pre-shuffle partial aggregation and run a
+    // single Complete-mode aggregation after the shuffle. This can improve performance when the
+    // group cardinality is high and the pre-shuffle reduction ratio is low.
+    //
+    // The bypass is only beneficial when there are grouping keys (groupingExpressions.nonEmpty):
+    // global aggregations (no GROUP BY) always produce a single output row, so the pre-shuffle
+    // partial aggregation achieves the maximum possible reduction ratio and should never be
+    // skipped. Bypassing a global aggregation would shuffle all raw rows to a single partition
+    // with no benefit, which is strictly worse than the normal Partial+Final path.
+    val hasGroupingKeys = groupingExpressions.nonEmpty
+    //
+    // session_window requires MergingSessionsExec (inserted below via mayAppendMergingSessionExec)
+    // to sort and merge overlapping sessions before the final aggregation. The bypass is skipped
+    // when a session_window grouping key is present so that the normal Partial+Merge+Final path
+    // runs and MergingSessionsExec is correctly inserted.
+    val hasSessionWindow = groupingExpressions.exists(_.metadata.contains(SessionWindow.marker))
+    if (child.conf.bypassPartialAggregation && hasGroupingKeys && !hasSessionWindow) {
+      val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
+      val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
+      val completeAggregate = createAggregate(
+        requiredChildDistributionExpressions = Some(groupingExpressions),
+        groupingExpressions = groupingExpressions,
+        aggregateExpressions = completeAggregateExpressions,
+        aggregateAttributes = completeAggregateAttributes,
+        initialInputBufferOffset = 0,
+        resultExpressions = resultExpressions,
+        child = child)
+      return completeAggregate :: Nil
+    }
 
     // 1. Create an Aggregate Operator for partial aggregations.
 
@@ -582,15 +611,6 @@ object AggUtils {
 
       case None => partialAggregate
     }
-  }
-
-  /**
-   * Returns whether a sort aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
-   */
-  private def forceApplySortAggregate(conf: SQLConf): Boolean = {
-    Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 
   /**

@@ -822,11 +822,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE tab1 RENAME TO default.tab2")
         },
-        condition = "_LEGACY_ERROR_TEMP_1074",
+        condition = "RENAME_TEMP_VIEW_WITH_DATABASE",
         parameters = Map(
           "oldName" -> "`tab1`",
           "newName" -> "`default`.`tab2`",
-          "db" -> "default")
+          "db" -> "`default`")
       )
 
       val catalog = spark.sessionState.catalog
@@ -851,11 +851,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE view1 RENAME TO default.tab2")
         },
-        condition = "_LEGACY_ERROR_TEMP_1074",
+        condition = "RENAME_TEMP_VIEW_WITH_DATABASE",
         parameters = Map(
           "oldName" -> "`view1`",
           "newName" -> "`default`.`tab2`",
-          "db" -> "default"))
+          "db" -> "`default`"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("view1")))

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -96,6 +97,15 @@ abstract class DatabaseOnDocker {
   def beforeContainerStart(
       hostConfigBuilder: HostConfig,
       containerConfigBuilder: ContainerConfig): Unit = {}
+
+  /**
+   * Optional per-database override for how long to wait for the database to accept JDBC
+   * connections after the container has started. Some databases (e.g. Oracle) take
+   * considerably longer to fully bootstrap their listener, so they can extend the default.
+   * The value is a duration string such as "15min". When `None`, the suite default
+   * (`spark.test.docker.connectionTimeout`, "10min") is used.
+   */
+  def connectionTimeout: Option[String] = None
 }
 
 abstract class DockerJDBCIntegrationSuite
@@ -109,10 +119,19 @@ abstract class DockerJDBCIntegrationSuite
     sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
   protected val imagePullTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
+  // Number of attempts to pull the Docker image before giving up. Image pulls occasionally fail
+  // with transient registry/proxy errors (e.g. HTTP 502 Bad Gateway) that abort the whole suite
+  // in beforeAll even though a retry would succeed, so retry a few times with backoff.
+  protected val imagePullAttempts: Int =
+    sys.props.getOrElse("spark.test.docker.imagePullAttempts", "3").toInt
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
-  protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
+  // `lazy` so that `db` (abstract, defined by concrete suites) is initialized before it is read.
+  // A database may extend the connection timeout via `db.connectionTimeout` (e.g. Oracle, whose
+  // container takes longer to bootstrap its listener); otherwise the suite default is used.
+  protected lazy val connectionTimeout: PatienceConfiguration.Timeout = {
+    val timeoutStr = db.connectionTimeout.getOrElse(
+      sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min"))
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 
@@ -145,27 +164,48 @@ abstract class DockerJDBCIntegrationSuite
       } catch {
         case e: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          val callback = new PullImageResultCallback {
-            override def onNext(item: PullResponseItem): Unit = {
-              super.onNext(item)
-              val status = item.getStatus
-              if (status != null && status != "Downloading" && status != "Extracting") {
-                logInfo(s"$status ${item.getId}")
+          // Retry the pull a few times: it can fail with transient registry/proxy errors
+          // (e.g. HTTP 502 Bad Gateway) or a timeout that would otherwise abort the suite.
+          var attempt = 0
+          var lastError: Throwable = null
+          while (!pulled && attempt < imagePullAttempts) {
+            attempt += 1
+            val callback = new PullImageResultCallback {
+              override def onNext(item: PullResponseItem): Unit = {
+                super.onNext(item)
+                val status = item.getStatus
+                if (status != null && status != "Downloading" && status != "Extracting") {
+                  logInfo(s"$status ${item.getId}")
+                }
               }
             }
+            try {
+              val (success, time) = Utils.timeTakenMs(
+                docker.pullImageCmd(db.imageName)
+                  .exec(callback)
+                  .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
+
+              if (success) {
+                pulled = true
+                logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
+              } else {
+                lastError = new TimeoutException(
+                  s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} " +
+                    "to be pulled")
+              }
+            } catch {
+              case NonFatal(e) =>
+                lastError = e
+            }
+            if (!pulled && attempt < imagePullAttempts) {
+              log.warn(s"Failed to pull image ${db.imageName} " +
+                s"(attempt $attempt/$imagePullAttempts); retrying", lastError)
+              // Linear backoff between attempts to let a transient registry issue recover.
+              Thread.sleep(TimeUnit.SECONDS.toMillis(5L * attempt))
+            }
           }
-
-          val (success, time) = Utils.timeTakenMs(
-            docker.pullImageCmd(db.imageName)
-              .exec(callback)
-              .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
-
-          if (success) {
-            pulled = success
-            logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
-          } else {
-            throw new TimeoutException(
-              s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} to be pulled")
+          if (!pulled) {
+            throw lastError
           }
       }
 
@@ -223,6 +263,10 @@ abstract class DockerJDBCIntegrationSuite
       case NonFatal(e) =>
         logError(log"Failed to initialize Docker container for " +
           log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
+        // Dump the container's own logs BEFORE afterAll() tears it down, so that a
+        // connection timeout (e.g. Oracle "ORA-12541: No listener") can be diagnosed
+        // from the database's bootstrap output rather than guessed at.
+        dumpContainerLogs()
         try {
           afterAll()
         } finally {
@@ -247,6 +291,34 @@ abstract class DockerJDBCIntegrationSuite
    */
   def getConnection(): Connection = {
     DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
+  }
+
+  /**
+   * Best-effort dump of the database container's stdout/stderr to the test log. Used when
+   * container initialization fails (e.g. the JDBC connection never succeeds within
+   * `connectionTimeout`) so the database's own bootstrap output is available for diagnosis.
+   * Never throws.
+   */
+  private def dumpContainerLogs(): Unit = {
+    if (docker == null || container == null) return
+    try {
+      val logs = new StringBuilder
+      docker.logContainerCmd(container.getId)
+        .withStdOut(true)
+        .withStdErr(true)
+        .withTail(2000)
+        .exec(new ResultCallback.Adapter[Frame]() {
+          override def onNext(frame: Frame): Unit = {
+            logs.append(new String(frame.getPayload, StandardCharsets.UTF_8))
+          }
+        })
+        .awaitCompletion(60, TimeUnit.SECONDS)
+      logWarning(s"Docker container logs for ${this.getClass.getName} " +
+        s"(image=${db.imageName}, container=${container.getId}):\n${logs.toString}")
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to capture Docker container logs: ${e.getMessage}")
+    }
   }
 
   /**

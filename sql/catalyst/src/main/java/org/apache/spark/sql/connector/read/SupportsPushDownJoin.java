@@ -43,6 +43,9 @@ public interface SupportsPushDownJoin extends ScanBuilder {
   /**
    * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
    * {@code SupportsPushDownJoin}.
+   * <p>
+   * If this scan builder holds previously pushed state, such as a pushed table sample, and cannot
+   * preserve it when pushing down the join, this method must return false.
    *
    * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
    * gets joined with.
@@ -52,7 +55,8 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @param rightSideRequiredColumnsWithAliases required output of the
    *                                            right side {@code SupportsPushDownJoin}
    * @param condition join condition. Columns are named after the specified aliases in
-   * {@code leftSideRequiredColumnWithAliases} and {@code rightSideRequiredColumnWithAliases}
+   * {@code leftSideRequiredColumnsWithAliases} and {@code rightSideRequiredColumnsWithAliases}
+   *
    * @return True if join has been successfully pushed down.
    */
   boolean pushDownJoin(

@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.*;
 
-import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonToken;
@@ -70,7 +69,7 @@ public class VariantBuilder {
    */
   public static Variant parseJson(String json, boolean allowDuplicateKeys,
       boolean validateUnicodeInJsonParsing) throws IOException {
-    try (JsonParser parser = new JsonFactory().createParser(json)) {
+    try (JsonParser parser = JSON_FACTORY.createParser(json)) {
       parser.nextToken();
       return parseJson(parser, allowDuplicateKeys, validateUnicodeInJsonParsing);
     }
@@ -94,6 +93,54 @@ public class VariantBuilder {
       boolean validateUnicodeInJsonParsing) throws IOException {
     VariantBuilder builder = new VariantBuilder(allowDuplicateKeys, validateUnicodeInJsonParsing);
     builder.buildJson(parser);
+    return builder.result();
+  }
+
+  // A segment in a JSONPath used by variant manipulation functions.
+  public abstract static class PathSegment {}
+
+  // Object field access (e.g. `.a` or `['a']`).
+  public static final class ObjectKeySegment extends PathSegment {
+    public final String key;
+
+    public ObjectKeySegment(String key) {
+      this.key = key;
+    }
+  }
+
+  // Array index access (e.g. `[0]`).
+  public static final class ArrayIndexSegment extends PathSegment {
+    public final int index;
+
+    public ArrayIndexSegment(int index) {
+      this.index = index;
+    }
+  }
+
+  // Return a new variant with the field or array element at `segments` removed. If the path does
+  // not match (missing key, out-of-range index, or incompatible container type), a semantically
+  // equivalent variant is returned. The result is always rebuilt with fresh metadata, so the
+  // binary representation may differ even when nothing is deleted. `segments` must be non-empty.
+  public static Variant deleteAtPath(Variant v, PathSegment[] segments) {
+    if (segments.length == 0) {
+      throw new IllegalArgumentException("Segments must be non-empty");
+    }
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithDeletionImpl(v.value, v.metadata, v.pos, segments, 0);
+    return builder.result();
+  }
+
+  // Return a new variant equal to `v` with `val` inserted at `segments` (which must be non-empty).
+  // An object leaf adds a field (or throws VARIANT_DUPLICATE_KEY if the key exists); an array leaf
+  // inserts at the index, shifting elements right and padding with nulls past the end. Missing
+  // intermediate keys/indices are created. A segment applied to an incompatible value throws
+  // VariantPathTypeMismatchException, which the caller maps to VARIANT_PATH_TYPE_MISMATCH.
+  public static Variant insertAtPath(Variant v, PathSegment[] segments, Variant val) {
+    if (segments.length == 0) {
+      throw new IllegalArgumentException("Segments must be non-empty");
+    }
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithInsertionImpl(v.value, v.metadata, v.pos, segments, 0, val);
     return builder.result();
   }
 
@@ -456,6 +503,203 @@ public class VariantBuilder {
       default:
         shallowAppendVariantImpl(value, pos);
         break;
+    }
+  }
+
+  private void appendWithDeletionImpl(
+      byte[] value, byte[] metadata, int pos, PathSegment[] segments, int depth) {
+    checkIndex(pos, value.length);
+    PathSegment seg = segments[depth];
+    boolean isLast = depth == segments.length - 1;
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (seg instanceof ObjectKeySegment && basicType == OBJECT) {
+      String key = ((ObjectKeySegment) seg).key;
+      handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          String fieldKey = getMetadataKey(metadata, id);
+          boolean isTarget = fieldKey.equals(key);
+          if (!(isTarget && isLast)) {
+            int newId = addKey(fieldKey);
+            fields.add(new FieldEntry(fieldKey, newId, writePos - start));
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingObject(start, fields);
+        return null;
+      });
+    } else if (seg instanceof ArrayIndexSegment && basicType == ARRAY) {
+      int index = ((ArrayIndexSegment) seg).index;
+      handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          boolean isTarget = i == index;
+          if (!(isTarget && isLast)) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            offsets.add(writePos - start);
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingArray(start, offsets);
+        return null;
+      });
+    } else {
+      // Container type does not match the segment kind; append unchanged.
+      appendVariantImpl(value, metadata, pos);
+    }
+  }
+
+  private void appendWithInsertionImpl(
+      byte[] value, byte[] metadata, int pos, PathSegment[] segments, int depth, Variant val) {
+    checkIndex(pos, value.length);
+    PathSegment seg = segments[depth];
+    boolean isLast = depth == segments.length - 1;
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (seg instanceof ObjectKeySegment && basicType == OBJECT) {
+      String key = ((ObjectKeySegment) seg).key;
+      handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>(size + 1);
+        int start = writePos;
+        boolean found = false;
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          String fieldKey = getMetadataKey(metadata, id);
+          boolean isTarget = fieldKey.equals(key);
+          found |= isTarget;
+          int newId = addKey(fieldKey);
+          fields.add(new FieldEntry(fieldKey, newId, writePos - start));
+          if (isTarget && !isLast) {
+            appendWithInsertionImpl(value, metadata, elementPos, segments, depth + 1, val);
+          } else {
+            appendVariantImpl(value, metadata, elementPos);
+          }
+        }
+        if (isLast) {
+          // Append the new field unconditionally; if `key` already exists, the duplicate is
+          // detected by `finishWritingObject`, which raises VARIANT_DUPLICATE_KEY.
+          int newId = addKey(key);
+          fields.add(new FieldEntry(key, newId, writePos - start));
+          appendVariant(val);
+        } else if (!found) {
+          // Intermediate object key is missing; create the rest of the path under it.
+          int newId = addKey(key);
+          fields.add(new FieldEntry(key, newId, writePos - start));
+          appendNewPath(segments, depth + 1, val);
+        }
+        finishWritingObject(start, fields);
+        return null;
+      });
+    } else if (seg instanceof ArrayIndexSegment && basicType == ARRAY) {
+      int index = ((ArrayIndexSegment) seg).index;
+      handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>(size + 1);
+        int start = writePos;
+        if (isLast) {
+          // Insert `val` at `index`, shifting existing elements right.
+          for (int i = 0; i < size; ++i) {
+            if (i == index) {
+              offsets.add(writePos - start);
+              appendVariant(val);
+            }
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            offsets.add(writePos - start);
+            appendVariantImpl(value, metadata, dataStart + offset);
+          }
+          if (index >= size) {
+            // Pad with variant nulls up to `index`, then append `val`.
+            for (int i = size; i < index; ++i) {
+              offsets.add(writePos - start);
+              appendNull();
+            }
+            offsets.add(writePos - start);
+            appendVariant(val);
+          }
+        } else if (index < size) {
+          // Descend into the existing element at `index`.
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            offsets.add(writePos - start);
+            if (i == index) {
+              appendWithInsertionImpl(value, metadata, elementPos, segments, depth + 1, val);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        } else {
+          // Intermediate index is past the end; copy existing elements, pad with variant nulls up
+          // to `index`, then create the rest of the path at `index`.
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            offsets.add(writePos - start);
+            appendVariantImpl(value, metadata, dataStart + offset);
+          }
+          for (int i = size; i < index; ++i) {
+            offsets.add(writePos - start);
+            appendNull();
+          }
+          offsets.add(writePos - start);
+          appendNewPath(segments, depth + 1, val);
+        }
+        finishWritingArray(start, offsets);
+        return null;
+      });
+    } else {
+      // The segment kind does not match the container at this path prefix.
+      throw new VariantPathTypeMismatchException(depth);
+    }
+  }
+
+  // Build a fresh chain of containers for `segments[depth..]`, terminating in `val`. Used to
+  // materialize missing intermediate path segments during insertion. The kind of each segment
+  // decides the container created: an object-key segment creates a single-field object, while an
+  // array-index segment creates an array padded with variant nulls up to the index.
+  private void appendNewPath(PathSegment[] segments, int depth, Variant val) {
+    PathSegment seg = segments[depth];
+    boolean isLast = depth == segments.length - 1;
+    if (seg instanceof ObjectKeySegment) {
+      String key = ((ObjectKeySegment) seg).key;
+      ArrayList<FieldEntry> fields = new ArrayList<>(1);
+      int start = writePos;
+      int id = addKey(key);
+      fields.add(new FieldEntry(key, id, writePos - start));
+      if (isLast) {
+        appendVariant(val);
+      } else {
+        appendNewPath(segments, depth + 1, val);
+      }
+      finishWritingObject(start, fields);
+    } else {
+      int index = ((ArrayIndexSegment) seg).index;
+      ArrayList<Integer> offsets = new ArrayList<>();
+      int start = writePos;
+      for (int i = 0; i < index; ++i) {
+        offsets.add(writePos - start);
+        appendNull();
+      }
+      offsets.add(writePos - start);
+      if (isLast) {
+        appendVariant(val);
+      } else {
+        appendNewPath(segments, depth + 1, val);
+      }
+      finishWritingArray(start, offsets);
     }
   }
 

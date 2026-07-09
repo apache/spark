@@ -20,9 +20,12 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, RowLevelOperationWithOptions, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.UpdateSummary
+import org.apache.spark.sql.connector.write.{RowLevelOperationTable, UpdateSummary}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -342,12 +345,14 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("metric values are stable across stage retries") {
-    // Force a shuffle in the UPDATE plan via an IN-subquery (with broadcast disabled), then
-    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage.
-    // Note: the current fetch-failure injection does not retry the writer stage, so this
-    // test passes equally well with plain SQLMetric — it only exercises the SLAM-aware
-    // read path. Follow-up #55738 will add infra to actually retry the writer stage and
-    // exercise the SLAM behavior end-to-end for UPDATE.
+    // INJECT_SHUFFLE_FETCH_FAILURES corrupts the partition-0 task of the first successful
+    // attempt of every shuffle map stage, so a downstream stage FetchFails and the producer
+    // re-runs. UPDATE writer-side metrics live on the result stage (`metric.add(N)` at
+    // end-of-task in WritingSparkTask), and ResultStage.findMissingPartitions only re-runs
+    // partitions that haven't successfully completed, so the writer accumulator single-counts;
+    // this test is regression coverage that retries don't break the SLAM-aware `UpdateSummary`.
+    // It does not independently assert that a retry fired (there is no overcounting metric to
+    // observe on the result stage).
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -1229,5 +1234,76 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Seq(
         Row(1, 100, "hr"),
         Row(2, 200, "software")))
+  }
+
+  // asserts the given SQL options reached every layer that should carry them: the rewritten
+  // DataSourceV2Relation, the RowLevelOperationInfo passed to the operation builder, and the
+  // write builder's LogicalWriteInfo
+  protected def checkRowLevelOperationOptions(
+      func: => Unit,
+      expectedOptions: (String, String)*): Unit = {
+    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
+    val writeRelation = qe.optimizedPlan.collectFirst {
+      case rd: ReplaceData => rd.table
+      case wd: WriteDelta => wd.table
+    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+      .asInstanceOf[DataSourceV2Relation]
+    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+      .asInstanceOf[RowLevelOperationWithOptions]
+    expectedOptions.foreach { case (key, value) =>
+      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
+      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
+      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
+    }
+  }
+
+  test("SPARK-57681: update with dynamic options") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 WHERE pk = 1"),
+      "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
+  }
+
+  test("SPARK-57681: update with dynamic options and a subquery on the same table") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM $tableNameAsString WHERE dep = 'hr')"),
+      "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
+  }
+
+  test("SPARK-57681: update with dynamic options and a CTE on the same table") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    checkRowLevelOperationOptions(
+      sql(s"WITH hr_rows AS (SELECT pk FROM $tableNameAsString WHERE dep = 'hr') " +
+        s"UPDATE $tableNameAsString WITH (`write.split-size` = 10) SET salary = -1 " +
+        s"WHERE pk IN (SELECT pk FROM hr_rows)"),
+      "write.split-size" -> "10")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 200, "software") :: Row(3, -1, "hr") :: Nil)
   }
 }

@@ -319,3 +319,55 @@ select try_validate_utf8(x'80');
 select quote('Spark');
 select quote("Don't");
 select quote(NULL);
+
+-- instr
+-- start parameter
+select instr('abcabc', 'b', 1);
+select instr('abcabc', 'b', 3);
+select instr('abcabc', 'a', 3);
+select instr('abcabc', 'b', -1);
+select instr('abcabc', 'b', -2);
+select instr('abcabc', 'b', -3);
+select instr('abcabc', 'a', -2);
+-- start and occurrence
+select instr('abcabc', 'b', 1, 2);
+select instr('abcabc', 'b', 3, 1);
+select instr('abcabc', 'b', 1, 3);
+select instr('abcabc', 'b', -1, 1);
+select instr('abcabc', 'b', -1, 2);
+select instr('abcabc', 'b', -2, 2);
+select instr('abcabc', 'a', -1, 2);
+select instr('abcabc', 'b', 0, 1);
+select instr('abcabc', 'b', 0, 2);
+-- empty substring
+select instr('hello', '', 1);
+select instr('hello', '', 3);
+select instr('hello', '', -1);
+select instr('hello', '', -2);
+select instr('', '', 1);
+select instr('', '', -1);
+-- multi-byte characters
+select instr('你好世界你好', '你好', 1, 2);
+select instr('你好世界你好', '你好', -1, 2);
+select instr('你好世界你好', '你好', -2, 2);
+select instr('你好世界你好', '你好', -1);
+select instr('你好世界你好', '你好', -2);
+select instr('你好世界你好', '世界', -1);
+-- overlapping matches
+select instr('aaaa', 'aa', 1, 2);
+select instr('aaaa', 'aa', 1, 3);
+select instr('aaaa', 'aa', -1, 2);
+select instr('aaaa', 'aa', -2, 2);
+-- not found
+select instr('abc', 'd', 1, 1);
+select instr('abc', 'b', 1, 3);
+-- start out of range
+select instr('abc', 'b', 10, 1);
+select instr('abc', 'b', -10, 1);
+-- null arguments
+select instr('a', 'b', cast(null as int));
+select instr('a', 'b', 1, cast(null as int));
+select instr(null, 'b', 1);
+select instr('a', null, 1);
+select instr('a', 'b', cast(null as int), 2);
+select instr(null, null, cast(null as int), cast(null as int));

@@ -141,6 +141,7 @@ DataFrame
     DataFrame.writeTo
     DataFrame.mergeInto
     DataFrame.pandas_api
+    DataFrame.zip
     DataFrame.zipWithIndex
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill

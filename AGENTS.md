@@ -70,6 +70,10 @@ Run test cases matching a substring:
 
     build/sbt '<module>/testOnly *MySuite -- -z "test name"'
 
+Run test cases in an optional module:
+
+    build/sbt -P<maven-profiles> '<module>/testOnly *MySuite'
+
 For faster iteration, keep SBT open in interactive mode:
 
     build/sbt
@@ -119,6 +123,20 @@ Step 3 — Fetch failure annotations:
 
 Each annotation contains the test class, test name, and failure message.
 
+## Checking PR Merge Status
+
+Spark merges PRs with `dev/merge_spark_pr.py`, not the GitHub merge button, so a **merged PR shows up on GitHub as Closed, not Merged** — its `merged` / `mergedAt` are empty, and backports to maintenance branches are plain pushes. **Do not read a Closed PR as rejected**; most Closed PRs were in fact merged.
+
+To check whether, and to which branches, a PR was merged, run `dev/pr_merge_status.py <pr-number>`:
+
+    $ dev/pr_merge_status.py 56356
+    PR #56356 (base master): [SPARK-57295][SQL] Make database location validation ...
+    merged: yes
+      master       9357bc9ae05
+      branch-4.x   72edddb358e
+
+It lists `master` and the latest major's release branches the commit reached (e.g. `branch-4.x`, `branch-4.2`) — or reports `open` or `closed without merging`. It needs `gh` authenticated and a non-shallow checkout, and exits non-zero with a clear message if the PR is unknown (404) or the environment isn't ready (no `gh`/auth, no apache/spark remote). Older majors' branches are omitted; pass `--all-branches` to list every branch the commit reached.
+
 ## Pull Request Workflow
 
 PR title format is `[SPARK-xxxx][COMPONENT] Title`. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
@@ -155,6 +173,23 @@ DO NOT push to the upstream repo. Always push to the personal fork. Open PRs aga
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+
+## Versioning and Branch Policy
+
+When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
+
+- **PR opened against a non-`master` base branch** (e.g. a maintenance line like `branch-4.2`): use that base branch's version -- when you're checked out on it, that's just the working tree's `pom.xml`. The helper below covers only the common `master`-base case.
+- **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
+  - breaking / binary-incompatible changes that can't ship in a minor release;
+  - dependency upgrades that don't fix a critical issue worth backporting.
+
+Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
+
+`dev/next_version_candidates.py` (no arguments) prints both candidate versions, reading from the local `apache/spark` remote (the `upstream` configured during pre-flight). It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
+
+    $ dev/next_version_candidates.py
+    master       5.0.0
+    branch-4.x   4.3.0
 
 ## Security
 

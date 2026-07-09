@@ -21,9 +21,11 @@ import org.scalatest.{BeforeAndAfterEach, Suite}
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{Column, Row}
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.SharedTablesInMemoryRowLevelOperationTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
@@ -53,10 +55,10 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       s"spark.sql.catalog.$catalog",
       classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName
     )
-    // Disable per-flow retries so failure-path tests (e.g. INCOMPATIBLE_DATA) surface the
-    // AnalysisException after the first attempt instead of going through the default 2 retries,
-    // which would otherwise emit duplicate FAILED events and inflate test runtime without
-    // changing the asserted outcome.
+    // Disable per-flow retries so failure-path tests (e.g. KEY_SCHEMA_DRIFT, INCOMPATIBLE_DATA)
+    // surface the AnalysisException after the first attempt instead of going through the default
+    // 2 retries, which would otherwise emit duplicate FAILED events and inflate test runtime
+    // without changing the asserted outcome.
     spark.conf.set(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key, "0")
     spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.$namespace")
   }
@@ -98,7 +100,7 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
 
   /**
    * Walk every [[Throwable]] reachable from `failure` via [[Throwable#getSuppressed]] and
-   * [[Throwable#getCause]], searching for the first [[SparkThrowable]] whose
+   * [[Throwable#getCause]] for the first [[SparkThrowable]] whose
    * [[SparkThrowable#getCondition]] equals `condition`, then run [[checkError]] against that
    * exception with all of its other arguments propagated through.
    */
@@ -145,7 +147,7 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
    * Assumes sequence type is BIGINT (Long).
    */
   protected val cdcMetadataDdl: String = {
-    val col = Scd1BatchProcessor.cdcMetadataColName
+    val col = AutoCdcReservedNames.cdcMetadataColName
     val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
     s"$col STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL"
@@ -206,6 +208,35 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       storedAsScdType = scdType
     )
   )
+
+  /**
+   * Build a single-flow AutoCDC pipeline: a [[TestGraphRegistrationContext]] that registers
+   * `target` under [[catalog]].[[namespace]] and one [[autoCdcFlow]] writing into it from
+   * `sourceDf`. Covers the common single-table/single-flow shape used across the AutoCDC E2E
+   * suites; tests that need multiple flows or non-AutoCDC datasets build the context inline.
+   */
+  protected def singleAutoCdcFlowPipeline(
+      flowName: String,
+      target: String,
+      sourceDf: DataFrame,
+      keys: Seq[String],
+      sequencing: Column,
+      columnSelection: Option[ColumnSelection] = None,
+      deleteCondition: Option[Column] = None,
+      scdType: ScdType = ScdType.Type1): TestGraphRegistrationContext =
+    new TestGraphRegistrationContext(spark) {
+      registerTable(target, catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = flowName,
+        target = target,
+        query = dfFlowFunc(sourceDf),
+        keys = keys,
+        sequencing = sequencing,
+        columnSelection = columnSelection,
+        deleteCondition = deleteCondition,
+        scdType = scdType
+      ))
+    }
 
   /** Build a target row's `_cdc_metadata` struct value. */
   protected def cdcMeta(deleteSeq: Option[Long], upsertSeq: Option[Long]): Row =

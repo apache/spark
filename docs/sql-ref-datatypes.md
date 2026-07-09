@@ -47,14 +47,16 @@ Spark SQL and DataFrames support the following data types:
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
   - `TimeType(precision)`: Represents values comprising values of fields hour, minute and second with the number of decimal digits `precision` following the decimal point in the seconds field, without a time-zone.
-  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999` for max precision `6`.
+  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999999` for max precision `9`. The default precision is `6`.
+    - Note: Apache Hive has no TIME type, so `TimeType` is not supported in Hive SerDe interop. Storing it in a Hive SerDe table (including `INSERT OVERWRITE DIRECTORY ... STORED AS`) or passing it to a Hive UDF/UDAF/UDTF raises an error rather than silently converting the value.
   - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second, with the session local time-zone. The timestamp value represents an
   absolute point in time.
   - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second. All operations are performed without taking any time zone into account.
     - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
-  - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
+  - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. In schema-driven Dataset/DataFrame conversion, Spark maps `TimestampNTZNanosType` to `java.time.LocalDateTime` and `TimestampLTZNanosType` to `java.time.Instant`; values with more sub-micro digits than declared by `precision` are floor-truncated to that precision. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
+    - Note: Nanosecond precision is only available through the schema-driven APIs above. Typed encoders derived from `java.time.Instant`/`java.time.LocalDateTime` (for example `ds.as[T]` for a case class and `spark.createDataFrame(Seq(...))` without an explicit schema) bind these types to the microsecond `TIMESTAMP_LTZ`/`TIMESTAMP_NTZ` types, and typed Scala/Java UDFs such as `udf((i: java.time.Instant) => ...)` coerce their inputs to microsecond precision at the UDF boundary. Kryo encoders bypass the SQL type system entirely and likewise do not preserve nanoseconds. To retain nanoseconds, use a schema that declares `TimestampLTZNanosType`/`TimestampNTZNanosType` together with the schema-driven `Row`/`Encoders.row(schema)` path.
 
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
@@ -143,6 +145,7 @@ from pyspark.sql.types import *
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
+|**TimeType**|datetime.time|TimeType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
 |**GeometryType**|Geometry|GeometryType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
 |**GeographyType**|Geography|GeographyType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
@@ -241,6 +244,7 @@ please use factory methods provided in
 |**BooleanType**|logical|"bool"|
 |**TimestampType**|POSIXct|"timestamp"|
 |**DateType**|Date|"date"|
+|**TimeType**|Not supported|Not supported|
 |**GeometryType**|Not supported|Not supported|
 |**GeographyType**|Not supported|Not supported|
 |**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
@@ -264,6 +268,7 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**FloatType**|FLOAT, REAL|
 |**DoubleType**|DOUBLE|
 |**DateType**|DATE|
+|**TimeType**|TIME, TIME(p)|
 |**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
 |**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|

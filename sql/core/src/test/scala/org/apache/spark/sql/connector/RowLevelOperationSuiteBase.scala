@@ -51,6 +51,7 @@ abstract class RowLevelOperationSuiteBase
   }
 
   after {
+    catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
   }
@@ -88,13 +89,22 @@ abstract class RowLevelOperationSuiteBase
     Collections.emptyMap[String, String]
   }
 
+  /** True for the *NoMetadata* test variants - the writer doesn't request any required
+   * distribution / ordering and so MergeRowsExec / writer can run in the same stage as the
+   * preceding join. */
+  protected def noMetadata: Boolean =
+    extraTableProps.getOrDefault("no-metadata", "false") == "true"
+
   protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
     catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
   }
 
   protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    // Use liveTable, not loadTable, because loadTable returns a snapshot copy.
+    // Tests mutate state through this accessor (e.g., `table.increaseVersion()`) and need
+    // those mutations to be observable to subsequent loads.
+    catalog.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
   }
 
   protected def createTable(schemaString: String): Unit = {

@@ -29,7 +29,7 @@ import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.{BinaryType, ByteType, DecimalType, IntegerType, LongType, ShortType}
+import org.apache.spark.sql.types.{BinaryType, ByteType, DecimalType, DoubleType, IntegerType, LongType, ShortType}
 
 /**
  * Low-level benchmark for the three Parquet delta-encoding decoders:
@@ -292,18 +292,33 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
 
     val rng = new Random(42)
     val intValues = Array.tabulate(NUM_ROWS)(_ => rng.nextInt())
+    val overflowIntValues = Array.tabulate(NUM_ROWS) { i =>
+      i % 4 match {
+        case 0 => 1
+        case 1 => 2
+        case 2 => Int.MinValue
+        case _ => 3
+      }
+    }
     val longValues = Array.tabulate(NUM_ROWS)(_ => rng.nextLong())
     val intBytes = encodeDeltaInts(intValues)
+    val overflowIntBytes = encodeDeltaInts(overflowIntValues)
     val longBytes = encodeDeltaLongs(longValues)
 
     val byteVec = new OnHeapColumnVector(NUM_ROWS, ByteType)
     val shortVec = new OnHeapColumnVector(NUM_ROWS, ShortType)
     val longVec = new OnHeapColumnVector(NUM_ROWS, LongType)
+    val doubleVec = new OnHeapColumnVector(NUM_ROWS, DoubleType)
     val unsignedLongVec = new OnHeapColumnVector(NUM_ROWS, DecimalType(20, 0))
 
     def newIntReader(): VectorizedDeltaBinaryPackedReader = {
       val r = new VectorizedDeltaBinaryPackedReader
       r.initFromPage(NUM_ROWS, ByteBufferInputStream.wrap(ByteBuffer.wrap(intBytes)))
+      r
+    }
+    def newOverflowIntReader(): VectorizedDeltaBinaryPackedReader = {
+      val r = new VectorizedDeltaBinaryPackedReader
+      r.initFromPage(NUM_ROWS, ByteBufferInputStream.wrap(ByteBuffer.wrap(overflowIntBytes)))
       r
     }
     def newLongReader(): VectorizedDeltaBinaryPackedReader = {
@@ -320,7 +335,20 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
     benchmark.addCase("readUnsignedIntegers (INT32 -> Long)") { _ =>
       newIntReader().readUnsignedIntegers(NUM_ROWS, longVec, 0)
     }
+    benchmark.addCase("readIntegersAsLongs (INT32 -> Long)") { _ =>
+      newIntReader().readIntegersAsLongs(NUM_ROWS, longVec, 0)
+    }
+    benchmark.addCase("readIntegersAsLongs (INT32 -> Long, overflow pattern)") { _ =>
+      newOverflowIntReader().readIntegersAsLongs(NUM_ROWS, longVec, 0)
+    }
+    benchmark.addCase("readIntegersAsDoubles (INT32 -> Double)") { _ =>
+      newIntReader().readIntegersAsDoubles(NUM_ROWS, doubleVec, 0)
+    }
+    benchmark.addCase("readIntegersAsDoubles (INT32 -> Double, overflow pattern)") { _ =>
+      newOverflowIntReader().readIntegersAsDoubles(NUM_ROWS, doubleVec, 0)
+    }
     benchmark.addCase("readUnsignedLongs (INT64 -> Decimal(20,0))") { _ =>
+      unsignedLongVec.reset()
       newLongReader().readUnsignedLongs(NUM_ROWS, unsignedLongVec, 0)
     }
     benchmark.addCase("skipBytes") { _ => newIntReader().skipBytes(NUM_ROWS) }

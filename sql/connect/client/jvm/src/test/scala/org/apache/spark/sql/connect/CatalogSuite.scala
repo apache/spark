@@ -163,6 +163,27 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     }
   }
 
+  test("createTable(tableName, path) uses spark.sql.sources.default") {
+    val tableName = "default_source_table"
+    withSQLConf("spark.sql.sources.default" -> "json") {
+      withTable(tableName) {
+        withTempPath { dir =>
+          val session = spark
+          import session.implicits._
+          // Write the data as JSON. If createTable hardcoded the parquet provider, reading the
+          // table back would fail because the files are not parquet.
+          Seq((1, "a")).toDF("id", "value").write.json(dir.getPath)
+          spark.catalog.createTable(tableName, dir.getPath)
+          assert(spark.catalog.tableExists(tableName))
+          val ddl = spark.catalog.getCreateTableString(tableName)
+          assert(ddl.toLowerCase(java.util.Locale.ROOT).contains("using json"))
+          // Reading the table back succeeds only if it was created with the json provider.
+          assert(spark.table(tableName).count() == 1)
+        }
+      }
+    }
+  }
+
   test("Cache Table APIs") {
     val parquetTableName = "parquet_table"
     withTable(parquetTableName) {

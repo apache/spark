@@ -49,9 +49,11 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog._
+// `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
+// `org.apache.spark.sql.catalyst.plans.logical._`.
+import org.apache.spark.sql.connector.catalog.{View => V2View, _}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -180,6 +182,36 @@ case class AnalysisContext(
 
     def getSinglePassResolverBridgeState: Option[AnalyzerBridgeState] =
       singlePassResolverBridgeState
+
+    /**
+     * Per-pass memo of the SQL resolution search path (SPARK-57758). Function resolution computes
+     * the ordered path once per analysis pass and reuses it for every [[UnresolvedFunction]],
+     * instead of rebuilding and re-iterating it per node -- the cost that, under Spark Connect's
+     * repeated re-analysis of the growing plan, scaled with plan size x analyze calls.
+     *
+     * The memo lives on the context so it shares the context's per-pass lifetime. `SET PATH` /
+     * `USE` / conf changes all produce a fresh context ([[reset]], [[withNewAnalysisContext]], or
+     * the `copy` / construction for a view or SQL-function body), and a body-level field is not
+     * carried over by `copy`, so a new pass automatically starts with an empty memo and the memo is
+     * collected with the context. It is therefore safe without an identity key or weak reference,
+     * but only for values derived from this context's immutable fields (the path derives from
+     * `resolutionPathEntries` / `catalogAndNamespace`); never memoize anything derived from the
+     * mutable fields above (`relationCache`, `referredTempFunctionNames`, ...).
+     *
+     * INVARIANT: keep this a body `var`, never a constructor parameter. `.copy()` (used by
+     * `withAnalysisContext(function)` and `withOuterPlan`) deliberately does not carry a body
+     * field, which is what gives a SQL-function-body / outer-plan context a fresh memo. Promoting
+     * it to a parameter would copy a stale path across that boundary and silently mis-resolve
+     * (SECTION 17f of `FunctionQualificationSuite` is the regression guard).
+     */
+    private var resolutionPathMemo: Seq[Seq[String]] = _
+
+    def memoizedResolutionPath(compute: => Seq[Seq[String]]): Seq[Seq[String]] = {
+      if (resolutionPathMemo == null) {
+        resolutionPathMemo = compute
+      }
+      resolutionPathMemo
+    }
 }
 
 object AnalysisContext {
@@ -294,6 +326,33 @@ object Analyzer {
         sqlConf.settings.put(SQLConf.ANSI_ENABLED.key, "false")
       }
     }
+  }
+
+  /**
+   * Builds the throwaway [[SQLConf]] used to resolve a SQL UDF body, seeded from the function's
+   * stored configs. Call sites share this seeding but differ in how they apply ANSI and session
+   * overrides, so both are parameters:
+   *  - `alwaysSetAnsiValue` calls [[trySetAnsiValue]] unconditionally (the SessionCatalog plan
+   *    builders); when false, ANSI is set only as part of the session overlay below (the
+   *    [[Analyzer#ResolveSQLFunctions]] / [[Analyzer#ResolveSQLTableFunctions]] rules).
+   *  - `applySessionOverrides` overlays the active session's retained resolution configs via
+   *    [[retainResolutionConfigsForAnalysis]], gated on
+   *    [[SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION]].
+   */
+  def buildSQLFunctionConf(
+      function: SQLFunction,
+      applySessionOverrides: Boolean,
+      alwaysSetAnsiValue: Boolean): SQLConf = {
+    val functionConf = new SQLConf()
+    function.getSQLConfigs.foreach { case (k, v) => functionConf.settings.put(k, v) }
+    if (alwaysSetAnsiValue) {
+      trySetAnsiValue(functionConf)
+    }
+    if (applySessionOverrides &&
+        conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
+      retainResolutionConfigsForAnalysis(newConf = functionConf, existingConf = conf)
+    }
+    functionConf
   }
 }
 
@@ -527,6 +586,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveUnpivot ::
+      ResolveBinBy ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ExtractGenerator ::
       ResolveGenerate ::
@@ -563,6 +623,8 @@ class Analyzer(
       ResolveBinaryArithmetic ::
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
+      ResolveDeduplicate ::
+      ResolveZip ::
       FlattenSequentialStreamingUnion ::
       ValidateSequentialStreamingUnion ::
       ResolveRowLevelCommandAssignments ::
@@ -835,11 +897,12 @@ class Analyzer(
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
-        // The unresolved grouping id will be resolved by ResolveReferences
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newCond = GroupingAnalyticsTransformer.replaceGroupingFunction(
           expression = cond,
           groupByExpressions = groupingExprs,
-          gid = VirtualColumn.groupingIdAttribute,
+          gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs),
           newAlias = (child, name, qualifier) =>
             Alias(child, name.get)(qualifier = qualifier)
         )
@@ -849,8 +912,9 @@ class Analyzer(
       case s @ Sort(order, _, child, _)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
-        val gid = VirtualColumn.groupingIdAttribute
-        // The unresolved grouping id will be resolved by ResolveReferences
+        val gid = GroupingAnalyticsTransformer.groupingIdExpression(groupingExprs)
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newOrder = order.map { expression =>
           GroupingAnalyticsTransformer.replaceGroupingFunction(
             expression = expression,
@@ -1181,9 +1245,9 @@ class Analyzer(
      * so surfacing a downstream "view not found" would hide the real reason.
      *
      * Lookup order against a non-session catalog:
-     *   1. If the catalog is a [[TableViewCatalog]], [[TableViewCatalog.loadTableOrView]] is called
-     *      once. A returned [[MetadataTable]] wrapping a [[ViewInfo]] is interpreted as a
-     *      view; other results are tables.
+     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
+     *      once. A returned [[org.apache.spark.sql.connector.catalog.View]] is interpreted as a
+     *      view; a [[Table]] is a table.
      *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
      *      [[ViewCatalog.loadView]] as the fallback view-resolution path (when implemented).
      */
@@ -1200,17 +1264,18 @@ class Analyzer(
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
             catalog match {
-              case mc: TableViewCatalog =>
-                // Single-RPC perf path: loadTableOrView returns a Table for a table or a
-                // MetadataTable wrapping a ViewInfo for a view. NoSuchTable means
-                // neither exists.
+              case mc: RelationCatalog =>
+                // Single-RPC perf path: loadRelation returns a Table for a table or a View
+                // for a view. NoSuchTable means neither exists.
                 try {
-                  Some(mc.loadTableOrView(ident) match {
-                    case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
-                      ResolvedPersistentView(
-                        catalog, ident, t.getTableInfo.asInstanceOf[ViewInfo])
-                    case table =>
+                  Some(mc.loadRelation(ident) match {
+                    case v: V2View =>
+                      ResolvedPersistentView(catalog, ident, v)
+                    case table: Table =>
                       ResolvedTable.create(catalog.asTableCatalog, ident, table)
+                    case other => throw SparkException.internalError(
+                      s"Catalog ${catalog.name} returned an unexpected relation type for " +
+                        s"$ident: ${other.getClass.getName}. Expected a Table or a View.")
                   })
                 } catch {
                   case _: NoSuchTableException => None
@@ -1229,7 +1294,7 @@ class Analyzer(
                       val v1Ident = v1Table.catalogTable.identifier
                       val v2Ident = Identifier.of(v1Ident.database.toArray, v1Ident.identifier)
                       ResolvedPersistentView(
-                        catalog, v2Ident, new V1ViewInfo(v1Table.catalogTable))
+                        catalog, v2Ident, new V1View(v1Table.catalogTable))
                     case table =>
                       ResolvedTable.create(catalog.asTableCatalog, ident, table)
                   }
@@ -1692,7 +1757,8 @@ class Analyzer(
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
-        o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
+        o.copy(deleteExpr = resolveExpressionByPlanOutput(
+          o.deleteExpr, o.table, includeLastResort = true))
 
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
@@ -1736,7 +1802,7 @@ class Analyzer(
                   // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
-                      UnresolvedAttribute(sourceAttr.name))
+                      UnresolvedAttribute.quoted(sourceAttr.name))
                     Assignment(key, sourceAttr)
                   }
                 } else {
@@ -1772,7 +1838,7 @@ class Analyzer(
                   // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
-                      UnresolvedAttribute(sourceAttr.name))
+                      UnresolvedAttribute.quoted(sourceAttr.name))
                     Assignment(key, sourceAttr)
                   }
                 } else {
@@ -2547,6 +2613,15 @@ class Analyzer(
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
+        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // re-running any analyzer rules.
+        case se: SubqueryExpression
+            if se.plan.resolved &&
+               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+          val newPlan = se.plan.transformWithSubqueries {
+            case r: V2TableReference => relationResolution.resolveReference(r)
+          }
+          se.withNewPlan(newPlan)
       }
     }
 
@@ -2649,11 +2724,10 @@ class Analyzer(
       val plan = v1SessionCatalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
       val resolved = SQLFunctionContext.withSQLFunction {
         // Resolve the SQL function plan using its context.
-        val newConf = new SQLConf()
-        f.function.getSQLConfigs.foreach { case (k, v) => newConf.settings.put(k, v) }
-        if (conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
-          Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
-        }
+        val newConf = Analyzer.buildSQLFunctionConf(
+          function = f.function,
+          applySessionOverrides = true,
+          alwaysSetAnsiValue = false)
         SQLConf.withExistingConf(newConf) {
           AnalysisContext.withAnalysisContext(f.function) {
             executeSameContext(plan)
@@ -2859,6 +2933,12 @@ class Analyzer(
           j.copy(left = newLeft, right = newRight)
         }
 
+      // Defer to a later iteration: once ResolveSQLTableFunctions expands the
+      // table function, the SQLFunctionExpression sits inside the expanded
+      // plan's input-cast Project and is rewritten by a subsequent iteration
+      // of this rule.
+      case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
+
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
         o.transformExpressionsWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {
           case f: SQLFunctionExpression =>
@@ -2953,11 +3033,10 @@ class Analyzer(
       _.containsPattern(SQL_TABLE_FUNCTION)) {
       case SQLTableFunction(name, function, inputs, output) =>
         // Resolve the SQL table function plan using its function context.
-        val newConf = new SQLConf()
-        function.getSQLConfigs.foreach { case (k, v) => newConf.settings.put(k, v) }
-        if (conf.getConf(SQLConf.APPLY_SESSION_CONF_OVERRIDES_TO_FUNCTION_RESOLUTION)) {
-          Analyzer.retainResolutionConfigsForAnalysis(newConf = newConf, existingConf = conf)
-        }
+        val newConf = Analyzer.buildSQLFunctionConf(
+          function = function,
+          applySessionOverrides = true,
+          alwaysSetAnsiValue = false)
         val resolved = SQLConf.withExistingConf(newConf) {
           val plan = v1SessionCatalog.makeSQLTableFunctionPlan(name, function, inputs, output)
           SQLFunctionContext.withSQLFunction {
@@ -3356,7 +3435,15 @@ class Analyzer(
           throw QueryCompilationErrors.nestedGeneratorError(g.generator)
         }
         g.copy(generatorOutput =
-          GeneratorResolution.makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+          GeneratorResolution.makeGeneratorOutput(
+            g.generator, g.generatorOutput.map {
+              case ua: UnresolvedAttribute =>
+                // LATERAL VIEW parser always emits single-part names via
+                // UnresolvedAttribute.quoted; assert to fail loudly if that ever changes.
+                assert(ua.nameParts.length == 1, s"unexpected multi-part name: ${ua.nameParts}")
+                ua.nameParts.head
+              case a => a.name
+            }))
       }
     }
   }
@@ -3826,13 +3913,35 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
-        val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
-          defaultValueFillMode)
+        // Only let TableOutputResolver see generation expression metadata if the catalog
+        // supports auto-filling generated columns on write.
+        val expected = v2Write.table match {
+          case r: DataSourceV2Relation
+            if !GeneratedColumn.supportsGeneratedColumnsOnWrite(r.catalog) =>
+            r.output.map(GeneratedColumn.removeGenerationExpressionMetadata)
+          case _ => v2Write.table.output
+        }
+        val (projection, autoFilledGenCols) =
+          TableOutputResolver.resolveOutputColumnsWithGeneratedInfo(
+            v2Write.table.name, expected, v2Write.query, v2Write.isByName, conf,
+            defaultValueFillMode)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {
             case r: DataSourceV2Relation =>
-              r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+              r.copy(output = r.output.map { attr =>
+                val cleaned = CharVarcharUtils.cleanAttrMetadata(attr)
+                // Strip the generation expression metadata from columns Spark auto-filled, so
+                // ResolveTableConstraints does not add a (redundant) CheckInvariant for them:
+                // their values were computed from the generation expression and are correct by
+                // construction. User-provided generated columns keep the metadata so their
+                // values are still validated.
+                if (autoFilledGenCols.contains(attr.name)) {
+                  GeneratedColumn.removeGenerationExpressionMetadata(cleaned)
+                    .asInstanceOf[AttributeReference]
+                } else {
+                  cleaned
+                }
+              })
             case other => other
           }
           v2Write.withNewQuery(projection).withNewTable(cleanedTable)

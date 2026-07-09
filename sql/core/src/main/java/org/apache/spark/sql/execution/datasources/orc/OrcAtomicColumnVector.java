@@ -27,9 +27,12 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.TimestampLTZNanosType;
+import org.apache.spark.sql.types.TimestampNTZNanosType;
 import org.apache.spark.sql.types.TimestampType;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -37,6 +40,8 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class OrcAtomicColumnVector extends OrcColumnVector {
   private final boolean isTimestamp;
+  private final boolean isTimestampNTZNanos;
+  private final boolean isTimestampLTZNanos;
   private final boolean isDate;
 
   // Column vector for each type. Only 1 is populated for any type.
@@ -54,6 +59,8 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     } else {
       isTimestamp = false;
     }
+    isTimestampNTZNanos = type instanceof TimestampNTZNanosType;
+    isTimestampLTZNanos = type instanceof TimestampLTZNanosType;
 
     if (type instanceof DateType) {
       isDate = true;
@@ -109,6 +116,28 @@ public class OrcAtomicColumnVector extends OrcColumnVector {
     } else {
       return longData.vector[index];
     }
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int rowId) {
+    if (!isTimestampNTZNanos || isNullAt(rowId)) {
+      return null;
+    }
+    int index = getRowIndex(rowId);
+    return DateTimeUtils.localDateTimeToTimestampNanos(
+      timestampData.asScratchTimestamp(index).toLocalDateTime(),
+      ((TimestampNTZNanosType) type).precision());
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int rowId) {
+    if (!isTimestampLTZNanos || isNullAt(rowId)) {
+      return null;
+    }
+    int index = getRowIndex(rowId);
+    return DateTimeUtils.instantToTimestampNanos(
+      timestampData.asScratchTimestamp(index).toInstant(),
+      ((TimestampLTZNanosType) type).precision());
   }
 
   @Override

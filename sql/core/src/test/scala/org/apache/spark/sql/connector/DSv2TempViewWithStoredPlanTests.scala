@@ -33,8 +33,6 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  */
 trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
-  // Uses testTable, cachingTestTable, and testIdent from DSv2ExternalMutationTestBase.
-
   // Scenario 1.1 (session write)
   test(s"${testPrefix}temp view with stored plan reflects session write") {
     withTestSession { session =>

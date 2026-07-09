@@ -29,4 +29,15 @@ private[pipelines] object AutoCdcReservedNames {
 
   /** Common reserved-name prefix shared by AutoCDC internal columns and internal tables. */
   val prefix: String = "__spark_autocdc_"
+
+  /**
+   * Reserved name of the operational metadata column AutoCDC that is projected on every AutoCDC
+   * microbatch, auxiliary table, and target table.
+   *
+   * Shared across all SCD strategies and across the flow resolution, batch-processor, and
+   * streaming-write layers.
+   *
+   * Note that the schema of the CDC metadata column however can and does differ on the SCD-type.
+   */
+  val cdcMetadataColName: String = s"${prefix}metadata"
 }

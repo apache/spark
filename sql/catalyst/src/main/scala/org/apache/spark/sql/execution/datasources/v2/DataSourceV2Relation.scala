@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataColumns, Histogram, HistogramBin, LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -329,7 +329,13 @@ object DataSourceV2Relation {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // The v2 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
+    // We also strip internal metadata that may have leaked onto the table columns, so it does
+    // not surface on the relation's output. Column IDs (FIELD_ID_METADATA_KEY) are an exception:
+    // although the key is listed in INTERNAL_METADATA_KEYS so that other paths drop it, the
+    // column-ID feature deliberately surfaces field IDs on the relation's output, so we keep them.
+    val schema = removeInternalMetadata(
+      CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema),
+      keepFieldIds = true)
     DataSourceV2Relation(table, toAttributes(schema), catalog, identifier, options, timeTravelSpec)
   }
 

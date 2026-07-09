@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -667,11 +668,15 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("variant_get path") {
     def checkInvalidPath(path: String): Unit = {
-      checkErrorInExpression[SparkRuntimeException](
-        variantGet("0", path, IntegerType),
-        "INVALID_VARIANT_GET_PATH",
-        Map("path" -> path, "functionName" -> "`variant_get`")
-      )
+      for ((expr, fn) <- Seq(
+          variantGet("0", path, IntegerType) -> "`variant_get`",
+          tryVariantGet("0", path, IntegerType) -> "`try_variant_get`")) {
+        checkErrorInExpression[SparkRuntimeException](
+          expr,
+          "INVALID_VARIANT_GET_PATH",
+          Map("path" -> path, "functionName" -> fn)
+        )
+      }
     }
 
     testVariantGet("""{"1": {"2": {"3": [4]}}}""", "$.1.2.3[0]", IntegerType, 4)
@@ -679,11 +684,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off nonascii
     testVariantGet("""{"你好": {"世界": "hello"}}""", """$['你好']["世界"]""", StringType, "hello")
     // scalastyle:on nonascii
+    testVariantGet("[1, 2, 3]", "$[2147483647]", IntegerType, null)
 
     checkInvalidPath("")
     checkInvalidPath(".a")
     checkInvalidPath("$1")
     checkInvalidPath("$[-1]")
+    checkInvalidPath("$[2147483648]")
+    checkInvalidPath("$[4294967296]")
     checkInvalidPath("""$['"]""")
 
     checkInvalidPath("$[\"\"\"]")
@@ -1199,5 +1207,262 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Null input.
     checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
+  }
+
+  test("variant_delete") {
+    def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
+      val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))
+      val expr = VariantDelete(Literal(parseJson(input)) +: pathLits)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2, "c": 3}""", Seq("$.a", "$.c"), """{"b":2}""")
+    checkDelete("""{"a": 1}""", Seq("$.missing"), """{"a":1}""")
+    checkDelete("[1, 2, 3]", Seq("$[1]"), "[1,3]")
+    checkDelete("[1, 2, 3]", Seq("$[10]"), "[1,2,3]")
+
+    // Cascading deletes propagate state across paths.
+    checkDelete("[1, 2, 3]", Seq("$[0]", "$[0]", "$[0]"), "[]")
+    checkDelete("""{"a":[1,2,3]}""", Seq("$.a[0]", "$.a[0]", "$.a[0]"), """{"a":[]}""")
+
+    checkDelete("""{"a": {"b": 1, "c": 2}}""", Seq("$.a.b"), """{"a":{"c":2}}""")
+    checkDelete("""[{"b": 1, "c": 2}]""", Seq("$[0].b"), """[{"c":2}]""")
+
+    // Empty containers are preserved; the parent is never collapsed to NULL.
+    checkDelete("""{"a": 1}""", Seq("$.a"), "{}")
+    checkDelete("[1]", Seq("$[0]"), "[]")
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a.b"), """{"a":{}}""")
+    checkDelete("""{"a": []}""", Seq("$.a[0]"), """{"a":[]}""")
+
+    checkDelete(
+      """{"a": {"b": {"c": {"d": 1}}}}""",
+      Seq("$.a.b.c.d"),
+      """{"a":{"b":{"c":{}}}}""")
+
+    checkDelete("""{"a": [10, 20, 30]}""", Seq("$.a[1]"), """{"a":[10,30]}""")
+    checkDelete(
+      """{"a": [{"b": 1, "c": 2}, {"b": 3}]}""",
+      Seq("$.a[0].b"),
+      """{"a":[{"c":2},{"b":3}]}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq("$['a']"), """{"b":2}""")
+    checkDelete("""{"a": 1, "b": 2}""", Seq("""$["a"]"""), """{"b":2}""")
+
+    // Pure deep-array nesting: only `ArrayIndexSegment`s, never visits the `OBJECT` branch.
+    checkDelete("[[[1, 2, 3]]]", Seq("$[0][0][1]"), "[[[1,3]]]")
+    checkDelete("[[10, 20], [30, 40]]", Seq("$[0][1]"), "[[10],[30,40]]")
+
+    // All three key notations (`.k`, `['k']`, `["k"]`) alternating within a single path.
+    checkDelete(
+      """{"a": {"b": {"c": 1, "d": 2}}}""",
+      Seq("""$['a'].b["c"]"""),
+      """{"a":{"b":{"d":2}}}""")
+
+    checkDelete("""{"": 1, "a": 2}""", Seq("$['']"), """{"a":2}""")
+    checkDelete("""{"?": 1, "a": 2}""", Seq("$['?']"), """{"a":2}""")
+    checkDelete(
+      """{"key with spaces": 1, "a": 2}""", Seq("$['key with spaces']"), """{"a":2}""")
+    checkDelete("""{"fb:testid": 1, "a": 2}""", Seq("$.fb:testid"), """{"a":2}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, "$.a"), """{"b":2}""")
+
+    // After a deletion empties the parent, a subsequent nested path is a silent no-op.
+    checkDelete("""{"a": {"b": 1}}""", Seq("$.a", "$.a.b"), "{}")
+
+    // Type mismatches between segment and value are silent no-ops.
+    checkDelete("""{"a": 5}""", Seq("$.a.b"), """{"a":5}""")
+    checkDelete("[1, 2, 3]", Seq("$.a"), "[1,2,3]")
+    checkDelete("""{"a": 1}""", Seq("$[0]"), """{"a":1}""")
+
+    checkDelete("""{"a": 1, "b": 2}""", Seq[String](null), """{"a":1,"b":2}""")
+
+    // All literal-NULL paths: `flatMap` leaves `pathArgs` empty; input is returned unchanged.
+    checkDelete("""{"a": 1, "b": 2}""", Seq(null, null, null), """{"a":1,"b":2}""")
+
+    checkDelete("""{"a": null, "b": 2}""", Seq("$.a"), """{"b":2}""")
+    checkDelete("[null, 1, null]", Seq("$[0]"), "[1,null]")
+
+    // Mixed literal + dynamic path exercises both `ParsedDeletePath` and `DynamicDeletePath`
+    // arms of `eval` in a single call.
+    val mixedLitDyn = VariantDelete(Seq(
+      Literal(parseJson("""{"a": 1, "b": 2, "c": 3}""")),
+      Literal("$.a"),
+      BoundReference(0, StringType, nullable = true)))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(mixedLitDyn, StringType)),
+      """{"b":2}""",
+      InternalRow(UTF8String.fromString("$.c")))
+
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(
+        Cast(VariantDelete(Seq(Literal.create(null, VariantType), Literal("$.a"))), StringType)),
+      null)
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal("$")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_delete`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      ResolveTimeZone.resolveTimeZones(
+        VariantDelete(Seq(Literal(parseJson("""{"a": 1}""")), Literal(".a")))),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> ".a", "functionName" -> "`variant_delete`"))
+
+    for (path <- Seq("$[2147483648]", "$[4294967296]")) {
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(
+          VariantDelete(Seq(Literal(parseJson("[1, 2, 3]")), Literal(path)))),
+        "INVALID_VARIANT_PATH",
+        Map("path" -> path, "functionName" -> "`variant_delete`"))
+    }
+
+    val noPaths = VariantDelete(Seq(Literal(parseJson("""{"a": 1}"""))))
+    intercept[org.apache.spark.sql.AnalysisException] {
+      noPaths.checkInputDataTypes()
+    }
+  }
+
+  test("variant_insert") {
+    def checkInsert(input: String, path: String, value: Expression, expected: String): Unit = {
+      val expr = VariantInsert(
+        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Object inserts.
+    checkInsert("""{"a": 1}""", "$.b", Literal(2), """{"a":1,"b":2}""")
+    checkInsert("{}", "$.a", Literal(1), """{"a":1}""")
+    checkInsert("""{"a": {"b": 1}}""", "$.a.c", Literal(3), """{"a":{"b":1,"c":3}}""")
+
+    // Missing intermediate keys are created; the next segment's kind picks the container.
+    checkInsert("{}", "$.a.b.c", Literal(99), """{"a":{"b":{"c":99}}}""")
+    checkInsert("{}", "$.a[0]", Literal(1), """{"a":[1]}""")
+
+    // Array inserts shift existing elements right.
+    checkInsert("""["a","b","c"]""", "$[1]", Literal("z"), """["a","z","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[0]", Literal("z"), """["z","a","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[3]", Literal("z"), """["a","b","c","z"]""")
+    checkInsert("""["a","b"]""", "$[5]", Literal("z"), """["a","b",null,null,null,"z"]""")
+
+    // A missing intermediate created as an array is also padded with nulls up to the index.
+    checkInsert("""{"a": []}""", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+    checkInsert("""{"a": [1, 2]}""", "$.a[3].b", Literal(2), """{"a":[1,2,null,{"b":2}]}""")
+    checkInsert("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
+    checkInsert("{}", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+
+    // Descending through an existing container, then inserting into it.
+    checkInsert("""[{"a": 1}]""", "$[0].b", Literal(2), """[{"a":1,"b":2}]""")
+    checkInsert("""[{"x": 0}, {"a": 1}]""", "$[1].b", Literal(2), """[{"x":0},{"a":1,"b":2}]""")
+    checkInsert("""{"a": [1, 2, 3]}""", "$.a[1]", Literal(9), """{"a":[1,9,2,3]}""")
+
+    // Bracket and dot notations are interchangeable: `['k']`, `["k"]`, and `.k` in one path.
+    checkInsert(
+      """{"a": {"b": {}}}""", """$['a'].b["c"]""", Literal(1), """{"a":{"b":{"c":1}}}""")
+
+    // Special / edge-case keys.
+    checkInsert("""{"a": 1}""", "$['']", Literal(2), """{"":2,"a":1}""")
+    checkInsert("""{"a": 1}""", "$['?']", Literal(2), """{"?":2,"a":1}""")
+    checkInsert(
+      """{"a": 1}""", "$['key with spaces']", Literal(2), """{"a":1,"key with spaces":2}""")
+    checkInsert("""{"a": 1}""", "$.fb:testid", Literal(2), """{"a":1,"fb:testid":2}""")
+
+    // Insert a variant null (the JSON null literal) vs. a verbatim string vs. structured JSON.
+    checkInsert("""{"a": 1}""", "$.b", Literal(parseJson("null")), """{"a":1,"b":null}""")
+    checkInsert("{}", "$.a", Literal("""{"x":1}"""), """{"a":"{\"x\":1}"}""")
+    checkInsert("{}", "$.a", Literal(parseJson("""{"x":1}""")), """{"a":{"x":1}}""")
+
+    // Values of various castable types exercise the corresponding `castToVariant` branches.
+    checkInsert("{}", "$.a", Literal(true), """{"a":true}""")
+    checkInsert("{}", "$.a", Literal(7L), """{"a":7}""")
+    checkInsert("{}", "$.a", Literal(2.5), """{"a":2.5}""")
+    checkInsert(
+      "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
+
+    // NULL-intolerant: any NULL argument yields NULL.
+    checkEvaluation(
+      VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1)),
+      null)
+    checkInsert("""{"a": 1}""", null, Literal(1), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, NullType), null)
+
+    val dynamic = VariantInsert(
+      Literal(parseJson("""{"a": 1}""")),
+      BoundReference(0, StringType, nullable = true),
+      Literal(2))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+      """{"a":1,"b":2}""",
+      InternalRow(UTF8String.fromString("$.b")))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
+      "VARIANT_DUPLICATE_KEY",
+      Map("key" -> "a"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a": 5}""")), Literal("$.a[0]"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("5")), Literal("$.a"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
+
+    // Structs and maps are rejected at analysis.
+    Seq(
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
+    ).foreach { v =>
+      assert(
+        VariantInsert(Literal(parseJson("{}")), Literal("$.a"), v).checkInputDataTypes().isFailure)
+    }
+
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1)),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "$", "functionName" -> "`variant_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("{}")), Literal("abc"), Literal(1)),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "abc", "functionName" -> "`variant_insert`"))
+
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("{}")), Literal("$.a[2000000000]"), Literal(1)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
   }
 }

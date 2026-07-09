@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -240,16 +241,19 @@ private[hive] trait HiveInspectors {
     // raw java list type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.List[_]]) =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3090", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_LIST",
+        messageParameters = Map.empty)
 
     // raw java map type unsupported
     case c: Class[_] if isSubClassOf(c, classOf[java.util.Map[_, _]]) =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3091", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.RAW_MAP",
+        messageParameters = Map.empty)
 
     case _: WildcardType =>
       throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3092", messageParameters = Map.empty)
+        errorClass = "UNSUPPORTED_HIVE_FUNCTION_TYPE.WILDCARD",
+        messageParameters = Map.empty)
 
     case c => throw new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_3093", messageParameters = Map("c" -> c.toString))
@@ -330,8 +334,22 @@ private[hive] trait HiveInspectors {
         withNullSafe(o =>
             DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: JavaTimestampObjectInspector =>
-        withNullSafe(o =>
-            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         withNullSafe(o => getDecimalWritable(o.asInstanceOf[Decimal]))
       case _: HiveDecimalObjectInspector =>
@@ -346,9 +364,39 @@ private[hive] trait HiveInspectors {
       case _: DateObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: TimestampObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getTimestampWritable(o))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _: TimestampNTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _ =>
+            getTimestampWritable(o)
+        })
       case _: TimestampObjectInspector =>
-        withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveIntervalDayTimeObjectInspector  if x.preferWritable() =>
         withNullSafe(o => getHiveIntervalDayTimeWritable(o))
       case _: HiveIntervalDayTimeObjectInspector =>
@@ -753,6 +801,73 @@ private[hive] trait HiveInspectors {
     }
 
   /**
+   * Returns an unwrapper that converts a Hive value into a Catalyst value, using the target
+   * Catalyst `dataType` to preserve nanosecond timestamp precision. The plain
+   * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
+   * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
+   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. Any other
+   * type is delegated to the `ObjectInspector`-only overload.
+   */
+  def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
+    (objectInspector, dataType) match {
+      case (ti: TimestampObjectInspector, t: TimestampNTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.localDateTimeToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toLocalDateTime, t.precision)
+          } else {
+            null
+          }
+        }
+      case (ti: TimestampObjectInspector, t: TimestampLTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.instantToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toInstant, t.precision)
+          } else {
+            null
+          }
+        }
+      case (li: ListObjectInspector, ArrayType(elementType, _)) =>
+        val unwrapper = unwrapperFor(li.getListElementObjectInspector, elementType)
+        data: Any => {
+          if (data != null) {
+            Option(li.getList(data))
+              .map(l => new GenericArrayData(l.asScala.map(unwrapper).toArray))
+              .orNull
+          } else {
+            null
+          }
+        }
+      case (mi: MapObjectInspector, MapType(keyType, valueType, _)) =>
+        val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector, keyType)
+        val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector, valueType)
+        data: Any => {
+          if (data != null) {
+            val map = mi.getMap(data)
+            if (map == null) null else ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+          } else {
+            null
+          }
+        }
+      case (si: StructObjectInspector, st: StructType) =>
+        val fields = si.getAllStructFieldRefs.asScala
+        val unwrappers = fields.zip(st.fields).map { case (field, structField) =>
+          val unwrapper = unwrapperFor(field.getFieldObjectInspector, structField.dataType)
+          data: Any => unwrapper(si.getStructFieldData(data, field))
+        }
+        data: Any => {
+          if (data != null) {
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
+          } else {
+            null
+          }
+        }
+      case _ =>
+        unwrapperFor(objectInspector)
+    }
+
+  /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
    *
@@ -849,6 +964,14 @@ private[hive] trait HiveInspectors {
     case _: UserDefinedType[_] =>
       val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
       toInspector(sqlType)
+    // Hive has no TIME type, so it cannot be represented by any Hive object inspector.
+    case _: TimeType => throw unsupportedHiveType(dataType)
+  }
+
+  private def unsupportedHiveType(dataType: DataType): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> toSQLType(dataType)))
   }
 
   /**
@@ -917,6 +1040,9 @@ private[hive] trait HiveInspectors {
       toInspector(dt)
     case Literal(_, dt: UserDefinedType[_]) =>
       toInspector(dt.sqlType)
+    // Hive has no TIME type, so a TIME constant cannot be mapped to a Hive object inspector.
+    case Literal(_, dt: TimeType) =>
+      throw unsupportedHiveType(dt)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
       throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
@@ -1169,6 +1295,8 @@ private[hive] trait HiveInspectors {
       case NullType => voidTypeInfo
       case _: DayTimeIntervalType => intervalDayTimeTypeInfo
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo
+      // Hive has no TIME type, so there is no Hive TypeInfo to map it to.
+      case _: TimeType => throw unsupportedHiveType(dt)
       case dt =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))

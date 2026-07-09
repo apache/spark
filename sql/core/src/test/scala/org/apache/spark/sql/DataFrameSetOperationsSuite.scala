@@ -22,7 +22,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -1617,6 +1618,47 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
     }
   }
 
+  test("SPARK-57881: union partitioning - keyed partitioning") {
+    withSQLConf("spark.sql.catalog.testcat" -> classOf[InMemoryCatalog].getName) {
+      sql("CREATE TABLE testcat.ns.t1 (id bigint, data string) PARTITIONED BY (id)")
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      sql("CREATE TABLE testcat.ns.t2 (id bigint, data string) PARTITIONED BY (id)")
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+
+      def unionDF: DataFrame = sql(
+        """SELECT id, data FROM testcat.ns.t1
+          |UNION ALL
+          |SELECT id, data FROM testcat.ns.t2
+          |""".stripMargin)
+
+      val correctResult = withSQLConf(SQLConf.UNION_OUTPUT_PARTITIONING.key -> "false") {
+        unionDF.collect()
+      }
+
+      Seq(true, false).foreach { enabled =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> enabled.toString) {
+          val union = unionDF
+          val unionExec = union.queryExecution.executedPlan.collect { case u: UnionExec => u }
+          assert(unionExec.size == 1)
+
+          val partitioning = unionExec.head.outputPartitioning
+          if (enabled) {
+            // The two children report compatible KeyedPartitionings (both identity(id)); the
+            // union merges their partition keys into a single KeyedPartitioning.
+            assert(partitioning.isInstanceOf[KeyedPartitioning],
+              "union of compatible KeyedPartitionings should report a merged KeyedPartitioning")
+          } else {
+            assert(partitioning.isInstanceOf[UnknownPartitioning])
+          }
+
+          checkAnswer(union, correctResult)
+        }
+      }
+    }
+  }
+
   test("SPARK-53550: union partitioning should compare canonicalized attributes") {
     withSQLConf(
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
@@ -1641,6 +1683,43 @@ class DataFrameSetOperationsSuite extends SharedSparkSession with AdaptiveSparkP
         checkAnswer(df, Row("jim", 20) :: Row("mike", 30) :: Nil)
       }
     }
+  }
+
+  test("SPARK-51262: exceptAll after dropDuplicates with subset should not throw") {
+    // Data where dropDuplicates(subset) produces deterministic results - to avoid test flakiness.
+    val df1 = spark.createDataFrame(Seq(
+      (1, "a", 100),
+      (2, "b", 200),
+      (3, "c", 300)
+    )).toDF("id", "name", "value")
+
+    val df2 = spark.createDataFrame(Seq(
+      (1, "a", 100)
+    )).toDF("id", "name", "value")
+
+    // dropDuplicates with subset - each (id, name) is already unique so output is deterministic
+    val deduped = df1.dropDuplicates("id", "name")
+
+    // exceptAll should work without INTERNAL_ERROR_ATTRIBUTE_NOT_FOUND
+    val result = deduped.exceptAll(df2)
+    assert(result.columns === Array("id", "name", "value"))
+    val rows = result.collect().sortBy(_.getInt(0))
+    assert(rows.length === 2)
+    assert(rows(0) === Row(2, "b", 200))
+    assert(rows(1) === Row(3, "c", 300))
+
+    // Also verify except (non-all) works and returns correct values
+    val result2 = deduped.except(df2)
+    val rows2 = result2.collect().sortBy(_.getInt(0))
+    assert(rows2.length === 2)
+    assert(rows2(0) === Row(2, "b", 200))
+    assert(rows2(1) === Row(3, "c", 300))
+
+    // intersectAll should also work and return the matching row
+    val result3 = deduped.intersectAll(df2)
+    val rows3 = result3.collect()
+    assert(rows3.length === 1)
+    assert(rows3.head === Row(1, "a", 100))
   }
 }
 

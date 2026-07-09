@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.expressions.{Attribute,
   ExternalUserDefinedFunction}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -46,6 +47,7 @@ trait ExternalUDF extends UnaryNode {
  * @param function         The UDF to invoke. Output attributes are
  *                         derived from `function.dataType`.
  * @param isBarrier        Whether to use barrier execution.
+ * @param profile          Optional resource profile for the UDF execution.
  * @param child            Input relation whose partitions are processed.
  */
 @Experimental
@@ -53,13 +55,16 @@ case class MapPartitionsExternalUDF(
     workerSpec: UDFWorkerSpecification,
     function: ExternalUserDefinedFunction,
     isBarrier: Boolean,
+    profile: Option[ResourceProfile],
     child: LogicalPlan)
   extends ExternalUDF {
 
-  // Map partitions always operate on StructTypes
-  override def output: Seq[Attribute] = toAttributes(
+  val nodeOutputAttributes = toAttributes(
     function.dataType.asInstanceOf[StructType]
   )
+
+  // Map partitions always operate on StructTypes
+  override def output: Seq[Attribute] = nodeOutputAttributes
 
   override protected def withNewChildInternal(
       newChild: LogicalPlan): MapPartitionsExternalUDF =

@@ -270,14 +270,10 @@ case class ShuffledHashJoinExec private (
       buildNullRow: GenericInternalRow,
       isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
-    TaskContext.get().addTaskCompletionListener[Unit](_ => {
-      // At the end of the task, update the task's memory usage for this
-      // [[OpenHashSet]] to track matched rows, which has two parts:
-      // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
-      val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
-      val dataEstimatedSize = matchedRows.capacity * 8
-      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
-    })
+    // At the end of the task, update the task's memory usage for this OpenHashSet that tracks
+    // matched rows (its underlying bit-set plus data array).
+    JoinHelper.recordOpenHashSetMemoryUsageOnTaskCompletion(
+      matchedRows, longMetric("buildDataSize"))
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex

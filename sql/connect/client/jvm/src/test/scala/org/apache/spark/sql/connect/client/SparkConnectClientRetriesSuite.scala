@@ -275,4 +275,38 @@ class SparkConnectClientRetriesSuite extends ConnectFunSuite with Eventually {
       policy.initialBackoff.toMillis * math.pow(policy.backoffMultiplier, i + 2).toLong)
     assertLongSequencesAlmostEqual(st.times, expectedSleeps, delta = policy.jitter.toMillis)
   }
+
+  test("DEADLINE_EXCEEDED is not retryable by defaultPolicy") {
+    // DEADLINE_EXCEEDED must not be retried via canRetry. The reattachable execute path
+    // handles it separately by converting it to RetryException in the iterator.
+    val exception = new StatusRuntimeException(Status.DEADLINE_EXCEEDED)
+    val canRetry = RetryPolicy.defaultPolicy().canRetry
+    assert(canRetry(exception) == false)
+  }
+
+  test("DEADLINE_EXCEEDED is not retried by retry handler") {
+    // Verify the function is called exactly once and the exception propagates immediately.
+    val dummyFn = new DummyFn(new StatusRuntimeException(Status.DEADLINE_EXCEEDED), numFails = 1)
+    val retryPolicies = RetryPolicy.defaultPolicies()
+    val retryHandler = new GrpcRetryHandler(retryPolicies, sleep = _ => {})
+    intercept[StatusRuntimeException] {
+      retryHandler.retry { dummyFn.fn() }
+    }
+    assert(dummyFn.counter == 1)
+  }
+
+  test("RpcDeadlines.disabled creates an instance with all deadlines set to None") {
+    val disabled = RpcDeadlines.disabled
+    assert(disabled.reattachableExecutePlan.isEmpty)
+    assert(disabled.reattachExecute.isEmpty)
+    assert(disabled.analyzePlan.isEmpty)
+    assert(disabled.addArtifacts.isEmpty)
+    assert(disabled.config.isEmpty)
+    assert(disabled.interrupt.isEmpty)
+    assert(disabled.releaseSession.isEmpty)
+    assert(disabled.artifactStatus.isEmpty)
+    assert(disabled.cloneSession.isEmpty)
+    assert(disabled.getStatus.isEmpty)
+    assert(disabled.fetchErrorDetails.isEmpty)
+  }
 }

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
+import org.apache.spark.sql.catalyst.catalog.SQLFunction.{padArgumentsWithDefaults, parseDefault}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
@@ -59,6 +59,13 @@ import org.apache.spark.util.Utils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
+
+  /**
+   * Metadata key marking an Alias / Attribute as originating from a SQL UDF input parameter.
+   * Consumed by name resolution: a parameterless built-in function takes precedence over a
+   * tagged alias of the same name.
+   */
+  val SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY: String = "__funcInputAlias"
 
   /**
    * Kind of session-scoped function namespace for lookup/resolve.
@@ -114,7 +121,7 @@ class SessionCatalog(
 
   /**
    * When set, unqualified builtin/temp function resolution uses this fixed kind order instead of
-   * [[catalogManagerForSessionFunctionKinds]] / [[SQLConf.systemPathOrder]]. For unit tests only;
+   * [[catalogManagerForSessionFunctionKinds]] / [[SQLConf.defaultPathOrder]]. For unit tests only;
    * production relies on the catalog manager binding.
    */
   @volatile private var sessionFunctionKindsTestOverride: Option[Seq[SessionFunctionKind]] = None
@@ -128,8 +135,9 @@ class SessionCatalog(
    * applied).
    *
    * When unset (e.g. standalone [[SessionCatalog]] in tests), kinds derive from
-   * [[SQLConf.systemPathOrder]] -- the seeded default path -- without assuming other legacy
-   * resolution-order conf beyond seeding `defaultPathOrder`.
+   * [[SQLConf.defaultPathOrder]] with no catalog entries -- equivalent to the system-namespace
+   * entries of the spark-built-in default path. This includes both `system.builtin` and
+   * `system.session` so unqualified temp functions are still resolvable in test setups.
    */
   @volatile private var catalogManagerForSessionFunctionKinds: Option[CatalogManager] = None
 
@@ -154,7 +162,8 @@ class SessionCatalog(
   /**
    * Session function kinds in resolution order for unqualified lookups: test override if set,
    * else live PATH from [[catalogManagerForSessionFunctionKinds]], else
-   * [[SQLConf.systemPathOrder]].
+   * [[SQLConf.defaultPathOrder]] with no catalog entries (so `system.builtin` and
+   * `system.session` are both reachable in standalone test mode).
    *
    * MUST NOT be called while holding [[SessionCatalog]]'s intrinsic lock (see SPARK-56939):
    * the path-driven branch delegates to [[CatalogManager]], which has its own intrinsic lock
@@ -169,7 +178,7 @@ class SessionCatalog(
           // (currentCatalog, currentNamespace, path) triple in a single critical section.
           cm.sessionFunctionKindsForUnqualifiedResolution()
         case None =>
-          CatalogManager.systemFunctionKindsFromPath(conf.systemPathOrder)
+          CatalogManager.systemFunctionKindsFromPath(conf.defaultPathOrder(Seq.empty))
       }
     }
 
@@ -1114,7 +1123,7 @@ class SessionCatalog(
     // so the SubqueryAlias qualifier reflects the real catalog + multi-part namespace.
     // Fall back to the historical 3-part form for v1 session-catalog tables -- we intentionally
     // always include `SESSION_CATALOG_NAME` here and ignore
-    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-MetadataTable behavior.
+    // `LEGACY_NON_IDENTIFIER_OUTPUT_CATALOG_NAME` to preserve pre-v2-DelegatingTable behavior.
     val multiParts = metadata.multipartIdentifier.getOrElse {
       val qualifiedIdent = qualifyIdentifier(metadata.identifier)
       Seq(CatalogManager.SESSION_CATALOG_NAME, qualifiedIdent.database.get, qualifiedIdent.table)
@@ -1878,20 +1887,16 @@ class SessionCatalog(
       name: String,
       function: SQLFunction,
       input: Seq[Expression]): LogicalPlan = {
-    def metaForFuncInputAlias = {
-      new MetadataBuilder()
-        .putString("__funcInputAlias", "true")
-        .build()
-    }
     assert(!function.isTableFunc,
       "Function '" + function.name + "' is a table function. " +
       "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
     val funcName = function.name.funcName
 
     // Use captured SQL configs when parsing a SQL function.
-    val conf = new SQLConf()
-    function.getSQLConfigs.foreach { case (k, v) => conf.settings.put(k, v) }
-    Analyzer.trySetAnsiValue(conf)
+    val conf = Analyzer.buildSQLFunctionConf(
+      function = function,
+      applySessionOverrides = false,
+      alwaysSetAnsiValue = true)
     SQLConf.withExistingConf(conf) {
       val inputParam = function.inputParam
       val returnType = function.getScalarFuncReturnType
@@ -1928,17 +1933,11 @@ class SessionCatalog(
         // function name as a qualifier. E.G.:
         // `create function foo(a int) returns int return foo.a`
         val qualifier = Seq(funcName)
-        val paddedInput = input ++
-          param.takeRight(paramSize - input.size).map { p =>
-            val defaultExpr = p.getDefault()
-            if (defaultExpr.isDefined) {
-              Cast(parseDefault(defaultExpr.get, parser), p.dataType)
-            } else {
-              throw QueryCompilationErrors.wrongNumArgsError(
-                name, paramSize.toString, input.size)
-            }
-          }
+        val paddedInput = padArgumentsWithDefaults(input, param, name, parser)
 
+        val funcInputMetadata = new MetadataBuilder()
+          .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
+          .build()
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
             // Add outer references to all resolved attributes and outer references in the function
@@ -1948,10 +1947,11 @@ class SessionCatalog(
               case a: Attribute if a.resolved => OuterReference(a)
               case o: OuterReference => OuterReference(o)
             }
+            // Mark the alias as function input so name resolution can give a parameterless
+            // built-in function precedence over a same-named UDF parameter.
             Alias(Cast(outer, param.dataType), param.name)(
               qualifier = qualifier,
-              // mark the alias as function input
-              explicitMetadata = Some(metaForFuncInputAlias))
+              explicitMetadata = Some(funcInputMetadata))
         }
       }.getOrElse(Nil)
 
@@ -2044,6 +2044,10 @@ class SessionCatalog(
           val outer = expr.transform {
             case a: Attribute => OuterReference(a)
           }
+          // No SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY marker here: a table UDF body references
+          // its parameter as an outer reference (the param lives in the lateral join's left
+          // child), so resolveColumnByName returns None and a parameterless built-in function
+          // already wins via the pre-existing "function beats outer reference" precedence.
           Alias(Cast(outer, param.dataType), param.name)(qualifier = qualifier)
       }
       val inputPlan = Project(inputCast, OneRowRelation())

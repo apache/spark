@@ -7,6 +7,7 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
+ALIGN	false
 ALL	false
 ALTER	false
 ALWAYS	false
@@ -15,6 +16,7 @@ AND	false
 ANTI	false
 ANY	false
 ANY_VALUE	false
+APPLY	false
 APPROX	false
 ARCHIVE	false
 ARRAY	false
@@ -24,12 +26,17 @@ ASENSITIVE	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	false
+AUTO	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
 BIGINT	false
+BIN	false
 BINARY	false
 BINDING	false
+BIN_DISTRIBUTE_RATIO	false
+BIN_END	false
+BIN_START	false
 BOOLEAN	false
 BOTH	false
 BUCKET	false
@@ -44,6 +51,7 @@ CASE	false
 CAST	false
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -216,6 +224,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALTIME	false
 LOCATION	false
 LOCK	false
 LOCKS	false
@@ -329,6 +338,7 @@ SECURITY	false
 SELECT	false
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	false
@@ -392,6 +402,7 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNIFORM	false
 UNION	false
 UNIQUE	false
 UNKNOWN	false
@@ -419,6 +430,7 @@ WEEKS	false
 WHEN	false
 WHERE	false
 WHILE	false
+WIDTH	false
 WINDOW	false
 WITH	false
 WITHIN	false

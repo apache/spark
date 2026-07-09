@@ -912,6 +912,41 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
+  test("SPARK-57198: skip the divide-by-zero check when the divisor is a non-zero literal") {
+    def codeOf(e: Expression): String = e.genCode(new CodegenContext).code.toString
+
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // A non-zero literal divisor makes the zero check dead code; codegen must not emit it.
+        Seq(
+          Divide(Literal(1.0), Literal(2.0)),
+          Remainder(Literal(7), Literal(3)),
+          IntegralDivide(Literal(7L), Literal(3L)),
+          Pmod(Literal(7), Literal(3))).foreach { e =>
+          val code = codeOf(e)
+          assert(!code.contains("ByZeroError"),
+            s"expected no by-zero check for a non-zero literal divisor in $e:\n$code")
+        }
+
+        // A variable (non-foldable) divisor keeps the check: in ANSI mode the by-zero error must
+        // still be generated.
+        Seq(
+          Divide(
+            BoundReference(0, DoubleType, nullable = false),
+            BoundReference(1, DoubleType, nullable = false)),
+          Pmod(
+            BoundReference(0, IntegerType, nullable = false),
+            BoundReference(1, IntegerType, nullable = false))).foreach { e =>
+          val code = codeOf(e)
+          if (ansi) {
+            assert(code.contains("ByZeroError"),
+              s"expected a by-zero check for a variable divisor in $e:\n$code")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
     Seq(EvalMode.ANSI, EvalMode.LEGACY).foreach { evalMode =>
       checkExceptionInExpression[ArithmeticException](

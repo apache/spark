@@ -84,6 +84,7 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
             cwd=SPARK_HOME,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=180,
         )
 
@@ -138,7 +139,7 @@ def read_classpath(project_relative_path, project_name_map=None):
 
     # First try to read classpath.txt (Maven builds)
     if os.path.exists(classpath_file):
-        with open(classpath_file, "r") as f:
+        with open(classpath_file, "r", encoding="utf-8") as f:
             classpath = f.read().strip()
         # Replace colon with comma for spark-submit --jars format
         return classpath.replace(":", ",")
@@ -168,52 +169,6 @@ except Exception as e:
     test_not_compiled_message = str(e)
 
 test_compiled = not test_not_compiled_message
-
-
-def with_sql_conf(pairs):
-    """
-    Class decorator that sets the given Spark confs in ``setUpClass`` and unsets them in
-    ``tearDownClass``, around the calls to the inherited ``setUpClass``/``tearDownClass``.
-
-    The decorated class is expected to expose ``cls.spark`` (a ``SparkSession``) after the
-    inherited ``setUpClass`` runs — typically by extending ``ReusedSQLTestCase`` or
-    ``ReusedConnectTestCase``.
-
-    If the decorated class defines its own ``setUpClass``/``tearDownClass``, those are
-    called instead of the inherited ones; the conf set/unset happens after setUpClass
-    and before tearDownClass respectively.
-    """
-    assert isinstance(pairs, dict), "pairs should be a dictionary."
-
-    def decorator(cls):
-        own_setup = cls.__dict__.get("setUpClass")
-        own_teardown = cls.__dict__.get("tearDownClass")
-
-        @classmethod
-        def setUpClass(klass):
-            if own_setup is not None:
-                own_setup.__func__(klass)
-            else:
-                super(cls, klass).setUpClass()
-            for key, value in pairs.items():
-                klass.spark.conf.set(key, value)
-
-        @classmethod
-        def tearDownClass(klass):
-            try:
-                for key in pairs:
-                    klass.spark.conf.unset(key)
-            finally:
-                if own_teardown is not None:
-                    own_teardown.__func__(klass)
-                else:
-                    super(cls, klass).tearDownClass()
-
-        cls.setUpClass = setUpClass
-        cls.tearDownClass = tearDownClass
-        return cls
-
-    return decorator
 
 
 class SQLTestUtils:

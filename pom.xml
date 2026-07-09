@@ -113,6 +113,7 @@
     <module>connector/protobuf</module>
     <module>udf/worker/proto</module>
     <module>udf/worker/core</module>
+    <module>udf/worker/grpc</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -127,7 +128,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
-    <log4j.version>2.25.4</log4j.version>
+    <log4j.version>2.26.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.5.0</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -146,7 +147,7 @@
     <parquet.version>1.17.1</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.8</jetty.version>
+    <jetty.version>12.1.10</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -183,7 +184,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.22.0</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
@@ -199,10 +200,10 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.6.0-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
-    <gson.version>2.13.2</gson.version>
+    <gson.version>2.14.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.1.11</jersey.version>
-    <joda.version>2.14.1</joda.version>
+    <joda.version>2.14.2</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -214,14 +215,14 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
-    <tink.version>1.20.0</tink.version>
+    <tink.version>1.22.0</tink.version>
     <!--
       TODO: Once upgrade datasketches to a version that supports Java 25,
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.13.Final</netty.version>
-    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
+    <netty.version>4.2.15.Final</netty.version>
+    <netty-tcnative.version>2.0.80.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -236,13 +237,13 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
-    <ammonite.version>3.0.8</ammonite.version>
+    <ammonite.version>3.0.9</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.7.0</kubernetes-client.version>
-    <vertx.version>4.5.26</vertx.version>
+    <kubernetes-client.version>7.8.0</kubernetes-client.version>
+    <vertx.version>4.5.28</vertx.version>
     <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -347,7 +348,7 @@
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
     <postgresql.version>42.7.11</postgresql.version>
-    <db2.jcc.version>11.5.9.0</db2.jcc.version>
+    <db2.jcc.version>12.1.4.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
@@ -772,7 +773,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.8.4</version>
+        <version>10.10.1.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -882,7 +883,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-8</version>
+        <version>1.5.7-9</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1106,6 +1107,20 @@
         <groupId>io.jsonwebtoken</groupId>
         <artifactId>jjwt-bom</artifactId>
         <version>${jjwt.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-bom</artifactId>
+        <version>${io.grpc.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.fabric8</groupId>
+        <artifactId>kubernetes-client-bom</artifactId>
+        <version>${kubernetes-client.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -1381,13 +1396,12 @@
         <version>${postgresql.version}</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-55707: Re-enable DB2 JDBC Driver tests) -->
-      <!--dependency>
+      <dependency>
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
         <version>${db2.jcc.version}</version>
         <scope>test</scope>
-      </dependency-->
+      </dependency>
       <dependency>
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>
@@ -1985,6 +1999,11 @@
           <exclusion>
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
+          </exclusion>
+          <!-- javax.xml.stream is provided by the JDK (java.xml module) -->
+          <exclusion>
+            <groupId>stax</groupId>
+            <artifactId>stax-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

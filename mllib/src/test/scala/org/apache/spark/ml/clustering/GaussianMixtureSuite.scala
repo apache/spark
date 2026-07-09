@@ -270,12 +270,12 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("GMM support instance weighting") {
-    val gm1 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed)
-    val gm2 = new GaussianMixture().setK(k).setMaxIter(20).setSeed(seed).setWeightCol("weight")
+    val gm1 = new GaussianMixture().setK(2).setMaxIter(20).setSeed(seed)
+    val gm2 = new GaussianMixture().setK(2).setMaxIter(20).setSeed(seed).setWeightCol("weight")
 
     Seq(1.0, 10.0, 90.0).foreach { w =>
-      val gmm1 = gm1.fit(dataset)
-      val ds2 = dataset.select(col("features"), lit(w).as("weight"))
+      val gmm1 = gm1.fit(rDataset)
+      val ds2 = rDataset.select(col("features"), lit(w).as("weight"))
       val gmm2 = gm2.fit(ds2)
       modelEquals(gmm1, gmm2)
     }

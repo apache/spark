@@ -71,6 +71,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  // Returns the underlying live instance without copying. Used by tests that need to mutate
+  // state in a way that's observable to subsequent `loadTable` callers, and by wrappers that
+  // need to propagate writes to the live state.
+  def liveTable(ident: Identifier): Table = {
+    Option(tables.get(ident)).getOrElse(
+      throw new NoSuchTableException(ident.asMultipartIdentifier))
+  }
+
   // load table for writes
   override def loadTable(
       ident: Identifier,
@@ -199,8 +207,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     table.increaseVersion()
     val currentVersion = table.version()
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      oldColumns = table.columns(),
-      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
+      CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
@@ -279,7 +286,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
       TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS,
-      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+      TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE
     ).asJava
   }
 

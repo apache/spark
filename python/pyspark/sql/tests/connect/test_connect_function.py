@@ -2216,8 +2216,20 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             sdf.select(SF.regexp_replace(sdf.b, "(a+)(b)?(c)", "--")).toPandas(),
         )
         self.assert_eq(
+            cdf.select(CF.regexp_replace(cdf.b, "(a+)(b)?(c)", "--", 2)).toPandas(),
+            sdf.select(SF.regexp_replace(sdf.b, "(a+)(b)?(c)", "--", 2)).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.translate(cdf.b, "abc", "xyz")).toPandas(),
             sdf.select(SF.translate(sdf.b, "abc", "xyz")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.instr(cdf.b, "abc", 1)).toPandas(),
+            sdf.select(SF.instr(sdf.b, "abc", 1)).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.instr(cdf.e, ".", -1, 2)).toPandas(),
+            sdf.select(SF.instr(sdf.e, ".", -1, 2)).toPandas(),
         )
 
     # TODO(SPARK-41283): To compare toPandas for test cases with dtypes marked

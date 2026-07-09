@@ -1232,6 +1232,20 @@ class BaseUDFTestsMixin:
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
+    def test_udf_traceback_with_locals(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": True}):
+
+            @udf("int")
+            def test_udf(a):
+                local_marker = a + 1
+                if local_marker:
+                    raise ValueError("boom")
+                return local_marker
+
+            # The captured locals should include the local variable and its value.
+            with self.assertRaisesRegex(PythonException, "local_marker = 1"):
+                self.spark.range(1).select(test_udf(col("id"))).collect()
+
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):

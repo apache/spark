@@ -855,7 +855,9 @@ abstract class HadoopFsRelationTest extends QueryTest with TestHiveSingleton {
         assert(preferredLocations.distinct.length == 2)
       }
 
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> dataSourceName) {
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> dataSourceName,
+          SQLConf.IGNORE_DATA_LOCALITY.key -> "false") {
         checkLocality()
 
         withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {

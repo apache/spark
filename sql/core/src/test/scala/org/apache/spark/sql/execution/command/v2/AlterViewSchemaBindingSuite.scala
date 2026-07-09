@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.command
 class AlterViewSchemaBindingSuite
   extends command.AlterViewSchemaBindingSuiteBase with ViewCommandSuiteBase {
 
-  test("V2: catalog stores the new schema mode on ViewInfo") {
+  test("V2: catalog stores the new schema mode on View") {
     val view = s"$catalog.$namespace.v2_schema_mode"
     createView(view)
     sql(s"ALTER VIEW $view WITH SCHEMA EVOLUTION")

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -187,7 +187,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabasePropertiesCommand(db, properties)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
-      if (SparkStringUtils.isEmpty(location)) {
+      if (SparkStringUtils.isBlank(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterDatabaseSetLocationCommand(db, location)
@@ -359,7 +359,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      if (location.isDefined && location.get.isEmpty) {
+      if (location.exists(SparkStringUtils.isBlank)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
       }
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
@@ -541,20 +541,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
     // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
     // from HandleSpecialCommand after this rewrite.
-    case alterViewAs @ AlterViewAs(
-        ResolvedViewIdentifier(ident), originalText, query, _, _) =>
-      // For session-catalog persistent views, pick up the analysis-time collation off the
-      // resolved `ViewInfo` -- `ApplyDefaultCollation` rewrites that property to fill the
-      // namespace default when the existing view had none, and `alterPermanentView` wants
-      // the post-rewrite value so the persisted `CatalogTable.collation` matches the
-      // collated literal types in the analyzed plan. Temp views don't carry a `ViewInfo`,
-      // so they pass through without a collation override.
-      val collation = alterViewAs.child match {
-        case rpv: ResolvedPersistentView =>
-          Option(rpv.info.properties.get(TableCatalog.PROP_COLLATION))
-        case _ => None
-      }
-      AlterViewAsCommand(ident, originalText, query, collation = collation)
+    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
+      AlterViewAsCommand(ident, originalText, query)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
@@ -828,7 +816,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataTable`) fall through and are picked up by dedicated v2 strategy
+    // (produced for `DelegatingTable`) fall through and are picked up by dedicated v2 strategy
     // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
     // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
     // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
@@ -965,7 +953,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 
@@ -979,7 +967,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case _ =>
         assert(resolved.namespace.length > 1)
         throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
-          resolved.namespace.map(quoteIfNeeded).mkString("."))
+          resolved.namespace)
     }
   }
 

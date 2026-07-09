@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -123,9 +124,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)0;
-    }
+    Arrays.fill(nulls, rowId, rowId + count, (byte) 0);
   }
 
   @Override
@@ -228,6 +227,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromBytes(byteData, rowId, count);
+  }
+
+  @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromBytes(byteData, rowId, count);
   }
 
   @Override

@@ -1325,15 +1325,12 @@ final class ShuffleBlockFetcherIterator(
     }
 
     def filterRequests(queue: mutable.Queue[FetchRequest]): Unit = {
-      val fetchRequestsToRemove = new mutable.Queue[FetchRequest]()
-      fetchRequestsToRemove ++= queue.dequeueAll { req =>
+      queue.dequeueAll { req =>
         val firstBlock = req.blocks.head
         firstBlock.blockId.isShuffleChunk && req.address.equals(address) &&
           sameShuffleReducePartition(firstBlock.blockId)
-      }
-      fetchRequestsToRemove.foreach { _ =>
-        removedChunkIds ++=
-          fetchRequestsToRemove.flatMap(_.blocks.map(_.blockId.asInstanceOf[ShuffleBlockChunkId]))
+      }.foreach { req =>
+        removedChunkIds ++= req.blocks.map(_.blockId.asInstanceOf[ShuffleBlockChunkId])
       }
     }
 

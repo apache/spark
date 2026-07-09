@@ -85,6 +85,18 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     assert(session.conf.get("some-config") == "v2")
   }
 
+  test("enabling timestampNanosTypes via SparkConf must not break the session") {
+    // Regression test: the conf's checkValue used to call SQLConf.get, which re-entered the
+    // session's sqlConf lazy val while mergeSparkConf was applying this very conf, so the
+    // first use of the session died with StackOverflowError.
+    val session = SparkSession.builder()
+      .master("local")
+      .config(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, value = true)
+      .getOrCreate()
+    assert(session.conf.get(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key) == "true")
+    assert(session.sql("SELECT 1").collect() === Array(Row(1)))
+  }
+
   test("use global default session") {
     val session = SparkSession.builder().master("local").getOrCreate()
     assert(SparkSession.builder().getOrCreate() == session)

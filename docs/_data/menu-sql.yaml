@@ -51,7 +51,30 @@
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
 - text: Data Source V2
-  url: sql-data-sources-v2.html
+  url: sql-v2-data-sources.html
+  subitems:
+    - text: Overview
+      url: sql-v2-data-sources.html#overview
+    - text: Entry Points
+      url: sql-v2-data-sources.html#entry-points
+    - text: Catalog Interfaces
+      url: sql-v2-data-sources.html#catalog-interfaces
+    - text: Table
+      url: sql-v2-data-sources.html#table
+    - text: View
+      url: sql-v2-data-sources.html#view
+    - text: Read Path
+      url: sql-v2-data-sources.html#read-path
+    - text: Write Path
+      url: sql-v2-data-sources.html#write-path
+    - text: Row-Level DML
+      url: sql-v2-data-sources.html#row-level-dml
+    - text: Expressions
+      url: sql-v2-data-sources.html#expressions
+    - text: Streaming
+      url: sql-v2-data-sources.html#streaming
+    - text: Further Reading
+      url: sql-v2-data-sources.html#further-reading
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:

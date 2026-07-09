@@ -112,6 +112,7 @@ class Relation(google.protobuf.message.Message):
     CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     RELATION_CHANGES_FIELD_NUMBER: builtins.int
     NEAREST_BY_JOIN_FIELD_NUMBER: builtins.int
+    ZIP_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -226,6 +227,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def nearest_by_join(self) -> global___NearestByJoin: ...
     @property
+    def zip(self) -> global___Zip: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -314,6 +317,7 @@ class Relation(google.protobuf.message.Message):
         chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
         relation_changes: global___RelationChanges | None = ...,
         nearest_by_join: global___NearestByJoin | None = ...,
+        zip: global___Zip | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -459,6 +463,8 @@ class Relation(google.protobuf.message.Message):
             b"with_relations",
             "with_watermark",
             b"with_watermark",
+            "zip",
+            b"zip",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -590,6 +596,8 @@ class Relation(google.protobuf.message.Message):
             b"with_relations",
             "with_watermark",
             b"with_watermark",
+            "zip",
+            b"zip",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -642,6 +650,7 @@ class Relation(google.protobuf.message.Message):
             "chunked_cached_local_relation",
             "relation_changes",
             "nearest_by_join",
+            "zip",
             "fill_na",
             "drop_na",
             "replace",
@@ -4742,3 +4751,35 @@ class NearestByJoin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NearestByJoin = NearestByJoin
+
+class Zip(google.protobuf.message.Message):
+    """Relation of type [[Zip]].
+
+    Combines the columns of two DataFrames side-by-side. Both DataFrames must produce the same
+    canonicalized plan after stripping outer Project chains.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left input relation."""
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right input relation."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+    ) -> None: ...
+
+global___Zip = Zip

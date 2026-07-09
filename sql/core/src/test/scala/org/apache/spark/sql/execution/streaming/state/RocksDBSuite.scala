@@ -1826,6 +1826,49 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  test("RocksDBFileManager: missing snapshot during load reports the available versions") {
+    // Loading a snapshot version that has not been uploaded yet (e.g. the asynchronous
+    // maintenance thread has not finished uploading it when reading state with
+    // snapshotStartBatchId) should fail with a FileNotFoundException whose message lists the
+    // snapshot/changelog files that ARE present, so intermittent failures in scheduled jobs are
+    // diagnosable straight from the logs.
+    val hadoopConf = new Configuration()
+    val remoteDir = Utils.createTempDir().toString
+    val fileManager = new RocksDBFileManager(remoteDir, Utils.createTempDir(), hadoopConf)
+    val fileMapping = new RocksDBFileMapping()
+    // Upload only snapshot version 1, leaving version 2 absent.
+    saveCheckpointFiles(
+      fileManager, Seq("001.sst" -> 10, "002.sst" -> 20), version = 1, numKeys = 10, fileMapping)
+
+    val ex = intercept[FileNotFoundException] {
+      fileManager.loadCheckpointFromDfs(2, Utils.createTempDir(), fileMapping)
+    }
+    assert(ex.getMessage.contains("Failed to load the snapshot file for version 2"))
+    assert(ex.getMessage.contains("Files currently present"))
+    // The version-1 snapshot that does exist must be surfaced in the diagnostic.
+    assert(ex.getMessage.contains("snapshots=[1.zip]"))
+
+    // Also cover the checkpointUniqueId (state checkpoint v2) path, which loads the snapshot via
+    // fm.open instead of fs.open. The diagnostic should still fire and name the unique id.
+    val v2RemoteDir = Utils.createTempDir().toString
+    val v2FileManager = new RocksDBFileManager(v2RemoteDir, Utils.createTempDir(), hadoopConf)
+    val v2FileMapping = new RocksDBFileMapping()
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    saveCheckpointFiles(
+      v2FileManager, Seq("001.sst" -> 10), version = 1, numKeys = 10, v2FileMapping,
+      checkpointUniqueId = checkpointUniqueId)
+
+    val v2Ex = intercept[FileNotFoundException] {
+      v2FileManager.loadCheckpointFromDfs(
+        2, Utils.createTempDir(), v2FileMapping, checkpointUniqueId = checkpointUniqueId)
+    }
+    assert(v2Ex.getMessage.contains("Failed to load the snapshot file for version 2"))
+    assert(v2Ex.getMessage.contains(s"checkpointUniqueId=${checkpointUniqueId.get}"))
+    assert(v2Ex.getMessage.contains("Files currently present"))
+    // The version-1 snapshot that does exist (named with the unique id) must be surfaced.
+    assert(v2Ex.getMessage.contains(s"1_${checkpointUniqueId.get}.zip"))
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
@@ -3271,6 +3314,49 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           } finally {
             RocksDBMemoryManager.resetWriteBufferManagerAndCache
           }
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { boundedMemoryUsage =>
+    testWithColumnFamilies(
+      s"SPARK-57183: LRUCache is handled correctly on RocksDB.close() " +
+        s"with boundedMemoryUsage=$boundedMemoryUsage",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      withTempDir { dir =>
+        try {
+          val sqlConf = new SQLConf
+          sqlConf.setConfString(
+            RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+              RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, boundedMemoryUsage.toString)
+          if (boundedMemoryUsage) {
+            sqlConf.setConfString(
+              RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+                RocksDBConf.MAX_MEMORY_USAGE_MB_CONF_KEY, "128")
+          }
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+          val (_, cache) = withDB(dir.getCanonicalPath, conf = dbConf,
+            useColumnFamilies = colFamiliesEnabled) { db =>
+            db.load(0)
+            db.put("k", "v")
+            db.commit()
+            db.getWriteBufferManagerAndCache()
+          }
+          if (boundedMemoryUsage) {
+            // Shared singleton -- must remain open after a single instance closes
+            assert(cache.isOwningHandle,
+              "Shared LRUCache handle must not be released after a single RocksDB.close() " +
+                "in bounded mode")
+          } else {
+            // Per-instance cache -- must be released deterministically on close()
+            assert(!cache.isOwningHandle,
+              "LRUCache native handle should be released after RocksDB.close() " +
+                "in unbounded mode")
+          }
+        } finally {
+          RocksDBMemoryManager.resetWriteBufferManagerAndCache
         }
       }
     }

@@ -134,6 +134,7 @@ private[v1] class SqlResource extends BaseAppResource {
       } else {
         (filteredExecs, Map.empty[Long, Seq[SQLExecutionUIData]])
       }
+      val summary = SqlResource.executionSummary(rootRows)
 
       // Sort
       val sortCol = Option(uriParams.getFirst("order[0][column]"))
@@ -182,6 +183,7 @@ private[v1] class SqlResource extends BaseAppResource {
       ret.put("aaData", aaData)
       ret.put("recordsTotal", java.lang.Long.valueOf(recordsTotal))
       ret.put("recordsFiltered", java.lang.Long.valueOf(recordsFiltered))
+      ret.put("summary", summary)
       ret
     }
   }
@@ -264,7 +266,8 @@ private[v1] class SqlResource extends BaseAppResource {
       edges,
       if (exec.queryId != null) exec.queryId.toString else null,
       exec.errorMessage.orNull,
-      exec.rootExecutionId)
+      exec.rootExecutionId,
+      exec.modifiedConfigs)
   }
 
   private def printableMetrics(allNodes: collection.Seq[SparkPlanGraphNode],
@@ -284,7 +287,8 @@ private[v1] class SqlResource extends BaseAppResource {
       val wholeStageCodegenId = nodeIdAndWSCGIdMap.get(node.id).flatten
       val metrics =
         node.metrics.flatMap(m => getMetric(metricValues, m.accumulatorId, m.name.trim))
-      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics)
+      Node(nodeId = node.id, nodeName = node.name.trim, wholeStageCodegenId, metrics,
+        desc = node.desc)
     }
 
     nodes.sortBy(_.nodeId).reverse
@@ -314,6 +318,30 @@ private[v1] class SqlResource extends BaseAppResource {
 }
 
 private[v1] object SqlResource {
+
+  def executionSummary(execs: Seq[SQLExecutionUIData]): java.util.LinkedHashMap[String, Object] = {
+    val totalQueries = execs.size
+    val runningQueries = execs.count(_.executionStatus == "RUNNING")
+    val failedQueries = execs.count(_.executionStatus == "FAILED")
+    val now = System.currentTimeMillis()
+    val totalDuration = execs.foldLeft(0L) { case (sum, exec) =>
+      sum + (exec.completionTime.map(_.getTime).getOrElse(now) - exec.submissionTime)
+    }
+    val averageDuration = if (totalQueries > 0) totalDuration / totalQueries else 0L
+    val failureRate = if (totalQueries > 0) {
+      failedQueries.toDouble / totalQueries.toDouble
+    } else {
+      0.0
+    }
+
+    val summary = new java.util.LinkedHashMap[String, Object]()
+    summary.put("totalQueries", java.lang.Long.valueOf(totalQueries))
+    summary.put("averageDuration", java.lang.Long.valueOf(averageDuration))
+    summary.put("runningQueries", java.lang.Long.valueOf(runningQueries))
+    summary.put("failedQueries", java.lang.Long.valueOf(failedQueries))
+    summary.put("failureRate", java.lang.Double.valueOf(failureRate))
+    summary
+  }
 
   /**
    * Split a set of executions into root rows and a sub-execution map. A root row is

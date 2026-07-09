@@ -102,10 +102,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
-    assertNoSpecifiedSchema("table")
-    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val temporalIdent =
+      sparkSession.sessionState.sqlParser.parseTemporalTableIdentifier(tableName)
+    if (temporalIdent.isTemporal) {
+      throw QueryCompilationErrors.timeTravelUnsupportedError(
+        QueryCompilationErrors.toSQLId(temporalIdent.nameParts))
+    }
     val unresolved = UnresolvedRelation(
-      identifier,
+      temporalIdent.nameParts,
       new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
       isStreaming = true)
     val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
