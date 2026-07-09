@@ -1358,9 +1358,8 @@ class Analyzer(
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
-            i.replaceCriteriaOpt.isDefined =>
-        // REPLACE USING has a scope-based row-level rewrite path. REPLACE ON remains unsupported
-        // for DSv2 tables.
+            i.replaceCriteriaOpt.exists(_.isInstanceOf[InsertReplaceOn]) =>
+        // INSERT REPLACE ON remains unsupported for DSv2 tables.
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
