@@ -1542,6 +1542,11 @@ private[spark] class BlockManager(
         val blockResult = getLocalValues(blockId).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
+          // The read-side seal self-check in getLocalValues cannot fire here: this path is only
+          // used for local checkpoints, whose seal runs at doCheckpoint finalization (after every
+          // partition is stored, once, before lineage is cut) - never between the doPutIterator
+          // above and this readback of the copy this task just wrote. So a divergent copy is never
+          // recomputed into this spot; the block is genuinely present.
           releaseLock(blockId)
           throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
         }
