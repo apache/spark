@@ -170,7 +170,7 @@ def parse_test_file(filepath, require_terminated=False):
             flush()
             if current is None:
                 current = {}
-            section_key = stripped[len(_SECTION_PREFIX):].strip()
+            section_key = stripped[len(_SECTION_PREFIX) :].strip()
         elif stripped.startswith("--!"):
             # Reaches here only because the space after "--!" is missing, i.e. a
             # typo'd section marker. Left as body it would silently turn an
@@ -186,9 +186,7 @@ def parse_test_file(filepath, require_terminated=False):
             # Non-blank content outside any section (before the first marker or
             # between cases) is dropped by the original loop; that hides stray
             # text, so fail loudly. Blank separator lines are fine.
-            raise AssertionError(
-                "{}: content outside any section: {!r}".format(filepath, line)
-            )
+            raise AssertionError("{}: content outside any section: {!r}".format(filepath, line))
 
     # A case still open here never hit "!-- end". In verify mode that is
     # corruption; under regeneration stay lenient and keep it so the rewrite can
@@ -335,9 +333,7 @@ def get_plan_strings(df):
     analyzed = _extract_explain_section(explain, "== Analyzed Logical Plan ==")
     optimized = _extract_explain_section(explain, "== Optimized Logical Plan ==")
     if analyzed is None:
-        raise AssertionError(
-            "explain output has no analyzed plan section:\n" + explain
-        )
+        raise AssertionError("explain output has no analyzed plan section:\n" + explain)
 
     # When the output schema is non-empty, the analyzed section starts with a
     # schema header line (possibly truncated by spark.sql.debug.maxToStringFields).
@@ -495,10 +491,7 @@ def get_result_rows(df):
     """
     schema = df.schema
     return [
-        "\t".join(
-            _format_value(row[i], field.dataType)
-            for i, field in enumerate(schema.fields)
-        )
+        "\t".join(_format_value(row[i], field.dataType) for i, field in enumerate(schema.fields))
         for row in df.collect()
     ]
 
@@ -560,9 +553,7 @@ def run_script(spark, script_path):
     exec(compile(code, script_path, "exec"), namespace)
     if "df" not in namespace:
         raise AssertionError(
-            "Test script {} must assign a DataFrame to a variable named `df`".format(
-                script_path
-            )
+            "Test script {} must assign a DataFrame to a variable named `df`".format(script_path)
         )
     return namespace["df"]
 
@@ -670,8 +661,9 @@ def _validate_test_file(test_file, header, cases, regenerate):
                     if key != "expected_error" and case.get(key) is not None
                 )
                 assert not conflicting, (
-                    "{}: error case `{}` must carry only `expected_error`, "
-                    "not also: {}".format(test_file, name, ", ".join(conflicting))
+                    "{}: error case `{}` must carry only `expected_error`, not also: {}".format(
+                        test_file, name, ", ".join(conflicting)
+                    )
                 )
             else:
                 # The result table and its hash are a pair; dropping one leaves
@@ -745,9 +737,7 @@ def _compare_case(test_case, case, actual):
         if got is None:
             produced = ", ".join(sorted(actual)) or "<nothing>"
             test_case.fail(
-                "[{}] expected section `{}` but the case produced: {}".format(
-                    name, key, produced
-                )
+                "[{}] expected section `{}` but the case produced: {}".format(name, key, produced)
             )
         test_case.assertEqual(
             expected.strip("\n"),

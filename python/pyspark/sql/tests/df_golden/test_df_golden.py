@@ -106,20 +106,22 @@ def _register_tests(cls):
     """
     test_files = []
     if os.path.isdir(cls.test_file_dir):
-        test_files = sorted(
-            f for f in os.listdir(cls.test_file_dir) if f.endswith(".test")
-        )
+        test_files = sorted(f for f in os.listdir(cls.test_file_dir) if f.endswith(".test"))
 
     if not test_files:
+
         def test_discovery_failed(self):
             self.fail("no .test files found in {}".format(cls.test_file_dir))
+
         cls.test_discovery_failed = test_discovery_failed
         return
 
     for filename in test_files:
+
         def _make_test(f=filename):
             def test_method(self):
                 self._run_golden_test(f)
+
             return test_method
 
         name = filename[: -len(".test")]
@@ -128,6 +130,7 @@ def _register_tests(cls):
 
 class DFGoldenTest(DFGoldenTestBase):
     """DataFrame golden file tests for all ``.test`` files in this directory."""
+
     pass
 
 

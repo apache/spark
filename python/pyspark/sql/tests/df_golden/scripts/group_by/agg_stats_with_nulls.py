@@ -23,4 +23,5 @@ df = spark.table("testData").agg(
     round(variance(col("a")), 12),
     round(stddev(col("a")), 12),
     sum(col("a")),
-    count(col("a")))
+    count(col("a")),
+)

@@ -151,9 +151,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
     # -- tags -------------------------------------------------------------
 
     def test_parse_tags_splits_on_whitespace_and_commas(self):
-        self.assertEqual(
-            parse_tags({"tags": "unordered, foo  bar"}), {"unordered", "foo", "bar"}
-        )
+        self.assertEqual(parse_tags({"tags": "unordered, foo  bar"}), {"unordered", "foo", "bar"})
         self.assertEqual(parse_tags({}), set())
         self.assertEqual(parse_tags({"tags": ""}), set())
 
@@ -170,15 +168,11 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_validate_accepts_well_formed_file(self):
         # Should not raise.
-        _validate_test_file(
-            "f.test", {"source": "x"}, [self._valid_case()], regenerate=False
-        )
+        _validate_test_file("f.test", {"source": "x"}, [self._valid_case()], regenerate=False)
 
     def test_validate_rejects_unknown_header_section(self):
         with self.assertRaisesRegex(AssertionError, "unknown header sections: bogus"):
-            _validate_test_file(
-                "f.test", {"bogus": "x"}, [self._valid_case()], regenerate=False
-            )
+            _validate_test_file("f.test", {"bogus": "x"}, [self._valid_case()], regenerate=False)
 
     def test_validate_rejects_no_cases(self):
         with self.assertRaisesRegex(AssertionError, "no test cases found"):
@@ -186,9 +180,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_validate_rejects_case_without_name(self):
         with self.assertRaisesRegex(AssertionError, "every test case needs a name"):
-            _validate_test_file(
-                "f.test", {}, [{"script": "scripts/a.py"}], regenerate=False
-            )
+            _validate_test_file("f.test", {}, [{"script": "scripts/a.py"}], regenerate=False)
 
     def test_validate_rejects_case_without_script(self):
         with self.assertRaisesRegex(AssertionError, "needs a script"):
@@ -207,14 +199,10 @@ class DFGoldenFrameworkTests(unittest.TestCase):
 
     def test_validate_rejects_unknown_tag(self):
         with self.assertRaisesRegex(AssertionError, "unknown tags: wat"):
-            _validate_test_file(
-                "f.test", {}, [self._valid_case(tags="wat")], regenerate=False
-            )
+            _validate_test_file("f.test", {}, [self._valid_case(tags="wat")], regenerate=False)
 
     def test_validate_accepts_known_unordered_tag(self):
-        _validate_test_file(
-            "f.test", {}, [self._valid_case(tags="unordered")], regenerate=False
-        )
+        _validate_test_file("f.test", {}, [self._valid_case(tags="unordered")], regenerate=False)
 
     def test_validate_rejects_vacuous_case_in_verify_mode(self):
         # A case with no expected_* section asserts nothing.
@@ -264,9 +252,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         # Tags are preserved verbatim across regeneration, so an unknown tag
         # would persist; it is rejected in both modes.
         with self.assertRaisesRegex(AssertionError, "unknown tags: wat"):
-            _validate_test_file(
-                "f.test", {}, [self._valid_case(tags="wat")], regenerate=True
-            )
+            _validate_test_file("f.test", {}, [self._valid_case(tags="wat")], regenerate=True)
 
     # -- output normalization --------------------------------------------
 
@@ -374,11 +360,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
         _validate_test_file(
             "f.test",
             {},
-            [
-                self._valid_case(
-                    expected_result="printed all 0 rows.", expected_result_hash="h"
-                )
-            ],
+            [self._valid_case(expected_result="printed all 0 rows.", expected_result_hash="h")],
             regenerate=False,
         )
 
@@ -491,9 +473,7 @@ class DFGoldenFrameworkTests(unittest.TestCase):
             parse_test_file(path)
 
     def test_parse_rejects_stray_content_outside_section(self):
-        path = self._write(
-            "stray text\n--! name\nc\n--! script\nscripts/a.py\n!-- end\n"
-        )
+        path = self._write("stray text\n--! name\nc\n--! script\nscripts/a.py\n!-- end\n")
         with self.assertRaisesRegex(AssertionError, "content outside any section"):
             parse_test_file(path)
 
