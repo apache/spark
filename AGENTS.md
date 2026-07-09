@@ -77,7 +77,7 @@ Spark Connect suites live in `pyspark.testing.connectutils` and are auto-skipped
 |------------|------|-------|
 | Plan / proto construction — no server | `PlanOnlyTestFixture` | Uses a `MockRemoteSession`; builds and inspects plans without a running Connect server. For proto / plan-shape assertions. |
 | Connect DataFrame — real session | `ReusedConnectTestCase` | The Connect analog of `ReusedSQLTestCase`; starts a session via `.remote(...)` (honoring `SPARK_CONNECT_TESTING_REMOTE`, default `local[4]`). Mixes in `SQLTestUtils` + `PySparkErrorTestUtils`. |
-| Classic + Connect side by side | `ReusedMixedTestCase` | Extends `ReusedConnectTestCase`; exposes both a classic `spark` and a Connect `connect` session for parity checks (`compare_by_show`, `both_conf`). Requires JVM access. |
+| Classic + Connect side by side | `ReusedMixedTestCase` | Extends `ReusedConnectTestCase`. For directly comparing classic vs Connect: it exposes a classic `self.spark` and a Connect `self.connect` so a test can run the same operation on each and assert they agree (`compare_by_show`, `both_conf`). Requires JVM access. |
 
 ### Mixins and helpers
 
