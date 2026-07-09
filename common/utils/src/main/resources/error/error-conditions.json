@@ -919,6 +919,11 @@
           "This typically occurs when building very complex queries with many operations, large literals, or deeply nested expressions.",
           "Consider splitting the query into smaller parts using temporary views for intermediate results or reducing the number of operations."
         ]
+      },
+      "UDT_JVM_CLASS_NOT_UDT" : {
+        "message" : [
+          "The 'jvm_class' <jvmClass> in the UDT is not a subclass of UserDefinedType."
+        ]
       }
     },
     "sqlState" : "56K00"
