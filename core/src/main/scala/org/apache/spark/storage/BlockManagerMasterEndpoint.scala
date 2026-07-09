@@ -913,8 +913,8 @@ class BlockManagerMasterEndpoint(
 
   /**
    * Seal an RDD's per-block content checksums: for each of its blocks with recorded per-replica
-   * checksums, choose the plurality checksum as authoritative, evict the divergent replicas (drop
-   * them from the directory and ask their executors to remove the local copy), and record the
+   * checksums, pick one checksum value as authoritative, evict the replicas that disagree with it
+   * (drop them from the directory and ask their executors to remove the local copy), and record the
    * authoritative value so later divergent registrations are rejected and reads can self-check.
    *
    * Runs on the message-handler thread, so it is atomic w.r.t. other `updateBlockInfo` for these
