@@ -9449,11 +9449,6 @@
       "<quoted> is a permanent view, which is not supported by streaming reading API such as `DataStreamReader.table` yet."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1021" : {
-    "message" : [
-      "count(<targetString>.*) is not allowed. Please use count(*) or expand the columns manually, e.g. count(col1, col2)."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1031" : {
     "message" : [
       "It is not allowed to use a window function inside an aggregate function. Please use the inner window function in a sub-query."
@@ -10011,11 +10006,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1255" : {
-    "message" : [
-      "Cannot drop built-in function '<functionName>'."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1256" : {
     "message" : [
       "Cannot refresh built-in function <functionName>."
@@ -10516,11 +10506,6 @@
   "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2106" : {
-    "message" : [
-      "Can't acquire <size> bytes memory to build hash relation, got <got> bytes."
     ]
   },
   "_LEGACY_ERROR_TEMP_2107" : {
@@ -11506,11 +11491,6 @@
   "_LEGACY_ERROR_TEMP_3109" : {
     "message" : [
       "<message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3110" : {
-    "message" : [
-      "Cannot bind a V1 function."
     ]
   },
   "_LEGACY_ERROR_TEMP_3113" : {
