@@ -76,6 +76,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       distributeColumns = distributeAttributes,
       scaledDistributeColumns = scaledDistributeColumns,
       appendedAttributes = appendedAttributes,
+      unrequiredChildIndex = Nil,
       child = child,
       timeZoneId = parameters.timeZoneId)
   }
