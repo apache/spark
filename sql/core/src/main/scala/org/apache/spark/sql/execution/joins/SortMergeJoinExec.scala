@@ -1489,7 +1489,12 @@ private abstract class OneSideOuterIterator(
   }
 
   override def advanceNext(): Boolean = {
-    val r = advanceBufferUntilRestConditionSatisfied() || advanceStream()
+    // Only walk the buffered matches if we are in the middle of iterating them for the
+    // current streamed row. If the iterator is null, advanceStream() has just emitted a
+    // null-padded row (either no matches or the streamed-only predicate was false), so we
+    // must move to the next streamed row rather than re-create the match iterator.
+    val r = (rightMatchesIterator != null && advanceBufferUntilRestConditionSatisfied()) ||
+      advanceStream()
     if (r) numOutputRows += 1
     r
   }
