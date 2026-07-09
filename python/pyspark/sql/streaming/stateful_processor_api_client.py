@@ -16,6 +16,7 @@
 #
 from datetime import datetime
 from enum import Enum
+import importlib.util
 import json
 import os
 import socket
@@ -34,36 +35,39 @@ import uuid
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
-try:
+# Whether numpy is available. Resolved without importing numpy so that
+# "import pyspark" stays free of unnecessary 3rd party imports (SPARK-56242).
+has_numpy: bool = importlib.util.find_spec("numpy") is not None
+
+SCALAR_TYPES = (bool, int, float, str, bytes, datetime, type(None))
+
+
+def _normalize_state_value(v: Any) -> Any:
+    if type(v) in SCALAR_TYPES:  # Fast path for common scalar values.
+        return v
+    # numpy is imported lazily here (cached in sys.modules after the first call)
+    # so that "import pyspark" does not eagerly import it.
     import numpy as np
 
-    has_numpy = True
-    SCALAR_TYPES = (bool, int, float, str, bytes, datetime, type(None))
-
-    def _normalize_state_value(v: Any) -> Any:
-        if type(v) in SCALAR_TYPES:  # Fast path for common scalar values.
-            return v
-        # Convert NumPy scalar values to Python primitive values.
-        if isinstance(v, np.generic):
-            return v.tolist()
-        # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
-        # require positional arguments and cannot be instantiated with a generator expression.
-        if isinstance(v, Row) or (isinstance(v, tuple) and hasattr(v, "_fields")):
-            return type(v)(*map(_normalize_state_value, v))
-        # List / tuple: recursively normalize each element.
-        if isinstance(v, (list, tuple)):
-            return type(v)(map(_normalize_state_value, v))
-        # Dict: normalize both keys and values.
-        if isinstance(v, dict):
-            return {_normalize_state_value(k): _normalize_state_value(val) for k, val in v.items()}
-        # Address a couple of pandas dtypes too.
-        if hasattr(v, "to_pytimedelta"):
-            return v.to_pytimedelta()
-        if hasattr(v, "to_pydatetime"):
-            return v.to_pydatetime()
-        return v
-except ImportError:
-    has_numpy = False
+    # Convert NumPy scalar values to Python primitive values.
+    if isinstance(v, np.generic):
+        return v.tolist()
+    # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
+    # require positional arguments and cannot be instantiated with a generator expression.
+    if isinstance(v, Row) or (isinstance(v, tuple) and hasattr(v, "_fields")):
+        return type(v)(*map(_normalize_state_value, v))
+    # List / tuple: recursively normalize each element.
+    if isinstance(v, (list, tuple)):
+        return type(v)(map(_normalize_state_value, v))
+    # Dict: normalize both keys and values.
+    if isinstance(v, dict):
+        return {_normalize_state_value(k): _normalize_state_value(val) for k, val in v.items()}
+    # Address a couple of pandas dtypes too.
+    if hasattr(v, "to_pytimedelta"):
+        return v.to_pytimedelta()
+    if hasattr(v, "to_pydatetime"):
+        return v.to_pydatetime()
+    return v
 
 
 class StatefulProcessorHandleState(Enum):
