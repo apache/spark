@@ -459,6 +459,31 @@ object ExplodeExpressionBuilder extends ExpressionBuilder {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unlike `explode`, if the array/map is null or empty then a single row of null is produced. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(collection => array(10, 20));
+       10
+       20
+      > SELECT _FUNC_(cast(null as array<int>));
+       NULL
+  """,
+  since = "2.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit
+object ExplodeOuterExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
+    Explode(expressions(0))
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
@@ -535,6 +560,31 @@ trait PosExplodeGeneratorBuilderBase extends GeneratorBuilder {
   group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 object PosExplodeExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("collection"))))
+
+  override def build(funcName: String, expressions: Seq[Expression]) : Expression =
+    PosExplode(expressions(0))
+}
+
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unlike `posexplode`, if the array/map is null or empty then a single row of (null, null) is produced. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(10,20));
+       0	10
+       1	20
+      > SELECT _FUNC_(collection => array(10,20));
+       0	10
+       1	20
+      > SELECT _FUNC_(cast(null as array<int>));
+       NULL	NULL
+  """,
+  since = "2.0.0",
+  group = "generator_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+object PosExplodeOuterExpressionBuilder extends ExpressionBuilder {
   override def functionSignature: Option[FunctionSignature] =
     Some(FunctionSignature(Seq(InputParameter("collection"))))
 

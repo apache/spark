@@ -143,7 +143,7 @@
 | org.apache.spark.sql.catalyst.expressions.EulerNumber | e | SELECT e() | struct<E():double> |
 | org.apache.spark.sql.catalyst.expressions.Exp | exp | SELECT exp(0) | struct<EXP(0):double> |
 | org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode | SELECT explode(array(10, 20)) | struct<col:int> |
-| org.apache.spark.sql.catalyst.expressions.ExplodeExpressionBuilder | explode_outer | SELECT explode_outer(array(10, 20)) | struct<col:int> |
+| org.apache.spark.sql.catalyst.expressions.ExplodeOuterExpressionBuilder | explode_outer | SELECT explode_outer(array(10, 20)) | struct<col:int> |
 | org.apache.spark.sql.catalyst.expressions.Expm1 | expm1 | SELECT expm1(0) | struct<EXPM1(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Extract | extract | SELECT extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456') | struct<extract(YEAR FROM TIMESTAMP '2019-08-12 01:00:00.123456'):int> |
 | org.apache.spark.sql.catalyst.expressions.Factorial | factorial | SELECT factorial(5) | struct<factorial(5):bigint> |
@@ -278,7 +278,7 @@
 | org.apache.spark.sql.catalyst.expressions.Pi | pi | SELECT pi() | struct<PI():double> |
 | org.apache.spark.sql.catalyst.expressions.Pmod | pmod | SELECT pmod(10, 3) | struct<pmod(10, 3):int> |
 | org.apache.spark.sql.catalyst.expressions.PosExplodeExpressionBuilder | posexplode | SELECT posexplode(array(10,20)) | struct<pos:int,col:int> |
-| org.apache.spark.sql.catalyst.expressions.PosExplodeExpressionBuilder | posexplode_outer | SELECT posexplode_outer(array(10,20)) | struct<pos:int,col:int> |
+| org.apache.spark.sql.catalyst.expressions.PosExplodeOuterExpressionBuilder | posexplode_outer | SELECT posexplode_outer(array(10,20)) | struct<pos:int,col:int> |
 | org.apache.spark.sql.catalyst.expressions.Pow | pow | SELECT pow(2, 3) | struct<pow(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Pow | power | SELECT power(2, 3) | struct<POWER(2, 3):double> |
 | org.apache.spark.sql.catalyst.expressions.Quarter | quarter | SELECT quarter('2016-08-31') | struct<quarter(2016-08-31):int> |
