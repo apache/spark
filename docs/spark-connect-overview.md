@@ -291,11 +291,8 @@ PySpark boots a fresh in-process Spark Connect server in **every** process. Each
 JVM warmup, `SparkContext` construction, and Connect server boot -- which can take a few seconds and
 makes a quick edit/run loop feel slow.
 
-There are two ways to amortize that cost across runs by reconnecting to a long-lived local server.
-
-### Start a server yourself and connect to it
-
-Start one persistent local Spark Connect server and point every run at it:
+To amortize that cost across runs, start one persistent local Spark Connect server and point
+every run at it:
 
 ```bash
 # Start once; it stays up across runs.
@@ -308,41 +305,11 @@ python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc
 $SPARK_HOME/sbin/stop-connect-server.sh
 ```
 
-### Let PySpark manage the server (opt-in)
-
-If you would rather keep your code as `SparkSession.builder.remote("local[*]").getOrCreate()` and not
-manage a server by hand, enable the opt-in reuse path. The first run starts one persistent local
-Connect server through the standard `sbin/start-connect-server.sh` script -- the same daemon you
-would start by hand above -- and records it in a discovery file; later runs reconnect to it in a
-fraction of a second:
-
-```bash
-export SPARK_LOCAL_CONNECT_REUSE=1     # or .config("spark.local.connect.reuse", "true")
-python script.py     # 1st run: starts a persistent server (cold start, once)
-python script.py     # 2nd+ run: reconnects to it (sub-second)
-```
-
-This is **off by default**; nothing changes unless you opt in. A few details:
-
-- Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
-  configurations, and (with artifact isolation, which stays on) session artifacts -- is fresh on
-  every run and never leaks between runs. State backed by the shared `SparkContext` (the persistent
-  catalog/warehouse, global temp views, and cached datasets) *is* shared across runs, so namespace
-  per-run databases or clear that state yourself if your runs must be fully isolated.
-- The server listens on port `15002` by default and authenticates with a token written, together
-  with the host, port, pid and Spark version, to `~/.spark/connect-local.json` (mode `0600`).
-  Set `SPARK_LOCAL_CONNECT_DISCOVERY` to relocate that file. Reuse is refused (and a fresh server
-  started) if the recorded process is gone, the port is closed, or the Spark version differs. On
-  Unix-like systems, PySpark uses a file lock around first startup. On platforms without `fcntl`,
-  concurrent startups can race; callers that lose the race reconnect to the server recorded in the
-  discovery file.
-- The server is a regular `spark-daemon.sh`-managed process and runs until you stop it with
-  `python -m pyspark.sql.connect.local_server --stop` (or `sbin/stop-connect-server.sh`, or by
-  terminating the `pid` recorded in the discovery file). Its pid file and logs live next to the
-  discovery file (`~/.spark` and `~/.spark/logs` by default), which is where to look if a start-up
-  fails. After a Spark upgrade the old server is rejected on its recorded version; stop it the same
-  way. Because this path drives the `sbin/` shell scripts, it is unavailable on Windows -- there,
-  start a server manually and connect to it with `.remote("sc://...")`.
+Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
+configurations, and session artifacts -- is fresh on every run and never leaks between runs. State
+backed by the shared `SparkContext` (the persistent catalog/warehouse, global temp views, and
+cached datasets) *is* shared across runs, so namespace per-run databases or clear that state
+yourself if your runs must be fully isolated.
 
 ## Use Spark Connect in standalone applications
 
