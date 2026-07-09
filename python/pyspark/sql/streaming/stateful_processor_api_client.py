@@ -61,7 +61,7 @@ def _normalize_state_value(v: Any) -> Any:
     if type(v) in SCALAR_TYPES:  # Fast path for common scalar values.
         return v
     # Convert NumPy scalar values to Python primitive values.
-    if isinstance(v, np.generic):
+    if np is not None and isinstance(v, np.generic):
         return v.tolist()
     # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
     # require positional arguments and cannot be instantiated with a generator expression.
