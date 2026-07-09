@@ -495,18 +495,18 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         val df = Seq(
           ("""{"a": 1}""", "$.a", 2),
           ("""["a","b"]""", "$[0]", 9),
-          (null, "$.a", 2)
+          (null, "$.a", 2),
+          ("""{"a": 1}""", "$.b", 2)
         ).toDF("json", "path", "val")
         val v = parse_json(col("json"))
-        val out = df.select(to_json(variant_set(v, col("path"), col("val"))).alias("r"))
-        checkAnswer(out, rows("""{"a":2}""", """[9,"b"]""", null))
-
-        // create_if_missing = false leaves a missing target unchanged (Column-path overload).
-        val flagDf = Seq("""{"a": 1}""").toDF("json")
-        val flagV = parse_json(flagDf("json"))
+        // Default create_if_missing = true: the last row's missing `$.b` target is created.
         checkAnswer(
-          flagDf.select(to_json(variant_set(flagV, lit("$.b"), lit(2), false)).alias("r")),
-          rows("""{"a":1}"""))
+          df.select(to_json(variant_set(v, col("path"), col("val"))).alias("r")),
+          rows("""{"a":2}""", """[9,"b"]""", null, """{"a":1,"b":2}"""))
+        // create_if_missing = false (Column-path overload): only the last row differs.
+        checkAnswer(
+          df.select(to_json(variant_set(v, col("path"), col("val"), false)).alias("r")),
+          rows("""{"a":2}""", """[9,"b"]""", null, """{"a":1}"""))
 
         // String-path overloads, with and without the boolean flag.
         val objDf = Seq(("""{"a": 1}""", 2), (null, 2)).toDF("json", "val")

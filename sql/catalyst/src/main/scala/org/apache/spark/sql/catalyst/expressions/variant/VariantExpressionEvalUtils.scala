@@ -176,7 +176,7 @@ object VariantExpressionEvalUtils {
   }
 
   /**
-   * Set `value` to `input` at `javaSegments`. `path` is the source string used in error messages.
+   * Set `input` at `javaSegments` to `value`. `path` is the source string used in error messages.
    * The cast and set share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT` and a type
    * mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `createIfMissing` is false, a missing
    * key/index leaves the variant unchanged.

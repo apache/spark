@@ -1536,6 +1536,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // A missing intermediate array is created and padded with variant nulls up to the index.
     checkSet("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
 
+    // scalastyle:off nonascii
+    // Non-ASCII (multi-byte UTF-8).
+    checkSet("""{"你好": 1}""", """$['你好']""", Literal(2), """{"你好":2}""")
+    checkSet("""{"a": 1}""", """$['世界']""", Literal(2), """{"a":1,"世界":2}""")
+    checkSet("{}", """$['café']['über']""", Literal("naïve"), """{"café":{"über":"naïve"}}""")
+    // scalastyle:on nonascii
+
     // create_if_missing = false.
     checkSet("""{"a": 1, "b": 2}""", "$.a", Literal(99), """{"a":99,"b":2}""", false)
     checkSet("""{"a": 1}""", "$.b", Literal(2), """{"a":1}""", false)
@@ -1621,6 +1628,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "INVALID_VARIANT_PATH",
       Map("path" -> "$", "functionName" -> "`variant_set`"))
 
+    checkErrorInExpression[SparkRuntimeException](
+      VariantSet(Literal(parseJson("{}")), Literal("$.a[2000000000]"), Literal(1), Literal(true)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_set`"))
     val tooBig = "x".repeat(16 * 1024 * 1024)
     checkErrorInExpression[SparkRuntimeException](
       VariantSet(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig), Literal(true)),
