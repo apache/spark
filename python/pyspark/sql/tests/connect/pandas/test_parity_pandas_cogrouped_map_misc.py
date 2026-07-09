@@ -15,16 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.data_type_ops.test_num_ops import NumOpsTestsMixin
-from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.sql.tests.pandas.test_pandas_cogrouped_map_misc import (
+    CogroupedApplyInPandasMiscTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class NumOpsParityTests(
-    NumOpsTestsMixin,
-    PandasOnSparkTestUtils,
-    OpsTestBase,
+class CogroupedApplyInPandasMiscTests(
+    CogroupedApplyInPandasMiscTestsMixin,
     ReusedConnectTestCase,
 ):
     pass
