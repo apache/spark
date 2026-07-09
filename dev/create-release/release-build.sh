@@ -877,6 +877,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Coerce the requested version
   $MVN versions:set -DnewVersion=$SPARK_VERSION
   tmp_settings="tmp-settings.xml"
+  fcreate_secure $tmp_settings
   echo "<settings><servers><server>" > $tmp_settings
   echo "<id>apache.snapshots.https</id><username>$ASF_USERNAME</username>" >> $tmp_settings
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
@@ -1016,6 +1017,7 @@ if [[ "$1" == "publish-release" ]]; then
       head -1)
 
     # Configure msmtp
+    fcreate_secure ~/.msmtprc
     cat > ~/.msmtprc <<EOF
 defaults
 auth           on
@@ -1032,8 +1034,6 @@ password       $ASF_PASSWORD
 
 account default : apache
 EOF
-
-    chmod 600 ~/.msmtprc
 
     # Compose and send the email
     {
@@ -1086,6 +1086,7 @@ EOF
       echo "with the RC (make sure to clean up the artifact cache before/after so"
       echo "you don't end up building with an out of date RC going forward)."
     } | msmtp -t
+    rm -f ~/.msmtprc
   fi
 
   popd
