@@ -60,6 +60,13 @@ stage DAG when only pipelined edges are considered.
 **External input of G:** a regular shuffle dependency whose consumer is in G and whose producer is
 not — i.e. a normal materialized parent of the group.
 
+**Outputs of G:** a pipelined group need not contain a `ResultStage`. Its outputs to the rest of the
+DAG are regular (materialized) shuffle edges from its members to consumers outside the group, and
+there may be **more than one** — e.g. two different members each feeding a distinct downstream
+stage. A `ResultStage` is one possible member, not a requirement; a PG may instead be an interior
+component whose materialized outputs feed downstream groups (§7). In this respect a PG behaves like
+a barrier stage embedded in a larger DAG: an interior unit with regular-shuffle edges in and out.
+
 ---
 
 ## 3. Group formation
@@ -72,6 +79,12 @@ not — i.e. a normal materialized parent of the group.
   pipelined edge are placed in the same group; the group is the transitive closure.
 - **Every stage belongs to exactly one group** (singletons included). Group membership is fixed at
   stage-creation time.
+- **A DAG may contain multiple pipelined groups.** Disjoint sets of pipelined edges form distinct
+  groups, and a group's materialized output may feed another group (§7). Independent groups (no
+  dependency path between them) may be admitted and run concurrently, subject to the cross-group
+  slot arbitration in §4.1; a group that consumes another group's materialized output waits for it,
+  by the normal materialize-before-read sequencing on that regular edge. This mirrors how a DAG may
+  contain multiple barrier stages.
 
 ---
 
@@ -109,8 +122,15 @@ not — i.e. a normal materialized parent of the group.
   per-profile accounting — checking each profile's demand against that profile's own capacity — is a
   follow-up, not needed for the streaming shapes whose members share the default profile.
 - **Co-residency.** Once admitted, all member stages of a group are simultaneously running.
-- **Single ownership.** A pipelined group belongs to exactly one job; a pipelined producer is not
-  shared across jobs.
+- **Single ownership and 1:1 (v1), enforced by never reusing a pipelined dependency.** A pipelined
+  producer feeds exactly one consumer and belongs to exactly one job. The regular-shuffle 1:many
+  fan-out and cross-job stage reuse are both disallowed, and both are prevented by the same
+  mechanism: a pipelined `ShuffleDependency` is never reused or shared. At stage/group creation the
+  `shuffleIdToMapStage` reuse path is bypassed for a pipelined dependency (each gets a fresh
+  producer stage, never bound to an existing one), and a group is rejected (fail-fast, §9) if a
+  pipelined producer has more than one consuming stage or its stage carries more than one jobId.
+  Reuse must be prevented explicitly: from the scheduler's perspective a shuffle-map stage *can* be
+  reused across jobs unless something forbids it.
 
 ### 4.1 Cross-group admission (multiple groups / groups vs. regular jobs)
 
@@ -137,10 +157,11 @@ slots, and a group that does not fit is failed rather than queued.
 
 ## 5. Completion
 
-- **Group-observable completion.** A member stage is not job-observably finished until **all** member
-  stages of its group have completed successfully. A result stage's job therefore completes only when
-  its entire group has, and a member that finishes ahead of the others cannot advance job or stage
-  completion until the group does.
+- **Group-observable completion.** A member stage is not observably finished until **all** member
+  stages of its group have completed successfully — a member that finishes ahead of the others
+  cannot advance stage or job completion, nor make its output visible to a downstream consumer,
+  until the group does. Whether the group's output is a `ResultStage`'s job result or a materialized
+  shuffle feeding a downstream group (§2.2), that output becomes observable only at group completion.
 - **Defer the finish decision, not per-task work.** When a member finishes before its group, only its
   stage-finish / job-finish transition is deferred until group completion. Per-task side effects that
   must always run — accumulator updates, output-commit coordination, task-end listener events — run
@@ -149,12 +170,19 @@ slots, and a group that does not fit is failed rather than queued.
   that window is a group failure (§6): the deferred finish transitions are dropped and the group
   reruns.
 - **In-group result-stage side effects must be idempotent.** Per-task side effects run immediately
-  (above), including a result stage's output commit. If a result task commits and a sibling then
-  fails in the replay window, the group reruns and re-delivers that output. This is the standard
-  streaming model — a batch is re-delivered on recovery and the sink must absorb it — so v1 requires
-  an in-group result stage's side effects to be idempotent, and fail-fast rejects a sink that cannot
-  absorb re-delivery (§9). Deferring the commit itself to group completion is a possible future
-  augmentation if a non-idempotent committer ever needs to be supported.
+  (above), including a result stage's output commit. The output-commit path itself is unchanged from
+  base Spark: `OutputCommitCoordinator` arbitration — deciding which of several racing attempts of a
+  partition may commit — never contends inside a group, because both sources of concurrent attempts
+  are absent (speculation is rejected, §9; single-stage resubmit is disabled for members, §6), so
+  each partition has exactly one attempt and is trivially authorized. If a result task commits and a
+  sibling then fails in the replay window, the group reruns and re-delivers that output. This is the
+  standard streaming model — a batch is re-delivered on recovery and the sink must absorb it — so v1
+  requires an in-group result stage's side effects to be idempotent, and fail-fast rejects a sink
+  that cannot absorb re-delivery (§9). The one integration point the group adds is state cleanup: a
+  member whose tasks all succeeded holds populated commit-coordinator state that is never cleared
+  (the clear path runs only on the holder's own failure), so group teardown must clear each member's
+  output-commit state — via `stageEnd` / fresh stage ids on rerun — or a rerun's commits would be
+  denied against the dead attempt's holders.
 
 ### 5.1 Observable completion events (listener bus)
 
@@ -205,6 +233,15 @@ member as completed before the group has committed.
     availability would miss the consumer here; teardown is therefore keyed on group membership, so a
     producer failure always tears down its co-scheduled consumers regardless of the producer's
     availability at the failure instant.
+  - *(Refinement, post-v1.)* v1 fails the group on any member's executor loss — safe and hang-free,
+    but over-eager: a producer that finished and whose output was already fully consumed can lose its
+    executor with no impact on the DAG, yet still triggers a rerun. A more precise, consumer-driven
+    signal is a post-v1 optimization: have the streaming reader raise a `FetchFailed` only when it
+    actually fails to read its input, so a post-consumption producer loss yields no failure and no
+    teardown. This reuses Spark's existing `FetchFailed` channel as the notification, with one
+    adaptation — on a pipelined edge it must route to **group failure**, not the base single-stage
+    mapper-resubmit (disabled for members) — so detection is consumer-driven while recovery stays
+    group-atomic.
 - **Recovery.** Group failure tears down all member stages atomically and discards their deferred
   completions. Because the shuffle is transient it cannot be partially recovered; the job fails and
   the caller re-runs it.
@@ -218,11 +255,19 @@ member as completed before the group has committed.
   - A lost external durable input reruns the group rather than being recomputed in isolation.
 - **Regular shuffle out of a group — supported.** A regular dependency from a member to a stage
   outside the group produces a materialized output that a downstream group consumes with normal
-  sequencing; the downstream waits for the group to complete.
-- **Regular shuffle internal to a group — fail-fast / unsupported.** If a regular dependency's
-  producer and consumer both fall in the same group, the group would co-schedule them concurrently
-  while the regular edge demands the producer be materialized first — a contradiction. Reject at
-  stage creation.
+  sequencing; the downstream waits for the group to complete. A group may have more than one such
+  output edge (from one or several members), and need not contain a `ResultStage` at all (§2.2).
+  - A group's external input and output edges are ordinary regular shuffles and behave exactly as
+    today, including optimizations like push-based shuffle merge; the pipelined restrictions apply
+    only to the group's internal (incremental) edges.
+- **Regular shuffle internal to a group — should not occur; checked as an invariant.** Grouping is
+  the connected component over *pipelined* edges only (§3), so a regular shuffle is a group
+  *boundary*: its producer and consumer fall into different groups by construction, splitting a
+  pipelined region rather than sitting inside one. A regular shuffle therefore should never be
+  internal to a group. The scheduler still verifies this as an invariant at stage/group creation and
+  fails fast if violated — a regular edge whose endpoints landed in the same group would be a
+  contradiction (co-schedule them, yet materialize-before-read), signalling inconsistent pipelined
+  marking rather than a valid plan.
 - Pipelined edges are intra-group by construction, so they never cross a group boundary.
 
 ---
@@ -242,25 +287,30 @@ member as completed before the group has committed.
 
 A pipelined group that involves any of the following is rejected at stage/group creation with a clear
 error, rather than silently mis-scheduled. Each is a documented limitation of the first version.
+The scope throughout is **within a PG** — how each idiom interacts with the members and internal
+(pipelined) edges of a group. A group's regular input/output edges are ordinary shuffles and are
+unaffected (§7); the entries below do not restrict them.
 
 The rejected idioms fall into two kinds. Some are **moot** under the group failure model (§6):
 Spark's stage-level recompute/rollback mechanisms never fire inside a group, because any failure
 aborts the whole group and the caller reruns from scratch — so a mechanism whose only job is to
 recompute or roll back a stage after a partial failure is never reached. We reject these rather than
 carry dead, self-contradictory machinery. The rest are **incompatible** with concurrent execution
-itself and would corrupt or hang a group that never fails.
+itself and would corrupt or hang a group that never fails. One row is neither — an **invariant** that
+should hold by construction (§3) but is still checked defensively, and would signal an inconsistent
+plan if violated.
 
 | Rejected condition | Kind | Why rejected |
 |--------------------|------|--------------|
 | Barrier execution in a member stage | incompatible | Barrier exposes output only after a global sync, contradicting concurrent partial reads. |
 | Dynamic resource allocation | incompatible | Gang admission needs a stable slot set; reclaiming executors from a pinned-open group can deadlock it. |
 | Speculative execution | incompatible | A speculative producer copy races a consumer already reading partial output; no commit barrier protects the read. |
-| Push-based shuffle merge | incompatible | Push-based shuffle merges each partition's blocks into large pre-sealed files on merger services, and those files become readable only after a post-map-completion "finalize" step — the exact opposite of a pipelined shuffle, whose consumer reads before the producer finishes, so the two can never apply to the same edge. |
+| Push-based shuffle merge as a pipelined (incremental) shuffle | incompatible | Push-based merge exposes output only after a post-completion "finalize" step — the opposite of incremental reads — so it cannot serve as the incremental shuffle within a PG. (A PG's regular input/output edges may still use push-based merge, like any regular shuffle — §7.) |
 | Statically-indeterminate producer | moot | Its recovery is stage rollback-and-recompute, which a group never performs (§6: any failure aborts the group). The mechanism is never reached; rejected so the inapplicability is explicit rather than latent. (A producer whose output RDD is classified `INDETERMINATE` — a rerun can yield different data, not just a different order — determinable from the RDD graph at stage-creation time.) |
 | Checksum-mismatch full retry | moot | The runtime counterpart to static indeterminism: it checksums each map task's output and, on a cross-attempt mismatch, rolls back and re-runs the succeeding stages. A group never keeps succeeding stages across a retry (§6), so this never fires; rejected to keep the inapplicability explicit. |
-| Cached/persisted RDD in a member's within-stage chain | incompatible | Would capture partial output read mid-run and serve it as a complete result on reuse. Scoped to the member's within-stage (narrow-dependency) chain: a cached *complete* input reached via a broadcast variable or across a materialized shuffle — e.g. the static side of a stream-static join — is outside that chain and is unaffected. |
-| Pipelined producer shared across jobs | incompatible | Breaks single ownership: a failure must map to exactly one job's group. |
-| Regular shuffle internal to a group | incompatible | Concurrent co-scheduling contradicts materialize-before-read (§7). |
+| Pipelined producer shared across jobs | incompatible | Breaks single ownership: a failure must map to exactly one job's group. Enforced with the fan-out rule below — a pipelined dependency is never reused or shared (§4). |
+| Pipelined producer with more than one consumer (fan-out) | incompatible | Fan-out of a pipelined edge comes only from exchange/stage reuse, which needs a durable, independently-readable output; a transient incremental shuffle has none (it is a live, once-through stream). Well-defined only over a persistent/replayable shuffle (the deferred `persistentHint` axis, §2), so v1 enforces 1:1 by never reusing a pipelined dependency (§4). |
+| Regular shuffle internal to a group (should not occur) | invariant | Split by construction into separate groups (§3); checked and rejected as an inconsistency if it ever arises (§7). |
 | Members with differing resource profiles | incompatible | The gang slot check compares one demand against one capacity (§4); v1 requires a group to be single-profile. Per-profile accounting is a follow-up. |
 | Adaptive Query Execution over a pipelined exchange | incompatible | AQE reshapes exchanges from complete map-output statistics, which are unavailable while the shuffle is read incrementally. Enforced where exchanges are marked pipelined. |
 
