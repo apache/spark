@@ -65,7 +65,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
     val partitionSpecs = getPartitionSpecs(shuffleStage, advisoryParallelism)
     val maxReducerPartitionsPerTask =
       conf.getConf(SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK)
-    val exceedsReducerPartitionLimit = partitionSpecs.exists {
+    val exceedsReducerPartitionLimit = advisoryParallelism.isDefined && partitionSpecs.exists {
       case spec: PartialMapperPartitionSpec =>
         spec.endReducerIndex - spec.startReducerIndex > maxReducerPartitionsPerTask
       case spec: CoalescedMapperPartitionSpec =>
