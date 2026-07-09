@@ -21,6 +21,18 @@
 
 var shouldBlockUI = true;
 
+/* Escape a value for safe inclusion in HTML text content. Non-string values are
+ * coerced to a string first; null/undefined are returned unchanged. */
+function escapeHtml(text) {
+  if (text === null || text === undefined) return text;
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 $(document).ajaxStop(function () {
   if (shouldBlockUI) {
     $.unblockUI();
@@ -1072,8 +1084,8 @@ $(document).ready(function () {
                   var indexOfLineSeparator = msg.indexOf("\n");
                   var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
                   var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
-                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
-                  return formHead + form + formMsg;
+                  var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + escapeHtml(row.errorMessage) + "</pre></div>";
+                  return escapeHtml(formHead) + form + formMsg;
                 }
               },
               name: "Errors"
