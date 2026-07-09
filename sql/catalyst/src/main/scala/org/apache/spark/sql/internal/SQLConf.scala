@@ -295,7 +295,7 @@ object SQLConf {
   val LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE =
     buildConf("spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled")
       .internal()
-      .version("4.3.0")
+      .version("4.2.0")
       .doc(
         "When true, a grand-total GROUP BY GROUPING SETS (()) (and the equivalent empty " +
         "CUBE() / ROLLUP()) is lowered to a global aggregate during analysis, so it returns " +
