@@ -24,6 +24,7 @@ import java.util.List;
 import javax.naming.Context;
 import javax.naming.NamingException;
 import javax.naming.directory.InitialDirContext;
+import javax.naming.ldap.Rdn;
 import javax.security.sasl.AuthenticationException;
 
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -39,7 +40,11 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
   private final String userDNPattern;
 
   LdapAuthenticationProviderImpl() {
-    HiveConf conf = new HiveConf();
+    this(new HiveConf());
+  }
+
+  // Visible for testing.
+  LdapAuthenticationProviderImpl(HiveConf conf) {
     ldapURL = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_URL);
     baseDN = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_BASEDN);
     ldapDomain = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_DOMAIN);
@@ -62,24 +67,7 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
     }
 
     // setup the security principal
-    List<String> candidatePrincipals = new ArrayList<>();
-    if (Utils.isBlank(userDNPattern)) {
-      if (Utils.isNotBlank(baseDN)) {
-        String pattern = "uid=" + user + "," + baseDN;
-        candidatePrincipals.add(pattern);
-      }
-    } else {
-      String[] patterns = userDNPattern.split(":");
-      for (String pattern : patterns) {
-        if (pattern.contains(",") && pattern.contains("=")) {
-          candidatePrincipals.add(pattern.replaceAll("%s", user));
-        }
-      }
-    }
-
-    if (candidatePrincipals.isEmpty()) {
-      candidatePrincipals = Collections.singletonList(user);
-    }
+    List<String> candidatePrincipals = createCandidatePrincipals(user);
 
     for (Iterator<String> iterator = candidatePrincipals.iterator(); iterator.hasNext();) {
       String principal = iterator.next();
@@ -103,6 +91,38 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
         }
       }
     }
+  }
+
+  // Builds the list of LDAP principals (Distinguished Names) to attempt binding with for the
+  // given user. The user-supplied value is escaped with {@link Rdn#escapeValue} before it is
+  // placed into a DN so that LDAP special characters including ',', '=', '+', '<', '>', etc.
+  // cannot alter the DN structure. See RFC-2253.
+  // Visible for testing.
+  List<String> createCandidatePrincipals(String user) {
+    String escapedUser = Rdn.escapeValue(user);
+    List<String> candidatePrincipals = new ArrayList<>();
+    if (Utils.isBlank(userDNPattern)) {
+      if (Utils.isNotBlank(baseDN)) {
+        String pattern = "uid=" + escapedUser + "," + baseDN;
+        candidatePrincipals.add(pattern);
+      }
+    } else {
+      String[] patterns = userDNPattern.split(":");
+      for (String pattern : patterns) {
+        if (pattern.contains(",") && pattern.contains("=")) {
+          // Use literal replacement: the escaped user may contain '\\', which would otherwise be
+          // treated as a regex escape by String.replaceAll.
+          candidatePrincipals.add(pattern.replace("%s", escapedUser));
+        }
+      }
+    }
+
+    // If there is no configured pattern or base we accept the raw user in full because there is no
+    // pattern we're trying to safely inject into.
+    if (candidatePrincipals.isEmpty()) {
+      candidatePrincipals = Collections.singletonList(user);
+    }
+    return candidatePrincipals;
   }
 
   private boolean hasDomain(String userName) {
