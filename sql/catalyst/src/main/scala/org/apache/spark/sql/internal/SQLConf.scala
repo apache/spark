@@ -292,6 +292,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE =
+    buildConf("spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled")
+      .internal()
+      .version("4.3.0")
+      .doc(
+        "When true, a grand-total GROUP BY GROUPING SETS (()) (and the equivalent empty " +
+        "CUBE() / ROLLUP()) is lowered to a global aggregate during analysis, so it returns " +
+        "one row over empty input, matching an aggregation with no GROUP BY clause. When false, " +
+        "falls back to the legacy Expand-based lowering that returns no rows over empty input.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
       .internal()
@@ -1144,6 +1157,17 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
+
+  val COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK =
+    buildConf("spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask")
+      .doc("The maximum number of contiguous reducer partitions that may be coalesced into a " +
+        "single task. This puts a hard limit on the reducer-partition fan-in of a coalesced " +
+        "shuffle task, independent of the advisory partition size.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The maximum number of reducer partitions per task must be positive.")
+      .createWithDefault(Int.MaxValue)
 
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
@@ -3869,6 +3893,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BYPASS_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.bypassPartialAggregation")
+    .doc("When true, skips the pre-shuffle partial aggregation and runs a single Complete-mode " +
+      "aggregation after the shuffle. Bypassing partial aggregation can improve performance " +
+      "when group cardinality is high and the pre-shuffle reduction ratio is low. " +
+      "When false (default), uses a two-phase Partial+Final aggregation across a shuffle. " +
+      "This setting has no effect on queries containing DISTINCT aggregate functions, where " +
+      "the partial aggregation phases are required for correctness and are always applied.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -3891,8 +3927,9 @@ object SQLConf {
     buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
       .internal()
       .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
-        "replaces repeated simple named get_json_object paths over the same input " +
-        "with one shared parse.")
+        "replaces repeated simple named and array-index get_json_object paths over the same " +
+        "input with one shared parse, including mutually exclusive object/array coalesce " +
+        "branches.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -8398,6 +8435,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
   def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
+
+  def bypassPartialAggregation: Boolean = getConf(BYPASS_PARTIAL_AGGREGATION)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

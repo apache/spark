@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -2623,6 +2623,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
+  def calendarIntervalArrowNanosOverflowError(
+      interval: CalendarInterval): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"write the interval value $interval as Arrow IntervalMonthDayNano " +
+          "nanoseconds (the microseconds component must be in +/-(Long.MaxValue / 1000), " +
+          "roughly +/-292 years)")),
+      context = Array.empty,
+      summary = "")
+  }
+
   def timestampNanosEpochNanosOverflowError(
       value: TimestampNanosVal, isNtz: Boolean, sink: String): SparkArithmeticException = {
     // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
@@ -3094,6 +3106,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "INVALID_VARIANT_PATH",
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
+  }
+
+  def variantPathTypeMismatch(path: String, failedAt: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "VARIANT_PATH_TYPE_MISMATCH",
+      messageParameters =
+        Map("path" -> path, "failedAt" -> failedAt, "functionName" -> toSQLId(functionName)))
   }
 
   def malformedVariant(): Throwable = new SparkRuntimeException(

@@ -1242,7 +1242,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.UPDATE))
+      ctx.identifierReference, Option(ctx.optionsClause()),
+      writePrivileges = Set(TableWritePrivilege.UPDATE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -1366,6 +1367,56 @@ class AstBuilder extends DataTypeAstBuilder
       notMatchedBySourceActions,
       withSchemaEvolution)
   }
+
+  protected def buildAutoCdcIntoCommand(ctx: AutoCdcCommandContext): AutoCdcIntoCommand =
+    withOrigin(ctx) {
+      val target = UnresolvedIdentifier(visitMultipartIdentifier(ctx.target))
+      val params = parseAutoCdcParams(ctx.autoCdcParameters())
+      AutoCdcIntoCommand(
+        targetTable = target,
+        source = params.source,
+        keys = params.keys,
+        deleteCondition = params.deleteCondition,
+        sequenceByExpr = params.sequencing,
+        includeColumns = params.includeColumns,
+        excludeColumns = params.excludeColumns)
+    }
+
+  protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
+    withOrigin(params) {
+      // The source is parsed as a general `relationPrimary` to allow richer streaming queries
+      // (e.g. streaming TVFs, or a STREAM(...) source with options and watermark). It must still
+      // read from a streaming source; a batch relation is not a valid AUTO CDC source.
+      val source = plan(params.source)
+      if (!source.isStreaming) {
+        withOrigin(params.source) {
+          operationNotAllowed(
+            "AUTO CDC source must be a streaming query, e.g. STREAM(<table>).", params.source)
+        }
+      }
+      val keys = visitIdentifierSeq(params.keys).map(UnresolvedAttribute.quoted)
+      val deleteCondition = Option(params.autoCdcDeleteClause())
+        .map(c => expression(c.deleteCondition))
+      val sequencing = expression(params.autoCdcSequenceByClause().sequence)
+
+      val columnsClause = Option(params.autoCdcColumnsClause())
+      val includeColumns = columnsClause.collect {
+        case c if c.columns != null =>
+          visitIdentifierSeq(c.columns).map(UnresolvedAttribute.quoted)
+      }
+      val excludeColumns = columnsClause.collect {
+        case c if c.exceptCols != null =>
+          visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
+      }
+
+      AutoCdcParams(
+        source = source,
+        keys = keys,
+        deleteCondition = deleteCondition,
+        sequencing = sequencing,
+        includeColumns = includeColumns,
+        excludeColumns = excludeColumns)
+    }
 
   /**
    * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
@@ -7758,3 +7809,14 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 }
+
+/**
+ * Parameters parsed from an AUTO CDC clause.
+ */
+case class AutoCdcParams(
+    source: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequencing: Expression,
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]])
