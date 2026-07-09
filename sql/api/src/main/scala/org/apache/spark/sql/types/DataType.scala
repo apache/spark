@@ -295,7 +295,19 @@ object DataType {
           ("pyClass", _),
           ("sqlType", _),
           ("type", JString("udt"))) =>
-      SparkClassUtils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
+      if (!SqlApiConf.get.allowCreatingUDTFromString &&
+        !SqlApiConf.get.allowedDynamicUDTClasses.contains(udtClass)) {
+        throw DataTypeErrors.udtClassLoadingDisabledError(
+          udtClass,
+          SqlApiConf.get.allowedDynamicUDTClasses)
+      }
+      // Defense in depth: resolve the class without initializing it and verify that it really is a
+      // UserDefinedType subclass before constructing it.
+      val clazz = SparkClassUtils.classForName[UserDefinedType[_]](udtClass, initialize = false)
+      if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
+        throw DataTypeErrors.udtClassNotUserDefinedTypeError(udtClass)
+      }
+      clazz.getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(

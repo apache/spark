@@ -23,11 +23,13 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
-class DataTypeSuite extends SparkFunSuite {
+class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
   private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
@@ -200,6 +202,55 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
     val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
+  }
+
+  test("loading a UDT class from a schema string is enabled by default") {
+    val udt = new ExampleBaseTypeUDT()
+    assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+  }
+
+  test("loading a UDT class from a schema string can be disabled") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          DataType.fromJson(udt.json)
+        },
+        condition = "UDT_CLASS_LOADING_DISABLED",
+        parameters = Map("udtClass" -> udt.getClass.getName, "allowed" -> ""))
+    }
+  }
+
+  test("disabled UDT loading still honors the allow list") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udt.getClass.getName) {
+      assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+    }
+  }
+
+  test("a schema string cannot load an arbitrary non-UserDefinedType class") {
+    // Simulate a crafted schema string (e.g. from Parquet file metadata) whose UDT "class" field
+    // points at an arbitrary class that is not a UserDefinedType. Spark must refuse to load and
+    // instantiate it, both when UDT loading is enabled and when the class is explicitly allowed.
+    val gadget = classOf[java.lang.Object].getName
+    val json = s"""{"type":"udt","class":"$gadget","pyClass":null,"sqlType":"integer"}"""
+    Seq(
+      Map(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "true"),
+      Map(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> gadget)
+    ).foreach { conf =>
+      withSQLConf(conf.toSeq: _*) {
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(json)
+          },
+          condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          parameters = Map("udtClass" -> gadget))
+      }
+    }
   }
 
   def checkDataTypeFromJson(dataType: DataType): Unit = {

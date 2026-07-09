@@ -25,7 +25,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -66,33 +68,38 @@ object SchemaMergeUtils extends Logging {
       new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreCorruptFiles
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
 
-    // Issues a Spark job to read Parquet/ORC schema in parallel.
+    // Issues a Spark job to read Parquet/ORC schema in parallel. Propagate the session's SQL
+    // configs to the executors so that reading the schema stored in file metadata (which calls
+    // `DataType.fromJson`) observes session settings such as
+    // `spark.sql.udt.allowCreatingUDTFromString` instead of executor-side defaults.
     val partiallyMergedSchemas =
-      sparkSession
-        .sparkContext
-        .parallelize(partialFileStatusInfo, numParallelism)
-        .mapPartitions { iterator =>
-          // Resembles fake `FileStatus`es with serialized path and length information.
-          val fakeFileStatuses = iterator.map { case (path, length) =>
-            new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
-          }.toSeq
+      SQLExecution.withSQLConfPropagated(sparkSession) {
+        sparkSession
+          .sparkContext
+          .parallelize(partialFileStatusInfo, numParallelism)
+          .mapPartitions { iterator =>
+            // Resembles fake `FileStatus`es with serialized path and length information.
+            val fakeFileStatuses = iterator.map { case (path, length) =>
+              new FileStatus(length, false, 0, 0, 0, 0, null, null, null, new Path(path))
+            }.toSeq
 
-          val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
+            val schemas = schemaReader(fakeFileStatuses, serializedConf.value, ignoreCorruptFiles)
 
-          if (schemas.isEmpty) {
-            Iterator.empty
-          } else {
-            var mergedSchema = schemas.head
-            schemas.tail.foreach { schema =>
-              try {
-                mergedSchema = mergedSchema.merge(schema, caseSensitive)
-              } catch { case cause: SparkException =>
-                throw QueryExecutionErrors.failedMergingSchemaError(mergedSchema, schema, cause)
+            if (schemas.isEmpty) {
+              Iterator.empty
+            } else {
+              var mergedSchema = schemas.head
+              schemas.tail.foreach { schema =>
+                try {
+                  mergedSchema = mergedSchema.merge(schema, caseSensitive)
+                } catch { case cause: SparkException =>
+                  throw QueryExecutionErrors.failedMergingSchemaError(mergedSchema, schema, cause)
+                }
               }
+              Iterator.single(mergedSchema)
             }
-            Iterator.single(mergedSchema)
-          }
-        }.collect()
+          }.collect()
+      }
 
     if (partiallyMergedSchemas.isEmpty) {
       None
