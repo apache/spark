@@ -147,6 +147,11 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the population standard deviation of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -178,6 +183,11 @@ case class StddevPop(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the sample standard deviation of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -210,6 +220,11 @@ case class StddevSamp(
 // Compute the population variance of a column
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the population variance calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the population variance of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -239,6 +254,11 @@ case class VariancePop(
 // Compute the sample variance of a column
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sample variance calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the sample variance of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
@@ -281,6 +301,11 @@ case class RegrReplacement(child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the skewness of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
@@ -312,6 +337,11 @@ case class Skewness(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the kurtosis value calculated from values of a group.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the kurtosis of.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);

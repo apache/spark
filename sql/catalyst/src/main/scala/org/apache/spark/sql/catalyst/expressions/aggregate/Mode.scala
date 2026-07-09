@@ -233,6 +233,14 @@ case class Mode(
     _FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause). NULL values are ignored.
       If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency only one value will be returned.
       The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or the largest value if sort direction is desc from multiple values with the same frequency.""",
+  arguments = """
+    Arguments:
+      * col - The column to compute the most frequent value of.
+        An expression of any type.
+      * deterministic - Whether to return a deterministic result when there are multiple most
+          frequent values.
+        An expression that evaluates to a boolean. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);

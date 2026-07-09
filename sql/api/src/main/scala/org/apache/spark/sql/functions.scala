@@ -877,14 +877,14 @@ object functions {
   /**
    * Create time from hour, minute and second fields. For invalid inputs it will throw an error.
    *
-   * @param hour
-   *   the hour to represent, from 0 to 23
-   * @param minute
-   *   the minute to represent, from 0 to 59
-   * @param second
-   *   the second to represent, from 0 to 59.999999
+   * @param hour the hour to represent, from 0 to 23. A column that evaluates to an integer.
+   * @param minute the minute to represent, from 0 to 59. A column that evaluates to an integer.
+   * @param second the second to represent, from 0 to 59.999999. A column that evaluates to a
+   *   decimal.
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a time.
    */
   def make_time(hour: Column, minute: Column, second: Column): Column = {
     Column.fn("make_time", hour, minute, second)
@@ -2880,6 +2880,8 @@ object functions {
    *
    * @group map_funcs
    * @since 2.4
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def map_from_arrays(keys: Column, values: Column): Column =
     Column.fn("map_from_arrays", keys, values)
@@ -2890,6 +2892,8 @@ object functions {
    *
    * @group map_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def str_to_map(text: Column, pairDelim: Column, keyValueDelim: Column): Column =
     Column.fn("str_to_map", text, pairDelim, keyValueDelim)
@@ -2953,6 +2957,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def isnan(e: Column): Column = e.isNaN
 
@@ -2961,6 +2967,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def isnull(e: Column): Column = e.isNull
 
@@ -3012,6 +3020,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def nanvl(col1: Column, col2: Column): Column = Column.fn("nanvl", col1, col2)
 
@@ -3043,6 +3053,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def not(e: Column): Column = !e
 
@@ -3055,6 +3067,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def rand(seed: Long): Column = Column.fn("rand", lit(seed))
 
@@ -3079,6 +3093,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def randn(seed: Long): Column = Column.fn("randn", lit(seed))
 
@@ -3101,6 +3117,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def randstr(length: Column): Column =
     randstr(length, lit(SparkClassUtils.random.nextLong))
@@ -3131,6 +3149,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def sqrt(e: Column): Column = Column.fn("sqrt", e)
 
@@ -3148,6 +3168,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def try_add(left: Column, right: Column): Column = Column.fn("try_add", left, right)
 
@@ -3165,6 +3187,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
 
@@ -3173,6 +3197,8 @@ object functions {
    *
    * @group math_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def try_mod(left: Column, right: Column): Column = Column.fn("try_mod", left, right)
 
@@ -3182,6 +3208,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def try_multiply(left: Column, right: Column): Column = Column.fn("try_multiply", left, right)
 
@@ -3191,6 +3219,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def try_subtract(left: Column, right: Column): Column = Column.fn("try_subtract", left, right)
 
@@ -3245,6 +3275,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def when(condition: Column, value: Any): Column =
     Column(internal.CaseWhenOtherwise(Seq(condition.node -> lit(value).node)))
@@ -3272,6 +3304,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def bit_count(e: Column): Column = Column.fn("bit_count", e)
 
@@ -3281,6 +3315,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a byte.
    */
   def bit_get(e: Column, pos: Column): Column = Column.fn("bit_get", e, pos)
 
@@ -3290,6 +3326,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a byte.
    */
   def getbit(e: Column, pos: Column): Column = Column.fn("getbit", e, pos)
 
@@ -3314,12 +3352,15 @@ object functions {
    *
    * @group math_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def abs(e: Column): Column = Column.fn("abs", e)
 
   /**
    * @return
    *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3338,6 +3379,7 @@ object functions {
   /**
    * @return
    *   inverse hyperbolic cosine of `e`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3356,6 +3398,7 @@ object functions {
   /**
    * @return
    *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3374,6 +3417,7 @@ object functions {
   /**
    * @return
    *   inverse hyperbolic sine of `e`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3392,6 +3436,7 @@ object functions {
   /**
    * @return
    *   inverse tangent of `e` as if computed by `java.lang.Math.atan`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3408,14 +3453,13 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   * @param y
-   *   coordinate on y-axis
-   * @param x
-   *   coordinate on x-axis
+   * @param y coordinate on y-axis. A column that evaluates to a double.
+   * @param x coordinate on x-axis. A column that evaluates to a double.
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
    *   `java.lang.Math.atan2`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3531,6 +3575,7 @@ object functions {
   /**
    * @return
    *   inverse hyperbolic tangent of `e`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3552,6 +3597,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def bin(e: Column): Column = Column.fn("bin", e)
 
@@ -3569,6 +3616,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def cbrt(e: Column): Column = Column.fn("cbrt", e)
 
@@ -3585,6 +3634,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def ceil(e: Column, scale: Column): Column = Column.fn("ceil", e, scale)
 
@@ -3609,6 +3660,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def ceiling(e: Column, scale: Column): Column = Column.fn("ceiling", e, scale)
 
@@ -3625,15 +3678,17 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def conv(num: Column, fromBase: Int, toBase: Int): Column =
     Column.fn("conv", num, lit(fromBase), lit(toBase))
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   cosine of the angle, as if computed by `java.lang.Math.cos`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3652,10 +3707,10 @@ object functions {
   def cos(columnName: String): Column = cos(Column(columnName))
 
   /**
-   * @param e
-   *   hyperbolic angle
+   * @param e hyperbolic angle. A column that evaluates to a double.
    * @return
    *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3674,10 +3729,10 @@ object functions {
   def cosh(columnName: String): Column = cosh(Column(columnName))
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   cotangent of the angle
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -3685,10 +3740,10 @@ object functions {
   def cot(e: Column): Column = Column.fn("cot", e)
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   cosecant of the angle
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -3708,6 +3763,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def exp(e: Column): Column = Column.fn("exp", e)
 
@@ -3724,6 +3781,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def expm1(e: Column): Column = Column.fn("expm1", e)
 
@@ -3740,6 +3799,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def factorial(e: Column): Column = Column.fn("factorial", e)
 
@@ -3748,6 +3809,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def floor(e: Column, scale: Column): Column = Column.fn("floor", e, scale)
 
@@ -3794,6 +3857,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def hex(column: Column): Column = Column.fn("hex", column)
 
@@ -3803,6 +3868,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def unhex(column: Column): Column = Column.fn("unhex", column)
 
@@ -3811,6 +3878,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(l: Column, r: Column): Column = Column.fn("hypot", l, r)
 
@@ -3898,6 +3967,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def ln(e: Column): Column = Column.fn("ln", e)
 
@@ -3906,6 +3977,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log(e: Column): Column = ln(e)
 
@@ -3938,6 +4011,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log10(e: Column): Column = Column.fn("log10", e)
 
@@ -3954,6 +4029,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log1p(e: Column): Column = Column.fn("log1p", e)
 
@@ -3970,6 +4047,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log2(expr: Column): Column = Column.fn("log2", expr)
 
@@ -3986,6 +4065,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def negative(e: Column): Column = Column.fn("negative", e)
 
@@ -4002,6 +4083,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def positive(e: Column): Column = Column.fn("positive", e)
 
@@ -4010,6 +4093,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(l: Column, r: Column): Column = Column.fn("power", l, r)
 
@@ -4074,6 +4159,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def power(l: Column, r: Column): Column = Column.fn("power", l, r)
 
@@ -4082,6 +4169,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def pmod(dividend: Column, divisor: Column): Column = Column.fn("pmod", dividend, divisor)
 
@@ -4091,6 +4180,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def rint(e: Column): Column = Column.fn("rint", e)
 
@@ -4108,6 +4199,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def round(e: Column): Column = round(e, 0)
 
@@ -4134,6 +4227,8 @@ object functions {
    *
    * @group math_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bround(e: Column): Column = bround(e, 0)
 
@@ -4156,10 +4251,10 @@ object functions {
   def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   secant of the angle
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -4182,6 +4277,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def shiftleft(e: Column, numBits: Int): Column = Column.fn("shiftleft", e, lit(numBits))
 
@@ -4201,6 +4298,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
 
@@ -4220,6 +4319,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
@@ -4229,6 +4330,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def sign(e: Column): Column = Column.fn("sign", e)
 
@@ -4237,6 +4340,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def signum(e: Column): Column = Column.fn("signum", e)
 
@@ -4249,10 +4354,10 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   sine of the angle, as if computed by `java.lang.Math.sin`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4271,10 +4376,10 @@ object functions {
   def sin(columnName: String): Column = sin(Column(columnName))
 
   /**
-   * @param e
-   *   hyperbolic angle
+   * @param e hyperbolic angle. A column that evaluates to a double.
    * @return
    *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4293,10 +4398,10 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   tangent of the given value, as if computed by `java.lang.Math.tan`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4315,10 +4420,10 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * @param e
-   *   hyperbolic angle
+   * @param e hyperbolic angle. A column that evaluates to a double.
    * @return
    *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4354,10 +4459,10 @@ object functions {
    * Converts an angle measured in radians to an approximately equivalent angle measured in
    * degrees.
    *
-   * @param e
-   *   angle in radians
+   * @param e angle in radians. A column that evaluates to a double.
    * @return
    *   angle in degrees, as if computed by `java.lang.Math.toDegrees`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 2.1.0
@@ -4396,10 +4501,10 @@ object functions {
    * Converts an angle measured in degrees to an approximately equivalent angle measured in
    * radians.
    *
-   * @param e
-   *   angle in degrees
+   * @param e angle in degrees. A column that evaluates to a double.
    * @return
    *   angle in radians, as if computed by `java.lang.Math.toRadians`
+   *   Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 2.1.0
@@ -4425,16 +4530,14 @@ object functions {
    * evaluated. Note that input arguments must follow conditions listed below; otherwise, the
    * method will return null.
    *
-   * @param v
-   *   value to compute a bucket number in the histogram
-   * @param min
-   *   minimum value of the histogram
-   * @param max
-   *   maximum value of the histogram
-   * @param numBucket
-   *   the number of buckets
+   * @param v value to compute a bucket number in the histogram. A column that evaluates to a double
+   *   or interval.
+   * @param min minimum value of the histogram. A column that evaluates to a double or interval.
+   * @param max maximum value of the histogram. A column that evaluates to a double or interval.
+   * @param numBucket the number of buckets. A column that evaluates to a long.
    * @return
    *   the bucket number into which the value would fall after being evaluated
+   *   Returns a column that evaluates to a long.
    * @group math_funcs
    * @since 3.5.0
    */
@@ -4491,6 +4594,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def md5(e: Column): Column = Column.fn("md5", e)
 
@@ -4500,6 +4605,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def sha1(e: Column): Column = Column.fn("sha1", e)
 
@@ -4507,13 +4614,13 @@ object functions {
    * Calculates the SHA-2 family of hash functions of a binary column and returns the value as a
    * hex string.
    *
-   * @param e
-   *   column to compute SHA-2 on.
-   * @param numBits
-   *   one of 224, 256, 384, or 512.
+   * @param e column to compute SHA-2 on. A column that evaluates to a binary.
+   * @param numBits one of 224, 256, 384, or 512. A column that evaluates to an integer.
    *
    * @group hash_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def sha2(e: Column, numBits: Int): Column = {
     require(
@@ -4528,6 +4635,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def crc32(e: Column): Column = Column.fn("crc32", e)
 
@@ -4555,6 +4664,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column that always evaluates to NULL.
    */
   def assert_true(c: Column): Column = Column.fn("assert_true", c)
 
@@ -4571,6 +4682,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column that always evaluates to NULL.
    */
   def raise_error(c: Column): Column = Column.fn("raise_error", c)
 
@@ -4596,6 +4709,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def uuid(): Column = Column.fn("uuid", lit(SparkClassUtils.random.nextLong))
 
@@ -4618,26 +4733,24 @@ object functions {
    * for encryption, the identical AAD value must be provided for decryption. The default mode is
    * GCM.
    *
-   * @param input
-   *   The binary value to encrypt.
-   * @param key
-   *   The passphrase to use to encrypt the data.
-   * @param mode
-   *   Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
-   *   GCM, CBC.
-   * @param padding
-   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
-   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
-   *   for CBC.
-   * @param iv
-   *   Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
-   *   "". 16-byte array for CBC mode. 12-byte array for GCM mode.
-   * @param aad
-   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
-   *   free-form input and must be provided for both encryption and decryption.
+   * @param input The binary value to encrypt. A column that evaluates to a binary.
+   * @param key The passphrase to use to encrypt the data. A column that evaluates to a binary.
+   * @param mode Specifies which block cipher mode should be used to encrypt messages. Valid modes:
+   *   ECB, GCM, CBC. A column that evaluates to a string.
+   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
+   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
+   *   PKCS for CBC. A column that evaluates to a string.
+   * @param iv Optional initialization vector. Only supported for CBC and GCM modes. Valid values:
+   *   None or "". 16-byte array for CBC mode. 12-byte array for GCM mode. A column that evaluates
+   *   to a binary.
+   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption. A column that
+   *   evaluates to a binary.
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_encrypt(
       input: Column,
@@ -4706,23 +4819,21 @@ object functions {
    * only supported for GCM. If provided for encryption, the identical AAD value must be provided
    * for decryption. The default mode is GCM.
    *
-   * @param input
-   *   The binary value to decrypt.
-   * @param key
-   *   The passphrase to use to decrypt the data.
-   * @param mode
-   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
-   *   GCM, CBC.
-   * @param padding
-   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
-   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
-   *   for CBC.
-   * @param aad
-   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
-   *   free-form input and must be provided for both encryption and decryption.
+   * @param input The binary value to decrypt. A column that evaluates to a binary.
+   * @param key The passphrase to use to decrypt the data. A column that evaluates to a binary.
+   * @param mode Specifies which block cipher mode should be used to decrypt messages. Valid modes:
+   *   ECB, GCM, CBC. A column that evaluates to a string.
+   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
+   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
+   *   PKCS for CBC. A column that evaluates to a string.
+   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption. A column that
+   *   evaluates to a binary.
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_decrypt(
       input: Column,
@@ -4772,23 +4883,21 @@ object functions {
    * This is a special version of `aes_decrypt` that performs the same operation, but returns a
    * NULL value instead of raising an error if the decryption cannot be performed.
    *
-   * @param input
-   *   The binary value to decrypt.
-   * @param key
-   *   The passphrase to use to decrypt the data.
-   * @param mode
-   *   Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
-   *   GCM, CBC.
-   * @param padding
-   *   Specifies how to pad messages whose length is not a multiple of the block size. Valid
-   *   values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
-   *   for CBC.
-   * @param aad
-   *   Optional additional authenticated data. Only supported for GCM mode. This can be any
-   *   free-form input and must be provided for both encryption and decryption.
+   * @param input The binary value to decrypt. A column that evaluates to a binary.
+   * @param key The passphrase to use to decrypt the data. A column that evaluates to a binary.
+   * @param mode Specifies which block cipher mode should be used to decrypt messages. Valid modes:
+   *   ECB, GCM, CBC. A column that evaluates to a string.
+   * @param padding Specifies how to pad messages whose length is not a multiple of the block size.
+   *   Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and
+   *   PKCS for CBC. A column that evaluates to a string.
+   * @param aad Optional additional authenticated data. Only supported for GCM mode. This can be any
+   *   free-form input and must be provided for both encryption and decryption. A column that
+   *   evaluates to a binary.
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_aes_decrypt(
       input: Column,
@@ -4839,6 +4948,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def sha(col: Column): Column = Column.fn("sha", col)
 
@@ -4900,6 +5011,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def typeof(col: Column): Column = Column.fn("typeof", col)
 
@@ -4922,6 +5035,8 @@ object functions {
    *
    * @group math_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def uniform(min: Column, max: Column): Column =
     uniform(min, max, lit(SparkClassUtils.random.nextLong))
@@ -4945,6 +5060,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def random(seed: Column): Column = Column.fn("random", seed)
 
@@ -4962,6 +5079,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def bitmap_bit_position(col: Column): Column =
     Column.fn("bitmap_bit_position", col)
@@ -4971,6 +5090,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def bitmap_bucket_number(col: Column): Column =
     Column.fn("bitmap_bucket_number", col)
@@ -5021,6 +5142,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def ascii(e: Column): Column = Column.fn("ascii", e)
 
@@ -5030,6 +5153,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def base64(e: Column): Column = Column.fn("base64", e)
 
@@ -5038,6 +5163,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def bit_length(e: Column): Column = Column.fn("bit_length", e)
 
@@ -5073,6 +5200,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def encode(value: Column, charset: String): Column =
     Column.fn("encode", value, lit(charset))
@@ -5082,6 +5211,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def is_valid_utf8(str: Column): Column =
     Column.fn("is_valid_utf8", str)
@@ -5092,6 +5223,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def make_valid_utf8(str: Column): Column =
     Column.fn("make_valid_utf8", str)
@@ -5102,6 +5235,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def validate_utf8(str: Column): Column =
     Column.fn("validate_utf8", str)
@@ -5111,6 +5246,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def try_validate_utf8(str: Column): Column =
     Column.fn("try_validate_utf8", str)
@@ -5124,6 +5261,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def format_number(x: Column, d: Int): Column = Column.fn("format_number", x, lit(d))
 
@@ -5145,6 +5284,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def initcap(e: Column): Column = Column.fn("initcap", e)
 
@@ -5158,6 +5299,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: String): Column = instr(str, lit(substring))
 
@@ -5253,6 +5396,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def length(e: Column): Column = Column.fn("length", e)
 
@@ -5263,6 +5408,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def len(e: Column): Column = Column.fn("len", e)
 
@@ -5271,6 +5418,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def lower(e: Column): Column = Column.fn("lower", e)
 
@@ -5279,6 +5428,7 @@ object functions {
    * to a given threshold.
    * @return
    *   result distance, or -1
+   *   Returns a column that evaluates to an integer.
    * @group string_funcs
    * @since 3.5.0
    */
@@ -5297,6 +5447,8 @@ object functions {
    * double between 0.0 (no similarity) and 1.0 (identical).
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def jaro_winkler_similarity(l: Column, r: Column): Column =
     Column.fn("jaro_winkler_similarity", l, r)
@@ -5310,6 +5462,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def locate(substr: String, str: Column): Column = Column.fn("locate", lit(substr), str)
 
@@ -5332,6 +5486,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def lpad(str: Column, len: Int, pad: String): Column = lpad(str, lit(len), lit(pad))
 
@@ -5358,6 +5514,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def ltrim(e: Column): Column = Column.fn("ltrim", e)
 
@@ -5380,6 +5538,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def octet_length(e: Column): Column = Column.fn("octet_length", e)
 
@@ -5396,6 +5556,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def collation(e: Column): Column = Column.fn("collation", e)
 
@@ -5404,6 +5566,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def rlike(str: Column, regexp: Column): Column = Column.fn("rlike", str, regexp)
 
@@ -5412,6 +5576,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def regexp(str: Column, regexp: Column): Column = Column.fn("regexp", str, regexp)
 
@@ -5420,6 +5586,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def regexp_like(str: Column, regexp: Column): Column = Column.fn("regexp_like", str, regexp)
 
@@ -5429,6 +5597,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def regexp_count(str: Column, regexp: Column): Column = Column.fn("regexp_count", str, regexp)
 
@@ -5440,6 +5610,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column =
     Column.fn("regexp_extract", e, lit(exp), lit(groupIdx))
@@ -5450,6 +5622,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def regexp_extract_all(str: Column, regexp: Column): Column =
     Column.fn("regexp_extract_all", str, regexp)
@@ -5469,6 +5643,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_replace(e: Column, pattern: String, replacement: String): Column =
     regexp_replace(e, lit(pattern), lit(replacement))
@@ -5508,6 +5684,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_substr(str: Column, regexp: Column): Column = Column.fn("regexp_substr", str, regexp)
 
@@ -5518,6 +5696,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def regexp_instr(str: Column, regexp: Column): Column = Column.fn("regexp_instr", str, regexp)
 
@@ -5538,6 +5718,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def unbase64(e: Column): Column = Column.fn("unbase64", e)
 
@@ -5547,6 +5729,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rpad(str: Column, len: Int, pad: String): Column = rpad(str, lit(len), lit(pad))
 
@@ -5573,6 +5757,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def repeat(str: Column, n: Int): Column = Column.fn("repeat", str, lit(n))
 
@@ -5589,6 +5775,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rtrim(e: Column): Column = Column.fn("rtrim", e)
 
@@ -5611,20 +5799,22 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def soundex(e: Column): Column = Column.fn("soundex", e)
 
   /**
    * Splits str around matches of the given pattern.
    *
-   * @param str
-   *   a string expression to split
-   * @param pattern
-   *   a string representing a regular expression. The regex string should be a Java regular
-   *   expression.
+   * @param str a string expression to split
+   * @param pattern a string representing a regular expression. The regex string should be a Java
+   *   regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def split(str: Column, pattern: String): Column = Column.fn("split", str, lit(pattern))
 
@@ -5693,6 +5883,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def substring(str: Column, pos: Int, len: Int): Column =
     Column.fn("substring", str, lit(pos), lit(len))
@@ -5717,6 +5909,8 @@ object functions {
    * right) is returned. substring_index performs a case-sensitive match when searching for delim.
    *
    * @group string_funcs
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def substring_index(str: Column, delim: String, count: Int): Column =
     Column.fn("substring_index", str, lit(delim), lit(count))
@@ -5727,6 +5921,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def overlay(src: Column, replace: Column, pos: Column, len: Column): Column =
     Column.fn("overlay", src, replace, pos, len)
@@ -5745,6 +5941,8 @@ object functions {
    * Splits a string into arrays of sentences, where each sentence is an array of words.
    * @group string_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sentences(string: Column, language: Column, country: Column): Column =
     Column.fn("sentences", string, language, country)
@@ -5773,6 +5971,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def translate(src: Column, matchingString: String, replaceString: String): Column =
     Column.fn("translate", src, lit(matchingString), lit(replaceString))
@@ -5782,6 +5982,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def trim(e: Column): Column = Column.fn("trim", e)
 
@@ -5804,6 +6006,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def upper(e: Column): Column = Column.fn("upper", e)
 
@@ -5815,6 +6019,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def to_binary(e: Column, f: Column): Column = Column.fn("to_binary", e, f)
 
@@ -5906,22 +6112,24 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a decimal.
    */
   def to_number(e: Column, format: Column): Column = Column.fn("to_number", e, format)
 
   /**
    * Replaces all occurrences of `search` with `replace`.
    *
-   * @param src
-   *   A column of string to be replaced
-   * @param search
-   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged.
-   * @param replace
-   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
-   *   the string that is removed from `str`.
+   * @param src A column of string to be replaced. A column that evaluates to a string.
+   * @param search A column of string, If `search` is not found in `str`, `str` is returned
+   *   unchanged. A column that evaluates to a string.
+   * @param replace A column of string, If `replace` is not specified or is an empty string, nothing
+   *   replaces the string that is removed from `str`. A column that evaluates to a string.
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def replace(src: Column, search: Column, replace: Column): Column =
     Column.fn("replace", src, search, replace)
@@ -5947,6 +6155,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def split_part(str: Column, delimiter: Column, partNum: Column): Column =
     Column.fn("split_part", str, delimiter, partNum)
@@ -5957,6 +6167,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def substr(str: Column, pos: Column, len: Column): Column =
     Column.fn("substr", str, pos, len)
@@ -5975,6 +6187,8 @@ object functions {
    *
    * @group url_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
     Column.fn("try_parse_url", url, partToExtract, key)
@@ -5993,6 +6207,8 @@ object functions {
    *
    * @group url_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def parse_url(url: Column, partToExtract: Column, key: Column): Column =
     Column.fn("parse_url", url, partToExtract, key)
@@ -6022,6 +6238,8 @@ object functions {
    *
    * @group url_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def url_decode(str: Column): Column = Column.fn("url_decode", str)
 
@@ -6031,6 +6249,8 @@ object functions {
    *
    * @group url_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def try_url_decode(str: Column): Column = Column.fn("try_url_decode", str)
 
@@ -6040,6 +6260,8 @@ object functions {
    *
    * @group url_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def url_encode(str: Column): Column = Column.fn("url_encode", str)
 
@@ -6049,6 +6271,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def position(substr: Column, str: Column, start: Column): Column =
     Column.fn("position", substr, str, start)
@@ -6070,6 +6294,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def endswith(str: Column, suffix: Column): Column =
     Column.fn("endswith", str, suffix)
@@ -6081,6 +6307,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def startswith(str: Column, prefix: Column): Column =
     Column.fn("startswith", str, prefix)
@@ -6091,6 +6319,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def char(n: Column): Column = Column.fn("char", n)
 
@@ -6099,6 +6329,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def btrim(str: Column): Column = Column.fn("btrim", str)
 
@@ -6116,6 +6348,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_to_binary(e: Column, f: Column): Column = Column.fn("try_to_binary", e, f)
 
@@ -6135,6 +6369,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a decimal.
    */
   def try_to_number(e: Column, format: Column): Column = Column.fn("try_to_number", e, format)
 
@@ -6144,6 +6380,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def char_length(str: Column): Column = Column.fn("char_length", str)
 
@@ -6153,6 +6391,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def character_length(str: Column): Column = Column.fn("character_length", str)
 
@@ -6162,6 +6402,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def chr(n: Column): Column = Column.fn("chr", n)
 
@@ -6172,6 +6414,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def contains(left: Column, right: Column): Column = Column.fn("contains", left, right)
 
@@ -6194,6 +6438,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def find_in_set(str: Column, strArray: Column): Column = Column.fn("find_in_set", str, strArray)
 
@@ -6203,6 +6449,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def like(str: Column, pattern: Column, escapeChar: Column): Column =
     Column.fn("like", str, pattern, escapeChar)
@@ -6222,6 +6470,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def ilike(str: Column, pattern: Column, escapeChar: Column): Column =
     Column.fn("ilike", str, pattern, escapeChar)
@@ -6240,6 +6490,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def lcase(str: Column): Column = Column.fn("lcase", str)
 
@@ -6248,6 +6500,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def ucase(str: Column): Column = Column.fn("ucase", str)
 
@@ -6257,6 +6511,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def left(str: Column, len: Column): Column = Column.fn("left", str, len)
 
@@ -6266,6 +6522,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def right(str: Column, len: Column): Column = Column.fn("right", str, len)
 
@@ -6275,6 +6533,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def quote(str: Column): Column = Column.fn("quote", str)
 
@@ -7353,6 +7613,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def kll_sketch_to_string_bigint(e: Column): Column =
     Column.fn("kll_sketch_to_string_bigint", e)
@@ -7362,6 +7624,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def kll_sketch_to_string_float(e: Column): Column =
     Column.fn("kll_sketch_to_string_float", e)
@@ -7371,6 +7635,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def kll_sketch_to_string_double(e: Column): Column =
     Column.fn("kll_sketch_to_string_double", e)
@@ -7380,6 +7646,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def kll_sketch_get_n_bigint(e: Column): Column =
     Column.fn("kll_sketch_get_n_bigint", e)
@@ -7389,6 +7657,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def kll_sketch_get_n_float(e: Column): Column =
     Column.fn("kll_sketch_get_n_float", e)
@@ -7398,6 +7668,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def kll_sketch_get_n_double(e: Column): Column =
     Column.fn("kll_sketch_get_n_double", e)
@@ -7407,6 +7679,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_merge_bigint(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_bigint", left, right)
@@ -7416,6 +7690,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_merge_float(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_float", left, right)
@@ -7425,6 +7701,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_merge_double(left: Column, right: Column): Column =
     Column.fn("kll_sketch_merge_double", left, right)
@@ -7435,6 +7713,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def kll_sketch_get_quantile_bigint(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
@@ -7445,6 +7725,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def kll_sketch_get_quantile_float(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_float", sketch, rank)
@@ -7455,6 +7737,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kll_sketch_get_quantile_double(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_double", sketch, rank)
@@ -7465,6 +7749,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kll_sketch_get_rank_bigint(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
@@ -7475,6 +7761,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kll_sketch_get_rank_float(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_float", sketch, quantile)
@@ -7485,6 +7773,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_double", sketch, quantile)
@@ -7496,13 +7786,14 @@ object functions {
   /**
    * Returns the date that is `numMonths` after `startDate`.
    *
-   * @param startDate
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param numMonths
-   *   The number of months to add to `startDate`, can be negative to subtract months
+   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
+   *   can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a date.
+   * @param numMonths The number of months to add to `startDate`, can be negative to subtract
+   *   months. A column that evaluates to an integer.
    * @return
    *   A date, or null if `startDate` was a string that could not be cast to a date
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7585,13 +7876,14 @@ object functions {
    * See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime
    * Patterns</a> for valid date and time format patterns
    *
-   * @param dateExpr
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format
-   *   A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that can
+   *   be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a timestamp or time.
+   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`. A column that
+   *   evaluates to a string.
    * @return
    *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp
+   *   Returns a column that evaluates to a string.
    * @note
    *   Use specialized functions like [[year]] whenever possible as they benefit from a
    *   specialized implementation.
@@ -7606,13 +7898,14 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days
-   *   The number of days to add to `start`, can be negative to subtract days
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param days The number of days to add to `start`, can be negative to subtract days. A column
+   *   that evaluates to an integer, short, or byte.
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7636,13 +7929,14 @@ object functions {
   /**
    * Returns the date that is `days` days after `start`
    *
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days
-   *   A column of the number of days to add to `start`, can be negative to subtract days
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param days A column of the number of days to add to `start`, can be negative to subtract days.
+   *   A column that evaluates to an integer, short, or byte.
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7651,13 +7945,14 @@ object functions {
   /**
    * Returns the date that is `days` days before `start`
    *
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param days
-   *   The number of days to subtract from `start`, can be negative to add days
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param days The number of days to subtract from `start`, can be negative to add days. A column
+   *   that evaluates to an integer, short, or byte.
    * @return
    *   A date, or null if `start` was a string that could not be cast to a date
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7688,15 +7983,16 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
    *   date. Negative if `end` is before `start`
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7711,15 +8007,16 @@ object functions {
    * // returns 1
    * }}}
    *
-   * @param end
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
    *   date. Negative if `end` is before `start`
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7730,6 +8027,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def date_from_unix_date(days: Column): Column = Column.fn("date_from_unix_date", days)
 
@@ -7737,6 +8036,7 @@ object functions {
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7746,6 +8046,7 @@ object functions {
    * Extracts the quarter as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7755,6 +8056,7 @@ object functions {
    * Extracts the month as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7765,6 +8067,7 @@ object functions {
    * for a Sunday through to 7 for a Saturday
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -7774,6 +8077,7 @@ object functions {
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7783,6 +8087,7 @@ object functions {
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7792,6 +8097,7 @@ object functions {
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7803,6 +8109,7 @@ object functions {
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7811,12 +8118,11 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field
-   *   selects which part of the source should be extracted.
-   * @param source
-   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @param field selects which part of the source should be extracted.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
    * @return
    *   a part of the date/timestamp or interval source
+   *   Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7827,13 +8133,12 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field
-   *   selects which part of the source should be extracted, and supported string values are as
-   *   same as the fields of the equivalent function `extract`.
-   * @param source
-   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @param field selects which part of the source should be extracted, and supported string values
+   *   are as same as the fields of the equivalent function `extract`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
    * @return
    *   a part of the date/timestamp or interval source
+   *   Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7844,13 +8149,12 @@ object functions {
   /**
    * Extracts a part of the date/timestamp or interval source.
    *
-   * @param field
-   *   selects which part of the source should be extracted, and supported string values are as
-   *   same as the fields of the equivalent function `EXTRACT`.
-   * @param source
-   *   a date/timestamp or interval column from where `field` should be extracted.
+   * @param field selects which part of the source should be extracted, and supported string values
+   *   are as same as the fields of the equivalent function `EXTRACT`.
+   * @param source a date/timestamp or interval column from where `field` should be extracted.
    * @return
    *   a part of the date/timestamp or interval source
+   *   Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -7862,11 +8166,12 @@ object functions {
    * Returns the last day of the month which the given date belongs to. For example, input
    * "2015-07-27" returns "2015-07-31" since July 31 is the last day of the month in July 2015.
    *
-   * @param e
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param e A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
    * @return
    *   A date, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7878,6 +8183,7 @@ object functions {
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7888,12 +8194,15 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def weekday(e: Column): Column = Column.fn("weekday", e)
 
   /**
    * @return
    *   A date created from year, month and day fields.
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.3.0
    */
@@ -7914,15 +8223,14 @@ object functions {
    * months_between("2017-06-01", "2017-06-16 12:00:00")  // returns -0.5
    * }}}
    *
-   * @param end
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param start
-   *   A date, timestamp or string. If a string, the data must be in a format that can cast to a
-   *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param end A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can
+   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return
    *   A double, or null if either `end` or `start` were strings that could not be cast to a
    *   timestamp. Negative if `end` is before `start`
+   *   Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7945,14 +8253,15 @@ object functions {
    * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
    * Sunday after 2015-07-27.
    *
-   * @param date
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param dayOfWeek
-   *   Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param dayOfWeek Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
+   *   "Sun". A column that evaluates to a string.
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
    *   was an invalid value
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7986,6 +8295,7 @@ object functions {
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -7999,6 +8309,7 @@ object functions {
    *
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
+   *   Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8009,11 +8320,11 @@ object functions {
    * representing the timestamp of that moment in the current system time zone in the yyyy-MM-dd
    * HH:mm:ss format.
    *
-   * @param ut
-   *   A number of a type that is castable to a long, such as string or integer. Can be negative
-   *   for timestamps before the unix epoch
+   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
+   *   negative for timestamps before the unix epoch
    * @return
    *   A string, or null if the input was a string that could not be cast to a long
+   *   Returns a column that evaluates to a string.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8050,6 +8361,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def unix_timestamp(): Column = unix_timestamp(current_timestamp())
 
@@ -8090,10 +8403,10 @@ object functions {
   /**
    * Parses a string value to a time value.
    *
-   * @param str
-   *   A string to be parsed to time.
+   * @param str A string to be parsed to time.
    * @return
    *   A time, or raises an error if the input is malformed.
+   *   Returns a column that evaluates to a string.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8125,11 +8438,12 @@ object functions {
   /**
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
-   * @param s
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
    * @return
    *   A timestamp, or null if the input was a string that could not be cast to a timestamp
+   *   Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -8157,10 +8471,10 @@ object functions {
   /**
    * Parses a string value to a time value.
    *
-   * @param str
-   *   A string to be parsed to time.
+   * @param str A string to be parsed to time.
    * @return
    *   A time, or null if the input is malformed.
+   *   Returns a column that evaluates to a string.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8196,6 +8510,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_to_timestamp(s: Column, format: Column): Column =
     Column.fn("try_to_timestamp", s, format)
@@ -8215,6 +8531,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def to_date(e: Column): Column = Column.fn("to_date", e)
 
@@ -8243,6 +8561,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def try_to_date(e: Column): Column = Column.fn("try_to_date", e)
 
@@ -8260,6 +8580,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def unix_date(e: Column): Column = Column.fn("unix_date", e)
 
@@ -8268,6 +8590,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
 
@@ -8287,6 +8611,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def unix_millis(e: Column): Column = Column.fn("unix_millis", e)
 
@@ -8296,6 +8622,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def unix_seconds(e: Column): Column = Column.fn("unix_seconds", e)
 
@@ -8304,16 +8632,16 @@ object functions {
    *
    * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
    *
-   * @param date
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format:
-   *   'year', 'yyyy', 'yy' to truncate by year, or 'month', 'mon', 'mm' to truncate by month
-   *   Other options are: 'week', 'quarter'
+   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates
+   *   to a date.
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year, or 'month', 'mon', 'mm' to truncate by
+   *   month Other options are: 'week', 'quarter'. A column that evaluates to a string.
    *
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or `format` was an
    *   invalid value
+   *   Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8324,16 +8652,16 @@ object functions {
    *
    * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format:
-   *   'year', 'yyyy', 'yy' to truncate by year, 'month', 'mon', 'mm' to truncate by month, 'day',
-   *   'dd' to truncate by day, Other options are: 'microsecond', 'millisecond', 'second',
-   *   'minute', 'hour', 'week', 'quarter'
-   * @param timestamp
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year, 'month', 'mon', 'mm' to truncate by
+   *   month, 'day', 'dd' to truncate by day, Other options are: 'microsecond', 'millisecond',
+   *   'second', 'minute', 'hour', 'week', 'quarter'. A column that evaluates to a string.
+   * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
+   *   can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a timestamp.
    * @return
    *   A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp or
    *   `format` was an invalid value
+   *   Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -8345,18 +8673,19 @@ object functions {
    * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14
    * 03:40:00.0'.
    *
-   * @param ts
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param tz
-   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
-   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
-   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a timestamp.
+   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
+   *   be in the format of either region-based zone IDs or zone offsets. Region IDs must have the
+   *   form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
    *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
-   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous.
+   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous. A
+   *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
    *   an invalid value
+   *   Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8377,18 +8706,19 @@ object functions {
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
    *
-   * @param ts
-   *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
-   *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param tz
-   *   A string detailing the time zone ID that the input should be adjusted to. It should be in
-   *   the format of either region-based zone IDs or zone offsets. Region IDs must have the form
-   *   'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
+   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
+   *   cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that
+   *   evaluates to a timestamp.
+   * @param tz A string detailing the time zone ID that the input should be adjusted to. It should
+   *   be in the format of either region-based zone IDs or zone offsets. Region IDs must have the
+   *   form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format
    *   '(+|-)HH:mm', for example '-08:00' or '+01:00'. Also 'UTC' and 'Z' are supported as aliases
-   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous.
+   *   of '+00:00'. Other short names are not recommended to use because they can be ambiguous. A
+   *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
    *   an invalid value
+   *   Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8569,15 +8899,16 @@ object functions {
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.
    *
-   * @param timeColumn
-   *   The column or the expression to use as the timestamp for windowing by time. The time column
-   *   must be of TimestampType or TimestampNTZType.
-   * @param gapDuration
-   *   A string specifying the timeout of the session, e.g. `10 minutes`, `1 second`. Check
-   *   `org.apache.spark.unsafe.types.CalendarInterval` for valid duration identifiers.
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *   The time column must be of TimestampType or TimestampNTZType.
+   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`, `1
+   *   second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
+   *   identifiers.
    *
    * @group datetime_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def session_window(timeColumn: Column, gapDuration: String): Column =
     session_window(timeColumn, lit(gapDuration))
@@ -8622,6 +8953,8 @@ object functions {
    * Converts the number of seconds from the Unix epoch (1970-01-01T00:00:00Z) to a timestamp.
    * @group datetime_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def timestamp_seconds(e: Column): Column = Column.fn("timestamp_seconds", e)
 
@@ -8630,6 +8963,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def timestamp_millis(e: Column): Column = Column.fn("timestamp_millis", e)
 
@@ -8638,6 +8973,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def timestamp_micros(e: Column): Column = Column.fn("timestamp_micros", e)
 
@@ -8707,15 +9044,14 @@ object functions {
    * Returns the difference between two times, measured in specified units. Throws a
    * SparkIllegalArgumentException, in case the specified unit is not supported.
    *
-   * @param unit
-   *   A STRING representing the unit of the time difference. Supported units are: "HOUR",
-   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
-   * @param start
-   *   A starting TIME.
-   * @param end
-   *   An ending TIME.
+   * @param unit A STRING representing the unit of the time difference. Supported units are: "HOUR",
+   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A column
+   *   that evaluates to a string.
+   * @param start A starting TIME. A column that evaluates to a time.
+   * @param end An ending TIME. A column that evaluates to a time.
    * @return
    *   The difference between `end` and `start` times, measured in specified units.
+   *   Returns a column that evaluates to a long.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @group datetime_funcs
@@ -8728,13 +9064,13 @@ object functions {
   /**
    * Returns `time` truncated to the `unit`.
    *
-   * @param unit
-   *   A STRING representing the unit to truncate the time to. Supported units are: "HOUR",
-   *   "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive.
-   * @param time
-   *   A TIME to truncate.
+   * @param unit A STRING representing the unit to truncate the time to. Supported units are:
+   *   "HOUR", "MINUTE", "SECOND", "MILLISECOND", and "MICROSECOND". The unit is case-insensitive. A
+   *   column that evaluates to a string.
+   * @param time A TIME to truncate. A column that evaluates to a time.
    * @return
    *   A TIME truncated to the specified unit.
+   *   Returns a column that evaluates to a time.
    * @note
    *   If any of the inputs is `NULL`, the result is `NULL`.
    * @throws IllegalArgumentException
@@ -8751,6 +9087,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a time.
    */
   def time_from_seconds(e: Column): Column = Column.fn("time_from_seconds", e)
 
@@ -8759,6 +9097,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a time.
    */
   def time_from_millis(e: Column): Column = Column.fn("time_from_millis", e)
 
@@ -8767,6 +9107,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a time.
    */
   def time_from_micros(e: Column): Column = Column.fn("time_from_micros", e)
 
@@ -8801,6 +9143,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def to_timestamp_ltz(timestamp: Column, format: Column): Column =
     Column.fn("to_timestamp_ltz", timestamp, format)
@@ -8821,6 +9165,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def to_timestamp_ntz(timestamp: Column, format: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp, format)
@@ -8840,6 +9186,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def to_unix_timestamp(timeExp: Column, format: Column): Column =
     Column.fn("to_unix_timestamp", timeExp, format)
@@ -8858,6 +9206,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def monthname(timeExp: Column): Column =
     Column.fn("monthname", timeExp)
@@ -8867,6 +9217,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def dayname(timeExp: Column): Column =
     Column.fn("dayname", timeExp)
@@ -8879,6 +9231,8 @@ object functions {
    * Returns null if the array is null, true if the array contains `value`, and false otherwise.
    * @group array_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def array_contains(column: Column, value: Any): Column =
     Column.fn("array_contains", column, lit(value))
@@ -8889,6 +9243,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_append(column: Column, element: Any): Column =
     Column.fn("array_append", column, lit(element))
@@ -8899,6 +9255,8 @@ object functions {
    * `false` otherwise.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def arrays_overlap(a1: Column, a2: Column): Column = Column.fn("arrays_overlap", a1, a2)
 
@@ -8906,15 +9264,14 @@ object functions {
    * Returns an array containing all the elements in `x` from index `start` (or starting from the
    * end if `start` is negative) with the specified `length`.
    *
-   * @param x
-   *   the array column to be sliced
-   * @param start
-   *   the starting index
-   * @param length
-   *   the length of the slice
+   * @param x the array column to be sliced. A column that evaluates to an array.
+   * @param start the starting index. A column that evaluates to an integer.
+   * @param length the length of the slice. A column that evaluates to an integer.
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def slice(x: Column, start: Int, length: Int): Column =
     slice(x, lit(start), lit(length))
@@ -8941,6 +9298,8 @@ object functions {
    * `nullReplacement`.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def array_join(column: Column, delimiter: String, nullReplacement: String): Column =
     Column.fn("array_join", column, lit(delimiter), lit(nullReplacement))
@@ -8976,6 +9335,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def array_position(column: Column, value: Any): Column =
     Column.fn("array_position", column, lit(value))
@@ -8986,6 +9347,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
 
@@ -8999,6 +9362,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def try_element_at(column: Column, value: Column): Column =
     Column.fn("try_element_at", column, value)
@@ -9009,6 +9374,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def get(column: Column, index: Column): Column = Column.fn("get", column, index)
 
@@ -9023,6 +9390,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_sort(e: Column): Column = Column.fn("array_sort", e)
 
@@ -9043,6 +9412,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_remove(column: Column, element: Any): Column =
     Column.fn("array_remove", column, lit(element))
@@ -9052,6 +9423,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_compact(column: Column): Column = Column.fn("array_compact", column)
 
@@ -9061,6 +9434,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_prepend(column: Column, element: Any): Column =
     Column.fn("array_prepend", column, lit(element))
@@ -9069,6 +9444,8 @@ object functions {
    * Removes duplicate values from the array.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_distinct(e: Column): Column = Column.fn("array_distinct", e)
 
@@ -9078,6 +9455,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_intersect(col1: Column, col2: Column): Column =
     Column.fn("array_intersect", col1, col2)
@@ -9087,6 +9466,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_insert(arr: Column, pos: Column, value: Column): Column =
     Column.fn("array_insert", arr, pos, value)
@@ -9096,6 +9477,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_union(col1: Column, col2: Column): Column =
     Column.fn("array_union", col1, col2)
@@ -9106,6 +9489,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_except(col1: Column, col2: Column): Column =
     Column.fn("array_except", col1, col2)
@@ -9138,13 +9523,13 @@ object functions {
    *   df.select(transform(col("i"), x => x + 1))
    * }}}
    *
-   * @param column
-   *   the input array column
-   * @param f
-   *   col => transformed_col, the lambda function to transform the input column
+   * @param column the input array column. A column that evaluates to an array.
+   * @param f col => transformed_col, the lambda function to transform the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def transform(column: Column, f: Column => Column): Column =
     Column.fn("transform", column, createLambda(f))
@@ -9174,13 +9559,13 @@ object functions {
    *   df.select(exists(col("i"), _ % 2 === 0))
    * }}}
    *
-   * @param column
-   *   the input array column
-   * @param f
-   *   col => predicate, the Boolean predicate to check the input column
+   * @param column the input array column. A column that evaluates to an array.
+   * @param f col => predicate, the Boolean predicate to check the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def exists(column: Column, f: Column => Column): Column =
     Column.fn("exists", column, createLambda(f))
@@ -9191,13 +9576,13 @@ object functions {
    *   df.select(forall(col("i"), x => x % 2 === 0))
    * }}}
    *
-   * @param column
-   *   the input array column
-   * @param f
-   *   col => predicate, the Boolean predicate to check the input column
+   * @param column the input array column. A column that evaluates to an array.
+   * @param f col => predicate, the Boolean predicate to check the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def forall(column: Column, f: Column => Column): Column =
     Column.fn("forall", column, createLambda(f))
@@ -9208,13 +9593,13 @@ object functions {
    *   df.select(filter(col("s"), x => x % 2 === 0))
    * }}}
    *
-   * @param column
-   *   the input array column
-   * @param f
-   *   col => predicate, the Boolean predicate to filter the input column
+   * @param column the input array column. A column that evaluates to an array.
+   * @param f col => predicate, the Boolean predicate to filter the input column.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def filter(column: Column, f: Column => Column): Column =
     Column.fn("filter", column, createLambda(f))
@@ -9245,19 +9630,17 @@ object functions {
    *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
    * }}}
    *
-   * @param expr
-   *   the input array column
-   * @param initialValue
-   *   the initial value
-   * @param merge
-   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
-   *   to the combined_value
-   * @param finish
-   *   combined_value => final_value, the lambda function to convert the combined value of all
-   *   inputs to final result
+   * @param expr the input array column. A column that evaluates to an array.
+   * @param initialValue the initial value. A column of any type.
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge an
+   *   input value to the combined_value.
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *   of all inputs to final result.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column of the same type as the initial value.
    */
   def aggregate(
       expr: Column,
@@ -9294,19 +9677,17 @@ object functions {
    *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
    * }}}
    *
-   * @param expr
-   *   the input array column
-   * @param initialValue
-   *   the initial value
-   * @param merge
-   *   (combined_value, input_value) => combined_value, the merge function to merge an input value
-   *   to the combined_value
-   * @param finish
-   *   combined_value => final_value, the lambda function to convert the combined value of all
-   *   inputs to final result
+   * @param expr the input array column. A column that evaluates to an array.
+   * @param initialValue the initial value. A column of any type.
+   * @param merge (combined_value, input_value) => combined_value, the merge function to merge an
+   *   input value to the combined_value.
+   * @param finish combined_value => final_value, the lambda function to convert the combined value
+   *   of all inputs to final result.
    *
    * @group collection_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the initial value.
    */
   def reduce(
       expr: Column,
@@ -9343,15 +9724,14 @@ object functions {
    *   df.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y))
    * }}}
    *
-   * @param left
-   *   the left input array column
-   * @param right
-   *   the right input array column
-   * @param f
-   *   (lCol, rCol) => col, the lambda function to merge two input columns into one column
+   * @param left the left input array column. A column that evaluates to an array.
+   * @param right the right input array column. A column that evaluates to an array.
+   * @param f (lCol, rCol) => col, the lambda function to merge two input columns into one column.
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column =
     Column.fn("zip_with", left, right, createLambda(f))
@@ -9435,6 +9815,8 @@ object functions {
    *
    * @group generator_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def explode(e: Column): Column = Column.fn("explode", e)
 
@@ -9445,6 +9827,8 @@ object functions {
    *
    * @group generator_funcs
    * @since 2.2.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def explode_outer(e: Column): Column = Column.fn("explode_outer", e)
 
@@ -9492,6 +9876,8 @@ object functions {
    *
    * @group json_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def get_json_object(e: Column, path: String): Column =
     Column.fn("get_json_object", e, lit(path))
@@ -9702,13 +10088,10 @@ object functions {
    * as keys type, `StructType` or `ArrayType` of `StructType`s with the specified schema. Returns
    * `null`, in the case of an unparseable string.
    *
-   * @param e
-   *   a string column containing JSON data.
-   * @param schema
-   *   the schema to use when parsing the json string
-   * @param options
-   *   options to control how the json is parsed. accepts the same options and the json data
-   *   source. See <a href=
+   * @param e a string column containing JSON data.
+   * @param schema the schema to use when parsing the json string
+   * @param options options to control how the json is parsed. accepts the same options and the json
+   *   data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    *
@@ -9731,21 +10114,23 @@ object functions {
    * Parses a JSON string and constructs a Variant value. Returns null if the input string is not
    * a valid JSON value.
    *
-   * @param json
-   *   a string column that contains JSON data.
+   * @param json a string column that contains JSON data.
    *
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   def try_parse_json(json: Column): Column = Column.fn("try_parse_json", json)
 
   /**
    * Parses a JSON string and constructs a Variant value.
    *
-   * @param json
-   *   a string column that contains JSON data.
+   * @param json a string column that contains JSON data. A column that evaluates to a string.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   def parse_json(json: Column): Column = Column.fn("parse_json", json)
 
@@ -9754,10 +10139,11 @@ object functions {
    * structs are converted to variant objects which are unordered unlike SQL structs. Input maps
    * can only have string keys.
    *
-   * @param col
-   *   a column with a nested schema or column name.
+   * @param col a column with a nested schema or column name.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   def to_variant_object(col: Column): Column = Column.fn("to_variant_object", col)
 
@@ -9975,15 +10361,14 @@ object functions {
   /**
    * Parses a JSON string and infers its schema in DDL format using options.
    *
-   * @param json
-   *   a foldable string column containing JSON data.
-   * @param options
-   *   options to control how the json is parsed. accepts the same options and the json data
-   *   source. See <a href=
+   * @param json a foldable string column containing JSON data.
+   * @param options options to control how the json is parsed. accepts the same options and the json
+   *   data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
    *   a column with string literal containing schema in DDL format.
+   *   Returns a column that evaluates to an integer.
    *
    * @group json_funcs
    * @since 3.0.0
@@ -10008,6 +10393,8 @@ object functions {
    *
    * @group json_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
 
@@ -10017,11 +10404,9 @@ object functions {
    * a JSON string with the specified schema. Throws an exception, in the case of an unsupported
    * type.
    *
-   * @param e
-   *   a column containing a struct, an array or a map.
-   * @param options
-   *   options to control how the struct column is converted into a json string. accepts the same
-   *   options and the json data source. See <a href=
+   * @param e a column containing a struct, an array, a map, or a variant.
+   * @param options options to control how the struct column is converted into a json string.
+   *   accepts the same options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
@@ -10039,11 +10424,9 @@ object functions {
    * a JSON string with the specified schema. Throws an exception, in the case of an unsupported
    * type.
    *
-   * @param e
-   *   a column containing a struct, an array or a map.
-   * @param options
-   *   options to control how the struct column is converted into a json string. accepts the same
-   *   options and the json data source. See <a href=
+   * @param e a column containing a struct, an array, a map, or a variant.
+   * @param options options to control how the struct column is converted into a json string.
+   *   accepts the same options and the json data source. See <a href=
    *   "https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option"> Data
    *   Source Option</a> in the version you use. Additionally the function supports the `pretty`
    *   option which enables pretty JSON generation.
@@ -10059,11 +10442,12 @@ object functions {
    * Converts a column containing a `StructType`, `ArrayType` or a `MapType` into a JSON string
    * with the specified schema. Throws an exception, in the case of an unsupported type.
    *
-   * @param e
-   *   a column containing a struct, an array or a map.
+   * @param e a column containing a struct, an array, a map, or a variant.
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def to_json(e: Column): Column =
     to_json(e, Map.empty[String, String])
@@ -10073,11 +10457,12 @@ object functions {
    * with 'n'. This can be useful for creating copies of tables with sensitive information
    * removed.
    *
-   * @param input
-   *   string value to mask. Supported types: STRING, VARCHAR, CHAR
+   * @param input string value to mask. Supported types: STRING, VARCHAR, CHAR
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def mask(input: Column): Column = Column.fn("mask", input)
 
@@ -10170,6 +10555,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def size(e: Column): Column = Column.fn("size", e)
 
@@ -10182,6 +10569,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def cardinality(e: Column): Column = Column.fn("cardinality", e)
 
@@ -10192,6 +10581,8 @@ object functions {
    *
    * @group array_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sort_array(e: Column): Column = sort_array(e, asc = true)
 
@@ -10212,6 +10603,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def array_min(e: Column): Column = Column.fn("array_min", e)
 
@@ -10221,6 +10614,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column of the element type of the input array.
    */
   def array_max(e: Column): Column = Column.fn("array_max", e)
 
@@ -10229,6 +10624,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def array_size(e: Column): Column = Column.fn("array_size", e)
 
@@ -10251,6 +10648,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def shuffle(e: Column): Column = shuffle(e, lit(SparkClassUtils.random.nextLong))
 
@@ -10269,6 +10668,8 @@ object functions {
    * Returns a reversed string or an array with reverse order of elements.
    * @group collection_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def reverse(e: Column): Column = Column.fn("reverse", e)
 
@@ -10285,6 +10686,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sequence(start: Column, stop: Column, step: Column): Column =
     Column.fn("sequence", start, stop, step)
@@ -10304,6 +10707,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_repeat(left: Column, right: Column): Column = Column.fn("array_repeat", left, right)
 
@@ -10692,6 +11097,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def xpath(xml: Column, path: Column): Column =
     Column.fn("xpath", xml, path)
@@ -10701,6 +11108,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def xpath_boolean(xml: Column, path: Column): Column =
     Column.fn("xpath_boolean", xml, path)
@@ -10711,6 +11120,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def xpath_double(xml: Column, path: Column): Column =
     Column.fn("xpath_double", xml, path)
@@ -10721,6 +11132,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def xpath_number(xml: Column, path: Column): Column =
     Column.fn("xpath_number", xml, path)
@@ -10731,6 +11144,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def xpath_float(xml: Column, path: Column): Column =
     Column.fn("xpath_float", xml, path)
@@ -10741,6 +11156,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def xpath_int(xml: Column, path: Column): Column =
     Column.fn("xpath_int", xml, path)
@@ -10751,6 +11168,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def xpath_long(xml: Column, path: Column): Column =
     Column.fn("xpath_long", xml, path)
@@ -10761,6 +11180,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a short.
    */
   def xpath_short(xml: Column, path: Column): Column =
     Column.fn("xpath_short", xml, path)
@@ -10770,6 +11191,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def xpath_string(xml: Column, path: Column): Column =
     Column.fn("xpath_string", xml, path)
@@ -10786,15 +11209,16 @@ object functions {
    * Converts the timestamp without time zone `sourceTs` from the `sourceTz` time zone to
    * `targetTz`.
    *
-   * @param sourceTz
-   *   the time zone for the input timestamp. If it is missed, the current session time zone is
-   *   used as the source time zone.
-   * @param targetTz
-   *   the time zone to which the input timestamp should be converted.
-   * @param sourceTs
-   *   a timestamp without time zone.
+   * @param sourceTz the time zone for the input timestamp. If it is missed, the current session
+   *   time zone is used as the source time zone. A column that evaluates to a string.
+   * @param targetTz the time zone to which the input timestamp should be converted. A column that
+   *   evaluates to a string.
+   * @param sourceTs a timestamp without time zone. A column that evaluates to a timestamp_ntz or
+   *   timestamp.
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
     Column.fn("convert_timezone", sourceTz, targetTz, sourceTs)
@@ -10817,6 +11241,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_dt_interval(days: Column, hours: Column, mins: Column, secs: Column): Column =
     Column.fn("make_dt_interval", days, hours, mins, secs)
@@ -10863,6 +11289,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(
       years: Column,
@@ -10879,6 +11307,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(
       years: Column,
@@ -11043,6 +11473,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp(
       years: Column,
@@ -11097,6 +11529,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp(
       years: Column,
@@ -11150,6 +11584,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp_ltz(
       years: Column,
@@ -11184,6 +11620,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp_ltz(
       years: Column,
@@ -11218,6 +11656,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def make_timestamp_ntz(
       years: Column,
@@ -11243,6 +11683,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def try_make_timestamp_ntz(
       years: Column,
@@ -11267,6 +11709,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_ym_interval(years: Column, months: Column): Column =
     Column.fn("make_ym_interval", years, months)
@@ -11312,6 +11756,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def ifnull(col1: Column, col2: Column): Column = Column.fn("ifnull", col1, col2)
 
@@ -11320,6 +11766,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def isnotnull(col: Column): Column = Column.fn("isnotnull", col)
 
@@ -11329,6 +11777,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def equal_null(col1: Column, col2: Column): Column = Column.fn("equal_null", col1, col2)
 
@@ -11337,6 +11787,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nullif(col1: Column, col2: Column): Column = Column.fn("nullif", col1, col2)
 
@@ -11345,6 +11797,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nullifzero(col: Column): Column = Column.fn("nullifzero", col)
 
@@ -11353,6 +11807,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nvl(col1: Column, col2: Column): Column = Column.fn("nvl", col1, col2)
 
@@ -11361,6 +11817,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nvl2(col1: Column, col2: Column, col3: Column): Column = Column.fn("nvl2", col1, col2, col3)
 
@@ -11369,6 +11827,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def zeroifnull(col: Column): Column = Column.fn("zeroifnull", col)
 

@@ -25,6 +25,13 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType, Numer
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the number of non-null number pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a numeric.
+      * x - The independent variable.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -57,6 +64,13 @@ case class RegrCount(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the average of the independent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a numeric.
+      * x - The independent variable to average.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -92,6 +106,13 @@ case class RegrAvgX(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the average of the dependent variable for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable to average.
+        An expression that evaluates to a numeric.
+      * x - The independent variable.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -127,6 +148,13 @@ case class RegrAvgY(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the coefficient of determination for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -160,6 +188,13 @@ case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x,
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -195,6 +230,13 @@ case class RegrSXX(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * COVAR_POP(y, x) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -224,6 +266,13 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns REGR_COUNT(y, x) * VAR_POP(y) for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 2), (2, 2), (2, 3), (2, 4) AS tab(y, x);
@@ -259,6 +308,13 @@ case class RegrSYY(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the slope of the linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);
@@ -322,6 +378,13 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(y, x) - Returns the intercept of the univariate linear regression line for non-null pairs in a group, where `y` is the dependent variable and `x` is the independent variable.",
+  arguments = """
+    Arguments:
+      * y - The dependent variable.
+        An expression that evaluates to a double.
+      * x - The independent variable.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(y, x) FROM VALUES (1, 1), (2, 2), (3, 3), (4, 4) AS tab(y, x);

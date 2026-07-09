@@ -36,6 +36,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to negate.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -109,6 +114,11 @@ case class UnaryMinus(
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the value of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The input expression whose value is returned.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -140,6 +150,11 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric or interval value.",
+  arguments = """
+    Arguments:
+      * expr - The numeric or interval value to take the absolute value of.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(-1);
@@ -388,6 +403,13 @@ object BinaryArithmetic {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+      * expr2 - The second addend.
+        An expression that evaluates to a numeric, interval, date, timestamp, or time.
+  """,
   examples = """
     Examples:
       > SELECT 1 _FUNC_ 2;
@@ -562,6 +584,13 @@ object Subtract {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The first operand.
+        An expression that evaluates to a numeric or interval.
+      * expr2 - The second operand.
+        An expression that evaluates to a numeric or interval.
+  """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 3;
@@ -811,6 +840,13 @@ trait DivModLike extends BinaryArithmetic {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a double, decimal, or interval.
+      * expr2 - The divisor.
+        An expression that evaluates to a double or decimal.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -893,6 +929,13 @@ object Divide {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend to be divided.
+        An expression that evaluates to a long, decimal, or interval.
+      * expr2 - The divisor to divide by.
+        An expression that evaluates to a long, decimal, or interval.
+  """,
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -976,6 +1019,13 @@ object IntegralDivide {
 
 @ExpressionDescription(
   usage = "expr1 % expr2, or mod(expr1, expr2) - Returns the remainder after `expr1`/`expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a numeric.
+      * expr2 - The divisor.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT 2 % 1.8;
@@ -1064,6 +1114,13 @@ object Remainder {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1 - The dividend.
+        An expression that evaluates to a numeric.
+      * expr2 - The divisor.
+        An expression that evaluates to a numeric.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(10, 3);

@@ -331,6 +331,11 @@ case class Percentile(
 
 @ExpressionDescription(
   usage = "_FUNC_(col) - Returns the median of numeric, ANSI interval or TIME column `col`.",
+  arguments = """
+    Arguments:
+      * col - The column to compute the median of.
+        An expression that evaluates to a numeric, interval, or time.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);

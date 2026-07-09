@@ -23,6 +23,11 @@ import org.apache.spark.sql.types._
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if all values of `expr` are true.",
+  arguments = """
+    Arguments:
+      * expr - The boolean expression to evaluate over the group.
+        An expression that evaluates to a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (true), (true), (true) AS tab(col);
@@ -45,6 +50,11 @@ case class BoolAnd(child: Expression) extends AggregateFunction with RuntimeRepl
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if at least one value of `expr` is true.",
+  arguments = """
+    Arguments:
+      * expr - The boolean expression to evaluate over the group.
+        An expression that evaluates to a boolean.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (true), (false), (false) AS tab(col);

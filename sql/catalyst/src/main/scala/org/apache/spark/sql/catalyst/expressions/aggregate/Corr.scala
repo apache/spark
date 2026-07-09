@@ -105,6 +105,13 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
+  arguments = """
+    Arguments:
+      * expr1 - The first variable of the number pairs.
+        An expression that evaluates to a double.
+      * expr2 - The second variable of the number pairs.
+        An expression that evaluates to a double.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2);
