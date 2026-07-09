@@ -851,6 +851,26 @@ class ArrowColumnToPylistTests(unittest.TestCase):
     column.to_pylist() returns, including exact element types.
     """
 
+    def setUp(self):
+        # Force the bulk paths so they stay covered regardless of the
+        # installed PyArrow version (with a fast native PyArrow the method
+        # short-circuits to column.to_pylist()).
+        import pyspark.sql.conversion as conversion_mod
+
+        self._conversion_mod = conversion_mod
+        self._saved_gate = conversion_mod._pyarrow_native_to_pylist_is_fast
+        conversion_mod._pyarrow_native_to_pylist_is_fast = False
+
+    def tearDown(self):
+        self._conversion_mod._pyarrow_native_to_pylist_is_fast = self._saved_gate
+
+    def test_native_to_pylist_gate(self):
+        import pyarrow as pa
+
+        column = pa.array([[1, None], None], type=pa.list_(pa.int32()))
+        self._conversion_mod._pyarrow_native_to_pylist_is_fast = True
+        self.assertEqual(ArrowTableToRowsConversion._to_pylist(column), [[1, None], None])
+
     def _assert_identical_types(self, actual, expected):
         self.assertIs(type(actual), type(expected))
         if isinstance(actual, (list, tuple)):

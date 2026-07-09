@@ -506,6 +506,28 @@ class PandasToArrowConversion:
         return pa.RecordBatch.from_arrays(arrays, schema.names)
 
 
+# The pure-Python bulk conversion in ArrowTableToRowsConversion._to_pylist is
+# a workaround for PyArrow materializing one Scalar per element (see
+# apache/arrow#50326). PyArrow releases containing the fix convert natively
+# without per-element Scalars, in which case the native conversion is used
+# directly. Bump this constant if the fix ships in a different release.
+_MIN_PYARROW_NATIVE_TO_PYLIST_VERSION = "25.0.1"
+
+_pyarrow_native_to_pylist_is_fast: Optional[bool] = None
+
+
+def _has_fast_native_to_pylist() -> bool:
+    global _pyarrow_native_to_pylist_is_fast
+    if _pyarrow_native_to_pylist_is_fast is None:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        _pyarrow_native_to_pylist_is_fast = LooseVersion(pa.__version__) >= LooseVersion(
+            _MIN_PYARROW_NATIVE_TO_PYLIST_VERSION
+        )
+    return _pyarrow_native_to_pylist_is_fast
+
+
 _numpy_available: Optional[bool] = None
 
 
@@ -1018,7 +1040,10 @@ class ArrowTableToRowsConversion:
         import pyarrow as pa
         import pyarrow.types as pa_types
 
-        if not _is_numpy_available():
+        if _has_fast_native_to_pylist() or not _is_numpy_available():
+            # Recent PyArrow converts without per-element Scalars natively
+            # (apache/arrow#50326); without NumPy the bulk paths below are
+            # unavailable. Either way, use the native conversion.
             return column.to_pylist()
 
         if isinstance(column, pa.ChunkedArray):
