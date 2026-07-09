@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, SupportsRead, Table, TableCapability, TableInfo}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan, ScanBuilder}
@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class LocalScanSuite extends QueryTest with SharedSparkSession {
+class LocalScanSuite extends SharedSparkSession {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")

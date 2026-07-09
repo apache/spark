@@ -19,6 +19,8 @@ package org.apache.spark.sql.connector
 
 class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
+  override protected def deltaDelete: Boolean = true
+
   override protected def extraTableProps: java.util.Map[String, String] = {
     val props = new java.util.HashMap[String, String]()
     props.put("supports-deltas", "true")

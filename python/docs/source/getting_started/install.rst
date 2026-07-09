@@ -30,7 +30,7 @@ and building from the source.
 Python Versions Supported
 -------------------------
 
-Python 3.10 and above.
+Python 3.11 and above.
 
 
 Using PyPI
@@ -62,7 +62,7 @@ For PySpark with/without a specific Hadoop version, you can install it by using 
 
     PYSPARK_HADOOP_VERSION=3 pip install pyspark
 
-The default distribution uses Hadoop 3.3 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
+The default distribution uses Hadoop 3.5 and Hive 2.3. If users specify different versions of Hadoop, the pip installation automatically
 downloads a different version and uses it in PySpark. Downloading it can take a while depending on
 the network and the mirror chosen. ``PYSPARK_RELEASE_MIRROR`` can be set to manually choose the mirror for faster downloading.
 
@@ -79,7 +79,7 @@ It is recommended to use ``-v`` option in ``pip`` to track the installation and 
 Supported values in ``PYSPARK_HADOOP_VERSION`` are:
 
 - ``without``: Spark pre-built with user-provided Apache Hadoop
-- ``3``: Spark pre-built for Apache Hadoop 3.3 and later (default)
+- ``3``: Spark pre-built for Apache Hadoop 3.5 and later (default)
 
 Note that this installation of PySpark with/without a specific Hadoop version is experimental. It can change or be removed between minor releases.
 
@@ -143,7 +143,7 @@ the same session as pyspark (you can install in several steps too).
 
 .. code-block:: bash
 
-    conda install -c conda-forge pyspark  # can also add "python=3.10 some_package [etc.]" here
+    conda install -c conda-forge pyspark  # can also add "python=3.11 some_package [etc.]" here
 
 Note that `PySpark for conda <https://anaconda.org/conda-forge/pyspark>`_ is maintained
 separately by the community; while new versions generally get packaged quickly, the
@@ -208,7 +208,7 @@ PySpark requires the following dependencies.
 ========================== ========================= =============================
 Package                    Supported version         Note
 ========================== ========================= =============================
-`py4j`                     >=0.10.9.9                Required to interact with JVM
+`py4j`                     >=0.10.9.7,<0.10.9.10     Required to interact with JVM
 ========================== ========================= =============================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -237,7 +237,7 @@ Installable with ``pip install "pyspark[connect]"``.
 ========================== ================= ==========================
 Package                    Supported version Note
 ========================== ================= ==========================
-`pandas`                   >=2.2.0           Required for Spark Connect
+`pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect
 `pyarrow`                  >=18.0.0          Required for Spark Connect
 `grpcio`                   >=1.76.0          Required for Spark Connect
 `grpcio-status`            >=1.76.0          Required for Spark Connect
@@ -254,7 +254,7 @@ Installable with ``pip install "pyspark[sql]"``.
 ========= ================= ======================
 Package   Supported version Note
 ========= ================= ======================
-`pandas`  >=2.2.0           Required for Spark SQL
+`pandas`  >=2.2.0,<3.0.0    Required for Spark SQL
 `pyarrow` >=18.0.0          Required for Spark SQL
 ========= ================= ======================
 
@@ -271,7 +271,7 @@ Installable with ``pip install "pyspark[pandas_on_spark]"``.
 ========= ================= ================================
 Package   Supported version Note
 ========= ================= ================================
-`pandas`  >=2.2.0           Required for Pandas API on Spark
+`pandas`  >=2.2.0,<3.0.0    Required for Pandas API on Spark
 `pyarrow` >=18.0.0          Required for Pandas API on Spark
 ========= ================= ================================
 
@@ -290,7 +290,7 @@ Installable with ``pip install "pyspark[ml]"``.
 ======= ================= ======================================
 Package Supported version Note
 ======= ================= ======================================
-`numpy` >=1.22            Required for MLlib DataFrame-based API
+`numpy` >=1.23.2          Required for MLlib DataFrame-based API
 ======= ================= ======================================
 
 Additional libraries that enhance functionality but are not included in the installation packages:
@@ -310,7 +310,7 @@ Installable with ``pip install "pyspark[mllib]"``.
 ======= ================= ==================
 Package Supported version Note
 ======= ================= ==================
-`numpy` >=1.22            Required for MLlib
+`numpy` >=1.23.2          Required for MLlib
 ======= ================= ==================
 
 Declarative Pipelines
@@ -321,7 +321,7 @@ Installable with ``pip install "pyspark[pipelines]"``. Includes all dependencies
 ========================== ================= ===================================================
 Package                    Supported version Note
 ========================== ================= ===================================================
-`pandas`                   >=2.2.0           Required for Spark Connect and Spark SQL
+`pandas`                   >=2.2.0,<3.0.0    Required for Spark Connect and Spark SQL
 `pyarrow`                  >=18.0.0          Required for Spark Connect and Spark SQL
 `grpcio`                   >=1.76.0          Required for Spark Connect
 `grpcio-status`            >=1.76.0          Required for Spark Connect

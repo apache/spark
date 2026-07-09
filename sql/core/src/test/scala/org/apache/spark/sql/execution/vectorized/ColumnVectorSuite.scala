@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
@@ -376,6 +376,66 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     (0 until 10).foreach { i =>
       mutableRow.rowId = i
       assert(mutableRow.getInt(0) === (10 - i))
+    }
+  }
+
+  testVectors("timestamp_ntz_nanos", 10, TimestampNTZNanosType(9)) { testVector =>
+    val values = (0 until 10).map(i => TimestampNanosVal.fromParts(i * 1000L, i.toShort))
+    values.foreach { v =>
+      testVector.putNotNull(testVector.elementsAppended)
+      testVector.putTimestampNTZNanos(testVector.elementsAppended, v)
+      testVector.elementsAppended += 1
+    }
+    values.zipWithIndex.foreach { case (v, i) =>
+      assert(testVector.getTimestampNTZNanos(i) === v)
+    }
+    testVector.putNull(0)
+    assert(testVector.isNullAt(0))
+  }
+
+  testVectors("timestamp_ltz_nanos", 10, TimestampLTZNanosType(9)) { testVector =>
+    val values = (0 until 10).map(i => TimestampNanosVal.fromParts(i * 1000L, i.toShort))
+    values.foreach { v =>
+      testVector.putNotNull(testVector.elementsAppended)
+      testVector.putTimestampLTZNanos(testVector.elementsAppended, v)
+      testVector.elementsAppended += 1
+    }
+    values.zipWithIndex.foreach { case (v, i) =>
+      assert(testVector.getTimestampLTZNanos(i) === v)
+    }
+    testVector.putNull(0)
+    assert(testVector.isNullAt(0))
+  }
+
+  testVectors("mutable ColumnarRow with TimestampNTZNanosType", 5,
+      TimestampNTZNanosType(9)) { testVector =>
+    val mutableRow = new MutableColumnarRow(Array(testVector))
+    val values = (0 until 5).map(i => TimestampNanosVal.fromParts(i * 100L, i.toShort))
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      mutableRow.setTimestampNTZNanos(0, v)
+    }
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      assert(mutableRow.getTimestampNTZNanos(0) === v)
+      assert(mutableRow.get(0, TimestampNTZNanosType(9)) === v)
+      assert(mutableRow.copy().get(0, TimestampNTZNanosType(9)) === v)
+    }
+  }
+
+  testVectors("mutable ColumnarRow with TimestampLTZNanosType", 5,
+      TimestampLTZNanosType(9)) { testVector =>
+    val mutableRow = new MutableColumnarRow(Array(testVector))
+    val values = (0 until 5).map(i => TimestampNanosVal.fromParts(i * 100L, i.toShort))
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      mutableRow.setTimestampLTZNanos(0, v)
+    }
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      assert(mutableRow.getTimestampLTZNanos(0) === v)
+      assert(mutableRow.get(0, TimestampLTZNanosType(9)) === v)
+      assert(mutableRow.copy().get(0, TimestampLTZNanosType(9)) === v)
     }
   }
 

@@ -63,6 +63,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val killWorkerOnFlushFailure: Boolean = SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
     val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+    val tracebackWithLocals: Boolean = SQLConf.get.pysparkTracebackWithLocals
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)

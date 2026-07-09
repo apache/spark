@@ -22,8 +22,8 @@ import java.time.Duration
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.{Dataset, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
-class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
+class WholeStageCodegenSuite extends SharedSparkSession
   with DisableAdaptiveExecutionSuite {
 
   import testImplicits._
@@ -59,7 +59,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
 
   test("SortAggregate should be included in WholeStageCodegen") {
     val df = spark.range(10).agg(max(col("id")), avg(col("id")))
-    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+    withSQLConf(SQLConf.USE_HASH_AGG.key -> "false") {
       val plan = df.queryExecution.executedPlan
       assert(plan.exists(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&
@@ -777,6 +777,29 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("SPARK-56134: Codegen working for empty output") {
+    // Create a balanced tree of AND conditions. This prevents generating a very deep tree,
+    // which can cause stack overflow.
+    def balancedAnd(cols: Seq[String]): String = cols match {
+      case Seq(single) => single
+      case seq =>
+        val (left, right) = seq.splitAt(seq.length / 2)
+        balancedAnd(left) + " and " + balancedAnd(right)
+    }
+
+    withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("select array(0) as value from range(0, 1, 1, 1)")
+          .write.mode(SaveMode.Overwrite).parquet(path)
+
+        val numConditions = 1000
+        val conditions = (0 until numConditions).map(i => s"value <= array($i)")
+        val condition = balancedAnd(conditions)
+        val df = spark.read.parquet(path).filter(condition).selectExpr()
+        assert(df.limit(1).selectExpr("count(*)").collect() === Array(Row(1)))
+    }
+  }
+
   test("SPARK-25767: Lazy evaluated stream of expressions handled correctly") {
     val a = Seq(1).toDF("key")
     val b = Seq((1, "a")).toDF("key", "value")
@@ -1028,5 +1051,296 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         Row(new JBigDecimal("50.00"), new JBigDecimal("200.00")),
         Row(new JBigDecimal("80.00"), new JBigDecimal("100.00"))))
     }
+  }
+
+  test("SPARK-56032: FilterExec CSE defers throw-capable notNullPred past guard otherPred") {
+    // `InferFiltersFromConstraints` can add a throw-capable `IsNotNull(cast(s as int))`
+    // alongside an earlier guard otherPred (`kind = 'numeric'`). The non-CSE path
+    // defers leftover notNullPreds to after the otherPreds so the guard short-circuits
+    // before the cast runs; the CSE branch must preserve that ordering.
+    // AQE is disabled here and in the sibling test below so each FilterExec is directly
+    // visible for the plan-shape assertions, rather than wrapped inside an
+    // AdaptiveSparkPlan.
+    val t = Seq(("3", "numeric"), ("abc", "text")).toDF("s", "kind")
+    val idx = Seq(1, 2).toDF("i")
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      withTempView("spark_56032_t", "spark_56032_idx") {
+        t.createOrReplaceTempView("spark_56032_t")
+        idx.createOrReplaceTempView("spark_56032_idx")
+        val query =
+          """
+            |WITH guarded AS (SELECT s FROM spark_56032_t WHERE kind = 'numeric'),
+            |     derived AS (SELECT s, CAST(s AS INT) AS n FROM guarded),
+            |     pairs   AS (SELECT s, i FROM derived, spark_56032_idx WHERE i <= n)
+            |SELECT s, i FROM pairs
+            |""".stripMargin
+        val df = spark.sql(query)
+        val plan = df.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        // Guard against optimizer drift: require a single rolled-up FilterExec carrying
+        // both `IsNotNull(Cast(s AS INT))` and a non-IsNotNull guard conjunct -- without
+        // this, `checkAnswer` alone would silently pass even if the buggy ordering
+        // returned.
+        def conjuncts(e: Expression): Seq[Expression] = e match {
+          case And(l, r) => conjuncts(l) ++ conjuncts(r)
+          case other => Seq(other)
+        }
+        val matchingFilter = plan.collect {
+          case f: FilterExec =>
+            val cs = conjuncts(f.condition)
+            val hasThrowingIsNotNull = cs.exists {
+              case IsNotNull(_: Cast) => true
+              case _ => false
+            }
+            val hasGuardOtherPred = cs.exists {
+              case _: IsNotNull => false
+              case _ => true
+            }
+            hasThrowingIsNotNull && hasGuardOtherPred
+        }.exists(identity)
+        assert(matchingFilter,
+          "expected a FilterExec whose condition carries both IsNotNull(Cast(...)) " +
+            "and a non-IsNotNull guard conjunct")
+        checkAnswer(df, Seq(Row("3", 1), Row("3", 2)))
+        // Cross-check the codegen path against the interpreted path.
+        withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+          checkAnswer(spark.sql(query), Seq(Row("3", 1), Row("3", 2)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE handles shared otherPred refs with guard") {
+    // Filter shape: kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100.
+    // Exercises invariant (b) on a shape where two cast otherPreds share a ref: the
+    // guard must short-circuit before either cast runs (so the 'abc'/'text' row never
+    // throws under ANSI), and the null-s row must be filtered by the IsNotNull check
+    // emitted ahead of the cast otherPreds rather than reaching the tightened-output
+    // binding. See the sibling test above for the AQE-off rationale.
+    val schema = StructType(Seq(
+      StructField("s", StringType, nullable = true),
+      StructField("kind", StringType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row("3", "numeric"),
+      Row("7", "numeric"),
+      Row(null, "numeric"),
+      Row("abc", "text")))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema).where(
+        "kind = 'numeric' AND cast(s as int) > 0 AND cast(s as int) < 100")
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "Filter should be in whole-stage codegen")
+      // Guard against optimizer drift: require the rolled-up filter to still carry
+      // both `cast(s as int)` conjuncts so the shared-ref path is exercised.
+      val castCount = plan.collectFirst { case f: FilterExec =>
+        f.condition.collect { case c: Cast => c }.size
+      }.getOrElse(0)
+      assert(castCount >= 2,
+        s"expected a FilterExec condition with at least 2 Cast expressions, got $castCount")
+      checkAnswer(df, Seq(Row("3", "numeric"), Row("7", "numeric")))
+    }
+  }
+
+  test("SPARK-56032: FilterExec CSE preserves short-circuit across predicates") {
+    // A CSE'd subexpression must not be hoisted above an earlier otherPred's short-circuit,
+    // otherwise rows an earlier otherPred would have rejected still pay the cost of the
+    // later predicate's throw-prone expression. Two shapes worth exercising:
+    //   - CSE within one conjunct: `x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)` --
+    //     `100 / x` appears twice inside otherPreds(1) only.
+    //   - CSE across two conjuncts: `x > 0 AND (100 / x) > 0 AND (100 / x) < 1000` --
+    //     `100 / x` is shared between otherPreds(1) and otherPreds(2); the precompute
+    //     must be emitted just before otherPreds(1), not at the top of the do { } block.
+    // In both shapes, hoisting to the top of the do { } block evaluates 100 / 0 on the
+    // x=0 row under ANSI and throws before x > 0 rejects.
+    val schema = StructType(Seq(
+      StructField("x", IntegerType, nullable = false)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(0), Row(2), Row(4)))
+
+    withSQLConf(
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = spark.createDataFrame(data, schema)
+      Seq(
+        "x > 0 AND ((100 / x) > 0 OR (100 / x) < 1000)",
+        "x > 0 AND (100 / x) > 0 AND (100 / x) < 1000"
+      ).foreach { predicate =>
+        val filtered = df.where(predicate)
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          s"Filter should be in whole-stage codegen for: $predicate")
+        checkAnswer(filtered, Seq(Row(2), Row(4)))
+      }
+    }
+  }
+
+  test("SPARK-56032: FilterExec skips CSE codegen when there is no common subexpression") {
+    // When otherPreds share no common subexpression, the CSE codegen path provides no benefit
+    // but would still eagerly evaluate every referenced input column at the top of the row loop
+    // (the inputVarsEvalCode prologue), defeating the lazy, short-circuiting column loads of the
+    // non-CSE path. Verify that with CSE enabled we fall back to the exact same generated code as
+    // with CSE disabled, so no column is decoded for rows an earlier predicate would reject.
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", IntegerType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+    val expected = Seq(Row(5, 6), Row(7, 8))
+
+    def filterCode(cseEnabled: Boolean): String = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        // `a > 4` and `b > 4` reference different columns and share no subexpression.
+        val filtered = df.where("a IS NOT NULL AND a > 4 AND b > 4")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    // Each `createDataFrame` mints fresh attribute exprIds (e.g. `a#16`), which appear in the
+    // plan-tree header of the codegen dump but not in the generated Java. Normalize them away so
+    // the comparison reflects the generated code, not the id counter.
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
+      "With no common subexpression, CSE-enabled FilterExec codegen should be identical to " +
+        "CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
+  }
+
+  test("SPARK-56032: FilterExec skips CSE codegen when the common subexpression is cheap") {
+    // A column repeated across conjuncts never becomes a common subexpression -- a bare column is a
+    // `LeafExpression`, which `EquivalentExpressions` skips, and `splitConjunctivePredicates` feeds
+    // each conjunct to a separate `addExprTree` call. The realistic cheap-but-recorded case is a
+    // shared *non-leaf* slot read such as a struct field access: `s.x > 5 AND s.x < 100` shares
+    // `GetStructField(s, x)`. Caching that gains nothing over the non-CSE path's lazy load, so the
+    // gate must fall back. (Pre-`isCheap`-gate this took the CSE path, emitting the eager
+    // prologue.)
+    val schema = StructType(Seq(
+      StructField("s", StructType(Seq(StructField("x", IntegerType, nullable = true))),
+        nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(Row(10)), Row(Row(3)), Row(Row(200)), Row(Row(50)), Row(Row(null)), Row(null)))
+    val expected = Seq(Row(Row(10)), Row(Row(50)))
+
+    def filterCode(cseEnabled: Boolean): String = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        // Both conjuncts share `GetStructField(s, x)`, a cheap non-leaf common subexpression.
+        val filtered = df.where("s.x > 5 AND s.x < 100")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
+      "With only a cheap common subexpression, CSE-enabled FilterExec codegen should be " +
+        "identical to CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting " +
+        "non-CSE path)")
+  }
+
+  test("SPARK-56032: FilterExec takes CSE codegen when the common subexpression is non-cheap") {
+    // The dual of the cheap-subexpression test: when `otherPreds` share a genuinely non-cheap
+    // computation (`a + b`, whose `isCheap` is false), the gate must take the CSE path so the
+    // shared result is computed once. Verify the CSE-enabled code differs from CSE-disabled here,
+    // pinning down that the gate still fires for real repeated computation.
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", IntegerType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(1, 5), Row(60, 50), Row(10, 20), Row(0, 0), Row(null, 5)))
+    val expected = Seq(Row(1, 5), Row(10, 20))
+
+    def filterCode(cseEnabled: Boolean): String = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        // Both conjuncts share `a + b`, a non-cheap common subexpression worth eliminating.
+        val filtered = df.where("(a + b) > 0 AND (a + b) < 100")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    assert(normalize(filterCode(cseEnabled = true)) != normalize(filterCode(cseEnabled = false)),
+      "With a non-cheap common subexpression, CSE-enabled FilterExec codegen should differ from " +
+        "CSE-disabled codegen (i.e. take the CSE path that computes the shared result once)")
+  }
+
+  test("SPARK-56032: subexpressionElimination.filterExec.enabled gates FilterExec CSE " +
+    "independently of subexpression elimination") {
+    // The conf disables CSE specifically for FilterExec while leaving subexpression elimination
+    // enabled elsewhere. With a genuine common subexpression in the predicates, turning the conf
+    // off should make FilterExec fall back to the lazy non-CSE path (re-evaluating the shared
+    // subexpression per use), matching the code generated when CSE is globally disabled.
+    val schema = StructType(Seq(
+      StructField("a", DayTimeIntervalType(), nullable = true),
+      StructField("b", DayTimeIntervalType(), nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(Duration.ofDays(1), Duration.ofDays(5)),
+      Row(Duration.ofDays(5), Duration.ofDays(6)),
+      Row(Duration.ofDays(2), Duration.ofDays(3))))
+    val expected = data.collect().toSeq
+
+    // `a + b` appears three times in the predicate, so it is a CSE candidate. We count `addExact`
+    // occurrences in the generated code: the CSE path evaluates it once, the lazy path per use.
+    def filterCode(filterExecCseEnabled: Boolean): String = {
+      withSQLConf(
+        // Subexpression elimination stays globally on; only the FilterExec gate flips.
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true",
+        SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key ->
+          filterExecCseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        val filtered = df.where(
+          "a IS NOT NULL AND (a + b) > INTERVAL '3' DAY " +
+            "AND (a + b) < INTERVAL '15' DAY AND (a + b) != INTERVAL '10' DAY")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    val addExactPattern = "addExact".r
+    val enabledCount = addExactPattern.findAllIn(filterCode(filterExecCseEnabled = true)).length
+    val disabledCount = addExactPattern.findAllIn(filterCode(filterExecCseEnabled = false)).length
+    // With the gate on, CSE collapses the repeated `a + b` evaluations; with the gate off,
+    // FilterExec falls back to the lazy path that re-evaluates per use.
+    assert(enabledCount < disabledCount,
+      s"subexpressionElimination.filterExec.enabled should reduce repeated evaluation: " +
+        s"addExact appears $enabledCount times when enabled vs $disabledCount times when disabled")
   }
 }

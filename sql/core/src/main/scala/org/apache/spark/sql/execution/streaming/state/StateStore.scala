@@ -537,6 +537,10 @@ trait StateStoreCustomMetric {
   def desc: String
   def withNewDesc(desc: String): StateStoreCustomMetric
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
+
+  // True if the metric reflects current store state (e.g. file size, memory) rather
+  // than per-batch work; snapshot metrics are preserved on no-data trigger events.
+  def isSnapshot: Boolean = false
 }
 
 case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric {
@@ -546,7 +550,10 @@ case class StateStoreCustomSumMetric(name: String, desc: String) extends StateSt
     SQLMetrics.createMetric(sparkContext, desc)
 }
 
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric {
+case class StateStoreCustomSizeMetric(
+    name: String,
+    desc: String,
+    override val isSnapshot: Boolean = false) extends StateStoreCustomMetric {
   override def withNewDesc(desc: String): StateStoreCustomSizeMetric = copy(desc = desc)
 
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =

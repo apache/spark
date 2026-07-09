@@ -67,7 +67,8 @@ abstract class DeltaBasedUpdateTableSuiteBase extends UpdateTableSuiteBase {
         sql(s"UPDATE $tableNameAsString SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5")
       },
       condition = "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
-      parameters = Map("sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\""),
+      parameters = Map(
+        "sqlExprs" -> "\"((id <= 1) AND (rand() > 0.5))\", \"((id <= 1) AND (rand() > 0.5))\""),
       context = ExpectedContext(
         fragment = "UPDATE cat.ns1.test_table SET dep = 'invalid' WHERE id <= 1 AND rand() > 0.5",
         start = 0,

@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class ValidateExternalTypeSuite extends QueryTest with SharedSparkSession {
+class ValidateExternalTypeSuite extends SharedSparkSession {
   test("SPARK-49044 ValidateExternalType should be user visible") {
     checkError(
       exception = intercept[SparkRuntimeException] {

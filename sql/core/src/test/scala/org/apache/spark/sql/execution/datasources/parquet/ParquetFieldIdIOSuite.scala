@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class ParquetFieldIdIOSuite extends QueryTest with ParquetTest with SharedSparkSession  {
+class ParquetFieldIdIOSuite extends ParquetTest with SharedSparkSession  {
 
   private def withId(id: Int): Metadata =
     new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()

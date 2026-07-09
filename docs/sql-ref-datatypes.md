@@ -47,13 +47,16 @@ Spark SQL and DataFrames support the following data types:
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
   - `TimeType(precision)`: Represents values comprising values of fields hour, minute and second with the number of decimal digits `precision` following the decimal point in the seconds field, without a time-zone.
-  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999` for max precision `6`.
+  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999999` for max precision `9`. The default precision is `6`.
+    - Note: Apache Hive has no TIME type, so `TimeType` is not supported in Hive SerDe interop. Storing it in a Hive SerDe table (including `INSERT OVERWRITE DIRECTORY ... STORED AS`) or passing it to a Hive UDF/UDAF/UDTF raises an error rather than silently converting the value.
   - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second, with the session local time-zone. The timestamp value represents an
   absolute point in time.
   - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second. All operations are performed without taking any time zone into account.
     - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
+  - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. In schema-driven Dataset/DataFrame conversion, Spark maps `TimestampNTZNanosType` to `java.time.LocalDateTime` and `TimestampLTZNanosType` to `java.time.Instant`; values with more sub-micro digits than declared by `precision` are floor-truncated to that precision. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
+    - Note: Nanosecond precision is only available through the schema-driven APIs above. Typed encoders derived from `java.time.Instant`/`java.time.LocalDateTime` (for example `ds.as[T]` for a case class and `spark.createDataFrame(Seq(...))` without an explicit schema) bind these types to the microsecond `TIMESTAMP_LTZ`/`TIMESTAMP_NTZ` types, and typed Scala/Java UDFs such as `udf((i: java.time.Instant) => ...)` coerce their inputs to microsecond precision at the UDF boundary. Kryo encoders bypass the SQL type system entirely and likewise do not preserve nanoseconds. To retain nanoseconds, use a schema that declares `TimestampLTZNanosType`/`TimestampNTZNanosType` together with the schema-driven `Row`/`Encoders.row(schema)` path.
 
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
@@ -95,8 +98,8 @@ Spark SQL and DataFrames support the following data types:
 
 * Spatial types
   Spatial objects as defined in the [OGC Simple Feature Access](https://portal.ogc.org/files/?artifact_id=25355) specification.
-  - `GeometryType`: Represents GEOMETRY values—spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. Default SRID when not specified is 4326 (WGS 84).
-  - `GeographyType`: Represents GEOGRAPHY values—spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. Default SRID is 4326 (WGS 84).
+  - `GeometryType`: Represents GEOMETRY values, spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. In SQL, `GEOMETRY` columns must always be declared with an explicit SRID or `ANY`.
+  - `GeographyType`: Represents GEOGRAPHY values, spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single geographic SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. In SQL, `GEOGRAPHY` columns must always be declared with an explicit SRID or `ANY`.
   For more details and built-in functions, see [Geospatial (Geometry/Geography) types](sql-ref-geospatial-types.html).
 
 * Complex types
@@ -142,9 +145,10 @@ from pyspark.sql.types import *
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
+|**TimeType**|datetime.time|TimeType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
-|**GeometryType**|Geometry|GeometryType() or GeometryType(*srid*)|
-|**GeographyType**|Geography|GeographyType() or GeographyType(*srid*)|
+|**GeometryType**|Geometry|GeometryType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
+|**GeographyType**|Geography|GeographyType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
 |**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
 |**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
 |**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -179,8 +183,8 @@ You can access them by doing
 |**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
-|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType or GeometryType(*srid*)|
-|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType or GeographyType(*srid*)|
+|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType(*srid*)|
+|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType(*srid*)|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -240,6 +244,7 @@ please use factory methods provided in
 |**BooleanType**|logical|"bool"|
 |**TimestampType**|POSIXct|"timestamp"|
 |**DateType**|Date|"date"|
+|**TimeType**|Not supported|Not supported|
 |**GeometryType**|Not supported|Not supported|
 |**GeographyType**|Not supported|Not supported|
 |**ArrayType**|vector or list|list(type="array", elementType=*elementType*, containsNull=[*containsNull*])<br/>**Note:** The default value of *containsNull* is TRUE.|
@@ -263,6 +268,7 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**FloatType**|FLOAT, REAL|
 |**DoubleType**|DOUBLE|
 |**DateType**|DATE|
+|**TimeType**|TIME, TIME(p)|
 |**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
 |**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|
@@ -272,8 +278,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
 |**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
-|**GeometryType**|GEOMETRY or GEOMETRY(*srid*) or GEOMETRY(ANY)|
-|**GeographyType**|GEOGRAPHY or GEOGRAPHY(*srid*) or GEOGRAPHY(ANY)|
+|**GeometryType**|GEOMETRY(*srid*) or GEOMETRY(ANY)|
+|**GeographyType**|GEOGRAPHY(*srid*) or GEOGRAPHY(ANY)|
 |**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|

@@ -26,7 +26,7 @@ import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileNameSpec
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
@@ -48,7 +48,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
+class PartitionedWriteSuite extends SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {
@@ -232,7 +232,10 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       "00:01:02.999999" -> TimeType(6),
       "12:00:00" -> TimeType(1),
       "23:59:59.000001" -> TimeType(),
-      "23:59:59.999999" -> TimeType(6)
+      "23:59:59.999999" -> TimeType(6),
+      "00:00:00.0000019" -> TimeType(7),
+      "12:34:56.12345678" -> TimeType(8),
+      "23:59:59.999999999" -> TimeType(9)
     ).foreach { case (timeStr, timeType) =>
       withTempPath { f =>
         val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")

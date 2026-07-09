@@ -1,0 +1,38 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# This is a placeholder. Scala 2.13 is the default on master, so there is no
+# separate scheduled Scala 2.13 build here. The file exists only so that the
+# README build status badge, which resolves a workflow by its path on the
+# default branch, renders for the branches that still run it as a separate
+# build (e.g. branch-3.5). The actual build is defined in the same file on
+# those branches.
+
+name: "Build / Java8 (Scala 2.13, JDK 8)"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  noop:
+    if: github.repository == 'apache/spark'
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "Scala 2.13 is the default on master and is not built separately. See branches that run it as a separate build (e.g. branch-3.5)."

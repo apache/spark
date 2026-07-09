@@ -45,7 +45,7 @@ class SQLMetric(
   // for SPARK-11013.
   assert(initValue <= 0)
   // _value will always be either initValue or non-negative.
-  private var _value = initValue
+  private[metric] var _value = initValue
 
   override def copy(): SQLMetric = {
     val newAcc = new SQLMetric(metricType, initValue)
@@ -110,7 +110,7 @@ class SQLMetric(
 }
 
 object SQLMetrics {
-  private val SUM_METRIC = "sum"
+  private[metric] val SUM_METRIC = "sum"
   private val SIZE_METRIC = "size"
   private val TIMING_METRIC = "timing"
   private val NS_TIMING_METRIC = "nsTiming"
@@ -120,7 +120,7 @@ object SQLMetrics {
 
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
-  private val metricsCache: LoadingCache[String, Option[String]] =
+  private[metric] val metricsCache: LoadingCache[String, Option[String]] =
     CacheBuilder.newBuilder().maximumSize(10000)
     .build(new CacheLoader[String, Option[String]] {
       override def load(name: String): Option[String] = {

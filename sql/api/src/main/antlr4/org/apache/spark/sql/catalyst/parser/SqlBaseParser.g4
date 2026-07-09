@@ -78,7 +78,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
   }
 }
 
@@ -201,6 +201,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleTemporalTableIdentifier
+    : temporalTableIdentifier EOF
+    ;
+
 singleMultipartIdentifier
     : multipartIdentifier EOF
     ;
@@ -215,6 +219,10 @@ singleDataType
 
 singleTableSchema
     : colTypeList EOF
+    ;
+
+singlePathElementList
+    : pathElement (COMMA pathElement)* EOF
     ;
 
 singleRoutineParamList
@@ -360,16 +368,16 @@ statement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
-        (LIKE? pattern=stringLit)?                                        #showTables
+        (LIKE? pattern=stringLit)? (AS JSON)?                            #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
-        LIKE pattern=stringLit partitionSpec?                             #showTableExtended
+        LIKE pattern=stringLit partitionSpec? (AS JSON)?                  #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
         (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
-    | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
+    | SHOW PARTITIONS identifierReference partitionSpec? (AS JSON)?    #showPartitions
     | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
@@ -412,8 +420,9 @@ statement
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
-        (AS query)?                                                    #createPipelineDataset
+        (AS query | FLOW autoCdcBody)?                                 #createPipelineDataset
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    | createPipelineFlowHeader autoCdcCommand                          #createFlowAutoCdc
     ;
 
 materializedView
@@ -736,7 +745,7 @@ dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
-    | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
+    | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         USING (source=identifierReference |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
@@ -744,6 +753,37 @@ dmlStatementNoWith
         matchedClause*
         notMatchedClause*
         notMatchedBySourceClause*                                                  #mergeIntoTable
+    ;
+
+autoCdcCommand
+    : AUTO CDC INTO target=multipartIdentifier
+        autoCdcParameters
+    ;
+
+autoCdcBody
+    : AUTO CDC autoCdcParameters
+    ;
+
+autoCdcParameters
+    : FROM source=relationPrimary
+        KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
+        autoCdcDeleteClause?
+        autoCdcSequenceByClause
+        autoCdcColumnsClause?
+    ;
+
+autoCdcDeleteClause
+    : APPLY AS DELETE WHEN deleteCondition=booleanExpression
+    ;
+
+autoCdcSequenceByClause
+    : SEQUENCE BY sequence=expression
+    ;
+
+autoCdcColumnsClause
+    : COLUMNS (
+        LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -809,6 +849,7 @@ fromStatementBody
       aggregationClause?
       havingClause?
       windowClause?
+      qualifyClause?
       queryOrganization
     ;
 
@@ -826,7 +867,8 @@ querySpecification
       whereClause?
       aggregationClause?
       havingClause?
-      windowClause?                                                         #regularQuerySpecification
+      windowClause?
+      qualifyClause?                                                        #regularQuerySpecification
     ;
 
 transformClause
@@ -895,6 +937,10 @@ whereClause
 
 havingClause
     : HAVING booleanExpression
+    ;
+
+qualifyClause
+    : QUALIFY booleanExpression
     ;
 
 hint
@@ -1019,6 +1065,20 @@ unpivotAlias
     : AS? errorCapturingIdentifier
     ;
 
+binByClause
+    : BIN BY LEFT_PAREN
+        RANGE rangeStart=multipartIdentifier TO rangeEnd=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression)?
+        DISTRIBUTE UNIFORM LEFT_PAREN
+          distributeCol+=multipartIdentifier
+          (COMMA distributeCol+=multipartIdentifier)* RIGHT_PAREN
+        (BIN_START AS binStartAlias=errorCapturingIdentifier)?
+        (BIN_END AS binEndAlias=errorCapturingIdentifier)?
+        (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+    ;
+
 lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
@@ -1040,10 +1100,11 @@ relationExtension
     : joinRelation
     | pivotClause
     | unpivotClause
+    | binByClause
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
@@ -1062,8 +1123,14 @@ joinCriteria
     | USING identifierList
     ;
 
+nearestByClause
+    : (APPROX | EXACT) NEAREST num=INTEGER_VALUE? BY (DISTANCE | SIMILARITY) expression
+    ;
+
 sample
-    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
+    : TABLESAMPLE (sampleType=(SYSTEM | BERNOULLI))?
+      LEFT_PAREN sampleMethod? RIGHT_PAREN
+      (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
 sampleMethod
@@ -1102,7 +1169,7 @@ relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
-    | identifierReference temporalClause?
+    | temporalTableIdentifierReference temporalClause?
       optionsClause? sample? watermarkClause? tableAlias    #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
       tableAlias                                            #aliasedQuery
@@ -1208,6 +1275,16 @@ tableIdentifier
     : (db=errorCapturingIdentifier DOT)? table=errorCapturingIdentifier
     ;
 
+temporalTableIdentifier
+    : id=multipartIdentifier AT_VERSION version
+    | id=multipartIdentifier
+    ;
+
+temporalTableIdentifierReference
+    : identifierReference AT_VERSION version
+    | identifierReference
+    ;
+
 functionIdentifier
     : (db=errorCapturingIdentifier DOT)? function=errorCapturingIdentifier
     ;
@@ -1307,7 +1384,7 @@ datetimeUnit
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH)             #currentLike
+    : name=(CURRENT_DATE | CURRENT_TIMESTAMP | CURRENT_USER | USER | SESSION_USER | CURRENT_TIME | CURRENT_PATH | LOCALTIME)             #currentLike
     | name=(TIMESTAMPADD | DATEADD | DATE_ADD) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA unitsAmount=valueExpression COMMA timestamp=valueExpression RIGHT_PAREN             #timestampadd
     | name=(TIMESTAMPDIFF | DATEDIFF | DATE_DIFF | TIMEDIFF) LEFT_PAREN (unit=datetimeUnit | invalidUnit=stringLit) COMMA startTimestamp=valueExpression COMMA endTimestamp=valueExpression RIGHT_PAREN    #timestampdiff
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
@@ -1467,7 +1544,10 @@ nonTrivialPrimitiveType
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
-    | TIMESTAMP (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+        (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP_LTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+    | TIMESTAMP_NTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
@@ -1482,7 +1562,6 @@ trivialPrimitiveType
     | FLOAT | REAL
     | DOUBLE
     | DATE
-    | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | BINARY
     | VOID
     | VARIANT
@@ -1888,6 +1967,7 @@ operatorPipeRightSide
     // messages in the event that both are present (this is not allowed).
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
+    | binByClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -1919,20 +1999,29 @@ ansiNonReserved
     : ADD
     | AFTER
     | AGGREGATE
+    | ALIGN
     | ALTER
     | ALWAYS
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPLY
+    | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
     | ASENSITIVE
     | AT
     | ATOMIC
+    | AUTO
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
+    | BIN
+    | BIN_DISTRIBUTE_RATIO
+    | BIN_END
+    | BIN_START
     | BINARY
     | BINARY_HEX
     | BINDING
@@ -1946,6 +2035,7 @@ ansiNonReserved
     | CASCADE
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2000,6 +2090,7 @@ ansiNonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTRIBUTE
     | DIV
     | DO
@@ -2009,6 +2100,7 @@ ansiNonReserved
     | ENFORCED
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2106,6 +2198,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2135,6 +2228,7 @@ ansiNonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2173,6 +2267,7 @@ ansiNonReserved
     | SECURITY
     | SEMI
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SET
@@ -2180,6 +2275,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2200,6 +2296,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
@@ -2228,6 +2325,7 @@ ansiNonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNIFORM
     | UNLOCK
     | UNPIVOT
     | UNSET
@@ -2248,6 +2346,7 @@ ansiNonReserved
     | WEEKS
     | WHILE
     | WATERMARK
+    | WIDTH
     | WINDOW
     | WITHOUT
     | YEAR
@@ -2289,6 +2388,7 @@ nonReserved
     : ADD
     | AFTER
     | AGGREGATE
+    | ALIGN
     | ALL
     | ALTER
     | ALWAYS
@@ -2296,6 +2396,8 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPLY
+    | APPROX
     | ARCHIVE
     | ARRAY
     | AS
@@ -2304,9 +2406,15 @@ nonReserved
     | AT
     | ATOMIC
     | AUTHORIZATION
+    | AUTO
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
+    | BIN
+    | BIN_DISTRIBUTE_RATIO
+    | BIN_END
+    | BIN_START
     | BINARY
     | BINARY_HEX
     | BINDING
@@ -2324,6 +2432,7 @@ nonReserved
     | CAST
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2391,6 +2500,7 @@ nonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTINCT
     | DISTRIBUTE
     | DIV
@@ -2404,6 +2514,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2487,6 +2598,7 @@ nonReserved
     | LIST
     | LOAD
     | LOCAL
+    | LOCALTIME
     | LOCATION
     | LOCK
     | LOCKS
@@ -2516,6 +2628,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2554,6 +2667,7 @@ nonReserved
     | PROCEDURES
     | PROPERTIES
     | PURGE
+    | QUALIFY
     | QUARTER
     | QUERY
     | RANGE
@@ -2594,6 +2708,7 @@ nonReserved
     | SECURITY
     | SELECT
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SESSION_USER
@@ -2601,6 +2716,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2623,6 +2739,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
@@ -2656,6 +2773,7 @@ nonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNIFORM
     | UNIQUE
     | UNKNOWN
     | UNLOCK
@@ -2681,6 +2799,7 @@ nonReserved
     | WHILE
     | WHEN
     | WHERE
+    | WIDTH
     | WINDOW
     | WITH
     | WITHIN

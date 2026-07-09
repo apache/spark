@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.{FlowAssigned, StreamingRelationV2, UserProvided, WriteToStream, WriteToStreamStatement}
+import org.apache.spark.sql.catalyst.util.GeneratedColumn
 import org.apache.spark.sql.connector.catalog.SupportsWrite
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RealTimeTrigger}
@@ -64,8 +65,17 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
         }
       }
 
+      // Streaming writes with generated columns are not yet supported.
+      s.catalogAndIdent.foreach { case (catalog, ident) =>
+        if (GeneratedColumn.supportsGeneratedColumnsOnWrite(Some(catalog), s.sink.columns())) {
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            catalog, ident, "streaming write with generated columns")
+        }
+      }
+
       WriteToStream(
         s.userSpecifiedName.orNull,
+        s.userSpecifiedSinkName,
         resolvedCheckpointLocation,
         s.sink,
         s.outputMode,

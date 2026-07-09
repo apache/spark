@@ -20,7 +20,7 @@ import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.unsafe.types.VariantVal
 
-class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
+class XmlVariantSuite extends SharedSparkSession with TestXmlData {
 
   protected val legacyParserEnabled: Boolean = false
 

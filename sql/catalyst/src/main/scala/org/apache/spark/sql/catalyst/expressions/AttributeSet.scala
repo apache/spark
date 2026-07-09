@@ -65,6 +65,10 @@ object AttributeSet {
  * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken tests,
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
+ *
+ * Iteration via [[iterator]], [[foreach]], or [[Iterable]]-derived combinators (`flatMap`, etc.)
+ * visits elements in insertion order. Note: [[toSeq]] is an explicit exception -- it sorts by
+ * `(name, exprId.id)` for stable codegen output, see SPARK-18394.
  */
 class AttributeSet private (private val baseSet: mutable.LinkedHashSet[AttributeEquals])
   extends Iterable[Attribute] with Serializable {

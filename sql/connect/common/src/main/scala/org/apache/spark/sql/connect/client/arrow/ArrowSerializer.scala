@@ -20,7 +20,7 @@ import java.io.{ByteArrayOutputStream, OutputStream}
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.nio.channels.Channels
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.{Map => JMap, Objects}
 
 import scala.jdk.CollectionConverters._
@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
@@ -239,7 +240,13 @@ object ArrowSerializer {
   }
 
   // TODO throw better errors on class cast exceptions.
-  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
+  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
+    ConnectTypeOps
+      .forEncoder(encoder)
+      .map(_.createArrowSerializer(v))
+      .getOrElse(serializerForDefault(encoder, v))
+
+  private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
     (encoder, v) match {
       case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: BitVector) =>
         new FieldSerializer[Boolean, BitVector](v) {
@@ -391,12 +398,6 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
-      case (LocalTimeEncoder, v: TimeNanoVector) =>
-        new FieldSerializer[LocalTime, TimeNanoVector](v) {
-          override def set(index: Int, value: LocalTime): Unit =
-            vector.setSafe(index, SparkDateTimeUtils.localTimeToNanos(value))
-        }
-
       case (OptionEncoder(value), v) =>
         new Serializer {
           private[this] val delegate: Serializer = serializerFor(value, v)
@@ -562,7 +563,8 @@ object ArrowSerializer {
     def write(index: Int, value: Any): Unit
   }
 
-  private abstract class FieldSerializer[E, V <: FieldVector](val vector: V) extends Serializer {
+  private[connect] abstract class FieldSerializer[E, V <: FieldVector](val vector: V)
+      extends Serializer {
     def set(index: Int, value: E): Unit
 
     override def write(index: Int, raw: Any): Unit = {

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -133,7 +134,7 @@ class IncrementalExecution(
       // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
-    sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
+    val optimized = sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
       tracker).transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
@@ -141,7 +142,11 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
+    WidenStatefulOperatorAttributeNullability(optimized)
   }
+
+  // Use `this` for explain so the already-open transaction and executedPlan are reused.
+  override protected def queryExecutionForExplain: QueryExecution = this
 
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)

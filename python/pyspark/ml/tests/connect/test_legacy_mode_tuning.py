@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -199,7 +198,7 @@ class CrossValidatorTestsMixin:
         )
 
         scaler = StandardScaler(inputCol="features", outputCol="scaled_features")
-        lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
+        lorv2 = LORV2(numTrainWorkers=1, featuresCol="scaled_features")
         pipeline = Pipeline(stages=[scaler, lorv2])
 
         grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 3]).build()
@@ -208,6 +207,7 @@ class CrossValidatorTestsMixin:
             estimatorParamMaps=grid2,
             parallelism=2,
             evaluator=BinaryClassificationEvaluator(),
+            numFolds=2,
         )
         cv_model = cv.fit(train_dataset)
         transformed_result = (

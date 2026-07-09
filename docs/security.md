@@ -348,8 +348,14 @@ The following options control the authentication of Web UIs:
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
   <td><code>SAMEORIGIN</code></td>
-  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. Requires <code>spark.ui.contentSecurityPolicy.enabled=true</code> to take effect. When CSP is disabled, <code>X-Frame-Options: SAMEORIGIN</code> is used regardless of this setting.</td>
   <td>1.6.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.contentSecurityPolicy.frameAncestors.enabled</code></td>
+  <td><code>true</code></td>
+  <td>Whether to include the <code>frame-ancestors</code> directive in the CSP header when <code>spark.ui.contentSecurityPolicy.enabled=true</code>. When enabled, the <code>frame-ancestors</code> directive enforces the <code>spark.ui.allowFramingFrom</code> setting. This setting is ignored when CSP is disabled.</td>
+  <td>4.3.0</td>
 </tr>
 <tr>
   <td><code>spark.ui.filters</code></td>
@@ -766,12 +772,14 @@ Security.
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
-  <td><code>1; mode=block</code></td>
+  <td><code>0</code></td>
   <td>
-    Value for HTTP X-XSS-Protection response header. You can choose appropriate value
-    from below:
+    Value for HTTP X-XSS-Protection response header. The default is <code>0</code> which
+    disables the browser's XSS Auditor. The XSS Auditor has been removed from Chrome and
+    Edge, and was never implemented in Firefox. In browsers that still support it (Safari),
+    it can introduce side-channel vulnerabilities. Use Content-Security-Policy instead.
     <ul>
-      <li><code>0</code> (Disables XSS filtering)</li>
+      <li><code>0</code> (Disables XSS filtering. Recommended.)</li>
       <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected,
         the browser will sanitize the page.)</li>
       <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering
@@ -802,6 +810,16 @@ Security.
     </ul>
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.ui.contentSecurityPolicy.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+    When enabled, the Content-Security-Policy (CSP) HTTP response header is set for the Spark UI,
+    restricting the sources from which the browser is allowed to load resources as a
+    defense-in-depth measure against cross-site scripting (XSS).
+  </td>
+  <td>4.2.0</td>
 </tr>
 </table>
 
@@ -924,9 +942,8 @@ In most cases, Spark relies on the credentials of the current logged in user whe
 to Kerberos-aware services. Such credentials can be obtained by logging in to the configured KDC
 with tools like `kinit`.
 
-When talking to Hadoop-based services, Spark needs to obtain delegation tokens so that non-local
-processes can authenticate. Spark ships with support for HDFS and other Hadoop file systems, Hive
-and HBase.
+When talking to Hadoop-based services, Spark needs to obtain delegation tokens so that processes
+can authenticate. Spark ships with support for HDFS and other Hadoop file systems, Hive and HBase.
 
 When using a Hadoop filesystem (such HDFS or WebHDFS), Spark will acquire the relevant tokens
 for the service hosting the user's home directory.
@@ -946,8 +963,8 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 `org.apache.spark.security.HadoopDelegationTokenProvider` can be made available to Spark
 by listing their names in the corresponding file in the jar's `META-INF/services` directory.
 
-Delegation token support is currently only supported in YARN and Kubernetes mode. Consult the
-deployment-specific page for more information.
+Delegation token support is currently only supported in Local, YARN and Kubernetes modes.
+Consult the deployment-specific page for more information.
 
 The following options provides finer-grained control for this feature:
 
@@ -1039,7 +1056,7 @@ documentation to find out instructions on how to ensure cluster mode is used for
 ## Secure Interaction with Kubernetes
 
 When talking to Hadoop-based services behind Kerberos, it was noted that Spark needs to obtain delegation tokens
-so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
+so that processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
 shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job:
 
 In all cases you must define the environment variable: `HADOOP_CONF_DIR` or

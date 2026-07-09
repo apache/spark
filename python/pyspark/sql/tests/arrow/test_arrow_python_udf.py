@@ -19,6 +19,7 @@ from decimal import Decimal
 import unittest
 
 from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
+from pyspark.loose_version import LooseVersion
 from pyspark.sql import Row
 from pyspark.sql.functions import udf, col
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
@@ -42,6 +43,9 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+
+if have_pandas:
+    import pandas as pd
 
 
 @unittest.skipIf(
@@ -190,8 +194,12 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "int")("value").alias("res")).collect()
 
-        with self.assertRaises(PythonException):
-            df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+        # Skip on pandas 3+ legacy conversion: pandas 3's StringDtype implements
+        # __arrow_array__, which lets pyarrow coerce integer-like strings to
+        # decimal. Older pandas (object dtype) raised ArrowTypeError here.
+        if LooseVersion(pd.__version__) < "3.0.0":
+            with self.assertRaises(PythonException):
+                df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
         with self.assertRaises(PythonException):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()

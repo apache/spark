@@ -18,14 +18,14 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * Test cases for various [[org.apache.spark.sql.catalyst.json.JSONOptions]].
  */
-class JsonParsingOptionsSuite extends QueryTest with SharedSparkSession {
+class JsonParsingOptionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("allowComments off") {

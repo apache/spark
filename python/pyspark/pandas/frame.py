@@ -3584,8 +3584,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self._update_internal_frame(self.drop(columns=item)._internal)
         return result
 
-    # TODO(SPARK-46158): add axis parameter can work when '1' or 'columns'
-    def xs(self, key: Name, axis: Axis = 0, level: Optional[int] = None) -> DataFrameOrSeries:
+    def xs(
+        self, key: Name, axis: Axis = 0, level: Optional[Union[int, Name]] = None
+    ) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
 
@@ -3596,9 +3597,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         key : label or tuple of label
             Label contained in the index, or partially in a MultiIndex.
-        axis : 0 or 'index', default 0
+        axis : {0 or 'index', 1 or 'columns'}, default 0
             Axis to retrieve cross-section on.
-            currently only support 0 or 'index'
         level : object, defaults to first n levels (n=1 or len(key))
             In case of a key partially contained in a MultiIndex, indicate
             which levels are used. Levels can be referred by label or position.
@@ -3660,6 +3660,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                            num_legs  num_wings
         class  locomotion
         mammal walks              4          0
+
+        Get values at specified column
+
+        >>> df.xs('num_legs', axis=1)  # doctest: +NORMALIZE_WHITESPACE
+        class   animal   locomotion
+        mammal  cat      walks         4
+                dog      walks         4
+                bat      flies         2
+        bird    penguin  walks         2
+        Name: num_legs, dtype: int64
         """
         from pyspark.pandas.series import first_series
 
@@ -3670,8 +3680,85 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise KeyError(key)
 
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
+        if axis == 1:
+            column_level = self._internal.column_labels_level
+            if column_level == 1:
+                if level is not None:
+                    raise TypeError("Index must be a MultiIndex")
+                if is_name_like_tuple(key):
+                    raise KeyError(key)
+
+            column_key = cast(Label, key if is_name_like_tuple(key) else (key,))
+            if len(column_key) > column_level:
+                raise KeyError(
+                    "Key length ({}) exceeds index depth ({})".format(len(column_key), column_level)
+                )
+
+            if level is None:
+                level_idx = 0
+            elif isinstance(level, int):
+                level_idx = level
+            else:
+                level_name = cast(Label, level if is_name_like_tuple(level) else (level,))
+                try:
+                    level_idx = self._internal.column_label_names.index(level_name)
+                except ValueError:
+                    raise KeyError("Level {} not found".format(name_like_string(level_name)))
+
+            original_level_idx = level_idx
+            if level_idx < 0:
+                level_idx += column_level
+                if level_idx < 0:
+                    raise IndexError(
+                        "Too many levels: Index has only {} levels, "
+                        "{} is not a valid level number".format(column_level, original_level_idx)
+                    )
+            if level_idx >= column_level:
+                raise IndexError(
+                    "Too many levels: Index has only {} levels, not {}".format(
+                        column_level, level_idx + 1
+                    )
+                )
+
+            drop_levels = range(level_idx, level_idx + len(column_key))
+            selected = [
+                (label, scol, field)
+                for label, scol, field in zip(
+                    self._internal.column_labels,
+                    self._internal.data_spark_columns,
+                    self._internal.data_fields,
+                )
+                if tuple(label[i] for i in drop_levels) == column_key
+            ]
+            if not selected:
+                raise KeyError(key)
+
+            selected_column_labels, data_spark_columns, data_fields = zip(*selected)
+            # Match pandas by dropping the selected column levels from the result.
+            new_column_labels = [
+                tuple(label[i] for i in range(column_level) if i not in drop_levels)
+                for label in selected_column_labels
+            ]
+            if len(new_column_labels[0]) == 0:
+                if len(selected_column_labels) == 1:
+                    return self._psser_for(selected_column_labels[0])
+                else:
+                    new_column_labels = list(selected_column_labels)
+                    column_label_names = self._internal.column_label_names
+            else:
+                column_label_names = [
+                    name
+                    for i, name in enumerate(self._internal.column_label_names)
+                    if i not in drop_levels
+                ]
+
+            internal = self._internal.copy(
+                column_labels=list(new_column_labels),
+                data_spark_columns=list(data_spark_columns),
+                data_fields=list(data_fields),
+                column_label_names=list(column_label_names),
+            )
+            return DataFrame(internal)
 
         if not is_name_like_tuple(key):
             key = (key,)
@@ -3682,10 +3769,25 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 )
             )
         if level is None:
-            level = 0
+            index_level = 0
+        elif isinstance(level, int):
+            index_level = level
+        else:
+            level_name = cast(Label, level if is_name_like_tuple(level) else (level,))
+            if self._internal.index_names.count(level_name) > 1:
+                raise ValueError(
+                    "The name {} occurs multiple times, use a level number".format(
+                        name_like_string(level_name)
+                    )
+                )
+            try:
+                index_level = self._internal.index_names.index(level_name)
+            except ValueError:
+                raise KeyError("Level {} not found".format(name_like_string(level_name)))
 
         rows = [
-            self._internal.index_spark_columns[lvl] == index for lvl, index in enumerate(key, level)
+            self._internal.index_spark_columns[lvl] == index
+            for lvl, index in enumerate(key, index_level)
         ]
         internal = self._internal.with_filter(reduce(lambda x, y: x & y, rows))
 
@@ -3700,11 +3802,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 return first_series(DataFrame(pdf.transpose()))
         else:
             index_spark_columns = (
-                internal.index_spark_columns[:level]
-                + internal.index_spark_columns[level + len(key) :]
+                internal.index_spark_columns[:index_level]
+                + internal.index_spark_columns[index_level + len(key) :]
             )
-            index_names = internal.index_names[:level] + internal.index_names[level + len(key) :]
-            index_fields = internal.index_fields[:level] + internal.index_fields[level + len(key) :]
+            index_names = (
+                internal.index_names[:index_level] + internal.index_names[index_level + len(key) :]
+            )
+            index_fields = (
+                internal.index_fields[:index_level]
+                + internal.index_fields[index_level + len(key) :]
+            )
 
             internal = internal.copy(
                 index_spark_columns=index_spark_columns,
@@ -7988,7 +8095,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             first puts NaNs at the beginning, last puts NaNs at the end. Not implemented for
             MultiIndex.
         ignore_index : bool, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -9646,7 +9753,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         random_state : int, optional
             Seed for the random number generator (if int).
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
             .. versionadded:: 3.4.0
 
@@ -10249,7 +10356,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         inplace : boolean, default False
             Whether to drop duplicates in place or to return a copy.
         ignore_index : boolean, default False
-            If True, the resulting axis will be labeled 0, 1, …, n - 1.
+            If True, the resulting axis will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -13351,7 +13458,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         column : str or tuple
             Column to explode.
         ignore_index : bool, default False
-            If True, the resulting index will be labeled 0, 1, …, n - 1.
+            If True, the resulting index will be labeled 0, 1, ..., n - 1.
 
         Returns
         -------
@@ -14205,6 +14312,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def _set_axis_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
         _f = self._build_fallback_method("set_axis")
+        return _f(*args, **kwargs)
+
+    def _combine_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("combine")
         return _f(*args, **kwargs)
 
     def __getattr__(self, key: str) -> Any:

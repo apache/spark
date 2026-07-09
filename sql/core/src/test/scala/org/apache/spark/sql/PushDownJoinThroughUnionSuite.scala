@@ -24,8 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class PushDownJoinThroughUnionSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
   import testImplicits._
 

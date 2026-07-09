@@ -198,7 +198,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   /**
    * Normalize proto messages for stable comparison:
    *   - Trim JVM origin fields (lines, stack traces, anonymous function names)
-   *   - Populate default StringType collation when missing (UTF8_BINARY)
    */
   private def normalizeProtoForComparison[T <: protobuf.Message](message: T): T = {
     def trim(builder: proto.JvmOrigin.Builder): Unit = {
@@ -221,17 +220,6 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = message.toBuilder
 
     builder match {
-      // For comparison only, we add UTF8_BINARY when StringType collation is missing
-      // to ensure deterministic plan equality across environments.
-      case dt: proto.DataType.Builder if dt.getKindCase == proto.DataType.KindCase.STRING =>
-        val sb = dt.getStringBuilder
-        if (sb.getCollation.isEmpty) {
-          val defaultCollationName =
-            CollationFactory
-              .fetchCollation(CollationFactory.UTF8_BINARY_COLLATION_ID)
-              .collationName
-          sb.setCollation(defaultCollationName)
-        }
       case exp: proto.Relation.Builder
           if exp.hasCommon && exp.getCommon.hasOrigin && exp.getCommon.getOrigin.hasJvmOrigin =>
         trim(exp.getCommonBuilder.getOriginBuilder.getJvmOriginBuilder)
@@ -403,7 +391,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   test("read changes with options") {
     session.read
       .option("startingTimestamp", "2026-01-01")
-      .option("deduplicationMode", "netChanges")
+      .option("deduplicationMode", "dropCarryovers")
       .option("computeUpdates", "true")
       .changes("myTable")
   }
@@ -514,6 +502,29 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   test("crossJoin") {
     left.crossJoin(right)
+  }
+
+  test("nearestByJoin inner_approx_similarity") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 1,
+        mode = "approx",
+        direction = "similarity")
+  }
+
+  test("nearestByJoin leftouter_exact_distance") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 5,
+        mode = "exact",
+        direction = "distance",
+        joinType = "leftouter")
   }
 
   test("sortWithinPartitions strings") {
@@ -713,6 +724,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     val builder = new MetadataBuilder
     builder.putString("description", "unique identifier")
     simple.withMetadata("id", builder.build())
+  }
+
+  test("zip") {
+    left.select("id").zip(left.select("a"))
   }
 
   test("zipWithIndex") {
@@ -2341,6 +2356,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.make_date(fn.lit(2018), fn.lit(5), fn.lit(14))
   }
 
+  temporalFunctionTest("make_time") {
+    fn.make_time(fn.lit(12), fn.lit(13), fn.lit(14))
+  }
+
+  temporalFunctionTest("current_time") {
+    fn.current_time()
+  }
+
+  temporalFunctionTest("current_time with precision") {
+    fn.current_time(3)
+  }
+
   temporalFunctionTest("months_between") {
     fn.months_between(fn.current_date(), fn.col("d"))
   }
@@ -2726,6 +2753,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_variant_null") {
     fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("is_valid_variant") {
+    fn.is_valid_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_delete") {
+    fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
+  }
+
+  functionTest("variant_insert") {
+    fn.variant_insert(fn.parse_json(fn.col("g")), "$.a", fn.lit(1))
   }
 
   functionTest("variant_get") {
@@ -3405,6 +3444,8 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
       fn.lit(Array(java.sql.Date.valueOf("2023-02-23"), java.sql.Date.valueOf("2023-03-01"))),
       fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
       fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
+      fn.lit(
+        Array(java.time.LocalTime.of(23, 59, 59, 999999999), java.time.LocalTime.of(12, 0, 0))),
       fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 

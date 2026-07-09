@@ -60,7 +60,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  */
 class FunctionResolver(
     expressionResolver: ExpressionResolver,
-    functionResolution: FunctionResolution,
+    protected val functionResolution: FunctionResolution,
     aggregateExpressionResolver: AggregateExpressionResolver,
     binaryArithmeticResolver: BinaryArithmeticResolver)
     extends TreeNodeResolver[UnresolvedFunction, Expression]

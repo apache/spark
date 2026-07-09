@@ -204,7 +204,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
-      val pushedFilters = dataFilters
+      // Expand struct equality predicates into field-level predicates for pushdown.
+      // The original struct predicates remain in afterScanFilters for correctness.
+      val expandedDataFilters = DataSourceStrategy.expandStructPredicatesForPushdown(
+        dataFilters, fsRelation.sparkSession.sessionState.conf)
+      val pushedFilters = expandedDataFilters
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
@@ -332,7 +336,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          rebindFileSourceMetadataAttributesInFilters(dataFilters),
+          rebindFileSourceMetadataAttributesInFilters(expandedDataFilters),
           table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct

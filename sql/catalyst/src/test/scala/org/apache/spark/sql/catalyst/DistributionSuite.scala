@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{CollationAwareMurmur3Hash, Expression, Literal, Pmod}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CollationAwareMurmur3Hash, Expression, Literal, Pmod}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -390,5 +390,80 @@ class DistributionSuite extends SparkFunSuite {
       UnknownPartitioning(10),
       StatefulOpClusteredDistribution(Seq($"a", $"b", $"c"), 10),
       false)
+  }
+
+  test("SPARK-56615: non-grouped KeyedPartitioning does not satisfy ClusteredDistribution") {
+    val x = AttributeReference("x", IntegerType)()
+
+    // Non-grouped: duplicate partition key (1 appears twice), so isGrouped=false.
+    val nonGroupedKP =
+      KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+    assert(!nonGroupedKP.isGrouped)
+    // satisfies() must return false: the partitions are not yet grouped.
+    checkSatisfied(nonGroupedKP, ClusteredDistribution(Seq(x)), false)
+    // groupedSatisfies() returns true: it CAN satisfy once GroupPartitionsExec groups them.
+    assert(nonGroupedKP.groupedSatisfies(ClusteredDistribution(Seq(x))))
+
+    // Grouped: all distinct keys, so isGrouped=true and satisfies() delegates to
+    // groupedSatisfies().
+    val groupedKP = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    assert(groupedKP.isGrouped)
+    checkSatisfied(groupedKP, ClusteredDistribution(Seq(x)), true)
+  }
+
+  test("SPARK-56877: fromPartitionings reuses already-consistent nested collections") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    // No KeyedPartitioning anywhere in the subtree: the nested collection is returned as-is.
+    // Rebuilding it would make outputPartitioning of deeply nested collections (e.g. chains of
+    // same-key shuffle joins) quadratic in the nesting depth.
+    val hashCollection = PartitioningCollection.fromPartitionings(
+      Seq(HashPartitioning(Seq(x), 10), HashPartitioning(Seq(y), 10)))
+    val wrapped = PartitioningCollection.fromPartitionings(
+      Seq(hashCollection, HashPartitioning(Seq(y), 10)))
+    assert(wrapped.partitionings.head eq hashCollection)
+
+    // KeyedPartitionings already share the canonical partitionKeys reference: also as-is.
+    val kpX = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
+    val kpY = kpX.copy(expressions = Seq(y))
+    val keyedCollection = PartitioningCollection.fromPartitionings(Seq(kpX, kpY))
+    val keyedWrapped = PartitioningCollection.fromPartitionings(Seq(keyedCollection, kpX))
+    assert(keyedWrapped.partitionings.head eq keyedCollection)
+  }
+
+  test("SPARK-56877: fromPartitionings interns partitionKeys across nested collections") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    val kpX = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+    val nested = PartitioningCollection.fromPartitionings(Seq(kpX))
+    // Structurally equal but reference-distinct partitionKeys.
+    val kpY = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
+    assert(kpX.partitionKeys ne kpY.partitionKeys)
+
+    val combined = PartitioningCollection.fromPartitionings(Seq(nested, kpY))
+    val interned = combined.partitionings.last.asInstanceOf[KeyedPartitioning]
+    assert(interned.partitionKeys eq kpX.partitionKeys)
+  }
+
+  test("SPARK-56877: PartitioningCollection enforces the invariant through nesting") {
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+
+    val kpX = KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2)))
+    val nested = PartitioningCollection.fromPartitionings(Seq(kpX))
+
+    val kpY = KeyedPartitioning(Seq(y), Seq(InternalRow(1), InternalRow(2)))
+    val refMismatch = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(nested, kpY))
+    }
+    assert(refMismatch.getMessage.contains("share the same partitionKeys reference"))
+
+    val kpXY = KeyedPartitioning(Seq(x, y), Seq(InternalRow(1, 1), InternalRow(2, 2)))
+    val arityMismatch = intercept[IllegalArgumentException] {
+      PartitioningCollection(Seq(nested, kpXY))
+    }
+    assert(arityMismatch.getMessage.contains("matching expression arity"))
   }
 }

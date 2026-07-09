@@ -161,7 +161,13 @@ private[connect] object ErrorUtils extends Logging {
             breakingChangeInfoBuilder.setNeedsAudit(breakingChangeInfo.needsAudit)
             sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
           }
-          sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
+          // The SparkThrowable interface's default getMessageParameters returns an empty
+          // map, but a faulty override may return null. Guard against that so the
+          // FetchErrorDetails RPC doesn't crash with a NullPointerException.
+          val messageParameters = sparkThrowable.getMessageParameters
+          if (messageParameters != null) {
+            sparkThrowableBuilder.putAllMessageParameters(messageParameters)
+          }
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
       }

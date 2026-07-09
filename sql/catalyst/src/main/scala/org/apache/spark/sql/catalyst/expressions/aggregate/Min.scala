@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{MIN, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -42,6 +43,8 @@ case class Min(child: Expression) extends DeclarativeAggregate with UnaryLike[Ex
 
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForOrderingExpr(child.dataType, prettyName)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(MIN)
 
   private lazy val min = AttributeReference("min", child.dataType)()
 

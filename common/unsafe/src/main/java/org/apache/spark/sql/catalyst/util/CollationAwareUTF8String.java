@@ -809,6 +809,77 @@ public class CollationAwareUTF8String {
     return lowercaseFind(target, lowerCaseCodePoints(pattern), start);
   }
 
+  /**
+   * Returns the position of the {@code occurrence}-th occurrence of the pattern string in the
+   * target string, starting from the specified position (1-based index referring to character
+   * position in UTF8String), with respect to the UTF8_LCASE collation. If the pattern is not
+   * found, {@code MATCH_NOT_FOUND} is returned.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @param start the start position for searching (1-based, can be negative for backward search)
+   * @param occurrence which occurrence to return (must be &gt;= 1)
+   * @return the position of the {@code occurrence}-th occurrence of pattern in target
+   *         (0-based character index), or {@code MATCH_NOT_FOUND} if not found
+   */
+  public static int lowercaseIndexOf(final UTF8String target, final UTF8String pattern,
+      final int start, final int occurrence) {
+    assert occurrence > 0;
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
+    if (start == 0) return MATCH_NOT_FOUND;
+    if (target.isFullAscii() && pattern.isFullAscii()) {
+      return target.toLowerCase().indexOf(pattern.toLowerCase(), start, occurrence);
+    }
+    return lowercaseIndexOfSlow(target, pattern, start, occurrence);
+  }
+
+  private static int lowercaseIndexOfSlow(final UTF8String target, final UTF8String pattern,
+      final int start, final int occurrence) {
+    assert start != 0; // start is char index, 0 is not allowed
+
+    int startIdx; // character index
+    if (start > 0) {
+      startIdx = start - 1; // 1-based to 0-based (left side)
+      if (startIdx >= target.numChars()) return MATCH_NOT_FOUND;
+    }
+    else {
+      startIdx = target.numChars() + start; // 1-based to 0-based (right side)
+      if (startIdx < 0) return MATCH_NOT_FOUND;
+    }
+
+    UTF8String lowercasePattern = lowerCaseCodePoints(pattern);
+    int remaining = occurrence;
+    int searchIdx = -1;
+    if (start > 0) {
+      // Forward search
+      while (remaining > 0) {
+        // Find the starting position of the first occurrence of
+        // lowercasePattern in target from startIdx onward.
+        searchIdx = lowercaseFind(target, lowercasePattern, startIdx);
+        if (searchIdx < 0) return MATCH_NOT_FOUND;
+        remaining--;
+        startIdx = searchIdx + 1;
+      }
+    } else {
+      // Convert startIdx to the exclusive right boundary needed by lowercaseMatchLengthUntil.
+      startIdx = startIdx + lowercasePattern.numChars();
+      if (startIdx > target.numChars()) startIdx = target.numChars();
+      // Backward search
+      while (remaining > 0) {
+        // Find the matching length (substring in the target) of the first
+        // occurrence of lowercasePattern from startIdx (not included) in the target.
+        int matchLength = lowercaseMatchLengthUntil(target, lowercasePattern, startIdx);
+        if (matchLength != MATCH_NOT_FOUND) {
+          remaining--;
+          if (remaining == 0) searchIdx = startIdx - matchLength;
+        }
+        startIdx--;
+        if (startIdx < 0) return MATCH_NOT_FOUND;
+      }
+    }
+    return searchIdx;
+  }
+
   public static int indexOf(final UTF8String target, final UTF8String pattern,
       final int start, final int collationId) {
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
@@ -840,6 +911,57 @@ public class CollationAwareUTF8String {
     return indexOf;
   }
 
+  /**
+   * Returns the position of the {@code occurrence}-th occurrence of the pattern string in the
+   * target string, starting from the specified position (1-based index referring to character
+   * position in UTF8String), with respect to the ICU collation identified by {@code collationId}.
+   * If the pattern is not found, {@code MATCH_NOT_FOUND} is returned.
+   *
+   * @param target the string to be searched in
+   * @param pattern the string to be searched for
+   * @param start the start position for searching (1-based, can be negative for backward search)
+   * @param occurrence which occurrence to return (must be &gt;= 1)
+   * @param collationId the ICU collation identifier
+   * @return the position of the {@code occurrence}-th occurrence of pattern in target
+   *         (0-based code point index), or {@code MATCH_NOT_FOUND} if not found
+   */
+  public static int indexOf(final UTF8String target, final UTF8String pattern,
+      final int start, final int occurrence, final int collationId) {
+    assert occurrence > 0;
+    if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
+    if (target.numBytes() == 0 || start == 0) return MATCH_NOT_FOUND;
+
+    String targetStr = target.toValidString();
+    String patternStr = pattern.toValidString();
+
+    // Adjust the starting position from 1-based to 0-based.
+    int realStart;
+    if (start > 0) {
+      realStart = start - 1;
+      if (targetStr.codePointCount(0, targetStr.length()) <= realStart) return MATCH_NOT_FOUND;
+    } else {
+      realStart = targetStr.codePointCount(0, targetStr.length()) + start + 1;
+      if (realStart < 0) return MATCH_NOT_FOUND;
+    }
+
+    StringSearch stringSearch =
+            CollationFactory.getStringSearch(targetStr, patternStr, collationId);
+    // Set Overlapping to true to support finding locations
+    // similar to the second occurrence of 'aa' in 'aaa'.
+    stringSearch.setOverlapping(true);
+    int startIndex = targetStr.offsetByCodePoints(0, realStart);
+    stringSearch.setIndex(startIndex);
+
+    // Search for target index.
+    int searchIndex;
+    if (start > 0) searchIndex = findIndex(stringSearch, occurrence);
+    else searchIndex = findStartIndexReverse(stringSearch, occurrence);
+
+    if (searchIndex == MATCH_NOT_FOUND) return MATCH_NOT_FOUND;
+    // Convert the search index from character count to code point count.
+    return targetStr.codePointCount(0, searchIndex);
+  }
+
   private static int findIndex(final StringSearch stringSearch, int count) {
     assert(count >= 0);
     int index = 0;
@@ -868,6 +990,19 @@ public class CollationAwareUTF8String {
       count--;
     }
     return index + stringSearch.getMatchLength();
+  }
+
+  private static int findStartIndexReverse(final StringSearch stringSearch, int count) {
+    assert(count >= 0);
+    int index = 0;
+    while (count > 0) {
+      index = stringSearch.previous();
+      if (index == StringSearch.DONE) {
+        return MATCH_NOT_FOUND;
+      }
+      count--;
+    }
+    return index;
   }
 
   public static UTF8String subStringIndex(final UTF8String string, final UTF8String delimiter,
@@ -1519,7 +1654,7 @@ public class CollationAwareUTF8String {
     if (charIndex == src.length()) {
       return srcString;
     }
-    if (lastNonSpacePosition == srcString.numChars()) {
+    if (lastNonSpacePosition == src.length()) {
       return UTF8String.fromString(src.substring(0, charIndex));
     }
     return UTF8String.fromString(

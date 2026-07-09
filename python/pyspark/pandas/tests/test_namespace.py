@@ -17,10 +17,16 @@
 
 import itertools
 import inspect
+import io
+import json
+import os
+import tempfile
+from contextlib import redirect_stdout
 
 import pandas as pd
 import numpy as np
 
+import pyspark
 from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
@@ -28,7 +34,6 @@ from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.utils import spark_column_equals
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.testing import assert_frame_equal
 
 
@@ -678,6 +683,41 @@ class NamespaceTestsMixin:
         data = []
         self.assert_eq(pd.json_normalize(data), ps.json_normalize(data))
 
+    def test_show_versions(self):
+        # Default: prints human-readable output containing pyspark, pandas, and numpy versions.
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ps.show_versions()
+        output = buf.getvalue()
+        self.assertIn("INSTALLED VERSIONS", output)
+        self.assertIn("pyspark", output)
+        self.assertIn(pyspark.__version__, output)
+        self.assertIn("pandas", output)
+        self.assertIn(pd.__version__, output)
+        self.assertIn("numpy", output)
+        self.assertIn(np.__version__, output)
+        self.assertIn("python", output)
+
+        # as_json=True: writes JSON to stdout with system and dependencies sections.
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ps.show_versions(as_json=True)
+        parsed = json.loads(buf.getvalue())
+        self.assertIn("system", parsed)
+        self.assertIn("dependencies", parsed)
+        self.assertEqual(parsed["dependencies"]["pyspark"], pyspark.__version__)
+        self.assertEqual(parsed["dependencies"]["pandas"], pd.__version__)
+
+        # as_json=<path>: writes JSON to a file.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "versions.json")
+            ps.show_versions(as_json=path)
+            with open(path, "r", encoding="utf-8") as f:
+                file_parsed = json.load(f)
+        self.assertIn("system", file_parsed)
+        self.assertIn("dependencies", file_parsed)
+        self.assertEqual(file_parsed["dependencies"]["pyspark"], pyspark.__version__)
+
     def test_missing(self):
         missing_functions = inspect.getmembers(
             MissingPandasLikeGeneralFunctions, inspect.isfunction
@@ -693,7 +733,7 @@ class NamespaceTestsMixin:
                 getattr(ps, name)()
 
 
-class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase):
     pass
 
 

@@ -20,7 +20,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
@@ -31,7 +30,7 @@ case class JDBCScan(
     pushedPredicates: Array[Predicate],
     pushedAggregateColumn: Array[String] = Array(),
     groupByColumns: Option[Array[String]],
-    tableSample: Option[TableSampleInfo],
+    tableSampleClause: Option[String],
     pushedLimit: Int,
     sortOrders: Array[String],
     pushedOffset: Int) extends V1Scan {
@@ -46,7 +45,7 @@ case class JDBCScan(
       pushedPredicates,
       pushedAggregateColumn,
       groupByColumns,
-      tableSample,
+      tableSampleClause,
       pushedLimit,
       sortOrders,
       pushedOffset).asInstanceOf[T]

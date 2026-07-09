@@ -70,12 +70,13 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
-RUN gpg -a --export E084DAB9 | apt-key add -
+RUN gpg -a --export E084DAB9 > /etc/apt/trusted.gpg.d/cran.asc
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
@@ -89,18 +90,6 @@ RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown',  \
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
-
-
-RUN add-apt-repository ppa:pypy/ppa
-RUN mkdir -p /usr/local/pypy/pypy3.10 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.10 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3.10 && \
-    ln -sf /usr/local/pypy/pypy3.10/bin/pypy /usr/local/bin/pypy3
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
-RUN echo 'meson<1.11.0' > /tmp/constraints.txt && \
-    PIP_CONSTRAINT=/tmp/constraints.txt pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.3.3' scipy coverage matplotlib 'lxml==4.9.4' && \
-    rm -f /tmp/constraints.txt
-
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.3.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
@@ -120,7 +109,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
     python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 RUN python3.9 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \

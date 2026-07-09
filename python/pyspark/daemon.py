@@ -98,7 +98,9 @@ def worker(sock: socket.socket, authenticated: bool) -> int:
                 faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
                 if faulthandler_log_path:
                     faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-                    with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                    with open(
+                        faulthandler_log_path, "w", encoding="utf-8"
+                    ) as faulthandler_log_file:
                         faulthandler.dump_traceback(file=faulthandler_log_file)
                 raise
             else:
@@ -244,7 +246,7 @@ def manager() -> None:
                         # Therefore, here we redirects it to '/dev/null' by duplicating
                         # another file descriptor for '/dev/null' to the standard input (0).
                         # See SPARK-26175.
-                        devnull = open(os.devnull, "r")
+                        devnull = open(os.devnull, "r", encoding="utf-8")
                         os.dup2(devnull.fileno(), 0)
                         devnull.close()
 

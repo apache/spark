@@ -34,14 +34,18 @@ DROP [ TEMPORARY ] FUNCTION [ IF EXISTS ] function_name
 
 * **function_name**
 
-    Specifies the name of an existing function. The function name may be
-    optionally qualified with a database name.
+    Specifies the name of an existing function. With `TEMPORARY`, the name may optionally be
+    qualified with `session` or `system.session`. Without `TEMPORARY`, the name may optionally be
+    qualified with a database (or a catalog and database) and resolves to a persistent function.
 
-    **Syntax:** `[ database_name. ] function_name`
+    **Syntax:** `[ catalog_name. ] [ database_name. ] function_name`
+
+    Functions in `system.builtin` cannot be dropped.
 
 * **TEMPORARY**
 
-    Should be used to delete the `TEMPORARY` function.
+    Required to drop a temporary function. Without `TEMPORARY`, `DROP FUNCTION` only considers
+    persistent functions.
 
 * **IF EXISTS**
 

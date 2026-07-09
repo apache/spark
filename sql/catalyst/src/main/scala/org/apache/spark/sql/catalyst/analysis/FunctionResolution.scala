@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -32,7 +35,8 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogPlugin,
   CatalogV2Util,
   Identifier,
-  LookupCatalog
+  LookupCatalog,
+  ProcedureCatalog
 }
 
 /**
@@ -56,24 +60,16 @@ import org.apache.spark.sql.connector.catalog.functions.{
   UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
     override val catalogManager: CatalogManager,
     relationResolution: RelationResolution)
-    extends DataTypeErrorsBase with LookupCatalog with Logging {
+    extends DataTypeErrorsBase with LookupCatalog with SQLConfHelper with Logging {
   private val v1SessionCatalog = catalogManager.v1SessionCatalog
 
   private val trimWarningEnabled = new AtomicBoolean(true)
-
-  /** Returns the current catalog path, preferring the view's context if resolving a view. */
-  private def currentCatalogPath: Seq[String] = {
-    val ctx = AnalysisContext.get.catalogAndNamespace
-    if (ctx.nonEmpty) ctx
-    else (Seq(catalogManager.currentCatalog.name) ++ catalogManager.currentNamespace).toSeq
-  }
 
   /** True if nameParts is 3-part and the first part is the system catalog name. */
   private def isSystemCatalogQualified(nameParts: Seq[String]): Boolean =
@@ -81,25 +77,78 @@ class FunctionResolution(
       nameParts.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME)
 
   /**
+   * True iff `system.session` is searched before `system.builtin` in the effective SQL PATH.
+   *
+   * Drives the `count(*) -> count(1)` rewrite (which must skip transformation when a temp
+   * `count` shadows the builtin) and the `SessionCatalog` security check that blocks creating
+   * a temp function with a builtin's name. Reads the live PATH via `CatalogManager` and
+   * applies the same kinds extraction that drives `SessionCatalog`'s fast-path provider, so
+   * the predicate stays in sync with the lookup loop's actual order. Uses the consolidated
+   * snapshot helper (SPARK-56939) so the (catalog, namespace, path) triple is observed
+   * atomically.
+   */
+  def isSessionBeforeBuiltinInPath: Boolean = {
+    catalogManager.sessionFunctionKindsForUnqualifiedResolution().headOption
+      .contains(org.apache.spark.sql.catalyst.catalog.SessionCatalog.Temp)
+  }
+
+  /**
    * Produces the ordered list of candidate names for resolution. Expansion happens in two cases:
    *
-   * 1. Single-part names: expanded via the search path, where each search path entry is
-   *    fully qualified so appending the name produces fully qualified candidates.
+   * 1. Single-part names: expanded via [[CatalogManager.sqlResolutionPathEntries]] (same list as
+   *    relation resolution), where each path entry is fully qualified so appending the name
+   *    produces fully qualified candidates.
    * 2. `builtin.name` or `session.name`: prepending `system` creates a fully qualified
    *    system catalog candidate. The original 2-part name is also kept as a persistent
    *    catalog candidate (qualified downstream). Order is controlled by
    *    the `persistentCatalogFirst` config.
    *
    * All other multi-part names are returned as-is for downstream resolution.
+   *
+   * When [[AnalysisContext.resolutionPathEntries]] is set (view or SQL function / table function
+   * body with a pinned path, with [[SQLConf.PATH_ENABLED]] true), that frozen list is used
+   * directly, matching [[RelationResolution.relationResolutionEntries]] so routine order stays
+   * aligned with relation order.
    */
+  private[analysis] def sqlResolutionPathEntriesForAnalysis: Seq[Seq[String]] = {
+    // Per-analysis-pass memo (SPARK-57758): computing the path (reading the live [[CatalogManager]]
+    // and several confs, then allocating `Seq`s) used to run once per [[UnresolvedFunction]], and
+    // under Spark Connect once per node on every re-analysis of the growing plan. The path is
+    // stable within a pass (`SET PATH` / `USE` / conf changes happen between passes, each under a
+    // fresh [[AnalysisContext]]), so it is memoized on the current context, which shares the pass's
+    // lifetime. See [[AnalysisContext.memoizedResolutionPath]] for why this needs no identity key.
+    val context = AnalysisContext.get
+    context.memoizedResolutionPath {
+      catalogManager.resolutionPathEntriesForAnalysis(
+        context.resolutionPathEntries, context.catalogAndNamespace)
+    }
+  }
+
+  /**
+   * True when `system.builtin` is the first entry of the effective resolution path. In that case a
+   * single-part name that resolves to a built-in cannot be shadowed by any earlier entry -- neither
+   * a `system.session` entry (a temporary/session function) nor a catalog/schema entry placed
+   * before `system.builtin` by a custom `SET PATH` -- so the built-in fast-path in
+   * [[resolveFunction]] / [[resolveTableFunction]] cannot change resolution precedence. A miss
+   * still falls through to the full candidate loop, so non-built-in names are unaffected.
+   *
+   * The default `spark.sql.functionResolution.sessionOrder` modes `second` and `last` put
+   * `system.builtin` first; only `first` puts `system.session` before it, where the fast-path is
+   * correctly disabled. Only a custom `SET PATH` can place another entry before `system.builtin`.
+   *
+   * Reads the per-pass memoized path ([[sqlResolutionPathEntriesForAnalysis]]), so the check is
+   * O(1) per [[UnresolvedFunction]].
+   */
+  private def builtinFastPathSafe: Boolean =
+    CatalogManager.isBuiltinFirstOnPath(sqlResolutionPathEntriesForAnalysis)
+
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
-      searchPath.map(_ ++ nameParts)
+      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
-      if (SQLConf.get.prioritizeSystemCatalog) {
+      if (conf.prioritizeSystemCatalog) {
         Seq(systemCandidate, nameParts)
       } else {
         Seq(nameParts, systemCandidate)
@@ -112,6 +161,12 @@ class FunctionResolution(
   private def resolveFunctionCandidate(
       nameParts: Seq[String],
       unresolvedFunc: UnresolvedFunction): Option[Expression] = {
+    // NOTE: the `system.builtin.<name>` case here is the same registry lookup the built-in
+    // fast-path in `resolveFunction` performs directly (both go through
+    // `identifierFromSystemNameParts` / `builtinFunctionIdentifier` ->
+    // `resolveScalarFunctionByIdentifier`). The two must stay equivalent; a change to built-in
+    // scalar resolution has to touch both. `resolveTableFunctionCandidate` / `resolveTableFunction`
+    // mirror this for table functions.
     if (isSystemCatalogQualified(nameParts)) {
       v1SessionCatalog.identifierFromSystemNameParts(nameParts).flatMap { ident =>
         val expr = v1SessionCatalog.resolveScalarFunctionByIdentifier(
@@ -167,6 +222,23 @@ class FunctionResolution(
         }
       }
 
+      // Fast-path (SPARK-57758): an unqualified, non-internal name that resolves to a built-in
+      // is by far the common case. When `system.builtin` is the first entry of the effective path,
+      // a built-in hit cannot be shadowed by any earlier entry (a session/temporary function, or a
+      // catalog/schema placed before `system.builtin` via `SET PATH`), so it can be resolved with a
+      // single registry lookup instead of building and iterating the candidate search path. A miss
+      // falls through to the full candidate resolution below. This lookup is equivalent to the
+      // `system.builtin.<name>` branch of `resolveFunctionCandidate`; keep the two in sync.
+      if (unresolvedFunc.nameParts.size == 1 && !unresolvedFunc.isInternal &&
+          builtinFastPathSafe) {
+        val builtin = v1SessionCatalog.resolveScalarFunctionByIdentifier(
+          FunctionRegistry.builtinFunctionIdentifier(unresolvedFunc.nameParts.head),
+          unresolvedFunc.arguments)
+        if (builtin.isDefined) {
+          return validateFunction(builtin.get, unresolvedFunc.arguments.length, unresolvedFunc)
+        }
+      }
+
       val candidates = resolutionCandidates(unresolvedFunc.nameParts)
       for (nameParts <- candidates) {
         resolveFunctionCandidate(nameParts, unresolvedFunc) match {
@@ -174,9 +246,10 @@ class FunctionResolution(
           case None =>
         }
       }
-      val searchPath = SQLConf.get.resolutionSearchPath(currentCatalogPath)
       throw QueryCompilationErrors.unresolvedRoutineError(
-        unresolvedFunc.nameParts, searchPath.map(toSQLId), unresolvedFunc.origin)
+        unresolvedFunc.nameParts,
+        sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+        unresolvedFunc.origin)
     }
   }
 
@@ -240,6 +313,16 @@ class FunctionResolution(
   def resolveTableFunction(
       nameParts: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
+    // Fast-path (SPARK-57758): see `resolveFunction`. Short-circuit a single-part name to a
+    // built-in table function when `system.builtin` is the first entry of the path; a miss
+    // (including a built-in scalar of the same name) falls through to the candidate loop, which
+    // preserves the NOT_A_TABLE_FUNCTION semantics.
+    if (nameParts.size == 1 && builtinFastPathSafe) {
+      val builtin = v1SessionCatalog.resolveTableFunctionByIdentifier(
+        FunctionRegistry.builtinFunctionIdentifier(nameParts.head), arguments)
+      if (builtin.isDefined) return builtin
+    }
+
     val candidates = resolutionCandidates(nameParts)
     for (nameParts <- candidates) {
       resolveTableFunctionCandidate(nameParts, arguments) match {
@@ -345,6 +428,43 @@ class FunctionResolution(
     }
 
     // Check external catalog for persistent functions
+    if (nameParts.length == 1) {
+      // Must match [[resolutionCandidates]] / [[resolveFunction]]: single-part names use PATH +
+      // session order, not only the current namespace (LookupCatalog single-part rule).
+      // `system.session.<name>` and `system.builtin.<name>` candidates were already resolved by
+      // [[lookupBuiltinOrTempFunction]] / [[lookupBuiltinOrTempTableFunction]] above (they
+      // route through `identifierFromSystemNameParts`, which only accepts those two
+      // namespaces); skip them here to avoid redundant catalog calls. Other `system.<x>`
+      // namespaces -- if any are ever added -- still go through persistent lookup.
+      val persistentCandidates = resolutionCandidates(nameParts).filterNot { c =>
+        c.length >= 2 &&
+          c.head.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) && {
+            val ns = c(1)
+            ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) ||
+              ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+          }
+      }
+      for (candidate <- persistentCandidates) {
+        try {
+          candidate match {
+            case CatalogAndIdentifier(catalog, ident) =>
+              if (catalog.asFunctionCatalog.functionExists(ident)) {
+                return FunctionType.Persistent
+              }
+            case _ =>
+          }
+        } catch {
+          // Only treat explicit "not found" / "forbidden" signals as a miss. Any other failure
+          // (e.g. permission denied, transient catalog error) propagates.
+          case _: NoSuchFunctionException
+             | _: NoSuchNamespaceException
+             | _: CatalogNotFoundException =>
+          case e: AnalysisException if e.getCondition == "FORBIDDEN_OPERATION" =>
+        }
+      }
+      return FunctionType.NotFound
+    }
+
     val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
     if (catalog.asFunctionCatalog.functionExists(ident)) {
       return FunctionType.Persistent
@@ -591,6 +711,66 @@ class FunctionResolution(
     throw new AnalysisException(
       errorClass = errorClass,
       messageParameters = messageParameters)
+  }
+
+  /**
+   * Resolves [[UnresolvedProcedure]] for `CALL` / `DESCRIBE PROCEDURE` using the same multipart
+   * candidates as SQL functions and relations ([[resolutionCandidates]] /
+   * [[sqlResolutionPathEntriesForAnalysis]]). Catalogs that do not implement
+   * [[ProcedureCatalog]] are skipped for unqualified names; an explicitly catalog-qualified name
+   * that targets a non-[[ProcedureCatalog]] still raises
+   * [[QueryCompilationErrors.missingCatalogProceduresAbilityError]].
+   */
+  def resolveProcedure(unresolved: UnresolvedProcedure): LogicalPlan = {
+    val candidates = resolutionCandidates(unresolved.nameParts)
+    val skipCandidateFailures = unresolved.nameParts.length == 1
+    for (multipart <- candidates) {
+      val expandedOpt =
+        try {
+          Some(relationResolution.expandIdentifier(multipart))
+        } catch {
+          case NonFatal(_) => None
+        }
+      expandedOpt.foreach { expanded =>
+        CatalogAndIdentifier.unapply(expanded).foreach { case (catalog, ident) =>
+          catalog match {
+            case pc: ProcedureCatalog =>
+              try {
+                val procedure = pc.loadProcedure(ident)
+                return ResolvedProcedure(pc, ident, procedure)
+              } catch {
+                // ProcedureCatalog has no standard "not found" exception type today. For
+                // unqualified names searched through PATH, treat candidate failures as misses and
+                // continue to the next entry (matching table/function PATH iteration semantics).
+                // Explicitly catalog-qualified names still preserve existing error behavior.
+                case _: AnalysisException if skipCandidateFailures =>
+                case _: SparkThrowable if skipCandidateFailures =>
+                case NonFatal(_) if skipCandidateFailures =>
+                case e: AnalysisException => throw e
+                case e: SparkThrowable => throw e
+                case NonFatal(e) =>
+                  val cause = e match {
+                    case ex: Exception => ex
+                    case th => new RuntimeException(th)
+                  }
+                  throw QueryCompilationErrors.failedToLoadRoutineError(
+                    catalog.name +: ident.asMultipartIdentifier,
+                    cause)
+              }
+            case _ =>
+              if (unresolved.nameParts.length > 1 &&
+                  catalogManager.isCatalogRegistered(unresolved.nameParts.head) &&
+                  catalog.name().equalsIgnoreCase(unresolved.nameParts.head)) {
+                throw QueryCompilationErrors.missingCatalogProceduresAbilityError(catalog)
+              }
+          }
+        }
+      }
+    }
+    throw QueryCompilationErrors.unresolvedRoutineError(
+      unresolved.nameParts,
+      sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+      unresolved.origin)
   }
 }
 

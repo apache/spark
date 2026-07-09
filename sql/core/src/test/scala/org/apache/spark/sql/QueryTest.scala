@@ -30,19 +30,18 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
-import org.scalatest.{Assertions, BeforeAndAfterAll, Suite, Tag}
+import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -59,6 +58,8 @@ trait QueryTestBase
   extends Eventually
   with BeforeAndAfterAll
   with SQLTestData
+  with CheckAnswerHelper
+  with QueryCleanupHelper
   with PlanTestBase { self: Suite =>
 
   /**
@@ -156,7 +157,7 @@ trait QueryTestBase
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
       case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
@@ -172,9 +173,15 @@ trait QueryTestBase
         }
     }
 
-    assertEmptyMissingInput(analyzedDF)
+    if (analyzedDF.isInstanceOf[classic.DataFrame]) {
+      assertEmptyMissingInput(analyzedDF)
 
-    QueryTest.checkAnswer(analyzedDF, expectedAnswer)
+      SQLExecution.withSQLConfPropagated(analyzedDF.sparkSession) {
+        analyzedDF.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+      }
+    }
+
+    super.checkAnswer(analyzedDF, expectedAnswer)
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
@@ -301,20 +308,23 @@ trait QueryTestBase
   }
 
   /**
-   * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
+   * Temporarily sets SparkContext configuration values for testing.
+   * This is for configs that must be set on the SparkContext (not
+   * SQLConf), such as testing flags.
    */
-  protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
+  protected def withSparkContextConf[T](
+      pairs: (String, String)*)(f: => T): T = {
+    val sc = spark.sparkContext
+    val oldValues = pairs.map { case (k, _) =>
+      k -> sc.conf.getOption(k)
+    }
     try {
+      pairs.foreach { case (k, v) => sc.conf.set(k, v) }
       f
-    } catch {
-      case cause: Throwable => throw cause
     } finally {
-      functions.foreach { case (functionName, isTemporary) =>
-        val withTemporary = if (isTemporary) "TEMPORARY" else ""
-        spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
-        assert(
-          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
-          s"Function $functionName should have been dropped. But, it still exists.")
+      oldValues.foreach {
+        case (k, Some(v)) => sc.conf.set(k, v)
+        case (k, None) => sc.conf.remove(k)
       }
     }
   }
@@ -343,28 +353,6 @@ trait QueryTestBase
         }
       }
     }
-  }
-
-  /**
-   * Drops table `tableName` after calling `f`.
-   */
-  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f) {
-      tableNames.foreach { name =>
-        spark.sql(s"DROP TABLE IF EXISTS $name")
-      }
-    }
-  }
-
-  /**
-   * Drops view `viewName` after calling `f`.
-   */
-  protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(
-      viewNames.foreach { name =>
-        spark.sql(s"DROP VIEW IF EXISTS $name")
-      }
-    )
   }
 
   /**
@@ -535,6 +523,151 @@ trait QueryTestBase
       .map(_.toFile.length).sum
   }
 
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
+   *                    to being compared.
+   */
+  protected def checkAnswer(
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedAnswer: Seq[Row],
+      sortAnswers: Boolean = true): Unit = {
+    doCheckAnswer(
+      input :: Nil,
+      (plans: Seq[SparkPlan]) => planFunction(plans.head),
+      expectedAnswer,
+      sortAnswers)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param left the left input data to be used.
+   * @param right the right input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
+   *                    to being compared.
+   */
+  protected def checkAnswer2(
+      left: DataFrame,
+      right: DataFrame,
+      planFunction: (SparkPlan, SparkPlan) => SparkPlan,
+      expectedAnswer: Seq[Row],
+      sortAnswers: Boolean = true): Unit = {
+    doCheckAnswer(
+      left :: right :: Nil,
+      (plans: Seq[SparkPlan]) => planFunction(plans(0), plans(1)),
+      expectedAnswer,
+      sortAnswers)
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts a sequence of input SparkPlans and uses them to
+   *                     instantiate the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
+   *                    to being compared.
+   */
+  protected def doCheckAnswer(
+      input: Seq[DataFrame],
+      planFunction: Seq[SparkPlan] => SparkPlan,
+      expectedAnswer: Seq[Row],
+      sortAnswers: Boolean = true): Unit = {
+    QueryTest
+      .checkAnswer(input, planFunction, expectedAnswer, sortAnswers, spark.sqlContext) match {
+        case Some(errorMessage) => fail(errorMessage)
+        case None =>
+    }
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the result produced by a reference plan.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
+   *                             instantiate a reference implementation of the physical operator
+   *                             that's being tested. The result of executing this plan will be
+   *                             treated as the source-of-truth for the test.
+   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
+   *                    to being compared.
+   */
+  protected def checkThatPlansAgree(
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedPlanFunction: SparkPlan => SparkPlan,
+      sortAnswers: Boolean = true): Unit = {
+    QueryTest.checkAnswer(
+        input, planFunction, expectedPlanFunction, sortAnswers, spark.sqlContext) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
+
+  // Whether to materialize all test data before the first test is run
+  private var loadTestDataBeforeTests = false
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    if (loadTestDataBeforeTests) {
+      loadTestData()
+    }
+  }
+
+  /**
+   * Materialize the test data immediately after the `SQLContext` is set up.
+   * This is necessary if the data is accessed by name but not through direct reference.
+   */
+  protected def setupTestData(): Unit = {
+    loadTestDataBeforeTests = true
+  }
+
+  /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files.toImmutableArraySeq) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
+    }
+  }
+
+  protected def getCurrentClassCallSitePattern: String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
+    val cs = stack(idx + 1)
+    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
+  }
+
+  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
+    val stack = Thread.currentThread().getStackTrace()
+    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
+    val cs = stack(idx + 1)
+    Pattern.quote(
+      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
+  }
+
 }
 
 /**
@@ -547,16 +680,7 @@ trait QueryTestBase
  * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
-  // Whether to materialize all test data before the first test is run
-  private var loadTestDataBeforeTests = false
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    if (loadTestDataBeforeTests) {
-      loadTestData()
-    }
-  }
+trait QueryTest extends SparkFunSuite with QueryTestBase {
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -581,14 +705,6 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
         }
       }
     }
-  }
-
-  /**
-   * Materialize the test data immediately after the `SQLContext` is set up.
-   * This is necessary if the data is accessed by name but not through direct reference.
-   */
-  protected def setupTestData(): Unit = {
-    loadTestDataBeforeTests = true
   }
 
   /**
@@ -671,47 +787,19 @@ trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
       f(tmpFile)
     }
   }
-
-  /**
-   * Waits for all tasks on all executors to be finished.
-   */
-  protected def waitForTasksToFinish(): Unit = {
-    eventually(timeout(10.seconds)) {
-      assert(spark.sparkContext.statusTracker
-        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
-    }
-  }
-
-  /**
-   * Creates the specified number of temporary directories, which is then passed to `f` and will be
-   * deleted after `f` returns.
-   */
-  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
-    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
-    try f(files.toImmutableArraySeq) finally {
-      // wait for all tasks to finish before deleting files
-      waitForTasksToFinish()
-      files.foreach(Utils.deleteRecursively)
-    }
-  }
-
-  protected def getCurrentClassCallSitePattern: String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getCurrentClassCallSitePattern")
-    val cs = stack(idx + 1)
-    s"${cs.getClassName}\\..*\\(${cs.getFileName}:\\d+\\)"
-  }
-
-  protected def getNextLineCallSitePattern(lines: Int = 1): String = {
-    val stack = Thread.currentThread().getStackTrace()
-    val idx = stack.lastIndexWhere(_.getMethodName == "getNextLineCallSitePattern")
-    val cs = stack(idx + 1)
-    Pattern.quote(
-      s"${cs.getClassName}.${cs.getMethodName}(${cs.getFileName}:${cs.getLineNumber + lines})")
-  }
 }
 
-object QueryTest extends Assertions {
+object QueryTest extends CheckAnswerHelper {
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
+   */
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(df, expectedAnswer, checkToRDD = true)
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    *
@@ -719,12 +807,25 @@ object QueryTest extends Assertions {
    * @param expectedAnswer the expected result in a Seq of Rows.
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean): Unit = {
+    if (checkToRDD) {
+      SQLExecution.withSQLConfPropagated(df.sparkSession) {
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+      }
+    }
+
+    super.checkAnswer(df, expectedAnswer)
+  }
+
+  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
   }
+
+  override protected def isDfSorted(df: DataFrame): Boolean =
+    df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
@@ -774,111 +875,27 @@ object QueryTest extends Assertions {
   }
 
 
-  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] = {
-    // Converts data to types that we can do equality comparison using Scala collections.
-    // For BigDecimal type, the Scala type has a better definition of equality test (similar to
-    // Java's java.math.BigDecimal.compareTo).
-    // For binary arrays, we convert it to Seq to avoid of calling java.util.Arrays.equals for
-    // equality test.
-    val converted: Seq[Row] = answer.map(prepareRow)
-    if (!isSorted) converted.sortBy(_.toString()) else converted
-  }
+  def prepareAnswer(answer: Seq[Row], isSorted: Boolean): Seq[Row] =
+    RowComparisonUtils.prepareAnswer(answer, isSorted)
 
-  // We need to call prepareRow recursively to handle schemas with struct types.
-  def prepareRow(row: Row): Row = {
-    Row.fromSeq(row.toSeq.map {
-      case null => null
-      case bd: java.math.BigDecimal => BigDecimal(bd)
-      // Equality of WrappedArray differs for AnyVal and AnyRef in Scala 2.12.2+
-      case seq: Seq[_] => seq.map {
-        case b: java.lang.Byte => b.byteValue
-        case s: java.lang.Short => s.shortValue
-        case i: java.lang.Integer => i.intValue
-        case l: java.lang.Long => l.longValue
-        case f: java.lang.Float => f.floatValue
-        case d: java.lang.Double => d.doubleValue
-        case x => x
-      }
-      // Convert array to Seq for easy equality check.
-      case b: Array[_] => b.toSeq
-      case r: Row => prepareRow(r)
-      // SPARK-51349: "null" and null had the same precedence in sorting
-      case "null" => "__null_string__"
-      case o => o
-    })
-  }
-
-  private def genError(
-      expectedAnswer: Seq[Row],
-      sparkAnswer: Seq[Row],
-      isSorted: Boolean = false): String = {
-    val getRowType: Option[Row] => String = row =>
-      row.map(row =>
-        if (row.schema == null) {
-          "struct<>"
-        } else {
-          s"${row.schema.catalogString}"
-        }).getOrElse("struct<>")
-
-    s"""
-       |== Results ==
-       |${
-      sideBySide(
-        s"== Correct Answer - ${expectedAnswer.size} ==" +:
-          getRowType(expectedAnswer.headOption) +:
-          prepareAnswer(expectedAnswer, isSorted).map(_.toString()),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-          getRowType(sparkAnswer.headOption) +:
-          prepareAnswer(sparkAnswer, isSorted).map(_.toString())).mkString("\n")
-    }
-    """.stripMargin
-  }
+  def prepareRow(row: Row): Row = RowComparisonUtils.prepareRow(row)
 
   def includesRows(
       expectedRows: Seq[Row],
       sparkAnswer: Seq[Row]): Option[String] = {
     if (!prepareAnswer(expectedRows, true).toSet.subsetOf(prepareAnswer(sparkAnswer, true).toSet)) {
-      return Some(genError(expectedRows, sparkAnswer, true))
+      return Some(RowComparisonUtils.genError(expectedRows, sparkAnswer, true))
     }
     None
   }
 
-  def compare(obj1: Any, obj2: Any): Boolean = (obj1, obj2) match {
-    case (null, null) => true
-    case (null, _) => false
-    case (_, null) => false
-    case (a: Array[_], b: Array[_]) =>
-      a.length == b.length && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Map[_, _], b: Map[_, _]) =>
-      a.size == b.size && a.keys.forall { aKey =>
-        b.keys.find(bKey => compare(aKey, bKey)).exists(bKey => compare(a(aKey), b(bKey)))
-      }
-    case (a: Iterable[_], b: Iterable[_]) =>
-      a.size == b.size && a.zip(b).forall { case (l, r) => compare(l, r)}
-    case (a: Product, b: Product) =>
-      compare(a.productIterator.toSeq, b.productIterator.toSeq)
-    case (a: Row, b: Row) =>
-      compare(a.toSeq, b.toSeq)
-    // 0.0 == -0.0, turn float/double to bits before comparison, to distinguish 0.0 and -0.0.
-    // in some hardware NaN can be represented with different bits, so first check for it
-    case (a: Double, b: Double) =>
-      a.isNaN && b.isNaN ||
-      java.lang.Double.doubleToRawLongBits(a) == java.lang.Double.doubleToRawLongBits(b)
-    case (a: Float, b: Float) =>
-      a.isNaN && b.isNaN ||
-      java.lang.Float.floatToRawIntBits(a) == java.lang.Float.floatToRawIntBits(b)
-    case (a, b) => a == b
-  }
+  def compare(obj1: Any, obj2: Any): Boolean = RowComparisonUtils.compare(obj1, obj2)
 
   def sameRows(
       expectedAnswer: Seq[Row],
       sparkAnswer: Seq[Row],
-      isSorted: Boolean = false): Option[String] = {
-    if (!compare(prepareAnswer(expectedAnswer, isSorted), prepareAnswer(sparkAnswer, isSorted))) {
-      return Some(genError(expectedAnswer, sparkAnswer, isSorted))
-    }
-    None
-  }
+      isSorted: Boolean = false): Option[String] =
+    RowComparisonUtils.sameRows(expectedAnswer, sparkAnswer, isSorted)
 
   def compareAnswers(
       sparkAnswer: Seq[Row],
@@ -942,13 +959,6 @@ object QueryTest extends Assertions {
     }
   }
 
-  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
-  }
-
   def withQueryExecutionsCaptured(spark: SparkSession)(thunk: => Unit): Seq[QueryExecution] = {
     var capturedQueryExecutions = Seq.empty[QueryExecution]
 
@@ -961,22 +971,145 @@ object QueryTest extends Assertions {
       }
     }
 
-    val classicSession = spark.asInstanceOf[classic.SparkSession]
-    classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
-    classicSession.listenerManager.register(listener)
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
     try {
       thunk
-      classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
     } finally {
-      classicSession.listenerManager.unregister(listener)
+      spark.listenerManager.unregister(listener)
     }
 
     capturedQueryExecutions
   }
 
+  /**
+   * Runs the plan and makes sure the answer matches the result produced by a reference plan.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedPlanFunction a function which accepts the input SparkPlan and uses it to
+   *                             instantiate a reference implementation of the physical operator
+   *                             that's being tested. The result of executing this plan will be
+   *                             treated as the source-of-truth for the test.
+   */
+  def checkAnswer(
+      input: DataFrame,
+      planFunction: SparkPlan => SparkPlan,
+      expectedPlanFunction: SparkPlan => SparkPlan,
+      sortAnswers: Boolean,
+      spark: SQLContext): Option[String] = {
+
+    val outputPlan = planFunction(input.queryExecution.sparkPlan)
+    val expectedOutputPlan = expectedPlanFunction(input.queryExecution.sparkPlan)
+
+    val expectedAnswer: Seq[Row] = try {
+      executePlan(expectedOutputPlan, spark)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan to calculate expected answer:
+             | $expectedOutputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
+    }
+
+    val actualAnswer: Seq[Row] = try {
+      executePlan(outputPlan, spark)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan:
+             | $outputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
+    }
+
+    compareAnswers(actualAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
+      s"""
+         | Results do not match.
+         | Actual result Spark plan:
+         | $outputPlan
+         | Expected result Spark plan:
+         | $expectedOutputPlan
+         | $errorMessage
+       """.stripMargin
+    }
+  }
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param input the input data to be used.
+   * @param planFunction a function which accepts the input SparkPlan and uses it to instantiate
+   *                     the physical operator that's being tested.
+   * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param sortAnswers if true, the answers will be sorted by their toString representations prior
+   *                    to being compared.
+   */
+  def checkAnswer(
+      input: Seq[DataFrame],
+      planFunction: Seq[SparkPlan] => SparkPlan,
+      expectedAnswer: Seq[Row],
+      sortAnswers: Boolean,
+      spark: SQLContext): Option[String] = {
+
+    val outputPlan = planFunction(input.map(_.queryExecution.sparkPlan))
+
+    val sparkAnswer: Seq[Row] = try {
+      executePlan(outputPlan, spark)
+    } catch {
+      case NonFatal(e) =>
+        val errorMessage =
+          s"""
+             | Exception thrown while executing Spark plan:
+             | $outputPlan
+             | == Exception ==
+             | $e
+             | ${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin
+        return Some(errorMessage)
+    }
+
+    compareAnswers(sparkAnswer, expectedAnswer, sortAnswers).map { errorMessage =>
+      s"""
+         | Results do not match for Spark plan:
+         | $outputPlan
+         | $errorMessage
+       """.stripMargin
+    }
+  }
+
+  /**
+   * Runs the plan
+   * @param outputPlan SparkPlan to be executed
+   * @param spark SqlContext used for execution of the plan
+   */
+  def executePlan(outputPlan: SparkPlan, spark: SQLContext): Seq[Row] = {
+    val execution = new QueryExecution(spark.sparkSession, LocalRelation(Nil)) {
+      override lazy val sparkPlan: SparkPlan = outputPlan transform {
+        case plan: SparkPlan =>
+          val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
+          plan transformExpressions {
+            case UnresolvedAttribute(Seq(u)) =>
+              inputMap.getOrElse(u,
+                sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
+          }
+      }
+    }
+    execution.executedPlan.executeCollectPublic().toSeq
+  }
+
 }
 
-class QueryTestSuite extends QueryTest with test.SharedSparkSession {
+class QueryTestSuite extends QueryTest with SparkSessionBinder {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
@@ -987,5 +1120,20 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
       "from range(2)"),
       Seq(Row(Row(null)), Row(Row("null"))))
+  }
+
+  test("checkAnswer demands correct result order for ordered queries") {
+    val e = intercept[org.scalatest.exceptions.TestFailedException] {
+      checkAnswer(
+        sql("SELECT col1 FROM VALUES 1, 2, 1, 3 ORDER BY col1"),
+        Seq(Row(3), Row(1), Row(1), Row(2)))
+    }
+    assert(e.getMessage().contains("Results do not match for query"))
+  }
+
+  test("checkAnswer ignores result order for unordered queries") {
+    checkAnswer(
+      sql("SELECT col1 FROM VALUES 1, 2, 1, 3"),
+      Seq(Row(3), Row(1), Row(1), Row(2)))
   }
 }

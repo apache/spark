@@ -19,7 +19,6 @@ package org.apache.spark.sql.protobuf
 
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -34,8 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 class ProtobufCatalystDataConversionSuite
-    extends SparkFunSuite
-    with SharedSparkSession
+    extends SharedSparkSession
     with ExpressionEvalHelper
     with ProtobufTestBase {
 

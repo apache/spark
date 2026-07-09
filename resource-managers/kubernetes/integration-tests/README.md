@@ -13,10 +13,10 @@ directory:
 
     ./dev/dev-run-integration-tests.sh
 
-To run tests with a specific Java version instead of Java 21, use `--java-image-tag` to specify the 
-[base image](https://hub.docker.com/r/azul/zulu-openjdk/tags) accordingly.
+To run tests with a specific Java version instead of Java 25, use `--java-image-tag` to specify the
+[base image](https://hub.docker.com/_/eclipse-temurin/tags) accordingly.
 
-    ./dev/dev-run-integration-tests.sh --java-image-tag 17-jre
+    ./dev/dev-run-integration-tests.sh --java-image-tag 21-jre
 
 To run tests with a custom docker image, use `--docker-file` to specify the Dockerfile.
 Note that if both `--docker-file` and `--java-image-tag` are used, `--docker-file` is preferred,
@@ -24,7 +24,7 @@ and the custom Dockerfile need to include a Java installation by itself.
 
     ./dev/dev-run-integration-tests.sh --docker-file ../docker/src/main/dockerfiles/spark/Dockerfile
 
-The minimum tested version of Minikube is 1.28.0. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.38.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -43,7 +43,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 1.28.0 or greater be installed and that it be allocated
+Uses the local `minikube` cluster, this requires that `minikube` 1.38.0 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -137,7 +137,7 @@ properties to Maven.  For example:
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
                             -Phadoop-3 -Dhadoop.version=3.5.0 \
-                            -Dspark.kubernetes.test.sparkTgz=spark-4.2.0-SNAPSHOT-bin-example.tgz \
+                            -Dspark.kubernetes.test.sparkTgz=spark-5.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
                             -Dspark.kubernetes.test.namespace=spark-int-tests \
@@ -205,7 +205,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific Azul Zulu OpenJDK base image tag to use, when set uses it instead of 21.
+      A specific Eclipse Temurin OpenJDK base image tag to use, when set uses it instead of 25.
     </td>
     <td><code>N/A</code></td>
   </tr>
@@ -303,7 +303,7 @@ You can use SBT in the same way to build image and run all K8s integration tests
     build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
-        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.imageTag=2027-01-01 \
         'kubernetes-integration-tests/test'
 
 The following is an example to rerun tests with the pre-built image.
@@ -311,14 +311,14 @@ The following is an example to rerun tests with the pre-built image.
     build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
-        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.imageTag=2027-01-01 \
         'kubernetes-integration-tests/runIts'
 
 In addition, you can run a single test selectively.
 
     build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
-        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.imageTag=2027-01-01 \
         'kubernetes-integration-tests/testOnly -- -z "Run SparkPi with a very long application name"'
 
 You can also specify your specific dockerfile to build JVM/Python/R based image to test.
@@ -326,7 +326,7 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
     build/sbt -Psparkr -Pkubernetes -Pkubernetes-integration-tests \
         -Dtest.exclude.tags=minikube \
         -Dspark.kubernetes.test.deployMode=docker-desktop \
-        -Dspark.kubernetes.test.imageTag=2022-03-06 \
+        -Dspark.kubernetes.test.imageTag=2027-01-01 \
         -Dspark.kubernetes.test.dockerFile=/path/to/Dockerfile \
         -Dspark.kubernetes.test.pyDockerFile=/path/to/py/Dockerfile \
         -Dspark.kubernetes.test.rDockerFile=/path/to/r/Dockerfile \
@@ -336,11 +336,11 @@ You can also specify your specific dockerfile to build JVM/Python/R based image 
 
 ## Requirements
 - A minimum of 6 CPUs and 9G of memory is required to complete all Volcano test cases.
-- Volcano v1.14.1.
+- Volcano v1.14.2.
 
 ## Installation
 
-    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml
+    kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
 
 ## Run tests
 
@@ -361,5 +361,5 @@ You can also specify `volcano` tag to only run Volcano test:
 
 ## Cleanup Volcano
 
-    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml
+    kubectl delete -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
 

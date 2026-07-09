@@ -19,7 +19,6 @@ package org.apache.spark.sql.connector
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.ScanBuilder
@@ -81,7 +80,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     java.util.EnumSet.of(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA)
 }
 
-class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
+class FileDataSourceV2FallBackSuite extends SharedSparkSession {
 
   private val dummyReadOnlyFileSourceV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyWriteOnlyFileSourceV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
@@ -180,10 +179,13 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
             val inputData = spark.range(10)
             inputData.write.format(format).save(path.getCanonicalPath)
             sparkContext.listenerBus.waitUntilEmpty()
-            assert(commands.length == 1)
-            assert(commands.head._1 == "command")
-            assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
-            assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+            // The write should be executed as a single "command" callback. Other callbacks
+            // (e.g. an eager "collect" on the analyzed plan) may be observed on the listener
+            // bus, so filter to the write command rather than asserting on the total count.
+            val writeCommands = commands.filter(_._1 == "command")
+            assert(writeCommands.length == 1)
+            assert(writeCommands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+            assert(writeCommands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
               .fileFormat.isInstanceOf[ParquetFileFormat])
             val df = spark.read.format(format).load(path.getCanonicalPath)
             checkAnswer(df, inputData.toDF())

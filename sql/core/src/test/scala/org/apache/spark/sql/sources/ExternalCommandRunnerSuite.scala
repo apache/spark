@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ExternalCommandRunnerSuite extends QueryTest with SharedSparkSession {
+class ExternalCommandRunnerSuite extends SharedSparkSession {
   test("execute command") {
     try {
       System.setProperty("command", "hello")

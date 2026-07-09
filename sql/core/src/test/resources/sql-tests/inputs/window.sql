@@ -158,6 +158,10 @@ SELECT val, cate, avg(null) OVER(PARTITION BY cate ORDER BY val) FROM testData O
 -- OrderBy not specified
 SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY cate, val;
 
+-- OrderBy not specified for lead
+SELECT lead(t) OVER ()
+FROM VALUES ('A'), ('B'), ('C') AS tbl(t);
+
 -- Over clause is empty
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
 

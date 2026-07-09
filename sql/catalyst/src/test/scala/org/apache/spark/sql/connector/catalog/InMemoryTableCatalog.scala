@@ -40,7 +40,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   protected val namespaces: util.Map[List[String], Map[String, String]] =
     new ConcurrentHashMap[List[String], Map[String, String]]()
 
-  protected val tables: util.Map[Identifier, Table] =
+  protected var tables: util.Map[Identifier, Table] =
     new ConcurrentHashMap[Identifier, Table]()
 
   private val invalidatedTables: util.Set[Identifier] = ConcurrentHashMap.newKeySet()
@@ -69,6 +69,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       case _ =>
         throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
+  }
+
+  // Returns the underlying live instance without copying. Used by tests that need to mutate
+  // state in a way that's observable to subsequent `loadTable` callers, and by wrappers that
+  // need to propagate writes to the live state.
+  def liveTable(ident: Identifier): Table = {
+    Option(tables.get(ident)).getOrElse(
+      throw new NoSuchTableException(ident.asMultipartIdentifier))
   }
 
   // load table for writes
@@ -179,25 +187,44 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
+    // Compute the intermediate schema that only reflects column deletions.
+    // [[InMemoryBaseTable.alterTableWithData]] decides which old-row fields to keep by
+    // matching names against its newSchema argument. Passing this post-drop schema
+    // (rather than the final schema that may re-add a same-named column) ensures that
+    // dropped column values are physically removed from existing data.
+    // Note: this only handles top-level column deletions. Nested column deletions
+    // would need additional handling, but [[alterTableWithData]] only filters by
+    // top-level field name anyway.
+    val deletedTopLevelNames = changes.collect {
+      case d: TableChange.DeleteColumn if d.fieldNames.length == 1 => d.fieldNames.head
+    }.toSet
+    val schemaAfterDrops = if (deletedTopLevelNames.nonEmpty) {
+      StructType(table.schema.fields.filterNot(f => deletedTopLevelNames(f.name)))
+    } else {
+      schema
+    }
+
     table.increaseVersion()
     val currentVersion = table.version()
+    val columnsWithIds = InMemoryBaseTable.assignMissingIds(
+      CatalogV2Util.structTypeToV2Columns(schema))
     val newTable = table match {
       case _: InMemoryTable =>
         new InMemoryTable(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties,
           constraints = constraints,
           id = table.id)
-          .alterTableWithData(table.data, schema)
+          .alterTableWithData(table.data, schemaAfterDrops)
       case _: InMemoryTableWithV2Filter =>
         new InMemoryTableWithV2Filter(
           name = table.name,
-          columns = CatalogV2Util.structTypeToV2Columns(schema),
+          columns = columnsWithIds,
           partitioning = finalPartitioning,
           properties = properties)
-          .alterTableWithData(table.data, schema)
+          .alterTableWithData(table.data, schemaAfterDrops)
       case other =>
         throw new UnsupportedOperationException(
           s"Unsupported InMemoryBaseTable subclass: ${other.getClass.getName}")
@@ -259,7 +286,8 @@ class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamesp
       TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
       TableCatalogCapability.SUPPORT_TABLE_CONSTRAINT,
       TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS,
-      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+      TableCatalogCapability.SUPPORT_GENERATED_COLUMN_ON_WRITE
     ).asJava
   }
 

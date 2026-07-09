@@ -19,17 +19,19 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, GreaterThan, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, EqualTo, GreaterThan, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType, TimeType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -88,6 +90,79 @@ class DDLParserSuite extends AnalysisTest {
       exception = parseException(sql),
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "':'", "hint" -> ""))
+  }
+
+  test("SPARK-57164: nanos timestamp types in CREATE TABLE / ALTER TABLE columns") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            // CREATE TABLE column.
+            val created = parsePlan(s"CREATE TABLE t (c $spelling) USING parquet")
+            assert(created.asInstanceOf[CreateTable].columns.head.dataType === expected)
+            // ALTER TABLE ... ADD COLUMNS.
+            val added = parsePlan(s"ALTER TABLE t ADD COLUMNS (c $spelling)")
+            assert(added.asInstanceOf[AddColumns].columnsToAdd.head.dataType === expected)
+            // ALTER TABLE ... ALTER COLUMN ... TYPE.
+            val altered = parsePlan(s"ALTER TABLE t ALTER COLUMN c TYPE $spelling")
+            assert(altered.asInstanceOf[AlterColumns].specs.head.newDataType === Some(expected))
+        }
+      }
+      // A column DEFAULT declared with a nanos type and a nanos typed-literal default.
+      val withDefault = parsePlan(
+        "CREATE TABLE t (c TIMESTAMP_NTZ(9) " +
+          "DEFAULT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') USING parquet")
+      val colDef = withDefault.asInstanceOf[CreateTable].columns.head
+      assert(colDef.dataType === TimestampNTZNanosType(9))
+      assert(colDef.defaultValue.isDefined)
+    }
+    // With the preview flag off, a nanos column type is rejected.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          parsePlan("CREATE TABLE t (c TIMESTAMP_NTZ(9)) USING parquet")
+        },
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+    }
+  }
+
+  test("SPARK-57564: TIME type in CREATE TABLE / ALTER TABLE columns") {
+    Seq(
+      "TIME" -> TimeType(),
+      "TIME(0)" -> TimeType(0),
+      "TIME(3)" -> TimeType(3),
+      "TIME(6)" -> TimeType(6)).foreach {
+      case (spelling, expected) =>
+        // CREATE TABLE column.
+        val created = parsePlan(s"CREATE TABLE t (c $spelling) USING parquet")
+        assert(created.asInstanceOf[CreateTable].columns.head.dataType === expected)
+        // ALTER TABLE ... ADD COLUMNS.
+        val added = parsePlan(s"ALTER TABLE t ADD COLUMNS (c $spelling)")
+        assert(added.asInstanceOf[AddColumns].columnsToAdd.head.dataType === expected)
+        // ALTER TABLE ... ALTER COLUMN ... TYPE.
+        val altered = parsePlan(s"ALTER TABLE t ALTER COLUMN c TYPE $spelling")
+        assert(altered.asInstanceOf[AlterColumns].specs.head.newDataType === Some(expected))
+    }
+    // A column DEFAULT declared with a TIME type and a TIME typed-literal default.
+    val withDefault = parsePlan(
+      "CREATE TABLE t (c TIME DEFAULT TIME '12:34:56') USING parquet")
+    val colDef = withDefault.asInstanceOf[CreateTable].columns.head
+    assert(colDef.dataType === TimeType())
+    assert(colDef.defaultValue.isDefined)
+    // PARTITIONED BY a TIME column.
+    val partitioned = parsePlan(
+      "CREATE TABLE t (id INT, c TIME) USING parquet PARTITIONED BY (c)")
+    val createTable = partitioned.asInstanceOf[CreateTable]
+    assert(createTable.columns.exists(col => col.name == "c" && col.dataType === TimeType()))
+    assert(createTable.partitioning === Seq(IdentityTransform(FieldReference("c"))))
   }
 
   test("create/replace table - with IF NOT EXISTS") {
@@ -1790,26 +1865,28 @@ class DDLParserSuite extends AnalysisTest {
           Literal(5))))
   }
 
-  test("insert table: REPLACE WHERE with tableAlias and BY NAME") {
-    parseCompare(
-      "INSERT INTO testcat.ns1.ns2.tbl AS t BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
-      OverwriteByExpression.byName(
-        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        GreaterThan(
-          UnresolvedAttribute("a"),
-          Literal(5))))
+  test("insert table: REPLACE WHERE rejects tableAlias with BY NAME") {
+    val sql =
+      "INSERT INTO testcat.ns1.ns2.tbl AS t BY NAME REPLACE WHERE a > 5 SELECT * FROM source"
+    checkError(
+      exception = parseException(sql),
+      condition = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT INTO testcat.ns1.ns2.tbl AS t BY NAME REPLACE WHERE a > 5",
+        start = 0, stop = 63))
   }
 
-  test("insert table: REPLACE WHERE with tableAlias without BY NAME") {
-    parseCompare(
-      "INSERT INTO testcat.ns1.ns2.tbl AS t REPLACE WHERE a > 5 SELECT * FROM source",
-      OverwriteByExpression.byPosition(
-        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
-        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-        GreaterThan(
-          UnresolvedAttribute("a"),
-          Literal(5))))
+  test("insert table: REPLACE WHERE rejects tableAlias without BY NAME") {
+    val sql =
+      "INSERT INTO testcat.ns1.ns2.tbl AS t REPLACE WHERE a > 5 SELECT * FROM source"
+    checkError(
+      exception = parseException(sql),
+      condition = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "INSERT INTO testcat.ns1.ns2.tbl AS t REPLACE WHERE a > 5",
+        start = 0, stop = 55))
   }
 
   for {
@@ -2175,6 +2252,38 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql,
         start = 0,
         stop = 70))
+  }
+
+  test("SPARK-57681: update table: with options") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
+        |SET a='Robert', b=32
+      """.stripMargin,
+      UpdateTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+          new CaseInsensitiveStringMap(
+            java.util.Map.of("write.split-size", "10"))),
+        Seq(Assignment(UnresolvedAttribute("a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("b"), Literal(32))),
+        None))
+  }
+
+  test("SPARK-57681: update table: with options and alias") {
+    parseCompare(
+      """
+        |UPDATE testcat.ns1.ns2.tbl AS t WITH (`k` = 'v')
+        |SET t.a='Robert', t.b=32
+        |WHERE t.c=2
+      """.stripMargin,
+      UpdateTable(
+        SubqueryAlias("t",
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(
+              java.util.Map.of("k", "v")))),
+        Seq(Assignment(UnresolvedAttribute("t.a"), Literal("Robert")),
+          Assignment(UnresolvedAttribute("t.b"), Literal(32))),
+        Some(EqualTo(UnresolvedAttribute("t.c"), Literal(2)))))
   }
 
   test("merge into table: basic") {
@@ -2761,7 +2870,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("CACHE TABLE t AS SELECT * FROM testData"),
       CacheTableAsSelect(
-        "t",
+        Literal("t"),
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
         "SELECT * FROM testData",
         false,
@@ -3234,7 +3343,8 @@ class DDLParserSuite extends AnalysisTest {
         "b",
         IntegerType,
         nullable = false,
-        generationExpression = Some("a+1")
+        generationExpression = Some(GeneratedColumnExpression(
+          Add(UnresolvedAttribute(Seq("a")), Literal(1)), "a+1"))
       )
     )
     comparePlans(parsePlan(

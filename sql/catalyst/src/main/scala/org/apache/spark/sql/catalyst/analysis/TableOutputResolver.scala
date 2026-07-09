@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{FILL, NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -41,9 +42,10 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
   /**
    * Modes for filling in default or null values for missing columns.
-   * If FILL, fill missing top-level columns with their default values.
-   * If RECURSE, fill missing top-level columns and also recurse into nested struct
-   * fields to fill null.
+   * If FILL, fill missing top-level columns with their default values (by-name reorder path).
+   * If RECURSE, fill missing top-level columns (including trailing columns on the by-position
+   * path for INSERT with schema evolution when enabled) and recurse into nested structs,
+   * arrays, and maps to fill missing struct fields with null or defaults.
    * If NONE, do not fill any missing columns.
    */
   object DefaultValueFillMode extends Enumeration {
@@ -92,19 +94,53 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       query: LogicalPlan,
       byName: Boolean,
       conf: SQLConf,
-      supportColDefaultValue: Boolean = false): LogicalPlan = {
+      defaultValueFillMode: DefaultValueFillMode.Value = NONE): LogicalPlan = {
+    resolveOutputColumnsInternal(
+      tableName, expected, query, byName, conf, defaultValueFillMode)._1
+  }
+
+  /**
+   * @return a tuple of:
+   *   - the resolved write plan (same as [[resolveOutputColumns]]); and
+   *   - the names of the generated columns that were auto-filled, i.e. computed from their
+   *     generation expression because the user did not provide a value for them.
+   */
+  def resolveOutputColumnsWithGeneratedInfo(
+      tableName: String,
+      expected: Seq[Attribute],
+      query: LogicalPlan,
+      byName: Boolean,
+      conf: SQLConf,
+      defaultValueFillMode: DefaultValueFillMode.Value = NONE
+  ): (LogicalPlan, Set[String]) = {
+    resolveOutputColumnsInternal(
+      tableName, expected, query, byName, conf, defaultValueFillMode)
+  }
+
+  private def resolveOutputColumnsInternal(
+      tableName: String,
+      expected: Seq[Attribute],
+      query: LogicalPlan,
+      byName: Boolean,
+      conf: SQLConf,
+      defaultValueFillMode: DefaultValueFillMode.Value
+  ): (LogicalPlan, Set[String]) = {
 
     if (expected.size < query.output.size) {
       throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
         tableName, expected.map(_.name), query.output)
     }
 
+    // In RECURSE mode, allow fewer source columns than target by filling trailing columns
+    // with defaults. In other modes, a column count mismatch in by-position resolution is
+    // an error.
+    val fillDefaultValue = defaultValueFillMode == RECURSE
     val errors = new mutable.ArrayBuffer[String]()
-    val resolved: Seq[NamedExpression] = if (byName) {
-      // If a top-level column does not have a corresponding value in the input query, fill with
-      // the column's default value. We need to pass `fillDefaultValue` as FILL here, if the
-      // `supportColDefaultValue` parameter is also true.
-      val defaultValueFillMode = if (supportColDefaultValue) FILL else NONE
+    // The resolver also reports which generated columns it auto-filled (not provided by the user).
+    val (resolved, autoFilledGenCols) = if (byName) {
+      // By-name resolution: the defaultValueFillMode is passed through to control whether
+      // missing top-level columns are filled (FILL/RECURSE) and whether missing nested
+      // struct fields are also filled (RECURSE only).
       reorderColumnsByName(
         tableName,
         query.output,
@@ -112,13 +148,16 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         conf,
         errors += _,
         Nil,
-        defaultValueFillMode)
+        defaultValueFillMode,
+        enforceFullOutput = true)
     } else {
-      if (expected.size > query.output.size) {
+      if (expected.size > query.output.size && !fillDefaultValue) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
           tableName, expected.map(_.name), query.output)
       }
-      resolveColumnsByPosition(tableName, query.output, expected, conf, errors += _)
+      resolveColumnsByPosition(
+        tableName, query.output, expected, conf, errors += _,
+        fillDefaultValue = fillDefaultValue)
     }
 
     if (errors.nonEmpty) {
@@ -126,11 +165,12 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         tableName, expected.map(_.name).map(toSQLId).mkString(", "))
     }
 
-    if (resolved == query.output) {
+    val plan = if (resolved == query.output) {
       query
     } else {
       Project(resolved, query)
     }
+    (plan, autoFilledGenCols)
   }
 
   def resolveUpdate(
@@ -157,17 +197,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       case (valueType: StructType, colType: StructType) =>
         val resolvedValue = resolveStructType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case (valueType: ArrayType, colType: ArrayType) =>
         val resolvedValue = resolveArrayType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case (valueType: MapType, colType: MapType) =>
         val resolvedValue = resolveMapType(
           tableName, value, valueType, col, colType,
-          byName = true, conf, addError, colPath, fillChildDefaultValue)
+          byName = true, conf, addError, colPath, fillChildDefaultValue, enforceFullOutput = false)
         resolvedValue.getOrElse(value)
       case _ =>
         checkUpdate(tableName, value, col, conf, addError, colPath)
@@ -278,6 +318,32 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
+  /**
+   * Builds the [[NamedExpression]] for a missing column filled with its default value, applying a
+   * write-side CHAR/VARCHAR length check so that non-foldable defaults (e.g. `current_user()`)
+   * that exceed the column length are caught at runtime. Uses `getRawType` so it works for both
+   * V1 and V2 tables. Shared by the by-name and by-position default-fill paths.
+   *
+   * We unwrap the default's outer alias before the length check so the check wraps the
+   * default value itself, not the alias; `applyColumnMetadata` then re-adds the required
+   * alias and metadata afterward.
+   */
+  private def applyDefaultWithLengthCheck(
+      defaultExpr: Expression,
+      expectedCol: Attribute,
+      conf: SQLConf): NamedExpression = {
+    val rawType = CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
+    val checked = if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
+      val value = defaultExpr match {
+        case a: Alias => a.child
+        case other => other
+      }
+      CharVarcharUtils.stringLengthCheck(value, rawType)
+    } else {
+      defaultExpr
+    }
+    applyColumnMetadata(checked, expectedCol)
+  }
 
   private def canWrite(
       tableName: String,
@@ -304,23 +370,42 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String] = Nil,
-      defaultValueFillMode: DefaultValueFillMode.Value): Seq[NamedExpression] = {
+      defaultValueFillMode: DefaultValueFillMode.Value,
+      enforceFullOutput: Boolean = false): (Seq[NamedExpression], Set[String]) = {
+    // Names of generated columns that were auto-filled (not provided by the user). Only populated
+    // for top-level columns, since generated columns cannot be nested.
+    val autoFilledGenCols = mutable.Set.empty[String]
     val matchedCols = mutable.HashSet.empty[String]
     val reordered = expectedCols.flatMap { expectedCol =>
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        val defaultExpr = if (Set(FILL, RECURSE).contains(defaultValueFillMode)) {
-          getDefaultValueExprOrNullLit(expectedCol, conf.useNullsForMissingDefaultColumnValues)
-        } else {
-          None
+        // Check for generated column expression first, before falling back to defaults,
+        // since getDefaultValueExprOrNullLit may return null for nullable columns.
+        GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
+          case Some(genExprSql) =>
+            autoFilledGenCols += expectedCol.name
+            // The parsed references here are placeholders: they are resolved against the post-cast
+            // stored columns after this loop (see below), so the generated value is computed from
+            // the values as they will be written. References to other generated columns are not
+            // allowed.
+            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
+            Some(applyColumnMetadata(genExpr, expectedCol))
+          case None =>
+            val useNullAsDefault = useNullAsDefaultForMissingColumn(expectedCols, conf)
+            val defaultExpr = if (Set(FILL, RECURSE).contains(defaultValueFillMode)) {
+              getDefaultValueExprOrNullLit(expectedCol, useNullAsDefault)
+            } else {
+              None
+            }
+            if (defaultExpr.isDefined) {
+              Some(applyDefaultWithLengthCheck(defaultExpr.get, expectedCol, conf))
+            } else {
+              throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+                tableName, newColPath.quoted
+              )
+            }
         }
-        if (defaultExpr.isEmpty) {
-          throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-            tableName, newColPath.quoted
-          )
-        }
-        Some(applyColumnMetadata(defaultExpr.get, expectedCol))
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted
@@ -336,15 +421,15 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           case (matchedType: StructType, expectedType: StructType) =>
             resolveStructType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
             resolveArrayType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case (matchedType: MapType, expectedType: MapType) =>
             resolveMapType(
               tableName, matchedCol, matchedType, actualExpectedCol, expectedType,
-              byName = true, conf, addError, newColPath, childFillDefaultValue)
+              byName = true, conf, addError, newColPath, childFillDefaultValue, enforceFullOutput)
           case _ =>
             checkField(
               tableName, actualExpectedCol, matchedCol, byName = true, conf, addError, newColPath)
@@ -352,7 +437,24 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     }
 
-    if (reordered.length == expectedCols.length) {
+    // Resolve auto-filled generated column references against the post-cast stored columns, so the
+    // generated value is computed from the values as they will be written (after any
+    // store-assignment cast). Generated columns only exist at the top level,
+    // so this only applies when colPath is empty.
+    val finalCols = if (colPath.isEmpty && autoFilledGenCols.nonEmpty) {
+      val storedCols = reordered.filterNot(col => autoFilledGenCols.contains(col.name))
+      reordered.map { col =>
+        if (autoFilledGenCols.contains(col.name)) {
+          resolveGenerationExprReferences(col, storedCols, conf).asInstanceOf[NamedExpression]
+        } else {
+          col
+        }
+      }
+    } else {
+      reordered
+    }
+
+    val output = if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
           .map(col => s"${toSQLId(col.name)}").mkString(", ")
@@ -364,11 +466,17 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             tableName, colPath.quoted, extraCols)
         }
       } else {
-        reordered
+        finalCols
       }
+    } else if (enforceFullOutput) {
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else expectedCols.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       Nil
     }
+    (output, autoFilledGenCols.toSet)
   }
 
   private def resolveColumnsByPosition(
@@ -377,7 +485,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       expectedCols: Seq[Attribute],
       conf: SQLConf,
       addError: String => Unit,
-      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+      colPath: Seq[String] = Nil,
+      fillDefaultValue: Boolean = false): (Seq[NamedExpression], Set[String]) = {
+    // Names of generated columns that were auto-filled (not provided by the user). Only populated
+    // for top-level columns, since generated columns cannot be nested.
+    val autoFilledGenCols = mutable.Set.empty[String]
     val actualExpectedCols = expectedCols.map { attr =>
       attr.withDataType { CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType) }
     }
@@ -393,8 +505,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           tableName, colPath.quoted, extraColsStr
         )
       }
-    } else if (inputCols.size < actualExpectedCols.size) {
-      val missingColsStr = actualExpectedCols.takeRight(actualExpectedCols.size - inputCols.size)
+    } else if (inputCols.size < actualExpectedCols.size && !fillDefaultValue) {
+      val missingCols = actualExpectedCols.drop(inputCols.size)
+      val missingColsStr = missingCols
         .map(col => toSQLId(col.name))
         .mkString(", ")
       if (colPath.isEmpty) {
@@ -407,25 +520,67 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       }
     }
 
-    inputCols.zip(actualExpectedCols).flatMap { case (inputCol, expectedCol) =>
+    val matched = inputCols.zip(actualExpectedCols).flatMap { case (inputCol, expectedCol) =>
       val newColPath = colPath :+ expectedCol.name
       (inputCol.dataType, expectedCol.dataType) match {
         case (inputType: StructType, expectedType: StructType) =>
           resolveStructType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case (inputType: ArrayType, expectedType: ArrayType) =>
           resolveArrayType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case (inputType: MapType, expectedType: MapType) =>
           resolveMapType(
             tableName, inputCol, inputType, expectedCol, expectedType,
-            byName = false, conf, addError, newColPath, fillDefaultValue = false)
+            byName = false, conf, addError, newColPath, fillDefaultValue, enforceFullOutput = true)
         case _ =>
           checkField(tableName, expectedCol, inputCol, byName = false, conf, addError, newColPath)
       }
     }
+
+    val trailingCols = actualExpectedCols.drop(inputCols.size)
+    val defaults = if (fillDefaultValue || trailingCols.nonEmpty) {
+      trailingCols.map { expectedCol =>
+        // Check for generated column expression first, before falling back to defaults.
+        GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
+          case Some(genExprSql) =>
+            autoFilledGenCols += expectedCol.name
+            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
+            // For by-position, manually resolve references against matched columns
+            // since the query may use different column names than the table. References to
+            // other generated columns are not allowed.
+            val resolvedGenExpr = resolveGenerationExprReferences(genExpr, matched, conf)
+            applyColumnMetadata(resolvedGenExpr, expectedCol)
+          case None =>
+            val useNullAsDefault = useNullAsDefaultForMissingColumn(actualExpectedCols, conf)
+            val defaultExpr = if (fillDefaultValue) {
+              getDefaultValueExprOrNullLit(
+                expectedCol, useNullAsDefault)
+            } else {
+              None
+            }
+            if (defaultExpr.isDefined) {
+              applyDefaultWithLengthCheck(defaultExpr.get, expectedCol, conf)
+            } else {
+              throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
+                tableName, (colPath :+ expectedCol.name).quoted)
+            }
+        }
+      }
+    } else {
+      Nil
+    }
+
+    val result = matched ++ defaults
+    if (result.length != actualExpectedCols.size) {
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else actualExpectedCols.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
+    }
+    (result, autoFilledGenCols.toSet)
   }
 
   private[sql] def checkNullability(
@@ -447,6 +602,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     input.nullable && !attr.nullable && conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY
   }
 
+  // scalastyle:off argcount
   private def resolveStructType(
       tableName: String,
       input: Expression,
@@ -457,18 +613,20 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val fields = inputType.zipWithIndex.map { case (f, i) =>
       Alias(GetStructField(nullCheckedInput, i, Some(f.name)), f.name)()
     }
     val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
-    val resolved = if (byName) {
+    // Generated columns cannot be nested, so the auto-filled set is always empty here.
+    val (resolved, _) = if (byName) {
       reorderColumnsByName(tableName, fields, toAttributes(expectedType), conf, addError, colPath,
-        defaultValueMode)
+        defaultValueMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
-        tableName, fields, toAttributes(expectedType), conf, addError, colPath)
+        tableName, fields, toAttributes(expectedType), conf, addError, colPath, fillDefaultValue)
     }
     if (resolved.length == expectedType.length) {
       val struct = CreateStruct(resolved)
@@ -478,6 +636,11 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         struct
       }
       Some(applyColumnMetadata(res, expected))
+    } else if (enforceFullOutput) {
+      val colName =
+        if (colPath.nonEmpty) colPath.quoted
+        else expectedType.fields.map(_.name).map(toSQLId).mkString(", ")
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       None
     }
@@ -493,17 +656,20 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
     val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
     val fakeAttr =
       AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
-    val res = if (byName) {
+    // Generated columns cannot be nested, so the auto-filled set is always empty here.
+    val (res, _) = if (byName) {
       val defaultValueMode = if (fillDefaultValue) RECURSE else NONE
       reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath,
-        defaultValueMode)
+        defaultValueMode, enforceFullOutput)
     } else {
-      resolveColumnsByPosition(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath, fillDefaultValue)
     }
     if (res.length == 1) {
       val castedArray =
@@ -515,6 +681,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           ArrayTransform(nullCheckedInput, func)
         }
       Some(applyColumnMetadata(castedArray, expected))
+    } else if (enforceFullOutput) {
+      val colName = if (colPath.nonEmpty) colPath.quoted else toSQLId(expected.name)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       None
     }
@@ -530,29 +699,33 @@ object TableOutputResolver extends SQLConfHelper with Logging {
       conf: SQLConf,
       addError: String => Unit,
       colPath: Seq[String],
-      fillDefaultValue: Boolean): Option[NamedExpression] = {
+      fillDefaultValue: Boolean,
+      enforceFullOutput: Boolean): Option[NamedExpression] = {
     val nullCheckedInput = checkNullability(input, expected, conf, colPath)
 
     val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
     val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
     val defaultValueFillMode = if (fillDefaultValue) RECURSE else NONE
-    val resKey = if (byName) {
+    // Generated columns cannot be nested, so the auto-filled set is always empty here.
+    val (resKey, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath,
-        defaultValueFillMode)
+        defaultValueFillMode, enforceFullOutput)
     } else {
-      resolveColumnsByPosition(tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
+      resolveColumnsByPosition(
+        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath, fillDefaultValue)
     }
 
     val valueParam =
       NamedLambdaVariable("value", inputType.valueType, inputType.valueContainsNull)
     val fakeValueAttr =
       AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
-    val resValue = if (byName) {
+    // Generated columns cannot be nested, so the auto-filled set is always empty here.
+    val (resValue, _) = if (byName) {
       reorderColumnsByName(tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath,
-        defaultValueFillMode)
+        defaultValueFillMode, enforceFullOutput)
     } else {
       resolveColumnsByPosition(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath, fillDefaultValue)
     }
 
     if (resKey.length == 1 && resValue.length == 1) {
@@ -577,8 +750,32 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           MapFromArrays(newKeys, newValues)
         }
       Some(applyColumnMetadata(casted, expected))
+    } else if (enforceFullOutput) {
+      val colName = if (colPath.nonEmpty) colPath.quoted else toSQLId(expected.name)
+      throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       None
+    }
+  }
+  // scalastyle:on argcount
+
+  private def useNullAsDefaultForMissingColumn(
+      expectedCols: Seq[Attribute],
+      conf: SQLConf): Boolean = {
+    conf.useNullsForMissingDefaultColumnValues &&
+      (conf.generatedColumnAllowNullableIngest ||
+        !expectedCols.exists(c => GeneratedColumn.isGeneratedColumn(c.metadata)))
+  }
+
+  private def resolveGenerationExprReferences(
+      genExpr: Expression,
+      matched: Seq[NamedExpression],
+      conf: SQLConf): Expression = {
+    genExpr.transform {
+      case u: UnresolvedAttribute if u.nameParts.size == 1 =>
+        matched.collectFirst {
+          case alias: Alias if conf.resolver(alias.name, u.nameParts.head) => alias.child
+        }.getOrElse(u)
     }
   }
 

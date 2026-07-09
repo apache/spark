@@ -28,18 +28,20 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{
   ArrayType,
   BooleanType,
+  DateType,
   DecimalType,
   DoubleType,
   IntegerType,
   LongType,
   StringType,
   StructField,
-  StructType
+  StructType,
+  TimestampType,
+  TimeType
 }
 
 class XmlInferSchemaSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with TestXmlData
     with XmlSchemaInferenceCaseSensitivityTests {
 
@@ -646,6 +648,141 @@ class XmlInferSchemaSuite
     // nullValue option is used during parsing
     assert(xmlDF.schema === expectedSchema)
     checkAnswer(xmlDF, expectedAns)
+  }
+
+  test("TIME type inference") {
+    val xmlString = Seq("""<ROW><t>13:31:24.123456</t></ROW>""")
+    val df = readData(xmlString)
+    assert(df.schema === new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION)))
+    checkAnswer(df, Row(java.time.LocalTime.of(13, 31, 24, 123456000)))
+  }
+
+  test("TIME type inference - disabled when timeType.enabled is false") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val xmlString = Seq("""<ROW><t>13:31:24</t></ROW>""")
+      val df = readData(xmlString)
+      // Falls through to TimestampType when TIME inference is disabled
+      assert(df.schema.fields.head.dataType === TimestampType)
+    }
+  }
+
+  test("TIME type inference - negative cases") {
+    // Date strings should not infer as TIME
+    val xmlDate = Seq("""<ROW><t>2024-01-15</t></ROW>""")
+    val dfDate = readData(xmlDate)
+    assert(dfDate.schema.fields.head.dataType === DateType)
+
+    // Timestamp strings should not infer as TIME
+    val xmlTs = Seq("""<ROW><t>2024-01-15T13:31:24</t></ROW>""")
+    val dfTs = readData(xmlTs)
+    assert(dfTs.schema.fields.head.dataType != TimeType(TimeType.DEFAULT_PRECISION))
+  }
+
+  test("TIME type inference - cross-row merge") {
+    // TIME + TIME -> TIME
+    val xmlTime = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>09:15:00.123</t></ROW>""")
+    val dfTime = readData(xmlTime)
+    assert(dfTime.schema === new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION)))
+
+    // TIME + non-time string -> StringType
+    val xmlMixed = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>not-a-time</t></ROW>""")
+    val dfMixed = readData(xmlMixed)
+    assert(dfMixed.schema.fields.head.dataType === StringType)
+
+    // TIME + Date -> StringType (incompatible types widen)
+    val xmlTimeDate = Seq(
+      """<ROW><t>13:31:24</t></ROW>""",
+      """<ROW><t>2024-01-15</t></ROW>""")
+    val dfTimeDate = readData(xmlTimeDate)
+    assert(dfTimeDate.schema.fields.head.dataType === StringType)
+  }
+
+  test("incremental inference widens the type across rows monotonically") {
+    // Long -> Double: once a value forces Double, a later Long value must not narrow it back.
+    val longThenDouble = Seq(
+      """<ROW><v>1</v></ROW>""",
+      """<ROW><v>1.5</v></ROW>""",
+      """<ROW><v>2</v></ROW>""")
+    assert(readData(longThenDouble).schema.fields.head.dataType === DoubleType)
+
+    // Long -> String: an incompatible later value widens all the way to the top type.
+    val longThenString = Seq(
+      """<ROW><v>1</v></ROW>""",
+      """<ROW><v>abc</v></ROW>""")
+    assert(readData(longThenString).schema.fields.head.dataType === StringType)
+
+    // The result is independent of row order (the merge is commutative).
+    val doubleThenLong = Seq(
+      """<ROW><v>1.5</v></ROW>""",
+      """<ROW><v>2</v></ROW>""")
+    assert(readData(doubleThenLong).schema.fields.head.dataType === DoubleType)
+  }
+
+  test("date is inferred regardless of preferDate") {
+    val xmlDate = Seq("""<ROW><d>2024-01-15</d></ROW>""")
+    // preferDate governs which date formatter is used, not whether date inference is attempted.
+    Seq("true", "false").foreach { preferDate =>
+      val df = readData(xmlDate, Map("preferDate" -> preferDate))
+      assert(df.schema.fields.head.dataType === DateType,
+        s"expected DateType with preferDate=$preferDate")
+    }
+  }
+
+  test("incremental type casting yields the same schema as the legacy batch path") {
+    // Incremental inference (the default) must produce the same inferred schema as the legacy
+    // per-record path across a range of shapes: mixed numerics, nested structs, repeated elements
+    // (arrays), attributes, value tags, cross-row widening to StringType, and -- the case that
+    // makes incremental inference actually differ if the type-so-far is threaded naively --
+    // prefersDecimal fields mixing a decimal and an integer, in both row orders.
+    //
+    // All records are read as a SINGLE partition so that the incremental path actually threads
+    // one record's type into the next within the partition; with the default parallelism each
+    // record lands in its own partition and both paths trivially agree via the final merge.
+    def readOnePartition(xml: Seq[String], options: Map[String, String]): StructType = {
+      val ds = spark.createDataset(spark.sparkContext.parallelize(xml, 1))(Encoders.STRING)
+      spark.read.options(Map("rowTag" -> "ROW") ++ options).xml(ds).schema
+    }
+
+    val cases: Seq[(Seq[String], Map[String, String])] = Seq(
+      Seq("""<ROW><a>1</a><b>1.5</b></ROW>""", """<ROW><a>2.5</a><b>3</b></ROW>""") -> Map.empty,
+      Seq("""<ROW><n><x>1</x><y>t</y></n></ROW>""",
+        """<ROW><n><x>2.0</x><y>u</y></n></ROW>""") -> Map.empty,
+      Seq("""<ROW><arr>1</arr><arr>2</arr><arr>3.5</arr></ROW>""") -> Map.empty,
+      Seq("""<ROW><e k="1">text</e></ROW>""", """<ROW><e k="2.5">other</e></ROW>""") -> Map.empty,
+      Seq("""<ROW><v>2024-01-15</v></ROW>""",
+        """<ROW><v>2024-01-15T10:00:00</v></ROW>""") -> Map.empty,
+      Seq("""<ROW><v>1</v></ROW>""", """<ROW><v>not-a-number</v></ROW>""") -> Map.empty,
+      // prefersDecimal: a decimal then an integer, and the reverse order.
+      Seq("""<ROW><a>123.45</a></ROW>""", """<ROW><a>5</a></ROW>""") ->
+        Map("prefersDecimal" -> "true"),
+      Seq("""<ROW><a>5</a></ROW>""", """<ROW><a>123.45</a></ROW>""") ->
+        Map("prefersDecimal" -> "true"),
+      // Temporal family with a time-requiring timestampFormat, in both row orders. A date-only
+      // value must widen with a timestamp identically whether it is seen first (so the field is
+      // Date when the timestamp arrives) or last (so the field is Timestamp when the date arrives):
+      // entering the temporal cascade at its top keeps the date-only value inferring as Date rather
+      // than falling through to String, so `findWiderDateTimeType` widens Date + Timestamp to
+      // Timestamp on both the incremental and the legacy path.
+      Seq("""<ROW><v>2024-01-15T10:00:00</v></ROW>""", """<ROW><v>2024-01-15</v></ROW>""") ->
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
+      Seq("""<ROW><v>2024-01-15</v></ROW>""", """<ROW><v>2024-01-15T10:00:00</v></ROW>""") ->
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"))
+
+    cases.foreach { case (xml, options) =>
+      val incremental = withSQLConf(
+        SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING.key -> "true") {
+        readOnePartition(xml, options)
+      }
+      val batch = withSQLConf(
+        SQLConf.XML_SCHEMA_INFERENCE_INCREMENTAL_TYPECASTING.key -> "false") {
+        readOnePartition(xml, options)
+      }
+      assert(incremental === batch, s"incremental and batch schemas differ for: $xml")
+    }
   }
 }
 

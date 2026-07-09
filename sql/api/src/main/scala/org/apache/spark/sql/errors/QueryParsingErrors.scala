@@ -72,6 +72,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def insertReplaceWhereTableAliasNotAllowed(ctx: TableAliasContext): Throwable = {
+    new ParseException(
+      errorClass = "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
     new ParseException(
       errorClass = "COLUMN_ALIASES_NOT_ALLOWED",
@@ -203,6 +210,33 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def nearestByJoinWithLateralUnsupportedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_NEAREST_BY",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def unsupportedNearestByJoinTypeError(
+      ctx: ParserRuleContext,
+      joinType: String,
+      supported: String): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+      messageParameters = Map("joinType" -> toSQLStmt(joinType), "supported" -> supported),
+      ctx)
+  }
+
+  def nearestByJoinNumResultsOutOfRangeError(
+      ctx: ParserRuleContext,
+      numResults: String,
+      max: Int): Throwable = {
+    new ParseException(
+      errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+      messageParameters = Map("numResults" -> numResults, "min" -> "1", "max" -> max.toString),
+      ctx)
+  }
+
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",
@@ -254,6 +288,47 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidTableSampleFractionError(fraction: Double, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TABLESAMPLE_FRACTION",
+      messageParameters = Map("fraction" -> fraction.toString),
+      ctx)
+  }
+
+  def unsupportedRowFormatLinesTerminatedByError(
+      value: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY",
+      messageParameters = Map("value" -> value),
+      ctx)
+  }
+
+  def invalidTableFunctionTableArgumentPartitioningError(
+      clause: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+      messageParameters = Map("clause" -> clause),
+      ctx)
+  }
+
+  def emptyQuantifiedPatternError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN", ctx)
+  }
+
+  def invalidWindowFrameBoundError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND", ctx)
+  }
+
+  def emptyRefreshResourcePathError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_REFRESH_RESOURCE_PATH", ctx)
+  }
+
+  def invalidRefreshResourcePathError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH", ctx)
+  }
+
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",
@@ -282,6 +357,24 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "INVALID_TYPED_LITERAL",
       messageParameters = Map("valueType" -> toSQLType(valueType), "value" -> toSQLValue(value)),
+      ctx)
+  }
+
+  def timestampLiteralPrecisionExceedsMaxError(
+      value: String,
+      ctx: TypeConstructorContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIMESTAMP_LITERAL_PRECISION",
+      messageParameters = Map("value" -> toSQLValue(value)),
+      ctx)
+  }
+
+  def timeLiteralPrecisionExceedsMaxError(
+      value: String,
+      ctx: TypeConstructorContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_LITERAL_PRECISION",
+      messageParameters = Map("value" -> toSQLValue(value)),
       ctx)
   }
 
@@ -479,6 +572,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0035",
       messageParameters = Map("message" -> message),
+      ctx)
+  }
+
+  def tableSampleSystemRepeatableError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def tableSampleSystemSampleMethodError(
+      sampleMethod: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      messageParameters = Map("sampleMethod" -> sampleMethod),
       ctx)
   }
 
@@ -766,6 +875,20 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0056",
       messageParameters = Map("reason" -> reason),
+      ctx)
+  }
+
+  def multipleTimeTravelSpec(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "MULTIPLE_TIME_TRAVEL_SPEC",
+      messageParameters = Map.empty,
+      ctx)
+  }
+
+  def timeTravelAtSyntaxDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
       ctx)
   }
 

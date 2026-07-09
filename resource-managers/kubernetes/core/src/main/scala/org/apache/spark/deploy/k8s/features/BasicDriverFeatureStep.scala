@@ -38,6 +38,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   private val driverContainerImage = conf.image
 
+  private val allowPrivilegeEscalation = conf.get(KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION)
+
   // CPU settings
   private val driverCpuCores = conf.get(DRIVER_CORES)
   private val driverCoresRequest = conf
@@ -140,6 +142,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits("memory", driverMemoryQuantity)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()
+      .editOrNewSecurityContext()
+        .withAllowPrivilegeEscalation(allowPrivilegeEscalation)
+        .endSecurityContext()
       .build()
 
     val driverPod = new PodBuilder(pod.pod)

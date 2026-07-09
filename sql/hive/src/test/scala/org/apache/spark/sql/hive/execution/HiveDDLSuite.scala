@@ -610,7 +610,7 @@ class HiveDDLSuite
       exception = intercept[AnalysisException] {
         sql(sql1)
       },
-      condition = "_LEGACY_ERROR_TEMP_1076",
+      condition = "INVALID_PARTITION_SPEC",
       parameters = Map(
         "details" -> "The spec ([partCol1=]) contains an empty partition column value")
     )
@@ -1141,7 +1141,7 @@ class HiveDDLSuite
           "alternative" -> "DROP TABLE",
           "operation" -> "DROP VIEW",
           "foundType" -> "MANAGED",
-          "requiredType" -> "VIEW",
+          "requiredType" -> "VIEW or METRIC_VIEW",
           "objectName" -> s"$SESSION_CATALOG_NAME.default.tab1"
         )
       )

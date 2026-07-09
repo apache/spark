@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class InjectRuntimeFilterSuite extends QueryTest with SharedSparkSession
+class InjectRuntimeFilterSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   protected override def beforeAll(): Unit = {

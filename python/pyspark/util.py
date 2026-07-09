@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -527,12 +526,19 @@ def handle_worker_exception(
     def format_exception() -> str:
         if hide_traceback:
             return "".join(traceback.format_exception_only(type(e), e))
+        tb = sys.exc_info()[-1]
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
-            tb = try_simplify_traceback(sys.exc_info()[-1])  # type: ignore[arg-type]
-            if tb is not None:
+            simplified_tb = try_simplify_traceback(tb)  # type: ignore[arg-type]
+            if simplified_tb is not None:
+                tb = simplified_tb
                 e.__cause__ = None
-                return "".join(traceback.format_exception(type(e), e, tb))
-        return traceback.format_exc()
+        # We only set SPARK_TRACEBACK_WITH_LOCALS=1 for now. This equivalent to a
+        # check for the existence of the environment variable.
+        capture_locals = bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False))
+        te = traceback.TracebackException(
+            type(e), e, tb, compact=True, capture_locals=capture_locals
+        )
+        return "".join(te.format())
 
     try:
         exc_info = format_exception()
@@ -972,7 +978,7 @@ class _FaulthandlerHelper:
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
-            self._log_file = open(self._log_path, "w")
+            self._log_file = open(self._log_path, "w", encoding="utf-8")
 
             faulthandler.enable(file=self._log_file)
 

@@ -293,6 +293,14 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td>3.2.0</td>
    </tr>
    <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask</code></td>
+     <td>Int.MaxValue</td>
+     <td>
+       The maximum number of contiguous reducer partitions that may be coalesced into a single task. This limits the reducer-partition fan-in independently of the advisory partition size.
+     </td>
+     <td>4.3.0</td>
+   </tr>
+   <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
      <td>(none)</td>
      <td>

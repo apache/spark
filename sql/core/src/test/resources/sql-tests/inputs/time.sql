@@ -366,3 +366,63 @@ SELECT time_to_millis(time_from_millis(52200500));
 SELECT time_from_millis(time_to_millis(TIME'14:30:00.5'));
 SELECT time_to_micros(time_from_micros(52200500000));
 SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'));
+
+-- SPARK-57585: common TIME(p) type for mixed-precision operands in set and conditional operations.
+-- The result type is the TIME with the largest fractional-seconds precision; values from the
+-- smaller-precision side are widened losslessly.
+
+-- UNION widens TIME(3) and TIME(6) to TIME(6).
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    UNION ALL SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c;
+-- UNION over the precision extremes widens TIME(0) and TIME(9) to TIME(9).
+SELECT typeof(c), c FROM (
+  SELECT '00:00:00' :: TIME(0) AS c
+    UNION ALL SELECT '23:59:59.123456789' :: TIME(9)) ORDER BY c;
+-- INTERSECT widens TIME(3) and TIME(6) to TIME(6); the matching value is compared at TIME(6).
+SELECT typeof(c), c FROM (
+  SELECT '01:02:03.456' :: TIME(3) AS c
+    INTERSECT SELECT '01:02:03.456000' :: TIME(6));
+-- EXCEPT widens TIME(3) and TIME(6) to TIME(6).
+SELECT typeof(c), c FROM (
+  SELECT '12:34:56.789' :: TIME(3) AS c
+    EXCEPT SELECT '01:02:03.456789' :: TIME(6)) ORDER BY c;
+
+-- coalesce keeps the first non-null, widened to the wider precision.
+SELECT typeof(v), v FROM (SELECT coalesce(
+  CAST(NULL AS TIME(3)), '01:02:03.456789' :: TIME(6)) AS v);
+-- CASE WHEN unifies its branches to TIME(6).
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+  THEN '12:34:56.789' :: TIME(3) ELSE '01:02:03.456789' :: TIME(6) END AS v);
+-- NULLIF resolves the common type of its arguments.
+SELECT typeof(v), v FROM (SELECT nullif(
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)) AS v);
+
+-- greatest / least widen their arguments to the common TIME type and pick the extreme value.
+SELECT typeof(greatest('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)));
+SELECT greatest('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6));
+SELECT least('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6));
+
+-- array() unifies element types and map() value types to the common TIME type.
+SELECT typeof(array('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6)));
+SELECT typeof(map('a', '12:34:56.789' :: TIME(3), 'b', '01:02:03.456789' :: TIME(6)));
+
+-- IN list resolves the common type across mixed TIME(p) elements.
+SELECT '01:02:03.456789' :: TIME(6) IN ('12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6));
+-- A 3-way mix folds across all precisions in findWiderCommonType, resolving the comparison at
+-- TIME(9).
+SELECT '01:02:03.456789123' :: TIME(9) IN (
+  '12:34:56.789' :: TIME(3), '01:02:03.456789' :: TIME(6), '01:02:03.456789123' :: TIME(9));
+
+-- Store assignment: widening TIME(3) -> TIME(6) succeeds, narrowing TIME(6) -> TIME(3) requires
+-- an explicit cast.
+CREATE TABLE time_widen_tbl (t6 TIME(6)) USING parquet;
+INSERT INTO time_widen_tbl SELECT '01:02:03.456' :: TIME(3);
+SELECT typeof(t6), t6 FROM time_widen_tbl;
+DROP TABLE time_widen_tbl;
+
+CREATE TABLE time_narrow_tbl (t3 TIME(3)) USING parquet;
+INSERT INTO time_narrow_tbl SELECT '01:02:03.456789' :: TIME(6);
+INSERT INTO time_narrow_tbl SELECT CAST('01:02:03.456789' :: TIME(6) AS TIME(3));
+SELECT typeof(t3), t3 FROM time_narrow_tbl;
+DROP TABLE time_narrow_tbl;

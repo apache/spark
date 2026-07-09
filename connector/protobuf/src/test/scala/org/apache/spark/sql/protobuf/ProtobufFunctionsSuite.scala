@@ -17,14 +17,15 @@
 package org.apache.spark.sql.protobuf
 
 import java.sql.Timestamp
-import java.time.Duration
+import java.time.{Duration, LocalTime}
 
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => AnyProto, BoolValue, ByteString, BytesValue, DoubleValue, DynamicMessage, FloatValue, Int32Value, Int64Value, StringValue, UInt32Value, UInt64Value}
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
@@ -34,8 +35,9 @@ import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
+import org.apache.spark.unsafe.types.UTF8String
 
-class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
+class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
   with Serializable {
 
   import testImplicits._
@@ -719,6 +721,67 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           === inputDf.select("durationMsg.key").first().get(0))
         assert(fromProtoDf.select("durationMsg.duration").first().get(0)
           === inputDf.select("durationMsg.duration").first().get(0))
+    }
+  }
+
+  test("SPARK-57573: Handle TimeType between to_protobuf and from_protobuf") {
+    val schema = StructType(
+      StructField("timeMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("time_val", TimeType(), nullable = true) :: Nil
+        ),
+        nullable = true
+      ) :: Nil
+    )
+
+    val localTime = LocalTime.of(12, 34, 56, 123456000)
+    val inputDf = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", localTime))
+      )),
+      schema
+    )
+
+    checkWithFileAndClassName("timeMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = inputDf
+          .select(to_protobuf_wrapper($"timeMsg", name,
+            descFilePathOpt) as Symbol("to_proto"))
+
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name,
+            descFilePathOpt) as Symbol("timeMsg"))
+
+        // The int64 field carries no logical-type marker, so from_protobuf infers it as
+        // LongType holding nanoseconds-of-day rather than TimeType.
+        assert(fromProtoDf.schema("timeMsg").dataType.asInstanceOf[StructType]("time_val")
+          .dataType === LongType)
+        assert(fromProtoDf.select("timeMsg.key").first().get(0) === "key1")
+        assert(fromProtoDf.select("timeMsg.time_val").first().get(0) === localTime.toNanoOfDay)
+    }
+  }
+
+  test("SPARK-57573: TimeType roundtrip through ProtobufSerializer and ProtobufDeserializer") {
+    val descriptor = ProtobufUtils.buildDescriptor("timeMsg", Some(testFileDesc)).descriptor
+    Seq(
+      (TimeType(TimeType.MIN_PRECISION), LocalTime.of(0, 0, 0)),
+      (TimeType(TimeType.MICROS_PRECISION), LocalTime.of(23, 59, 59, 999999000)),
+      (TimeType(TimeType.MICROS_PRECISION), LocalTime.of(12, 34, 56, 123456000))
+    ).foreach { case (timeType, localTime) =>
+      val catalyst = StructType(
+        StructField("key", StringType) ::
+          StructField("time_val", timeType) :: Nil)
+      val serializer = new ProtobufSerializer(catalyst, descriptor, nullable = false)
+      val deserializer = new ProtobufDeserializer(descriptor, catalyst)
+      val nanos = localTime.toNanoOfDay
+      val input = InternalRow(UTF8String.fromString("key1"), nanos)
+
+      val message = serializer.serialize(input).asInstanceOf[DynamicMessage]
+      val result = deserializer.deserialize(message).get
+
+      assert(result.getUTF8String(0).toString === "key1")
+      assert(result.getLong(1) === nanos)
     }
   }
 

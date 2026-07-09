@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -95,8 +96,8 @@ RUN python3.12 -m pip install \
     'mypy==1.19.1' \
     'numpy==2.4.1' \
     'numpydoc' \
-    'pandas' \
-    'pandas-stubs' \
+    'pandas==2.3.3' \
+    'pandas-stubs==2.3.3.260113' \
     'plotly>=4.8' \
     'pyarrow>=23.0.0' \
     'pytest-mypy-plugins==1.9.3' \

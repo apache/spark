@@ -62,7 +62,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.{ResetSystemProperties, SparkTestUtils, Utils}
 
 @ExtendedSQLTest
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     with ResetSystemProperties {
   import testImplicits._
 
@@ -1697,6 +1697,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
+
+    // Test for empty and whitespace-only paths
+    Seq("", " ", "\t", "\n", "\t\n", " \t ").foreach { file_path =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"select id from json.`$file_path`")
+        },
+        condition = "INVALID_EMPTY_LOCATION",
+        parameters = Map("location" -> file_path),
+        queryContext = Array(ExpectedContext(
+          fragment = s"json.`$file_path`",
+          start = 15,
+          stop = 15 + s"json.`$file_path`".length - 1)))
+    }
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

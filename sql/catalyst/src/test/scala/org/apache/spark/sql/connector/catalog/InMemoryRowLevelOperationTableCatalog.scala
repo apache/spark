@@ -17,10 +17,48 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import scala.collection.mutable.ArrayBuffer
 
-class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
+import org.apache.spark.sql.types.StructType
+
+class InMemoryRowLevelOperationTableCatalog
+    extends InMemoryTableCatalog
+    with TransactionalCatalogPlugin {
   import CatalogV2Implicits._
+
+  // The current active transaction.
+  var transaction: Txn = _
+  // The last completed transaction.
+  var lastTransaction: Txn = _
+  // All transactions in order (committed and aborted), allowing per-statement
+  // validation in SQL scripting tests.
+  val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
+  // Test-only knob. When true, the next transaction created by `beginTransaction` will reject
+  // register-scans calls (`registerScans` returns false unconditionally). Reset after consumed.
+  var nextTxnRejectRegisteredScansAttempt: Boolean = false
+
+  // Each `loadTable` returns a fresh snapshot pinned at the current table version (id is
+  // preserved). This is the "pin at table loading" semantics that lets version-aware
+  // `Table.equals` catch staleness: a cached relation holds a copy frozen at V1; a later load
+  // returns a copy at V2, and the two compare unequal so cache substitution fails before
+  // `Transaction.registerScans` is consulted.
+  override def loadTable(ident: Identifier): Table = {
+    liveTable(ident) match {
+      case rlot: InMemoryRowLevelOperationTable => rlot.copy()
+      case other => other
+    }
+  }
+
+  override def beginTransaction(info: TransactionInfo): Transaction = {
+    assert(transaction == null || transaction.currentState != Active)
+    val txn = new Txn(new TxnTableCatalog(this))
+    txn.rejectRegisteredScansAttempt = nextTxnRejectRegisteredScansAttempt
+    nextTxnRejectRegisteredScansAttempt = false
+    this.transaction = txn
+    txn
+  }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
@@ -41,11 +79,7 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(
-      table.schema,
-      changes,
-      tableProvider = Some("in-memory"),
-      statementType = "ALTER TABLE")
+    val schema = computeAlterTableSchema(table.schema, changes.toSeq)
     val partitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
     val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
 
@@ -54,17 +88,32 @@ class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    val newTable = new InMemoryRowLevelOperationTable(
+    val columnsWithIds = InMemoryBaseTable.assignMissingIds(
+      CatalogV2Util.structTypeToV2Columns(schema))
+
+    val newTable = InMemoryRowLevelOperationTable.withColumns(
       name = table.name,
-      schema = schema,
+      columns = columnsWithIds,
       partitioning = partitioning,
       properties = properties,
-      constraints = constraints)
+      constraints = constraints,
+      tableId = table.id)
     newTable.alterTableWithData(table.data, schema)
+    newTable.setVersionAndValidatedVersionFrom(table)
 
     tables.put(ident, newTable)
 
     newTable
+  }
+
+  /**
+   * Computes the schema that would result from applying `changes` to `currentSchema`.
+   * Can be overridden by subclasses to simulate catalogs that selectively ignore changes
+   * (e.g. [[PartialSchemaEvolutionCatalog]]).
+   */
+  def computeAlterTableSchema(currentSchema: StructType, changes: Seq[TableChange]): StructType = {
+    CatalogV2Util.applySchemaChanges(
+      currentSchema, changes, tableProvider = Some("in-memory"), statementType = "ALTER TABLE")
   }
 }
 
@@ -84,14 +133,21 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       case _ => false
     }
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, propertyChanges)
+    val schema = computeAlterTableSchema(table.schema, changes.toSeq)
     val newTable = new InMemoryRowLevelOperationTable(
       name = table.name,
-      schema = table.schema,
+      schema = schema,
       partitioning = table.partitioning,
       properties = properties,
       constraints = table.constraints)
     newTable.alterTableWithData(table.data, table.schema)
+    newTable.setVersionAndValidatedVersionFrom(table)
     tables.put(ident, newTable)
     newTable
   }
+
+  // Ignores all schema changes and returns the current schema unchanged.
+  override def computeAlterTableSchema(
+      currentSchema: StructType,
+      changes: Seq[TableChange]): StructType = currentSchema
 }

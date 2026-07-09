@@ -18,15 +18,14 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.test.SharedSparkSession
 
 // Turn of the length check because most of the tests check entire error messages
 // scalastyle:off line.size.limit
-class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQLHelper {
+class QueryParsingErrorsSuite extends SharedSparkSession {
 
   private def parseException(sqlText: String): SparkThrowable = {
     intercept[ParseException](sql(sqlText).collect())
@@ -788,5 +787,49 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         fragment = "NOT IN ()",
         start = 33,
         stop = 41))
+  }
+
+  test("MISSING_CLAUSES_FOR_OPERATION: metric view creation without WITH METRICS") {
+    val query =
+      """CREATE VIEW mv
+        |LANGUAGE YAML
+        |AS
+        |$$
+        |version: 0.1
+        |$$""".stripMargin
+
+    checkError(
+      exception = parseException(query),
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      sqlState = "42601",
+      parameters = Map(
+        "clauses" -> "WITH METRICS",
+        "operation" -> "METRIC VIEW CREATION"),
+      context = ExpectedContext(
+        fragment = query,
+        start = 0,
+        stop = query.length - 1))
+  }
+
+  test("MISSING_CLAUSES_FOR_OPERATION: metric view creation without LANGUAGE") {
+    val query =
+      """CREATE VIEW mv
+        |WITH METRICS
+        |AS
+        |$$
+        |version: 0.1
+        |$$""".stripMargin
+
+    checkError(
+      exception = parseException(query),
+      condition = "MISSING_CLAUSES_FOR_OPERATION",
+      sqlState = "42601",
+      parameters = Map(
+        "clauses" -> "LANGUAGE",
+        "operation" -> "METRIC VIEW CREATION"),
+      context = ExpectedContext(
+        fragment = query,
+        start = 0,
+        stop = query.length - 1))
   }
 }

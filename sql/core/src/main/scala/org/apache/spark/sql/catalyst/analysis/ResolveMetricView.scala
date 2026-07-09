@@ -23,13 +23,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Measure}
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.METRIC_VIEW_PLACEHOLDER
-import org.apache.spark.sql.metricview.logical.{MetricViewPlaceholder, ResolvedMetricView}
-import org.apache.spark.sql.metricview.serde.{Column => CanonicalColumn, DimensionExpression, JsonUtils, MeasureExpression, MetricView => CanonicalMetricView}
-import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
+import org.apache.spark.sql.metricview.logical.{DimensionInputColumn, InputColumn, MeasureInputColumn, MetricViewPlaceholder, ResolvedMetricView}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Analysis rule for resolving metric view operations (CREATE and SELECT).
@@ -165,7 +163,6 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * into resolved logical plans that can be further optimized and executed.
  */
 case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
-  private def parser: ParserInterface = session.sessionState.sqlParser
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.containsPattern(METRIC_VIEW_PLACEHOLDER)) {
       return plan
@@ -176,7 +173,7 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
       // are aggregate functions, we need to use an Aggregate node and group by all
       // dimensions to get the output schema.
       case mvp: MetricViewPlaceholder if mvp.isCreate && mvp.child.resolved =>
-        val (dimensions, measures) = buildMetricViewOutput(mvp.desc)
+        val (dimensions, measures) = buildMetricViewOutput(mvp.inputColumns)
         Aggregate(
           // group by all dimensions
           dimensions.map(_.toAttribute).toSeq,
@@ -190,9 +187,11 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
       // Resolve the Aggregate node based on the metric view output and then replace
       // the AttributeReference of the metric view output to the actual expressions.
       case node @ MetricViewReadOperation(metricView) =>
-        // step 1: parse the metric view definition
+        // step 1: build typed dimension / measure columns from the placeholder's
+        // pre-parsed `inputColumns`. These were populated by `MetricViewPlanner` from the
+        // YAML descriptor so the resolver doesn't need to re-parse expressions here.
         val (dimensions, measures) =
-          parseMetricViewColumns(metricView.outputMetrics, metricView.desc.select)
+          buildMetricViewColumns(metricView.outputMetrics, metricView.inputColumns)
 
         // step 2: build the Project node containing the dimensions
         val dimensionExprs = dimensions.map(_.namedExpr)
@@ -235,50 +234,40 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
     }
   }
 
-  private def buildMetricViewOutput(metricView: CanonicalMetricView)
+  /**
+   * Builds the named expressions used by the CREATE-time aggregate (so the analyzer can
+   * derive the output schema). Reads pre-parsed expressions from [[InputColumn]]s.
+   */
+  private def buildMetricViewOutput(inputColumns: Seq[InputColumn])
   : (Seq[NamedExpression], Seq[NamedExpression]) = {
     val dimensions = new mutable.ArrayBuffer[NamedExpression]()
     val measures = new mutable.ArrayBuffer[NamedExpression]()
-    metricView.select.foreach { col =>
-      val metadata = new MetadataBuilder()
-        .withMetadata(Metadata.fromJson(JsonUtils.toJson(col.getColumnMetadata)))
-        .build()
-      col.expression match {
-        case DimensionExpression(expr) =>
-          dimensions.append(
-            Alias(parser.parseExpression(expr), col.name)(explicitMetadata = Some(metadata)))
-        case MeasureExpression(expr) =>
-          measures.append(
-            Alias(parser.parseExpression(expr), col.name)(explicitMetadata = Some(metadata)))
-      }
+    inputColumns.foreach {
+      case c: DimensionInputColumn =>
+        dimensions.append(Alias(c.expr, c.name)(explicitMetadata = Some(c.metadata)))
+      case c: MeasureInputColumn =>
+        measures.append(Alias(c.expr, c.name)(explicitMetadata = Some(c.metadata)))
     }
     (dimensions.toSeq, measures.toSeq)
   }
 
-  private def parseMetricViewColumns(
+  /**
+   * Pairs each pre-parsed [[InputColumn]] with the matching output attribute (by position)
+   * so the resolver can replace `MEASURE(<measure-name>)` references with the original
+   * aggregate expression while preserving exprId and data type.
+   */
+  private def buildMetricViewColumns(
       metricViewOutput: Seq[Attribute],
-      columns: Seq[CanonicalColumn]
+      inputColumns: Seq[InputColumn]
   ): (Seq[MetricViewDimension], Seq[MetricViewMeasure]) = {
     val dimensions = new mutable.ArrayBuffer[MetricViewDimension]()
     val measures = new mutable.ArrayBuffer[MetricViewMeasure]()
-    metricViewOutput.zip(columns).foreach { case (attr, column) =>
-      column.expression match {
-        case DimensionExpression(expr) =>
-          dimensions.append(
-            MetricViewDimension(
-              attr.name,
-              parser.parseExpression(expr),
-              attr.exprId,
-              attr.dataType)
-          )
-        case MeasureExpression(expr) =>
-          measures.append(
-            MetricViewMeasure(
-              attr.name,
-              parser.parseExpression(expr),
-              attr.exprId,
-              attr.dataType)
-          )
+    metricViewOutput.zip(inputColumns).foreach { case (attr, column) =>
+      column match {
+        case c: DimensionInputColumn =>
+          dimensions.append(MetricViewDimension(attr.name, c.expr, attr.exprId, attr.dataType))
+        case c: MeasureInputColumn =>
+          measures.append(MetricViewMeasure(attr.name, c.expr, attr.exprId, attr.dataType))
       }
     }
     (dimensions.toSeq, measures.toSeq)

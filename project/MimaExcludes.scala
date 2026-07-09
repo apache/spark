@@ -33,8 +33,28 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  // Exclude rules for 5.0.x from 4.3.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v43excludes
+
+  // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
+  lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
+    // [SPARK-57910] ALS reuses the shared HasIntermediateStorageLevel param; the param and its
+    // getter are declared final in the shared trait (same name, type, default and validation).
+    ProblemFilters.exclude[FinalMethodProblem](
+      "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
+    ProblemFilters.exclude[FinalMethodProblem](
+      "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-57987] Add desc field to the SQL REST API Node case class
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
+  )
+
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
+    // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
     // [SQL] SafeJsonSerializer.safeMapToJValue: second parameter widened from Function1 to
     // Function2 so the key is passed to the value serializer (progress.scala). Binary-incompatible
     // vs spark-sql-api 4.0.0; not part of the public supported API (private[streaming] package).
@@ -47,6 +67,8 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this"),
     // [SPARK-55228][SQL] Implement Dataset.zipWithIndex in Scala API
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zipWithIndex"),
+    // [SPARK-55886][SQL] Add DataFrame.zip
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.zip"),
     // [SPARK-55949][SQL] Add DataFrame API for CDC queries
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.DataFrameReader.changes"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.changes"),
@@ -55,7 +77,22 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
+    // [SPARK-56700][SS] Make DataStreamReader.name public
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
+    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
+    // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin"),
+    // [SPARK-57332][SQL] MySQLDialect no longer overrides the visit methods below; the public
+    // Scala overrides on its private SQL builder are replaced by the inherited protected Java
+    // methods of V2ExpressionSQLBuilder. MySQLDialect is private, so this is not a public API.
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitStartsWith"),
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitEndsWith"),
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitContains"),
+    // [SPARK-57491][CORE] Add PostStatusUpdateListener to TaskContext for stale push detection
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addPostStatusUpdateListener"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.invokePostStatusUpdateListeners")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
@@ -88,7 +125,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList"),
 
     // [SPARK-54323][PYTHON] Change the way to access logs to TVF instead of system view
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs"),
+
+    // [SPARK-56719][SS] Add DataStreamWriter.name() API for sink evolution
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamWriter.name")
   )
 
   // Default exclude rules
@@ -147,6 +187,8 @@ object MimaExcludes {
   )
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("5.0") => v50excludes
+    case v if v.startsWith("4.3") => v43excludes
     case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()

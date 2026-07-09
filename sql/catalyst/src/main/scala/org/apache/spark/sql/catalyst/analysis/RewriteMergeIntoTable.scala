@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, DeleteAction, Filter, HintInfo, InsertAction, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
@@ -52,6 +52,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // NOT MATCHED conditions may only refer to columns in source so they can be pushed down
@@ -73,7 +74,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
           }
           val project = Project(projectList, joinPlan)
 
-          AppendData.byPosition(r, project)
+          InsertOnlyMerge(r, project)
 
         case _ =>
           m
@@ -85,6 +86,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r: DataSourceV2Relation =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
 
           // there are only NOT MATCHED actions, use a left anti join to remove any matching rows
@@ -114,7 +116,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             output = generateExpandOutput(r.output, outputs),
             joinPlan)
 
-          AppendData.byPosition(r, mergeRows)
+          InsertOnlyMerge(r, mergeRows)
 
         case _ =>
           m
@@ -124,6 +126,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
+          checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
           val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
           table.operation match {
@@ -295,7 +298,12 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     // build a plan to write the row delta to the table
     val writeRelation = relation.copy(table = operationTable)
     val projections = buildWriteDeltaProjections(mergeRowsPlan, rowAttrs, rowIdAttrs, metadataAttrs)
-    WriteDelta(writeRelation, cond, mergeRowsPlan, relation, projections)
+    val groupFilterCond = if (notMatchedBySourceActions.isEmpty && groupFilterEnabled) {
+      Some(toGroupFilterCondition(relation, source, cond))
+    } else {
+      None
+    }
+    WriteDelta(writeRelation, cond, mergeRowsPlan, relation, projections, groupFilterCond)
   }
 
   private def chooseWriteDeltaJoinType(

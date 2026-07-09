@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -56,8 +57,11 @@ abstract class FileTable(
         options.asScala.toMap, userSpecifiedSchema)
     } else {
       // This is a non-streaming file based datasource.
+      val ignoredPathSegmentRegex =
+        new FileSourceOptions(caseSensitiveMap).ignoredPathSegmentRegexPattern
       val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths)
+        checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths,
+        ignoredPathSegmentRegex = ignoredPathSegmentRegex)
       val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
       new InMemoryFileIndex(
         sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)

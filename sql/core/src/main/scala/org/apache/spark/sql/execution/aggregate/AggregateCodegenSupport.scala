@@ -150,9 +150,12 @@ trait AggregateCodegenSupport
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
+    // Pass `partitionIndex` as a parameter so bare references in the child's
+    // produce resolve to the local, not the protected superclass field.
+    // Required when `addNewFunction` spills this helper to a nested class.
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-         |private void $doAgg() throws java.io.IOException {
+         |private void $doAgg(int partitionIndex) throws java.io.IOException {
          |  // initialize aggregation buffer
          |  $initBufVar
          |
@@ -167,11 +170,11 @@ trait AggregateCodegenSupport
         val beforeAgg = ctx.freshName("beforeAgg")
         s"""
            |long $beforeAgg = System.nanoTime();
-           |$doAggFuncName();
+           |$doAggFuncName(partitionIndex);
            |$aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);
          """.stripMargin
       } else {
-        s"$doAggFuncName();"
+        s"$doAggFuncName(partitionIndex);"
       }
 
     s"""

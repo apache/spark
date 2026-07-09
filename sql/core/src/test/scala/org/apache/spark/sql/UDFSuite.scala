@@ -64,7 +64,7 @@ private case class KryoBufAggregator() extends Aggregator[Long, KryoEncodedBuf, 
   override def outputEncoder: Encoder[Long] = Encoders.scalaLong
 }
 
-class UDFSuite extends QueryTest with SharedSparkSession {
+class UDFSuite extends SharedSparkSession {
   import testImplicits._
 
   test("udf") {

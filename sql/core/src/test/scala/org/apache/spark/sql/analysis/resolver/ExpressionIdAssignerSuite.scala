@@ -22,7 +22,7 @@ import java.util.IdentityHashMap
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.resolver.{ExpressionIdAssigner, Resolver}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class ExpressionIdAssignerSuite extends QueryTest with SharedSparkSession {
+class ExpressionIdAssignerSuite extends SharedSparkSession {
   private val col1Integer = AttributeReference(name = "col1", dataType = IntegerType)()
   private val col1IntegerAlias = Alias(col1Integer, "a")()
   private val col2Integer = AttributeReference(name = "col2", dataType = IntegerType)()

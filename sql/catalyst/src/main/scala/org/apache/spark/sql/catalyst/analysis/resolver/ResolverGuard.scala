@@ -474,9 +474,8 @@ class ResolverGuard(
   private def checkUnresolvedFunction(unresolvedFunction: UnresolvedFunction) = {
     val nameParts = unresolvedFunction.nameParts
     val funcName = nameParts.last.toLowerCase(Locale.ROOT)
-
-    if (nameParts.length == 1) {
-      // Unqualified: same as master (unsupported, non-builtin, or check children)
+    if (nameParts.size == 1) {
+      // Unqualified: reject if unsupported, else non-builtin or check children (same as master)
       if (isUnsupportedFunction(funcName)) {
         Some(s"unsupported function ${funcName}")
       } else if (!isBuiltinFunction(funcName)) {
@@ -493,7 +492,7 @@ class ResolverGuard(
         unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
       }
     } else if (FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
-      // Session-qualified: allow through (system-first behavior)
+      // Session-qualified: allow through (PATH + system-first)
       unresolvedFunction.children.collectFirst { case CheckExpression(reason) => reason }
     } else {
       Some("multi-part function name")
@@ -563,14 +562,14 @@ class ResolverGuard(
           _: Length | _: BitLength | _: OctetLength | _: Levenshtein | _: SoundEx | _: Ascii |
           _: Chr | _: Base64 | _: UnBase64 | _: Decode | _: StringDecode | _: Encode | _: ToBinary |
           _: FormatNumber | _: Sentences | _: StringSplitSQL | _: SplitPart | _: Empty2Null |
-          _: Luhncheck =>
+          _: Luhncheck | _: StringInstrWithOccurrence =>
         true
       // Datetime
       case _: CurrentTime | _: CurrentTimestampLike | _: TimeZoneAwareExpression =>
         true
       // Decimal
       case _: UnscaledValue | _: MakeDecimal | _: CheckOverflow | _: CheckOverflowInSum |
-          _: DecimalAddNoOverflowCheck |
+          _: DecimalAddNoOverflowCheck | _: DecimalSubtractNoOverflowCheck |
           _: DecimalDivideWithOverflowCheck =>
         true
       // Interval

@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark._
 import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
-import org.apache.spark.sql.{functions, Encoder, Encoders, QueryTest, Row}
+import org.apache.spark.sql.{functions, Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.classic.Dataset
@@ -41,8 +41,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
-class DataFrameCallbackSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameCallbackSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
   import functions._

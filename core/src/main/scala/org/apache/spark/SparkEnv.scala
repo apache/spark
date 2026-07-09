@@ -46,9 +46,13 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
 import org.apache.spark.storage._
+import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkUDFWorkerLogger
 
 /**
  * :: DeveloperApi ::
@@ -120,6 +124,50 @@ class SparkEnv (
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  /**
+   * :: Experimental ::
+   * Dispatcher factory to generate UDF worker dispatchers
+   * using the new UDF framework proposed in SPARK-55278.
+   * Initialized on first use via [[getExternalUDFDispatcher]].
+   */
+  @volatile private var udfDispatcherManager: Option[UDFDispatcherManager] = None
+
+  private def createUDFDispatcherManager(): UDFDispatcherManager = {
+    val factory = new UDFDispatcherFactory {
+      override def createDispatcher(
+          workerSpec: UDFWorkerSpecification,
+          logger: org.apache.spark.udf.worker.core.WorkerLogger
+      ): WorkerDispatcher = {
+        // TODO [SPARK-55278]: Wire in the correct dispatcher factory
+        throw new UnsupportedOperationException(
+          "No UDF dispatcher factory configured. " +
+            "Set up a concrete factory for SPARK-55278.")
+      }
+    }
+    new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns the [[WorkerDispatcher]] for the given worker
+   * specification via the [[UDFDispatcherManager]].
+   */
+  private[spark] def getExternalUDFDispatcher(
+      workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
+    val manager : UDFDispatcherManager = udfDispatcherManager.getOrElse {
+      synchronized {
+        // Get or Else synchronized to protect
+        // against concurrent creation requests.
+        udfDispatcherManager.getOrElse {
+          val created = createUDFDispatcherManager()
+          udfDispatcherManager = Some(created)
+          created
+        }
+      }
+    }
+    manager.getDispatcher(workerSpec)
+  }
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
@@ -134,7 +182,9 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
+      udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
+      _streamingShuffleOutputTracker.foreach(_.stop())
       if (shuffleManager != null) {
         shuffleManager.stop()
       }
@@ -253,12 +303,61 @@ class SparkEnv (
       // Signal that the ShuffleManager has been initialized
       shuffleManagerInitLatch.countDown()
     }
+    initializeStreamingShuffleOutputTracker()
   }
 
-  private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
+  // Holds the streaming shuffle output tracker, which is only present when the configured
+  // shuffle manager requires it (i.e., StreamingShuffleManager or MultiShuffleManager).
+  @volatile private var _streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
+    None
+
+  def streamingShuffleOutputTracker: Option[StreamingShuffleOutputTracker] =
+    _streamingShuffleOutputTracker
+
+  /**
+   * Initialize the StreamingShuffleOutputTracker if the configured shuffle manager requires one
+   * and one does not already exist. This method is idempotent -- calling it multiple times is safe.
+   */
+  private def initializeStreamingShuffleOutputTracker(): Unit = {
+    if (_streamingShuffleOutputTracker.isDefined) {
+      return
+    }
+
+    val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
+    if (shuffleManagerName == classOf[StreamingShuffleManager].getName
+        || shuffleManagerName == classOf[MultiShuffleManager].getName) {
+      val tracker = if (SparkContext.isDriver(executorId)) {
+        new StreamingShuffleOutputTrackerMaster(conf)
+      } else {
+        new StreamingShuffleOutputTrackerWorker(conf)
+      }
+
+      if (SparkContext.isDriver(executorId)) {
+        tracker.trackerEndpoint = rpcEnv.setupEndpoint(
+          StreamingShuffleOutputTracker.ENDPOINT_NAME,
+          new StreamingShuffleOutputTrackerMasterEndpoint(
+            rpcEnv,
+            tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster],
+            conf))
+      } else {
+        tracker.trackerEndpoint = RpcUtils.makeDriverRef(
+          StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
+      }
+      _streamingShuffleOutputTracker = Some(tracker)
+    }
+  }
+
+  private[spark] def initializeMemoryManager(
+      numUsableCores: Int,
+      offHeapAllowed: Boolean = true): Unit = {
     Preconditions.checkState(null == memoryManager,
       "Memory manager already initialized to %s", _memoryManager)
-    _memoryManager = UnifiedMemoryManager(conf, numUsableCores)
+    val memoryManagerConf = if (offHeapAllowed) {
+      conf
+    } else {
+      conf.clone.set(MEMORY_OFFHEAP_ENABLED, false).set(MEMORY_OFFHEAP_SIZE, 0L)
+    }
+    _memoryManager = UnifiedMemoryManager(memoryManagerConf, numUsableCores)
   }
 }
 

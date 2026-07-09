@@ -252,7 +252,36 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+private object CeilFloor {
+  def doubleToLong(value: Double, context: QueryContext): Long = {
+    if (!value.isNaN &&
+        (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      throw QueryExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+    value.toLong
+  }
+
+  def doubleToLongCode(
+      input: String,
+      funcName: String,
+      result: String,
+      roundedValue: String,
+      errorContext: String): String = {
+    s"""
+       |double $roundedValue = java.lang.Math.$funcName($input);
+       |if (!java.lang.Double.isNaN($roundedValue) &&
+       |    ($roundedValue < (double) java.lang.Long.MIN_VALUE ||
+       |     $roundedValue >= (double) java.lang.Long.MAX_VALUE)) {
+       |  throw QueryExecutionErrors.arithmeticOverflowError(
+       |    "long overflow", "", $errorContext);
+       |}
+       |$result = (long) $roundedValue;
+       |""".stripMargin
+  }
+}
+
+case class Ceil(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.ceil, "CEIL") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -260,11 +289,17 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      CeilFloor.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
@@ -275,6 +310,12 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        nullSafeCodeGen(ctx, ev, c => {
+          val roundedValue = ctx.freshName("roundedValue")
+          val errorContext = getContextOrNullCode(ctx)
+          CeilFloor.doubleToLongCode(c, funcName, ev.value, roundedValue, errorContext)
+        })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -418,40 +459,11 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => {
-    // fdlibm e_acosh.c algorithm
-    if (x < 1.0) {
-      Double.NaN
-    } else if (x >= (1 << 28)) {
-      StrictMath.log(x) + StrictMath.log(2.0)
-    } else if (x == 1.0) {
-      0.0
-    } else if (x > 2.0) {
-      StrictMath.log(2.0 * x - 1.0 / (x + math.sqrt(x * x - 1.0)))
-    } else {
-      val t = x - 1.0
-      StrictMath.log1p(t + math.sqrt(2.0 * t + t * t))
-    }
-  }, "ACOSH") {
+  // fdlibm e_acosh.c algorithm, shared with codegen via ExpressionImplUtils.acosh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.acosh(x), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val sm = "java.lang.StrictMath"
-      val t = ctx.freshName("t")
-      s"""
-         |if ($c < 1.0) {
-         |  ${ev.value} = java.lang.Double.NaN;
-         |} else if ($c >= ${1 << 28}.0) {
-         |  ${ev.value} = $sm.log($c) + $sm.log(2.0);
-         |} else if ($c == 1.0) {
-         |  ${ev.value} = 0.0;
-         |} else if ($c > 2.0) {
-         |  ${ev.value} = $sm.log(2.0 * $c - 1.0 / ($c + java.lang.Math.sqrt($c * $c - 1.0)));
-         |} else {
-         |  double $t = $c - 1.0;
-         |  ${ev.value} = $sm.log1p($t + java.lang.Math.sqrt(2.0 * $t + $t * $t));
-         |}
-         |""".stripMargin
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.acosh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
@@ -560,7 +572,8 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
+case class Floor(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.floor, "FLOOR") with SupportQueryContext {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -568,11 +581,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case _ => LongType
   }
 
+  override def initQueryContext(): Option[QueryContext] = {
+    if (failOnError) Some(origin.context) else None
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
+    case DoubleType if failOnError =>
+      CeilFloor.doubleToLong(f(input.asInstanceOf[Double]), getContextOrNull())
     case DoubleType => f(input.asInstanceOf[Double]).toLong
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
@@ -583,11 +602,17 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
+      case DoubleType if failOnError =>
+        nullSafeCodeGen(ctx, ev, c => {
+          val roundedValue = ctx.freshName("roundedValue")
+          val errorContext = getContextOrNullCode(ctx)
+          CeilFloor.doubleToLongCode(c, funcName, ev.value, roundedValue, errorContext)
+        })
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
- }
- override protected def withNewChildInternal(newChild: Expression): Floor =
-  copy(child = newChild)
+  }
+  override protected def withNewChildInternal(newChild: Expression): Floor =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit
@@ -877,47 +902,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   since = "3.0.0",
   group = "math_funcs")
 case class Asinh(child: Expression)
-  extends UnaryMathExpression((x: Double) => {
-    // fdlibm s_asinh.c algorithm
-    val ax = Math.abs(x)
-    val w = if (ax.isInfinite || ax.isNaN) {
-      ax
-    } else if (ax < 1.0 / (1 << 28)) {
-      ax
-    } else if (ax > (1 << 28)) {
-      StrictMath.log(ax) + StrictMath.log(2.0)
-    } else if (ax > 2.0) {
-      StrictMath.log(2.0 * ax + 1.0 / (math.sqrt(x * x + 1.0) + ax))
-    } else {
-      val t = x * x
-      StrictMath.log1p(ax + t / (1.0 + math.sqrt(1.0 + t)))
-    }
-    Math.copySign(w, x)
-  }, "ASINH") {
+  // fdlibm s_asinh.c algorithm, shared with codegen via ExpressionImplUtils.asinh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.asinh(x), "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val sm = "java.lang.StrictMath"
-      val ax = ctx.freshName("ax")
-      val w = ctx.freshName("w")
-      val t = ctx.freshName("t")
-      s"""
-         |double $ax = java.lang.Math.abs($c);
-         |double $w;
-         |if (java.lang.Double.isInfinite($ax) || java.lang.Double.isNaN($ax)) {
-         |  $w = $ax;
-         |} else if ($ax < ${1.0 / (1 << 28)}) {
-         |  $w = $ax;
-         |} else if ($ax > ${1 << 28}.0) {
-         |  $w = $sm.log($ax) + $sm.log(2.0);
-         |} else if ($ax > 2.0) {
-         |  $w = $sm.log(2.0 * $ax + 1.0 / (java.lang.Math.sqrt($c * $c + 1.0) + $ax));
-         |} else {
-         |  double $t = $c * $c;
-         |  $w = $sm.log1p($ax + $t / (1.0 + java.lang.Math.sqrt(1.0 + $t)));
-         |}
-         |${ev.value} = java.lang.Math.copySign($w, $c);
-         |""".stripMargin
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.asinh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
@@ -1823,6 +1812,7 @@ case class BRound(
 }
 
 object WidthBucket {
+  /** Shared by interpreted eval and generated Java code; must stay public for codegen. */
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     if (isNull(value, min, max, numBucket)) {
       null
@@ -1831,8 +1821,7 @@ object WidthBucket {
     }
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+  private def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
     numBucket <= 0 ||
       numBucket == Long.MaxValue ||
       jl.Double.isNaN(value) ||
@@ -1841,8 +1830,7 @@ object WidthBucket {
       jl.Double.isNaN(max) || jl.Double.isInfinite(max)
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def computeBucketNumberNotNull(
+  private def computeBucketNumberNotNull(
       value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
@@ -1957,11 +1945,13 @@ case class WidthBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
-      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |  .isNull($input, $min, $max, $numBucket);
+      val bucket = ctx.freshName("bucket")
+      val boxedLong = CodeGenerator.boxedType(dataType)
+      s"""$boxedLong $bucket = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .computeBucketNumber($input, $min, $max, $numBucket);
+         |${ev.isNull} = $bucket == null;
          |if (!${ev.isNull}) {
-         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |  ${ev.value} = $bucket;
          |}""".stripMargin
     })
   }

@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
+class DataFrameSubquerySuite extends SharedSparkSession {
   import testImplicits._
 
   setupTestData()

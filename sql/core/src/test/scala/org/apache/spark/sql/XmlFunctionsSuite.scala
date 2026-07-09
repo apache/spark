@@ -18,17 +18,21 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
+import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
+class XmlFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("from_xml") {
@@ -40,6 +44,53 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(Row(1)) :: Nil)
   }
 
+  test("SPARK-57164: from_xml with a nanos timestamp DDL schema string") {
+    val df = Seq("""<ROW><c>2020-01-01T00:00:00.123456789</c></ROW>""").toDF("value")
+    // FAILFAST so the value-converter rejection propagates instead of becoming a corrupt record.
+    // Pin the session timezone to UTC so LTZ values are predictable without a zone in the string.
+    val options = Map("mode" -> "FAILFAST").asJava
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val truncator = TimestampNanosTestUtils.nanoOfSecTruncator(p)
+        val truncNanos = truncator(123456789)
+        val expectedNTZ = LocalDateTime.of(2020, 1, 1, 0, 0, 0, truncNanos)
+        val expectedLTZ = expectedNTZ.toInstant(ZoneOffset.UTC)
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> (TimestampNTZNanosType(p), expectedNTZ.asInstanceOf[Any]),
+          s"TIMESTAMP_LTZ($p)" -> (TimestampLTZNanosType(p), expectedLTZ.asInstanceOf[Any]),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" ->
+            (TimestampNTZNanosType(p), expectedNTZ.asInstanceOf[Any]),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" ->
+            (TimestampLTZNanosType(p), expectedLTZ.asInstanceOf[Any])).foreach {
+          case (spelling, (expectedType, expectedVal)) =>
+            val parsed = df.select(from_xml($"value", s"c $spelling", options).as("v"))
+            // The schema string resolves to the nanos type ...
+            val parsedType = parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType
+            assert(parsedType === expectedType)
+            // ... the XML datasource parses the value and round-trips to the expected value.
+            checkAnswer(parsed, Row(Row(expectedVal)) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57458: from_xml rejects zoned input for NTZ nanos columns") {
+    // A string with an explicit zone offset must be rejected for TIMESTAMP_NTZ(p) because
+    // the NTZ parse path uses allowTimeZone=false, matching the micro NTZ and CSV behaviour.
+    val df = Seq("""<ROW><c>2020-01-01T00:00:00.123456789+05:00</c></ROW>""").toDF("value")
+    val options = Map("mode" -> "FAILFAST").asJava
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        val parsed = df.select(from_xml($"value", s"c TIMESTAMP_NTZ($p)", options).as("v"))
+        intercept[SparkException] {
+          parsed.collect()
+        }
+      }
+    }
+  }
+
   test("SPARK-48300: from_xml - Codegen Support") {
     withTempView("XmlToStructsTable") {
       val dataDF = Seq("""<ROW><a>1</a></ROW>""").toDF("value")
@@ -47,6 +98,60 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = sql("SELECT from_xml(value, 'a INT') FROM XmlToStructsTable")
       assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       checkAnswer(df, Row(Row(1)) :: Nil)
+    }
+  }
+
+  test("from_xml variant output honors the parse mode") {
+    // A raw control char (code 5, ENQ) in XML text is illegal in XML 1.0 and the parser rejects
+    // it. Before the fix the variant path bypassed FailureSafeParser, so the parse `mode` had no
+    // effect and a malformed record aborted the whole query.
+    val badRec = "<Event>ab" + 5.toChar + "cd</Event>"
+    val goodRec = "<Event><a>1</a></Event>"
+    val df = Seq(badRec, goodRec).toDF("value")
+    df.createOrReplaceTempView("from_xml_variant_mode")
+
+    // Exercise both the interpreted path and whole-stage codegen.
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        // PERMISSIVE: the good record parses, the malformed record is rescued to null. Compare
+        // to_json of the variant so the expected value is concrete; key off `value` since row
+        // order is not guaranteed.
+        checkAnswer(
+          spark.sql("SELECT value, to_json(from_xml(value, 'variant', " +
+            "map('rowTag','Event','mode','PERMISSIVE'))) AS json FROM from_xml_variant_mode"),
+          Seq(Row(goodRec, "{\"a\":1}"), Row(badRec, null)))
+
+        // FAILFAST: the malformed record aborts the query.
+        checkError(
+          exception = intercept[SparkException] {
+            spark.sql("SELECT from_xml(value, 'variant', " +
+              "map('rowTag','Event','mode','FAILFAST')) AS d FROM from_xml_variant_mode").collect()
+          },
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+      }
+    }
+  }
+
+  test("from_xml variant output validates each record against rowValidationXSDPath") {
+    val xsdPath =
+      getTestResourcePath("test-data/xml-resources/basket.xsd").replace("file:/", "/")
+    // The first record satisfies basket.xsd; the second has an element not allowed by the schema.
+    val valid = "<basket><entry><key>1</key><value>fork</value></entry></basket>"
+    val invalid = "<basket><unexpected>x</unexpected></basket>"
+    val df = Seq(valid, invalid).toDF("value")
+    df.createOrReplaceTempView("from_xml_xsd")
+
+    Seq("true", "false").foreach { wholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage) {
+        val result = spark.sql("SELECT value, to_json(from_xml(value, 'variant', " +
+          s"map('rowTag','basket','rowValidationXSDPath','$xsdPath'))) AS json FROM from_xml_xsd")
+          .collect().map(r => r.getString(0) -> r.getString(1)).toMap
+        assert(result(invalid) == null,
+          s"XSD-invalid record should be rescued to null (wholeStageCodegen=$wholeStage)")
+        assert(result(valid) != null && result(valid).contains("fork"),
+          s"XSD-valid record should parse (wholeStageCodegen=$wholeStage), got: ${result(valid)}")
+      }
     }
   }
 
@@ -562,7 +667,10 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, time, timeStr) =>

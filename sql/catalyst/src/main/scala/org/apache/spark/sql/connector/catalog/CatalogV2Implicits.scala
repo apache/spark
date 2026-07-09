@@ -171,6 +171,15 @@ private[sql] object CatalogV2Implicits {
         throw QueryCompilationErrors.requiresSinglePartNamespaceError(asMultipartIdentifier)
     }
 
+    // Build a v1 TableIdentifier for display / error-rendering purposes. Collapses a
+    // multi-part namespace to its last segment (v1 TableIdentifier has a single-string
+    // database field). Callers that need a lossless multi-part form should build a
+    // Seq[String] from toQualifiedNameParts instead.
+    def asLegacyTableIdentifier(catalogName: String): TableIdentifier = TableIdentifier(
+      table = ident.name(),
+      database = ident.namespace().lastOption,
+      catalog = Some(catalogName))
+
     /**
      * Tries to convert catalog identifier to the table identifier. Table identifier does not
      * support multiple namespaces (nested namespaces), so if identifier contains nested namespace,

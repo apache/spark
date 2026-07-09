@@ -53,6 +53,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
+  def showTableExtendedJsonWithPartitionError(): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION",
+      messageParameters = Map.empty)
+  }
+
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",

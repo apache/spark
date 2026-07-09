@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 import org.apache.spark.sql.columnar.{CachedBatch, CachedBatchSerializer}
@@ -141,8 +141,7 @@ class DefaultCachedBatchSerializerNoUnwrap extends DefaultCachedBatchSerializer 
   }
 }
 
-class CachedBatchSerializerSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CachedBatchSerializerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   override protected def sparkConf: SparkConf = {
@@ -201,8 +200,7 @@ class CachedBatchSerializerSuite extends QueryTest
 }
 
 
-class CachedBatchSerializerNoUnwrapSuite extends QueryTest
-  with SharedSparkSession with AdaptiveSparkPlanHelper {
+class CachedBatchSerializerNoUnwrapSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 

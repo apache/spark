@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class TableLocationSuite extends QueryTest with SharedSparkSession {
+class TableLocationSuite extends SharedSparkSession {
 
   test("SPARK-44185: relative LOCATION in CTAS should be qualified with warehouse") {
     withSQLConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key -> "false") {

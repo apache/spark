@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.resolver.Resolver
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.test.SharedSparkSession
 
-class AggregateExpressionResolverSuite extends QueryTest with SharedSparkSession {
+class AggregateExpressionResolverSuite extends SharedSparkSession {
   private val table = LocalRelation.fromExternalRows(
     Seq("a".attr.int),
     Seq(Row(1))

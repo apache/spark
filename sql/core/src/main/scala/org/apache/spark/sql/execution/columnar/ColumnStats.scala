@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()
@@ -324,6 +324,30 @@ private[columnar] final class IntervalColumnStats extends ColumnStats {
 
   override def collectedStatistics: Array[Any] =
     Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
+private[columnar] final class TimestampNanosColumnStats extends ColumnStats {
+  protected var upper: TimestampNanosVal = null
+  protected var lower: TimestampNanosVal = null
+
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      // TimestampNanosVal has a total order matching calendar order, so collect min/max bounds
+      // (like DecimalColumnStats, not IntervalColumnStats) to enable partition pruning, matching
+      // the micro-precision timestamp path (LongColumnStats). NTZ and LTZ share the same physical
+      // payload, so a single getter reads the value for both.
+      val value = row.getTimestampNTZNanos(ordinal)
+      if (upper == null || value.compareTo(upper) > 0) upper = value
+      if (lower == null || value.compareTo(lower) < 0) lower = value
+      sizeInBytes += TimestampNanosVal.SIZE_IN_BYTES
+      count += 1
+    } else {
+      gatherNullStats()
+    }
+  }
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) extends ColumnStats {

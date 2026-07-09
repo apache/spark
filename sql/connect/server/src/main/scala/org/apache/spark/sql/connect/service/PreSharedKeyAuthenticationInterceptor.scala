@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.nio.charset.StandardCharsets.UTF_8
+import java.security.MessageDigest
+
 import io.grpc.{Metadata, ServerCall, ServerCallHandler, ServerInterceptor, Status}
 
 class PreSharedKeyAuthenticationInterceptor(token: String) extends ServerInterceptor {
@@ -36,7 +39,9 @@ class PreSharedKeyAuthenticationInterceptor(token: String) extends ServerInterce
       val status = Status.UNAUTHENTICATED.withDescription("No authentication token provided")
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}
-    } else if (authHeaderValue != expectedValue) {
+    } else if (!MessageDigest.isEqual(
+        authHeaderValue.getBytes(UTF_8),
+        expectedValue.getBytes(UTF_8))) {
       val status = Status.UNAUTHENTICATED.withDescription("Invalid authentication token")
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}

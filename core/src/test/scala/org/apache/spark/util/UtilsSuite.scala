@@ -527,18 +527,24 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val scenario4 = new File(testDir, "scenario4")
     assert(testDir.canWrite)
     assert(testDir.setWritable(false))
-    assert(!Utils.createDirectory(scenario4))
-    assert(!scenario4.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario4"))
+    // Skip when write permission cannot actually be revoked (e.g., running as root).
+    if (!testDir.canWrite) {
+      assert(!Utils.createDirectory(scenario4))
+      assert(!scenario4.exists())
+      assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario4"))
+    }
     assert(testDir.setWritable(true))
 
     // 5. The parent directory cannot execute
     val scenario5 = new File(testDir, "scenario5")
     assert(testDir.canExecute)
     assert(testDir.setExecutable(false))
-    assert(!Utils.createDirectory(scenario5))
-    assert(!scenario5.exists())
-    assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario5"))
+    // Skip when execute permission cannot actually be revoked (e.g., running as root).
+    if (!testDir.canExecute) {
+      assert(!Utils.createDirectory(scenario5))
+      assert(!scenario5.exists())
+      assertThrows[IOException](Utils.createDirectory(testDirPath, "scenario5"))
+    }
     assert(testDir.setExecutable(true))
 
     // The following 3 scenarios are only for the method: createDirectory(File)
@@ -717,11 +723,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     try {
       Utils.setLogLevel(Level.ALL)
       assert(rootLogger.getLevel == Level.ALL)
-      assert(log.isInfoEnabled())
+      // Assert enablement on the root logger that `Utils.setLogLevel` controls directly, rather
+      // than on this suite's own logger. The latter is fragile: if the logging configuration
+      // contains an intermediate `org.apache.spark*` LoggerConfig, the suite logger resolves to
+      // that config instead of root, so its effective level no longer tracks `setLogLevel` even
+      // though the root level is updated correctly (as the `getLevel` assertions confirm).
+      assert(rootLogger.isInfoEnabled())
       Utils.setLogLevel(Level.ERROR)
       assert(rootLogger.getLevel == Level.ERROR)
-      assert(!log.isInfoEnabled())
-      assert(log.isErrorEnabled())
+      assert(!rootLogger.isInfoEnabled())
+      assert(rootLogger.isErrorEnabled())
     } finally {
       // Best effort at undoing changes this test made.
       Utils.setLogLevel(current)
@@ -1592,7 +1603,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val sparkConf = new SparkConf()
       .set(MEMORY_OFFHEAP_ENABLED, true)
     val expected =
-      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
+      s"${MEMORY_OFFHEAP_SIZE.key} must be at least 1MiB when ${MEMORY_OFFHEAP_ENABLED.key} == true"
     val message = intercept[IllegalArgumentException] {
       Utils.executorOffHeapMemorySizeAsMb(sparkConf)
     }.getMessage

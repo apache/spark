@@ -21,6 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkClassUtils
@@ -29,7 +30,10 @@ import org.apache.spark.util.SparkClassUtils
  * Helper class for conversions between [[DataType]] and [[proto.DataType]].
  */
 object DataTypeProtoConverter {
-  def toCatalystType(t: proto.DataType): DataType = {
+  def toCatalystType(t: proto.DataType): DataType =
+    ConnectTypeOps.toCatalystType(t).getOrElse(toCatalystTypeDefault(t))
+
+  private def toCatalystTypeDefault(t: proto.DataType): DataType = {
     t.getKindCase match {
       case proto.DataType.KindCase.NULL => NullType
 
@@ -53,13 +57,6 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
-      case proto.DataType.KindCase.TIME =>
-        if (t.getTime.hasPrecision) {
-          TimeType(t.getTime.getPrecision)
-        } else {
-          TimeType()
-        }
-
       case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
         toCatalystYearMonthIntervalType(t.getYearMonthInterval)
@@ -154,10 +151,18 @@ object DataTypeProtoConverter {
     }
 
     if (t.hasJvmClass) {
-      SparkClassUtils
-        .classForName[UserDefinedType[_]](t.getJvmClass)
-        .getConstructor()
-        .newInstance()
+      // Verify the class is a UserDefinedType before constructing it. newInstance() runs the
+      // class's no-arg constructor, so load it without initializing and check the type first,
+      // rather than instantiating an arbitrary client-provided class name and relying on a
+      // later cast (which happens only after the constructor has already run).
+      val clazz =
+        SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
+      if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
+        throw InvalidPlanInput(
+          "CONNECT_INVALID_PLAN.UDT_JVM_CLASS_NOT_UDT",
+          Map("jvmClass" -> t.getJvmClass))
+      }
+      clazz.getConstructor().newInstance()
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
         throw InvalidPlanInput("CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS", Map.empty)
@@ -174,7 +179,12 @@ object DataTypeProtoConverter {
     toConnectProtoTypeInternal(t, bytesToBinary)
   }
 
-  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType = {
+  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType =
+    ConnectTypeOps(t)
+      .map(_.toConnectProtoType)
+      .getOrElse(toConnectProtoTypeDefault(t, bytesToBinary))
+
+  private def toConnectProtoTypeDefault(t: DataType, bytesToBinary: Boolean): proto.DataType = {
     t match {
       case NullType => ProtoDataTypes.NullType
 
@@ -231,12 +241,6 @@ object DataTypeProtoConverter {
       case TimestampType => ProtoDataTypes.TimestampType
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
-
-      case TimeType(precision) =>
-        proto.DataType
-          .newBuilder()
-          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
-          .build()
 
       case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 

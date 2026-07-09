@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericR
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
 import org.apache.spark.sql.execution.LocalTableScanExec
@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 
-class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
+class AvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {
@@ -668,15 +668,18 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("roundtrip in to_avro and from_avro - TIME type with different precisions") {
+    // Avro stores TIME as the time-micros logical type, so this lossless round-trip is limited to
+    // precision 0-6. TIME(7-9) truncates to microseconds over Avro (no time-nanos logical type,
+    // upstream AVRO-4043); that behavior is covered in AvroSuite.
     val df = spark.sql("""
       SELECT
-        TIME'12:34:56' as time_p0,
-        TIME'12:34:56.1' as time_p1,
-        TIME'12:34:56.12' as time_p2,
-        TIME'12:34:56.123' as time_p3,
-        TIME'12:34:56.1234' as time_p4,
-        TIME'12:34:56.12345' as time_p5,
-        TIME'12:34:56.123456' as time_p6
+        CAST(TIME'12:34:56' AS TIME(0)) as time_p0,
+        CAST(TIME'12:34:56.1' AS TIME(1)) as time_p1,
+        CAST(TIME'12:34:56.12' AS TIME(2)) as time_p2,
+        CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
+        CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
+        CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
+        CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
     """)
 
     val precisions = Seq(0, 1, 2, 3, 4, 5, 6)

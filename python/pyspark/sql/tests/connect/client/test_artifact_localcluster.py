@@ -20,7 +20,7 @@ from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class LocalClusterArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
+class LocalClusterArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
     @classmethod
     def conf(cls):
         return (

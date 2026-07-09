@@ -594,28 +594,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       logger.info("Merging {} spill files using bounded merge with factor {}",
           MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
           MDC.of(LogKeys.MERGE_FACTOR, spillMergeFactor));
-
-      // This assignment is not inside synchronized(this), unlike the read in
-      // cleanupResources(). That is safe because all callers of cleanupResources()
-      // (the task completion listener, iterator-end cleanup from wrappers like
-      // UnsafeExternalRowSorter / UnsafeKVExternalSorter / SortExec, etc.) run on
-      // the task thread, sequentially with getSortedIterator(). The volatile modifier
-      // on boundedMerger provides memory visibility across any intervening
-      // synchronized blocks.
-      boundedMerger = new UnsafeSorterBoundedSpillMerger(
-          spillMergeFactor,
-          recordComparatorSupplier.get(),
-          prefixComparator,
-          blockManager,
-          serializerManager,
-          fileBufferSizeBytes);
-
-      UnsafeSorterIterator inMemIter = null;
-      if (inMemSorter != null) {
-        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
-        inMemIter = readingIterator;
-      }
-      return boundedMerger.merge(spillWriters, inMemIter);
+      BoundedMergerContext ctx = prepareBoundedMerge();
+      return ctx.merger.merge(ctx.snapshot, ctx.inMemIter);
     } else {
       // Original single-round merge: open all spill readers at once
       logger.info("Merging {} spill files in single round",
@@ -631,6 +611,60 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       }
       return spillMerger.getSortedIterator();
     }
+  }
+
+  @VisibleForTesting
+  static final class BoundedMergerContext {
+    final List<UnsafeSorterSpillWriter> snapshot;
+    @Nullable final SpillableIterator inMemIter;
+    final UnsafeSorterBoundedSpillMerger merger;
+
+    BoundedMergerContext(
+        List<UnsafeSorterSpillWriter> snapshot,
+        @Nullable SpillableIterator inMemIter,
+        UnsafeSorterBoundedSpillMerger merger) {
+      this.snapshot = snapshot;
+      this.inMemIter = inMemIter;
+      this.merger = merger;
+    }
+  }
+
+  @VisibleForTesting
+  BoundedMergerContext prepareBoundedMerge() {
+    // Snapshot MUST precede readingIterator publication. Once readingIterator is
+    // non-null, a sibling MemoryConsumer's spill request is routed via
+    // readingIterator.spill(), which appends a new writer to spillWriters AND rebinds
+    // readingIterator.upstream to that same file. A post-publication snapshot would
+    // then feed that file to BOTH the snapshot path and readingIterator -- duplicate
+    // records in the merged output. List.copyOf returns an unmodifiable list so any
+    // future code that mutates the snapshot (or aliases the live spillWriters field
+    // into the context and adds to it) fails fast.
+    final List<UnsafeSorterSpillWriter> snapshot = List.copyOf(spillWriters);
+
+    // The volatile fields published below -- boundedMerger and readingIterator -- are
+    // written without holding synchronized(this). Safe because all callers of
+    // getSortedIterator() and cleanupResources() (the task completion listener,
+    // iterator-end cleanup from wrappers like UnsafeExternalRowSorter /
+    // UnsafeKVExternalSorter / SortExec, etc.) run on the task thread, sequentially.
+    // The volatile modifier provides memory visibility to off-task-thread readers:
+    // sibling MemoryConsumer.spill() reads readingIterator, and cleanupResources()'s
+    // synchronized(this) read of boundedMerger crosses any intervening synchronized
+    // blocks.
+    final UnsafeSorterBoundedSpillMerger merger = new UnsafeSorterBoundedSpillMerger(
+        spillMergeFactor,
+        recordComparatorSupplier.get(),
+        prefixComparator,
+        blockManager,
+        serializerManager,
+        fileBufferSizeBytes);
+    boundedMerger = merger;
+
+    SpillableIterator inMemIter = null;
+    if (inMemSorter != null) {
+      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+      inMemIter = readingIterator;
+    }
+    return new BoundedMergerContext(snapshot, inMemIter, merger);
   }
 
   @VisibleForTesting boolean hasSpaceForAnotherRecord() {

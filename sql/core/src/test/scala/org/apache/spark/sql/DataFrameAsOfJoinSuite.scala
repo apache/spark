@@ -27,8 +27,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DataFrameAsOfJoinSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameAsOfJoinSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   def prepareForAsOfJoin(): (classic.DataFrame, classic.DataFrame) = {

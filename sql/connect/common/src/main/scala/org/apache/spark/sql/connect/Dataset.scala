@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.catalyst.plans.NearestByJoinValidation
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.{toExpr, toLiteral, toTypedExpr}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
@@ -240,6 +241,27 @@ class Dataset[T] private[sql] (
     // scalastyle:on println
   }
 
+  private[connect] def explainString(mode: String): String = {
+    val protoMode = mode.trim.toLowerCase(util.Locale.ROOT) match {
+      case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
+      case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
+      case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
+      case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
+      case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
+      case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
+    }
+    sparkSession
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(protoMode))
+      .getExplain
+      .getExplainString
+  }
+
+  private[connect] def explainString(extended: Boolean): String = if (extended) {
+    explainString("extended")
+  } else {
+    explainString("simple")
+  }
+
   /** @inheritdoc */
   def isLocal: Boolean = sparkSession
     .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
@@ -346,6 +368,16 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def zip(other: sql.Dataset[_]): DataFrame = {
+    checkSameSparkSession(other)
+    sparkSession.newDataFrame { builder =>
+      builder.getZipBuilder
+        .setLeft(plan.getRoot)
+        .setRight(other.asInstanceOf[Dataset[_]].plan.getRoot)
+    }
+  }
+
+  /** @inheritdoc */
   def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
     val (leftNullable, rightNullable) = joinTypeValue match {
@@ -419,6 +451,52 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def lateralJoin(right: sql.Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     lateralJoin(right, Some(joinExprs), joinType)
+  }
+
+  private def nearestByJoinImpl(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      joinType: String,
+      mode: String,
+      direction: String): DataFrame = {
+    // Validate locally so Connect users see the same errors as the classic path without a
+    // server round-trip. The validation logic mirrors `NearestByJoinType.apply` /
+    // `NearestByJoinMode.apply` / `NearestByDirection.apply` in sql/catalyst, which
+    // `sql/connect/common` cannot import; the acceptance lists themselves are shared via
+    // `NearestByJoinValidation` in sql-api.
+    Dataset.validateNearestByJoinArgs(numResults, joinType, mode, direction)
+    sparkSession.newDataFrame(Seq(rankingExpression)) { builder =>
+      builder.getNearestByJoinBuilder
+        .setLeft(plan.getRoot)
+        .setRight(right.plan.getRoot)
+        .setRankingExpression(toExpr(rankingExpression))
+        .setNumResults(numResults)
+        .setJoinType(joinType)
+        .setMode(mode)
+        .setDirection(direction)
+    }
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String): DataFrame = {
+    nearestByJoinImpl(right, rankingExpression, numResults, "inner", mode, direction)
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String,
+      joinType: String): DataFrame = {
+    nearestByJoinImpl(right, rankingExpression, numResults, joinType, mode, direction)
   }
 
   override protected def sortInternal(global: Boolean, sortCols: Seq[Column]): Dataset[T] = {
@@ -1568,4 +1646,48 @@ class Dataset[T] private[sql] (
 
   override def queryExecution: QueryExecution =
     throw ConnectClientUnsupportedErrors.queryExecution()
+}
+
+private[sql] object Dataset {
+
+  private[connect] def validateNearestByJoinArgs(
+      numResults: Int,
+      joinType: String,
+      mode: String,
+      direction: String): Unit = {
+    if (numResults < 1 || numResults > NearestByJoinValidation.MaxNumResults) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+        messageParameters = Map(
+          "numResults" -> numResults.toString,
+          "min" -> "1",
+          "max" -> NearestByJoinValidation.MaxNumResults.toString))
+    }
+    val canonicalJoinType = joinType.toLowerCase(java.util.Locale.ROOT).replace("_", "")
+    if (!NearestByJoinValidation.SupportedJoinTypes.contains(canonicalJoinType)) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+        messageParameters = Map(
+          "joinType" -> joinType,
+          "supported" -> NearestByJoinValidation.SupportedJoinTypeDisplay))
+    }
+    if (!NearestByJoinValidation.SupportedModes.contains(
+        mode.toLowerCase(java.util.Locale.ROOT))) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+        messageParameters = Map(
+          "mode" -> mode,
+          "supported" ->
+            NearestByJoinValidation.SupportedModes.mkString("'", "', '", "'")))
+    }
+    if (!NearestByJoinValidation.SupportedDirections.contains(
+        direction.toLowerCase(java.util.Locale.ROOT))) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
+        messageParameters = Map(
+          "direction" -> direction,
+          "supported" ->
+            NearestByJoinValidation.SupportedDirections.mkString("'", "', '", "'")))
+    }
+  }
 }

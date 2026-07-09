@@ -40,10 +40,11 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 /**
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -106,7 +107,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
-    if (isFileFormat && ident.last.isEmpty) {
+    if (isFileFormat && SparkStringUtils.isBlank(ident.last)) {
       unresolved.failAnalysis(
         errorClass = "INVALID_EMPTY_LOCATION",
         messageParameters = Map("location" -> ident.last))
@@ -169,7 +170,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       val tableName = tableIdentWithDB.unquotedString
       val existingTable = catalog.getTableMetadata(tableIdentWithDB)
 
-      if (existingTable.tableType == CatalogTableType.VIEW) {
+      if (existingTable.isViewLike) {
         throw QueryCompilationErrors.saveDataIntoViewNotAllowedError()
       }
 
@@ -528,7 +529,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         query,
         byName,
         conf,
-        supportColDefaultValue = true)
+        TableOutputResolver.DefaultValueFillMode.FILL)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
@@ -737,19 +738,6 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
  * It does so by walking the resolved plan looking for View operators for persisted views.
  */
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
-
-  /**
-   * Checks if comment changes between view and table should trigger schema sync.
-   * When preserveUserComments flag is enabled, comment differences should NOT trigger sync
-   * because we want to preserve user-set view comments.
-   */
-  private def shouldTriggerRedoOnCommentChange(
-      viewField: StructField,
-      tableField: StructField,
-      preserveUserComments: Boolean): Boolean = {
-    !preserveUserComments && viewField.getComment() != tableField.getComment()
-  }
-
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case View(metaData, false, viewQuery, _)
@@ -768,44 +756,19 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           (field.dataType != planField.dataType ||
             field.nullable != planField.nullable ||
             (viewSchemaMode == SchemaEvolution && (
-              field.name != planField.name ||
-                shouldTriggerRedoOnCommentChange(
-                  field,
-                  planField,
-                  session.sessionState.conf.viewSchemaEvolutionPreserveUserComments))))
+              field.getComment() != planField.getComment() ||
+              field.name != planField.name)))
         }
-
-        lazy val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
 
         if (redo) {
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
             val newFields = viewQuery.schema.map {
               case StructField(name, dataType, nullable, _) =>
                 StructField(name, dataType, nullable,
-                  viewFieldsByName(name).metadata)
-            }
-            StructType(newFields)
-          } else if (session.sessionState.conf.viewSchemaEvolutionPreserveUserComments) {
-            // Adopt types/nullable/names from query, but preserve view comments.
-            val newFields = viewQuery.schema.map { planField =>
-              val newMetadata = viewFieldsByName.get(planField.name) match {
-                case Some(viewField) =>
-                  // Use table metadata but override with view comment
-                  val builder = new MetadataBuilder().withMetadata(planField.metadata)
-                  viewField.getComment() match {
-                    case Some(comment) => builder.putString("comment", comment)
-                    case None => builder.remove("comment")
-                  }
-                  builder.build()
-                case None =>
-                  // New column, use table metadata as-is
-                  planField.metadata
-              }
-              StructField(planField.name, planField.dataType, planField.nullable, newMetadata)
+                  viewFields.find(_.name == name).get.metadata)
             }
             StructType(newFields)
           } else {
-            // Legacy behavior: adopt everything from table including comments.
             viewQuery.schema
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,

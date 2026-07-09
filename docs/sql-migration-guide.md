@@ -22,11 +22,26 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.2 to 4.3
+
+- Since Spark 4.3, zero-length files are skipped during Parquet schema inference instead of failing with a `FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER` error.
+- Since Spark 4.3, the configuration key `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled` has been renamed to `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` to reflect that it now applies to storage-partitioned joins, aggregates, and windows. The old key continues to work as an alias.
+- Since Spark 4.3, the Spark Thrift Server rejects setting JVM system properties through the `set:system:` session configuration overlay (for example, in a JDBC connection string). To restore the previous behavior, set `spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties` to `true`.
+- Since Spark 4.3, `GROUP BY GROUPING SETS (())` (and the equivalent empty `GROUP BY CUBE()` / `GROUP BY ROLLUP()`) is treated as a grand total and returns one row over empty input, matching an aggregation with no `GROUP BY` clause; previously it returned no rows. To restore the previous behavior, set `spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled` to `false`.
+
 ## Upgrading from Spark SQL 4.1 to 4.2
 
 - Since Spark 4.2, Spark enables order-independent checksums for shuffle outputs by default to detect data inconsistencies during indeterminate shuffle stage retries. If a checksum mismatch is detected, Spark rolls back and re-executes all succeeding stages that depend on the shuffle output. If rolling back is not possible for some succeeding stages, the job will fail. To restore the previous behavior, set `spark.sql.shuffle.orderIndependentChecksum.enabled` and `spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch` to `false`.
 - Since Spark 4.2, support for Derby JDBC datasource is deprecated.
 - Since Spark 4.2, a new default method `mergeWith` has been added to the `CustomTaskMetric` interface. The default implementation sums the two metric values, which is correct for count-type metrics. Data source connector implementations that report non-additive metrics (e.g., maximum, average, compression ratio, or gauge values) must override `mergeWith` to provide correct merge semantics.
+- Since Spark 4.2, the virtual `system` catalog hosts the new `system.builtin` and `system.session` namespaces. `system.builtin` exposes built-in functions and functions injected through `SparkSessionExtensions`; `system.session` exposes temporary views, temporary functions, and session variables created in the current session. As a result, 2-part references like `builtin.func()` and `session.func()` now follow a mini-path that tries the system namespace first and the current catalog second, so a persistent schema named `builtin` or `session` is no longer reached by `builtin.func()` / `session.func()` when the system namespace contains an object of the same name. To restore the previous behavior (current catalog first), set `spark.sql.legacy.persistentCatalogFirst` to `true`. Persistent schemas with these names are still allowed but should be reached with an explicit catalog prefix (for example, `spark_catalog.session.x`). See [Reserved system names](sql-ref-identifier.html#reserved-system-names).
+- Since Spark 4.2, `CREATE TEMPORARY VIEW`, `CREATE TEMPORARY FUNCTION`, and the corresponding `DROP` statements accept the `session` and `system.session` qualifiers on the object name (in addition to the previously supported unqualified form); for example, `CREATE TEMPORARY VIEW system.session.v AS ...` and `DROP TEMPORARY FUNCTION session.f` are now valid. Any other qualifier on a temporary object is rejected with `INVALID_TEMP_OBJ_QUALIFIER`.
+- Since Spark 4.2, the SQL standard `PATH` feature is available: the `SET PATH` statement, the `current_path()` function, path-based resolution of unqualified routines, tables, views, and session variables, and the configurations `spark.sql.path.enabled` (default `false`) and `spark.sql.defaultPath`. The feature is opt-in; when `spark.sql.path.enabled` is `false`, unqualified resolution falls back to a fixed default path and `SET PATH` is rejected with `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html) and [Name Resolution](sql-ref-name-resolution.html).
+- Since Spark 4.2, duplicate Common Table Expression (CTE) names within a single `WITH` clause are detected case-insensitively at parse time, so names that differ only in case (for example, `WITH a AS (...), A AS (...)`) are rejected with `DUPLICATED_CTE_NAMES`. This check is always case-insensitive and does not depend on `spark.sql.caseSensitive`. Rename the conflicting CTEs.
+- Since Spark 4.2, `NATURAL JOIN` honors the `spark.sql.caseSensitive` configuration when determining the common columns to join on. This can change which columns are used as join keys, and therefore the query result, when column names differ only in case.
+- Since Spark 4.2, when a SQL UDF has a parameter whose name matches a parameterless built-in function (`current_user`, `current_date`, `current_time`, `current_timestamp`, `user`, `session_user`, `grouping__id`), a bare reference to that name in the function body resolves to the built-in function instead of the parameter, matching the documented name resolution rules. Rename the parameter to avoid the collision, or set `spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction` to `true` to restore the previous behavior.
+- Since Spark 4.2, `SET CATALOG <name>` resolves a bare (unquoted) name as a session variable first, using the variable's value as the catalog name when such a variable exists, and otherwise treats the name as a literal catalog name. Use a string literal (`SET CATALOG 'name'`) to force it to be interpreted literally.
+- Since Spark 4.2, when an error occurs while collecting observed metrics, `Observation.get` raises the underlying exception (for example, `SparkRuntimeException` in Scala or `PySparkException` in Python) instead of silently returning an empty result. Add error handling if your code relied on receiving an empty result on failure.
 
 ## Upgrading from Spark SQL 4.0 to 4.1
 
@@ -1066,7 +1081,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 2.0.0 to 2.3.10 and 3.0.0 to 4.1.0. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore).
+(from 2.0.0 to 2.3.10 and 3.0.0 to 4.2.0). Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}

@@ -378,6 +378,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = $"a".string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
     checkEvaluation(Ascii(a), 97, create_row("abdef"))
+    // U+1F600 is a supplementary-plane code point; ascii must return the full code point
+    // (128512 via codePointAt), not the leading UTF-16 surrogate (55357 via charAt).
+    // scalastyle:off
+    checkEvaluation(Ascii(Literal("😀")), 128512, create_row("😀"))
+    // scalastyle:on
     checkEvaluation(Ascii(a), 0, create_row(""))
     checkEvaluation(Ascii(a), null, create_row(null))
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
@@ -655,6 +660,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments:
     GenerateUnsafeProjection.generate(Levenshtein(Literal("\"quotea"), Literal("\"quoteb")) :: Nil)
+  }
+
+  test("Jaro-Winkler similarity") {
+    // Identical strings
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("ABC")), 1.0)
+    // Completely different
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("XYZ")), 0.0)
+    // Empty strings
+    checkEvaluation(JaroWinkler(Literal(""), Literal("")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("")), 0.0)
+    checkEvaluation(JaroWinkler(Literal(""), Literal("ABC")), 0.0)
+    // Classic example: MARTHA vs MARHTA (well-known reference value)
+    checkEvaluation(JaroWinkler(Literal("MARTHA"), Literal("MARHTA")), 0.9611111111111111)
+    // Another well-known example
+    checkEvaluation(JaroWinkler(Literal("DWAYNE"), Literal("DUANE")), 0.8400000000000001)
+    // Symmetry: jaro_winkler(a, b) == jaro_winkler(b, a)
+    checkEvaluation(JaroWinkler(Literal("MARHTA"), Literal("MARTHA")), 0.9611111111111111)
+    checkEvaluation(JaroWinkler(Literal("sitting"), Literal("kitten")),
+      JaroWinkler(Literal("kitten"), Literal("sitting")).eval(null))
+    // Strings with very different lengths
+    assert(JaroWinkler(Literal("a"), Literal("abcdefgh")).eval(null)
+      .asInstanceOf[Double] > 0.0)
+    checkEvaluation(JaroWinkler(Literal("abc"), Literal("abcdefgh")),
+      JaroWinkler(Literal("abcdefgh"), Literal("abc")).eval(null))
+    // Single character strings
+    checkEvaluation(JaroWinkler(Literal("a"), Literal("a")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("a"), Literal("b")), 0.0)
+    // Multi-byte (Japanese) strings
+    // scalastyle:off nonascii
+    checkEvaluation(JaroWinkler(Literal("東京都"), Literal("東京都")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("東京都"), Literal("東京府")),
+      JaroWinkler(Literal("東京府"), Literal("東京都")).eval(null))
+    assert(JaroWinkler(Literal("東京都"), Literal("東京府")).eval(null)
+      .asInstanceOf[Double] > 0.8)
+    // scalastyle:on nonascii
+    // Null handling
+    checkEvaluation(JaroWinkler(Literal.create(null, StringType), Literal("ABC")), null)
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal.create(null, StringType)), null)
   }
 
   test("soundex unit test") {
@@ -982,6 +1025,90 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(StringInstr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    // Test instr with start and occurrence
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(3), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(3), Literal(2)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("b"), Literal(-1), Literal(2)), 2)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(1)), 4)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(2)), 1)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-2), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("ab"), Literal(-3), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(0), Literal(2)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("b"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("abc"), Literal("d"), Literal(1), Literal(1)), 0)
+
+    // NULL
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal.create(null, StringType), Literal("de"), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal.create(null, StringType), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal("aa"), Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("aaads"), Literal("aa"), Literal(1), Literal.create(null, IntegerType)), null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringInstrWithOccurrence(
+      s1, s2, Literal(1), Literal(1)), 3, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstrWithOccurrence(
+      s1, s2, Literal(1), Literal(2)), 0, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstrWithOccurrence(
+      Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(2)), 1)
+    // scalastyle:on
+  }
+
+  test("StringInstrExpressionBuilder") {
+    val seq1 = Seq(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2))
+    val seq2 = Seq(Literal("abcabc"), Literal("a"), Literal(-1))
+    val seq3 = Seq(Literal("abcabc"), Literal("a"))
+
+    val instrExp1 = StringInstrExpressionBuilder.build("instr", seq1)
+    val instrExp2 = StringInstrExpressionBuilder.build("instr", seq2)
+    val instrExp3 = StringInstrExpressionBuilder.build("instr", seq3)
+
+    assert(instrExp1 == StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)))
+    assert(instrExp2 == StringInstrWithOccurrence(
+      Literal("abcabc"), Literal("a"), Literal(-1), Literal(1)))
+    assert(instrExp3 == StringInstr(Literal("abcabc"), Literal("a")))
   }
 
   test("LOCATE") {

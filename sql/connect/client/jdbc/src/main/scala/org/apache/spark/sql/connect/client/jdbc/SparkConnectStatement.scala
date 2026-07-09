@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.sql.{Array => _, _}
 
 import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
 
 class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
@@ -27,6 +28,8 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   private var resultSet: SparkConnectResultSet = _
 
   private var maxRows: Int = 0
+
+  private var resultsExhausted: Boolean = false
 
   @volatile private var closed: Boolean = false
 
@@ -94,6 +97,7 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     // reset before executing new query
     operationId = null
     resultSet = null
+    resultsExhausted = false
 
     var df = conn.spark.sql(sql)
     if (maxRows > 0) {
@@ -143,8 +147,13 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     0
   }
 
-  override def setQueryTimeout(seconds: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  // This driver does not apply a query timeout; validate and silently drop the value.
+  override def setQueryTimeout(seconds: Int): Unit = {
+    checkOpen()
+    if (seconds < 0) {
+      throw new SQLException("Query timeout must be zero or a positive integer.")
+    }
+  }
 
   override def cancel(): Unit = {
     checkOpen()
@@ -164,35 +173,60 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def getUpdateCount: Int = {
     checkOpen()
 
-    if (resultSet != null) {
+    if (resultsExhausted || resultSet != null) {
       -1
     } else {
       0 // always return 0 because affected rows is not supported yet
     }
   }
 
-  override def getMoreResults: Boolean =
-    throw new SQLFeatureNotSupportedException
+  // a single result per execute(), so there is no next one: close the current
+  // ResultSet and mark exhausted, flipping getUpdateCount() to -1 so drain loops end
+  override def getMoreResults: Boolean = {
+    checkOpen()
+    if (resultSet != null) {
+      resultSet.close()
+      resultSet = null
+    }
+    resultsExhausted = true
+    false
+  }
 
-  override def setFetchDirection(direction: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  override def setFetchDirection(direction: Int): Unit = {
+    checkOpen()
+    if (direction != ResultSet.FETCH_FORWARD) {
+      throw new SQLException(
+        s"Fetch direction ${JdbcErrorUtils.stringifyFetchDirection(direction)} is not supported.")
+    }
+  }
 
-  override def getFetchDirection: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getFetchDirection: Int = {
+    checkOpen()
+    ResultSet.FETCH_FORWARD
+  }
 
-  override def setFetchSize(rows: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  // This driver does not apply a fetch size hint; validate and silently drop the value.
+  override def setFetchSize(rows: Int): Unit = {
+    checkOpen()
+    if (rows < 0) {
+      throw new SQLException("Fetch size must be zero or a positive integer.")
+    }
+  }
 
-  override def getFetchSize: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getFetchSize: Int = {
+    checkOpen()
+    0
+  }
 
   override def getResultSetConcurrency: Int = {
     checkOpen()
     ResultSet.CONCUR_READ_ONLY
   }
 
-  override def getResultSetType: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getResultSetType: Int = {
+    checkOpen()
+    ResultSet.TYPE_FORWARD_ONLY
+  }
 
   override def addBatch(sql: String): Unit =
     throw new SQLFeatureNotSupportedException

@@ -7,6 +7,7 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
+ALIGN	false
 ALL	false
 ALTER	false
 ALWAYS	false
@@ -15,6 +16,8 @@ AND	false
 ANTI	false
 ANY	false
 ANY_VALUE	false
+APPLY	false
+APPROX	false
 ARCHIVE	false
 ARRAY	false
 AS	false
@@ -23,11 +26,17 @@ ASENSITIVE	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	false
+AUTO	false
 BEGIN	false
+BERNOULLI	false
 BETWEEN	false
 BIGINT	false
+BIN	false
 BINARY	false
 BINDING	false
+BIN_DISTRIBUTE_RATIO	false
+BIN_END	false
+BIN_START	false
 BOOLEAN	false
 BOTH	false
 BUCKET	false
@@ -42,6 +51,7 @@ CASE	false
 CAST	false
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -110,6 +120,7 @@ DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
+DISTANCE	false
 DISTINCT	false
 DISTRIBUTE	false
 DIV	false
@@ -123,6 +134,7 @@ ENFORCED	false
 ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
+EXACT	false
 EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
@@ -212,6 +224,7 @@ LINES	false
 LIST	false
 LOAD	false
 LOCAL	false
+LOCALTIME	false
 LOCATION	false
 LOCK	false
 LOCKS	false
@@ -243,6 +256,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	false
+NEAREST	false
 NEXT	false
 NO	false
 NONE	false
@@ -282,6 +296,7 @@ PROCEDURE	false
 PROCEDURES	false
 PROPERTIES	false
 PURGE	false
+QUALIFY	false
 QUARTER	false
 QUERY	false
 RANGE	false
@@ -323,6 +338,7 @@ SECURITY	false
 SELECT	false
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	false
@@ -330,6 +346,7 @@ SET	false
 SETS	false
 SHORT	false
 SHOW	false
+SIMILARITY	false
 SINGLE	false
 SKEWED	false
 SMALLINT	false
@@ -352,6 +369,7 @@ STRUCT	false
 SUBSTR	false
 SUBSTRING	false
 SYNC	false
+SYSTEM	false
 SYSTEM_PATH	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
@@ -384,6 +402,7 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNIFORM	false
 UNION	false
 UNIQUE	false
 UNKNOWN	false
@@ -411,6 +430,7 @@ WEEKS	false
 WHEN	false
 WHERE	false
 WHILE	false
+WIDTH	false
 WINDOW	false
 WITH	false
 WITHIN	false

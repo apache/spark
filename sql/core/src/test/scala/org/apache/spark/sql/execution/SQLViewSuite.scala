@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Divide}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -1404,6 +1405,184 @@ abstract class SQLViewSuite extends QueryTest {
 
               checkAnswer(spark.sql(s"SELECT * FROM $viewName"), expectedResults)
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56639: permanent view uses frozen SQL path") {
+    withSQLConf(PATH_ENABLED.key -> "true") {
+      withDatabase("path_view_db_a", "path_view_db_b") {
+        withTable("path_view_db_a.frozen_t", "path_view_db_b.frozen_t") {
+          withView("default.v_path_frozen") {
+            sql("USE default")
+            sql("CREATE DATABASE path_view_db_a")
+            sql("CREATE DATABASE path_view_db_b")
+            sql("CREATE TABLE path_view_db_a.frozen_t USING parquet AS SELECT 1 AS id")
+            sql("CREATE TABLE path_view_db_b.frozen_t USING parquet AS SELECT 2 AS id")
+            try {
+              sql("SET PATH = spark_catalog.path_view_db_a, system.builtin")
+              sql("CREATE VIEW default.v_path_frozen AS SELECT id FROM frozen_t")
+              sql("SET PATH = spark_catalog.path_view_db_b, system.builtin")
+
+              checkAnswer(sql("SELECT id FROM frozen_t"), Row(2))
+              checkAnswer(sql("SELECT id FROM default.v_path_frozen"), Row(1))
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56639: malformed persisted view path fails analysis") {
+    withView("default.v_bad_path_metadata") {
+      sql("CREATE VIEW default.v_bad_path_metadata AS SELECT 1 AS id")
+      val ident = TableIdentifier("v_bad_path_metadata", Some("default"))
+      val metadata = spark.sessionState.catalog.getTableMetadata(ident)
+      val corrupted = metadata.copy(
+        properties = metadata.properties + (CatalogTable.VIEW_RESOLUTION_PATH -> "{bad-json"))
+      spark.sessionState.catalog.alterTable(corrupted)
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT * FROM default.v_bad_path_metadata").collect()
+      }
+      assert(e.getMessage.contains("Invalid stored SQL path metadata for view"), e.getMessage)
+    }
+  }
+
+  test("SPARK-56853: stored view path is ignored when PATH is disabled at read time") {
+    // A view created with PATH enabled persists two things in metadata: the frozen
+    // resolution path AND the creator session's current catalog+namespace at CREATE
+    // VIEW time (the view's `viewCatalogAndNamespace` property). If the reader's
+    // session has `spark.sql.path.enabled=false`, the pinned entries are intentionally
+    // dropped (`CatalogManager.resolutionPathEntriesForAnalysis`); the view body's
+    // unqualified references fall back to that captured catalog+namespace, which is
+    // the creator's USE state at CREATE time -- NOT the schema the view physically
+    // lives in (the two coincide below only because the test runs
+    // `USE spark_catalog.compat_view_b` before CREATE VIEW). Verify both directions:
+    //   - fully-qualified bodies keep working (qualification doesn't depend on PATH),
+    //   - unqualified bodies that relied on the frozen path now resolve via the
+    //     captured viewCatalogAndNamespace.
+    withDatabase("compat_view_a", "compat_view_b") {
+      sql("CREATE DATABASE compat_view_a")
+      sql("CREATE DATABASE compat_view_b")
+      withTable(
+          "compat_view_a.compat_t",
+          "compat_view_b.compat_t") {
+        sql("CREATE TABLE compat_view_a.compat_t USING parquet AS SELECT 1 AS id")
+        sql("CREATE TABLE compat_view_b.compat_t USING parquet AS SELECT 2 AS id")
+        withView(
+            "compat_view_b.v_unq_path",
+            "compat_view_b.v_fq_path") {
+          // Create both views with USE compat_view_b in effect so the stored
+          // viewCatalogAndNamespace points at compat_view_b, then SET PATH=a so the
+          // frozen path pins compat_view_a.
+          withSQLConf(PATH_ENABLED.key -> "true") {
+            try {
+              sql("USE spark_catalog.compat_view_b")
+              sql("SET PATH = spark_catalog.compat_view_a, system.builtin")
+              sql(
+                """
+                  |CREATE VIEW compat_view_b.v_unq_path AS
+                  |SELECT id FROM compat_t
+                  |""".stripMargin)
+              sql(
+                """
+                  |CREATE VIEW compat_view_b.v_fq_path AS
+                  |SELECT id FROM spark_catalog.compat_view_a.compat_t
+                  |""".stripMargin)
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+              sql("USE spark_catalog.default")
+            }
+          }
+
+          // Now read with PATH disabled. The fully-qualified view body is independent of
+          // PATH and must keep returning rows from compat_view_a. The unqualified-body view
+          // drops its frozen-path pin and falls back to viewCatalogAndNamespace
+          // (compat_view_b), so unqualified `compat_t` resolves to compat_view_b.compat_t.
+          withSQLConf(PATH_ENABLED.key -> "false") {
+            checkAnswer(sql("SELECT id FROM compat_view_b.v_fq_path"), Row(1))
+            checkAnswer(sql("SELECT id FROM compat_view_b.v_unq_path"), Row(2))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-56853: stored view path with no fallback target fails clearly when PATH is off") {
+    // Same shape as the previous test, but the captured `viewCatalogAndNamespace`
+    // (the creator's USE state at CREATE VIEW time -- set here via
+    // `USE spark_catalog.compat_home_only`) does NOT contain the unqualified name.
+    // Under PATH disabled the analyzer cannot fall back anywhere, so the lookup
+    // must raise TABLE_OR_VIEW_NOT_FOUND against that captured catalog+namespace.
+    withDatabase("compat_home_only", "compat_referenced") {
+      sql("CREATE DATABASE compat_home_only")
+      sql("CREATE DATABASE compat_referenced")
+      withTable("compat_referenced.only_here") {
+        sql("CREATE TABLE compat_referenced.only_here USING parquet AS SELECT 7 AS id")
+        withView("compat_home_only.v_unq_home") {
+          withSQLConf(PATH_ENABLED.key -> "true") {
+            try {
+              sql("USE spark_catalog.compat_home_only")
+              sql("SET PATH = spark_catalog.compat_referenced, system.builtin")
+              sql(
+                """
+                  |CREATE VIEW compat_home_only.v_unq_home AS
+                  |SELECT id FROM only_here
+                  |""".stripMargin)
+            } finally {
+              sql("SET PATH = DEFAULT_PATH")
+              sql("USE spark_catalog.default")
+            }
+          }
+
+          withSQLConf(PATH_ENABLED.key -> "false") {
+            val e = intercept[AnalysisException] {
+              sql("SELECT id FROM compat_home_only.v_unq_home").collect()
+            }
+            assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND" ||
+                e.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND"),
+              s"Expected TABLE_OR_VIEW_NOT_FOUND; got: ${e.getCondition}: ${e.getMessage}")
+          }
+        }
+      }
+    }
+  }
+
+  // Regression guard: frozen resolution path must not leak into CURRENT_SCHEMA/CURRENT_PATH.
+  test("SPARK-56639: current_schema/current_path in persisted view use invoker context") {
+    withSQLConf(PATH_ENABLED.key -> "true") {
+      withDatabase("path_ctx_view_a", "path_ctx_view_b") {
+        withView("path_ctx_view_a.v_ctx") {
+          sql("CREATE DATABASE path_ctx_view_a")
+          sql("CREATE DATABASE path_ctx_view_b")
+          try {
+            sql("USE path_ctx_view_a")
+            sql(
+              """
+                |CREATE VIEW path_ctx_view_a.v_ctx AS
+                |SELECT current_schema() AS cs, current_path() AS cp
+                |""".stripMargin)
+
+            sql("USE path_ctx_view_b")
+            sql("SET PATH = DEFAULT_PATH")
+            val row = sql("SELECT cs, cp FROM path_ctx_view_a.v_ctx").head()
+            val currentSchema = row.getString(0)
+            val currentPath = row.getString(1)
+
+            assert(currentSchema == "path_ctx_view_b",
+              s"Expected invoker current_schema, got: $currentSchema")
+            assert(currentPath.contains("path_ctx_view_b"),
+              s"Expected invoker current_path to include path_ctx_view_b, got: $currentPath")
+            assert(!currentPath.contains("path_ctx_view_a"),
+              s"Did not expect creator schema in current_path, got: $currentPath")
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql("USE default")
           }
         }
       }

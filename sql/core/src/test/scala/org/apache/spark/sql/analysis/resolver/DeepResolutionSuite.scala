@@ -18,12 +18,10 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DeepResolutionSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with SinglePassAnalyzerTestUtils {
   protected override def sparkConf: SparkConf = setTentativeMode(super.sparkConf)
 

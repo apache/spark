@@ -38,3 +38,30 @@ DROP TABLE t1
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+
+
+-- !query
+SELECT col.a FROM (SELECT null AS col) t
+-- !query analysis
+Project [null AS a#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT col[0] FROM (SELECT null AS col) t
+-- !query analysis
+Project [null AS col[0]#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT col['key'] FROM (SELECT null AS col) t
+-- !query analysis
+Project [null AS col[key]#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation

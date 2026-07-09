@@ -30,10 +30,17 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.Distributions
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.Expressions._
-import org.apache.spark.sql.execution.{ExtendedMode, FormattedMode, RDDScanExec, SimpleMode, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{
+  ExtendedMode,
+  FormattedMode,
+  RDDScanExec,
+  SimpleMode,
+  SortExec,
+  SparkPlan,
+  UnionExec}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions.{col, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -233,7 +240,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }.head
 
     resolveDistribution(distribution, relation) match {
-      case physical.ClusteredDistribution(clustering, _, _) =>
+      case physical.ClusteredDistribution(clustering, _, _, _) =>
         assert(relation.keyGroupedPartitioning.isDefined &&
           relation.keyGroupedPartitioning.get == clustering)
       case _ =>
@@ -1733,7 +1740,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-48065: SPJ: allowJoinKeysSubsetOfPartitionKeys is too strict") {
+  test("SPARK-48065: SPJ: allowKeysSubsetOfPartitionKeys is too strict") {
     val table1 = "tab1e1"
     val table2 = "table2"
     val partition = Array(identity("id"))
@@ -1764,7 +1771,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
             partiallyClustered.toString,
-          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
           val df = sql(
             s"""
                |${selectWithMergeJoinHint("t1", "t2")}
@@ -1821,15 +1828,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     Seq(true, false).foreach { pushDownValues =>
       Seq(true, false).foreach { filter =>
         Seq(true, false).foreach { partiallyClustered =>
-          Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+          Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
             withSQLConf(
               SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
               SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
               SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
                   partiallyClustered.toString,
               SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> filter.toString,
-              SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-                  allowJoinKeysSubsetOfPartitionKeys.toString) {
+              SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                  allowKeysSubsetOfPartitionKeys.toString) {
               val df = sql(
                 s"""
                   |${selectWithMergeJoinHint("t1", "t2")}
@@ -1838,7 +1845,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
                   |ON t1.id = t2.id ORDER BY t1.id, t1data, t2data
                   |""".stripMargin)
               val shuffles = collectShuffles(df.queryExecution.executedPlan)
-              if (allowJoinKeysSubsetOfPartitionKeys) {
+              if (allowKeysSubsetOfPartitionKeys) {
                 assert(shuffles.isEmpty, "SPJ should be triggered")
               } else {
                 assert(shuffles.nonEmpty, "SPJ should not be triggered")
@@ -1846,7 +1853,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
               val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
                 .map(_.outputPartitioning.numPartitions)
-              (allowJoinKeysSubsetOfPartitionKeys, partiallyClustered, filter) match {
+              (allowKeysSubsetOfPartitionKeys, partiallyClustered, filter) match {
                 // SPJ, partially-clustered, with filter
                 case (true, true, true) => assert(groupPartitions == Seq(6, 6))
 
@@ -1963,13 +1970,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
             sql(finalStr)
         }
 
-        Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-              allowJoinKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
             SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
             val df = sql(
               s"""
@@ -2123,13 +2130,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
             sql(finalStr)
         }
 
-        Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-              allowJoinKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
             SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
             val df = sql(
               s"""
@@ -2237,13 +2244,13 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           sql(insertStr)
         }
 
-        Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-              allowJoinKeysSubsetOfPartitionKeys.toString,
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+              allowKeysSubsetOfPartitionKeys.toString,
             SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
             val df = sql(
               s"""
@@ -2306,7 +2313,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
           val df = sql(
             s"""
@@ -2372,7 +2379,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> allowPushDown.toString,
           SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
             partiallyClustered.toString,
-          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
           SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
           val df = sql(
                 s"""
@@ -2424,15 +2431,15 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     Seq(true, false).foreach { pushDownValues =>
       Seq(true, false).foreach { partiallyClustered =>
-        Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key ->
                 pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
                 partiallyClustered.toString,
-            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-                allowJoinKeysSubsetOfPartitionKeys.toString) {
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                allowKeysSubsetOfPartitionKeys.toString) {
 
             val df = sql(
               s"""
@@ -2445,7 +2452,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
             checkAnswer(df, Seq(Row(1, 4, "aa"), Row(2, 5, "bb"), Row(3, 6, "cc")))
 
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
-            if (allowJoinKeysSubsetOfPartitionKeys) {
+            if (allowKeysSubsetOfPartitionKeys) {
               assert(shuffles.isEmpty, "SPJ should be triggered")
             } else {
               assert(shuffles.nonEmpty, "SPJ should not be triggered")
@@ -2453,7 +2460,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
             val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
               .map(_.outputPartitioning.numPartitions)
-            (pushDownValues, allowJoinKeysSubsetOfPartitionKeys, partiallyClustered) match {
+            (pushDownValues, allowKeysSubsetOfPartitionKeys, partiallyClustered) match {
               // SPJ and partially-clustered
               case (_, true, _) => assert(partitions == Seq(3, 3))
               // non-SPJ or SPJ/partially-clustered
@@ -2486,20 +2493,20 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     Seq(true, false).foreach { pushDownValues =>
       Seq(true, false).foreach { partiallyClustered =>
-        Seq(true, false).foreach { allowJoinKeysSubsetOfPartitionKeys =>
+        Seq(true, false).foreach { allowKeysSubsetOfPartitionKeys =>
 
           withSQLConf(
             SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
             SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushDownValues.toString,
             SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key ->
                 partiallyClustered.toString,
-            SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
-                allowJoinKeysSubsetOfPartitionKeys.toString) {
+            SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+                allowKeysSubsetOfPartitionKeys.toString) {
             val df = createJoinTestDF(Seq("arrive_time" -> "time"), extraColumns = Seq("p.item_id"))
             // Currently SPJ for case where join key not same as partition key
             // only supported when push-part-values enabled
             val shuffles = collectShuffles(df.queryExecution.executedPlan)
-            if (allowJoinKeysSubsetOfPartitionKeys) {
+            if (allowKeysSubsetOfPartitionKeys) {
               assert(shuffles.isEmpty, "SPJ should be triggered")
             } else {
               assert(shuffles.nonEmpty, "SPJ should not be triggered")
@@ -2507,7 +2514,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
             val partitions = collectGroupPartitions(df.queryExecution.executedPlan)
               .map(_.outputPartitioning.numPartitions)
-            (allowJoinKeysSubsetOfPartitionKeys, partiallyClustered) match {
+            (allowKeysSubsetOfPartitionKeys, partiallyClustered) match {
               // SPJ and partially-clustered
               case (true, true) => assert(partitions == Seq(5, 5))
               // SPJ and not partially-clustered
@@ -2558,7 +2565,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushdownValues.toString,
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
         val df = createJoinTestDF(Seq("id" -> "item_id"))
         val shuffles = collectShuffles(df.queryExecution.executedPlan)
         assert(shuffles.size == 1, "SPJ should be triggered")
@@ -2705,7 +2712,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-     SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+     SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
      val df = createJoinTestDF(Seq("id" -> "item_id"))
      val shuffles = collectShuffles(df.queryExecution.executedPlan)
      assert(shuffles.size == 1, "SPJ should be triggered")
@@ -3146,7 +3153,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
 
     withSQLConf(
         SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
         SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
       val metrics = runAndFetchMetrics {
         val df = sql(
@@ -3181,7 +3188,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
       SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
       SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
-      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
 
       val customers_partitions = Array(identity("customer_name"), bucket(4, "customer_id"))
       createTable(customers, customersColumns, customers_partitions)
@@ -3254,7 +3261,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
   test("SPARK-55535: Multi table join granular partition grouping") {
     withSQLConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val items_partitions = Array(identity("id"), years("arrive_time"))
       createTable(items, itemsColumns, items_partitions)
@@ -3450,7 +3457,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (2, 10.0, cast('2021-01-01' as timestamp))")
     withSQLConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-      SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
       SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
       val df = sql(
         s"""
@@ -3793,7 +3800,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     Seq(true, false).foreach { preserveOrdering =>
       withSQLConf(
           SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
-          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
           SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key ->
             preserveOrdering.toString) {
         val df = sql(
@@ -3910,6 +3917,555 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
                 "SortExec should be added before SMJ")
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-56549: k-way merge enabled only when parent requires ordering") {
+    // Both tables are partitioned by id/item_id and report a two-column ordering.
+    // Key 1 appears on two splits on each side, so GroupPartitionsExec must coalesce.
+    //
+    // Dynamic gate: with the config enabled, k-way merge must be activated only when the parent
+    // actually requires ordering (SMJ), and must stay off when the parent does not (hash join).
+    val itemOrdering = Array(
+      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("arrive_time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(items, itemsColumns, Array(identity("id")), itemOrdering)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(2, 'cc', 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 'bb', 20.0, cast('2022-03-10' as timestamp)), " +
+      "(3, 'dd', 40.0, cast('2024-01-01' as timestamp)), " +
+      "(1, 'aa', 10.0, cast('2021-05-20' as timestamp)), " +
+      "(2, 'ee', 50.0, cast('2025-09-01' as timestamp))")
+
+    val purchaseOrdering = Array(
+      sort(FieldReference("item_id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
+      sort(FieldReference("time"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+    createTable(purchases, purchasesColumns, Array(identity("item_id")), purchaseOrdering)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(2, 50.0, cast('2025-09-01' as timestamp)), " +
+      "(1, 10.0, cast('2021-05-20' as timestamp)), " +
+      "(3, 40.0, cast('2024-01-01' as timestamp)), " +
+      "(2, 30.0, cast('2023-06-15' as timestamp)), " +
+      "(1, 20.0, cast('2022-03-10' as timestamp))")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true"
+    ) {
+      val hashDf = sql(
+        s"""
+           |SELECT /*+ SHUFFLE_HASH(i, p) */ i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(hashDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val hashPlan = hashDf.queryExecution.executedPlan
+      assert(collect(hashPlan) { case j: ShuffledHashJoinExec => j }.nonEmpty,
+        "expected ShuffledHashJoinExec")
+      assert(collectAllShuffles(hashPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val hashCoalescing =
+        collectAllGroupPartitions(hashPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(hashCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      hashCoalescing.foreach { gp =>
+        assert(!gp.enableSortedMerge,
+          "hash join does not require ordering: enableSortedMerge must stay false")
+        assert(!gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "hash join does not require ordering: must use simple CoalescedRDD")
+      }
+
+      val smjDf = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, i.name
+           |FROM testcat.ns.$items i
+           |JOIN testcat.ns.$purchases p ON p.item_id = i.id AND p.time = i.arrive_time
+           |""".stripMargin)
+      checkAnswer(smjDf, Seq(Row(1, "aa"), Row(1, "bb"), Row(2, "cc"), Row(2, "ee"), Row(3, "dd")))
+      val smjPlan = smjDf.queryExecution.executedPlan
+      assert(collectAllShuffles(smjPlan).isEmpty, "should not shuffle for compatible partitioning")
+      val smjCoalescing =
+        collectAllGroupPartitions(smjPlan).filter(_.groupedPartitions.exists(_._2.size > 1))
+      assert(smjCoalescing.nonEmpty, "expected coalescing GroupPartitionsExec")
+      smjCoalescing.foreach { gp =>
+        assert(gp.enableSortedMerge,
+          "sort-merge join requires ordering: enableSortedMerge must be true")
+        assert(gp.execute().isInstanceOf[SortedMergeCoalescedRDD[_]],
+          "sort-merge join requires ordering: must use SortedMergeCoalescedRDD")
+      }
+    }
+  }
+
+  test("SPARK-46367: partition key alias in subquery projects KeyedPartitioning") {
+    // A subquery that renames a partition key (id -> pk) creates a ProjectExec between the scan and
+    // the join. This test verifies that KeyedPartitioning expressions are correctly projected
+    // through aliases so that SPJ still works without a shuffle. Both sides have the same partition
+    // key sequence so no GroupPartitionsExec is needed.
+    val items_partitions = Array(identity("id"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    val df = sql(
+      s"""
+         |${selectWithMergeJoinHint("sub", "p")}
+         |sub.pk, p.price AS purchase_price
+         |FROM (SELECT id AS pk FROM testcat.ns.$items) sub
+         |JOIN testcat.ns.$purchases p
+         |ON sub.pk = p.item_id
+         |ORDER BY pk, purchase_price
+         |""".stripMargin)
+
+    val shuffles = collectShuffles(df.queryExecution.executedPlan)
+    assert(shuffles.isEmpty, "should not add shuffle when partition key is aliased in subquery")
+
+    checkAnswer(df, Seq(Row(1, 42.0f), Row(2, 11.0f), Row(3, 19.5f)))
+  }
+
+  test("SPARK-46367: narrowing projection requires allowKeysSubsetOfPartitionKeys") {
+    // items is partitioned by (id, name). The subquery projects away 'name', narrowing
+    // KeyedPartitioning([id, name]) -> KeyedPartitioning([id]) with isNarrowed=true.
+    // Because id=1 maps to two original partitions ("aa" and "bb"), isGrouped=false.
+    // GroupPartitionsExec would merge them, carrying the same skew risk as subset partition
+    // keys -- so SPJ requires allowKeysSubsetOfPartitionKeys to be enabled.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 11.0, cast('2020-01-01' as timestamp))")
+
+    Seq(true, false).foreach { allowSubset =>
+      withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key ->
+          allowSubset.toString) {
+
+        val df = sql(
+          s"""
+             |${selectWithMergeJoinHint("sub", "p")}
+             |sub.id, p.price AS purchase_price
+             |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+             |JOIN testcat.ns.$purchases p
+             |ON sub.id = p.item_id
+             |ORDER BY sub.id, purchase_price
+             |""".stripMargin)
+
+        val shuffles = collectShuffles(df.queryExecution.executedPlan)
+        if (allowSubset) {
+          assert(shuffles.isEmpty, "SPJ should be triggered with config enabled")
+        } else {
+          assert(shuffles.nonEmpty, "SPJ should not be triggered without config")
+        }
+
+        checkAnswer(df, Seq(Row(1, 42.0f), Row(1, 42.0f), Row(2, 11.0f)))
+      }
+    }
+  }
+
+  test("SPARK-46367: narrowing projection with distinct projected keys does not require " +
+      "allowKeysSubsetOfPartitionKeys") {
+    // items is partitioned by (id, name) but each id value is unique, so projecting away 'name'
+    // produces KeyedPartitioning([id]) with isNarrowed=true but isGrouped=true.
+    // Because no two original partitions share the same projected key, GroupPartitionsExec does not
+    // merge any partitions -- no skew risk -- so SPJ works without config.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+        s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 'bb', 10.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
+
+    val purchases_partitions = Array(identity("item_id"))
+    createTable(purchases, purchasesColumns, purchases_partitions)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+        s"(1, 42.0, cast('2020-01-01' as timestamp)), " +
+        s"(2, 11.0, cast('2020-01-01' as timestamp)), " +
+        s"(3, 19.5, cast('2020-02-01' as timestamp))")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("sub", "p")}
+           |sub.id, p.price AS purchase_price
+           |FROM (SELECT id FROM testcat.ns.$items WHERE name >= 'aa') sub
+           |JOIN testcat.ns.$purchases p
+           |ON sub.id = p.item_id
+           |ORDER BY sub.id, purchase_price
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "should not add shuffle: narrowed KP remains grouped so no skew risk")
+
+      checkAnswer(df, Seq(Row(1, 42.0f), Row(2, 11.0f), Row(3, 19.5f)))
+    }
+  }
+
+  test("SPARK-46367: aggregate with GROUP BY subset of partition keys uses GroupPartitionsExec " +
+      "with allowKeysSubsetOfPartitionKeys") {
+    // Table partitioned by (id, name): id=1 maps to two distinct partition keys (1,'aa') and
+    // (1,'bb'). The partial HashAggregate (a PartitioningPreservingUnaryExecNode) projects away
+    // 'name', narrowing the KP from [id,name] to KP([id], isNarrowed=true, isGrouped=false).
+    // By default a shuffle is required; with allowKeysSubsetOfPartitionKeys enabled,
+    // EnsureRequirements inserts GroupPartitionsExec to coalesce both id=1 partitions so the final
+    // aggregate sees all id=1 partial results in one task -- correct and shuffle-free.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 41.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 10.0, cast('2020-01-01' as timestamp))")
+
+    // Use MAX(name) so that 'name' stays in the scan output and is not column-pruned away.
+    // Without it, V2ScanPartitioningAndOrdering drops KP([id,name]) when 'name' is absent
+    // from the output, making the scan report UnknownPartitioning and always shuffling for
+    // a different reason -- which would mask the narrowing behaviour we are testing here.
+    val query =
+      s"SELECT id, MAX(name) AS max_name, COUNT(*) AS cnt FROM testcat.ns.$items GROUP BY id"
+    val expected = Seq(Row(1L, "bb", 2L), Row(2L, "cc", 1L))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(sql(query), expected)
+      assert(collectAllShuffles(sql(query).queryExecution.executedPlan).nonEmpty,
+        "shuffle required: KP([id,name]) does not satisfy ClusteredDistribution([id])")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
+      }
+    }
+  }
+
+  test("SPARK-46367: window with PARTITION BY subset of partition keys uses GroupPartitionsExec " +
+      "with allowKeysSubsetOfPartitionKeys") {
+    // Same narrowing mechanism as the aggregate test: the partial HashAggregate (a
+    // PartitioningPreservingUnaryExecNode) for the inner GROUP BY id, price projects away 'name',
+    // narrowing KP([id,name]) to KP([id], isNarrowed=true, isGrouped=false). With
+    // allowKeysSubsetOfPartitionKeys enabled, EnsureRequirements inserts GroupPartitionsExec to
+    // coalesce both id=1 partitions for the final aggregate. The window PARTITION BY id then sees
+    // KP([id], isGrouped=true) from the aggregate output and needs no further exchange.
+    //
+    // MAX(name) in the subquery keeps 'name' in the scan output so that
+    // V2ScanPartitioningAndOrdering does not drop the KP before PartitioningPreservingUnaryExecNode
+    // narrowing can happen.
+    val items_partitions = Array(identity("id"), identity("name"))
+    createTable(items, itemsColumns, items_partitions)
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      s"(1, 'aa', 10.0, cast('2020-01-01' as timestamp)), " +
+      s"(1, 'bb', 20.0, cast('2020-01-01' as timestamp)), " +
+      s"(2, 'cc', 30.0, cast('2020-01-01' as timestamp))")
+
+    val query =
+      s"""SELECT id, SUM(price) OVER (PARTITION BY id ORDER BY price) AS running_sum, max_name
+         |FROM (SELECT id, MAX(name) AS max_name, price FROM testcat.ns.$items GROUP BY id, price)
+         |""".stripMargin
+    val expected = Seq(Row(1L, 10.0, "aa"), Row(1L, 30.0, "bb"), Row(2L, 30.0, "cc"))
+
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      checkAnswer(sql(query), expected)
+      assert(collectAllShuffles(sql(query).queryExecution.executedPlan).nonEmpty,
+        "shuffle required: KP([id,name]) does not satisfy ClusteredDistribution([id])")
+
+      withSQLConf(SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        checkAnswer(sql(query), expected)
+        assert(collectAllGroupPartitions(sql(query).queryExecution.executedPlan).nonEmpty,
+          "GroupPartitionsExec expected to coalesce partitions sharing the narrowed key [id]")
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join leverages union output KeyedPartitioning to " +
+      "avoid shuffle") {
+    val cols = Array(
+      Column.create("id", LongType),
+      Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3')")
+
+      // Disable AQE for a deterministic, fully-planned tree to inspect.
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+        // The union reports a KeyedPartitioning over `id`, which the SMJ leverages for a
+        // storage-partitioned join, so no shuffle is needed.
+        assert(collectShuffles(plan).isEmpty)
+        checkAnswer(df,
+          Seq(Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: compatible expressions, " +
+      "disjoint child partition keys") {
+    // Both children are partitioned by identity(id) (compatible expressions) but hold
+    // disjoint key sets: t1=[1,2], t2=[3,4]. The union merges the keys into [1,2,3,4];
+    // because no key repeats across children, the merged KeyedPartitioning is already
+    // grouped, so no GroupPartitionsExec is needed on the union side. t3 carries the same
+    // keys in the same order, so SPJ matches the two legs directly without a shuffle.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (3, 'b3'), (4, 'b4')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        // The merged descriptor carries the concatenation of the children's keys; disjoint
+        // keys leave it grouped, which the SMJ consumes directly.
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.numPartitions == 4, "one key per physical partition of the concatenation")
+        assert(kp.isGrouped, "disjoint child keys merge without duplicates")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: merged grouped keys match t3")
+        assert(collectGroupPartitions(plan).isEmpty,
+          "no GroupPartitionsExec: merged keys are already grouped and aligned")
+        checkAnswer(df, Seq(
+          Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(3, "b3", "c3"), Row(4, "b4", "c4")))
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: compatible expressions, " +
+      "union keys are a strict subset of the other leg") {
+    // Expressions are compatible (both identity(id)), but the join legs carry different
+    // partition key sets: the union (t1=[1,2] UNION t2=[2,3]) groups to [1,2,3] while t3
+    // holds [1,2,3,4,5]. The merged KeyedPartitioning has a duplicate key (2 from both
+    // children), so isGrouped=false and EnsureRequirements inserts a GroupPartitionsExec.
+    // With pushPartValues enabled, SPJ computes the superset [1,2,3,4,5] and pads the union
+    // side with empty partitions for the missing keys 4 and 5, avoiding a shuffle. With
+    // pushPartValues disabled the key mismatch cannot be reconciled, so both legs shuffle.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4'), (5, 'c5')")
+
+      Seq(true, false).foreach { pushPartValues =>
+        withSQLConf(
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+            SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> pushPartValues.toString) {
+          val df = sql(
+            """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+              |FROM (
+              |  SELECT id, data FROM testcat.ns.t1
+              |  UNION ALL
+              |  SELECT id, data FROM testcat.ns.t2
+              |) u
+              |JOIN testcat.ns.t3 ON u.id = t3.id
+              |""".stripMargin)
+          val plan = df.queryExecution.executedPlan
+
+          // The merged descriptor is ungrouped regardless of the pushPartValues flag, since
+          // key 2 is duplicated across the two children.
+          val union = collect(plan) { case u: UnionExec => u }.head
+          val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+          assert(!kp.isGrouped, "overlapping child keys merge with duplicates")
+
+          val shuffles = collectShuffles(plan)
+          val groupPartitions = collectGroupPartitions(plan)
+          if (pushPartValues) {
+            assert(shuffles.isEmpty, "no shuffle: superset of keys pushed to both legs")
+            assert(groupPartitions.nonEmpty &&
+              groupPartitions.forall(_.outputPartitioning.numPartitions === 5),
+              "both legs aligned to the 5-key superset")
+          } else {
+            assert(shuffles.length == 2,
+              "both legs shuffled when keys mismatch and pushPartValues is off")
+            assert(groupPartitions.isEmpty,
+              "GroupPartitionsExec is dropped once a shuffle is inserted")
+          }
+          // Inner join: keys 4 and 5 have no match on the union side.
+          checkAnswer(df, Seq(
+            Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: compatible expressions, " +
+      "the other leg is a strict subset of the union keys") {
+    // Expressions compatible (identity(id)); partition keys mismatch in the other direction:
+    // the union (t1=[1,2] UNION t2=[2,3,4]) groups to [1,2,3,4] while t3 only holds [2,3].
+    // SPJ pushes the superset [1,2,3,4] to t3, padding keys 1 and 4 with empty partitions.
+    // No shuffle.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3'), (4, 'b4')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (2, 'c2'), (3, 'c3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: superset pushed to the t3 leg")
+        assert(collectGroupPartitions(plan).nonEmpty &&
+          collectGroupPartitions(plan).forall(_.outputPartitioning.numPartitions === 4),
+          "both legs aligned to the 4-key superset")
+        // Inner join: only ids 2 and 3 match.
+        checkAnswer(df, Seq(
+          Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: bucket transform partitioning") {
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(bucket(4, "id"))
+    withTable("t1", "t2", "t3") {
+      createTable("t1", cols, partitions)
+      sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+      createTable("t2", cols, partitions)
+      sql("INSERT INTO testcat.ns.t2 VALUES (2, 'b2'), (3, 'b3')")
+      createTable("t3", cols, partitions)
+      sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3')")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        // The union reports a KeyedPartitioning whose expression is the `bucket(4, id)` transform.
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.expressions.length == 1 && kp.expressions.head.isInstanceOf[TransformExpression],
+          "merged KeyedPartitioning carries the bucket transform expression")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: SPJ over the bucket transform")
+        checkAnswer(df,
+          Seq(Row(1, "a1", "c1"), Row(2, "a2", "c2"), Row(2, "b2", "c2"), Row(3, "b3", "c3")))
+      }
+    }
+  }
+
+  test("SPARK-57881: storage-partitioned join over union: a union leg is entirely " +
+      "runtime-pruned") {
+    // The merged descriptor is built from each leg's unfiltered `inputPartitions`, while the union
+    // RDD concatenates each leg's `filteredPartitions` (pruned splits kept as `None`). Here dynamic
+    // partition filtering prunes the entire t1 leg (only t3 ids [3, 4] survive), so this guards
+    // that the per-leg partition-count == partitionKeys.length alignment holds under pruning.
+    val cols = Array(Column.create("id", LongType), Column.create("data", StringType))
+    val partitions = Array(identity("id"))
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+      withTable("t1", "t2", "t3") {
+        createTable("t1", cols, partitions)
+        sql("INSERT INTO testcat.ns.t1 VALUES (1, 'a1'), (2, 'a2')")
+        createTable("t2", cols, partitions)
+        sql("INSERT INTO testcat.ns.t2 VALUES (3, 'b3'), (4, 'b4')")
+        createTable("t3", cols, partitions)
+        sql("INSERT INTO testcat.ns.t3 VALUES (1, 'c1'), (2, 'c2'), (3, 'c3'), (4, 'c4')")
+
+        val df = sql(
+          """SELECT /*+ MERGE(u, t3) */ u.id, u.data, t3.data AS t3data
+            |FROM (
+            |  SELECT id, data FROM testcat.ns.t1
+            |  UNION ALL
+            |  SELECT id, data FROM testcat.ns.t2
+            |) u
+            |JOIN testcat.ns.t3 ON u.id = t3.id
+            |WHERE t3.data IN ('c3', 'c4')
+            |""".stripMargin)
+        val plan = df.queryExecution.executedPlan
+
+        // The merged descriptor carries the concatenation of both legs' unfiltered keys
+        // ([1, 2] ++ [3, 4]), independent of runtime pruning.
+        val union = collect(plan) { case u: UnionExec => u }.head
+        val kp = union.outputPartitioning.asInstanceOf[physical.KeyedPartitioning]
+        assert(kp.numPartitions == 4,
+          "merged descriptor keeps one key per unfiltered physical partition of both legs")
+
+        assert(collectShuffles(plan).isEmpty, "no shuffle: merged grouped keys match t3")
+
+        // Force execution, then verify the t1 leg is entirely runtime-pruned (all `None`) while
+        // its keys still live in the merged descriptor above.
+        checkAnswer(df, Seq(Row(3, "b3", "c3"), Row(4, "b4", "c4")))
+        val unionScans = collectScans(union)
+        assert(unionScans.exists(_.filteredPartitions.forall(_.isEmpty)),
+          "one union leg must be entirely pruned to None while its keys remain in the descriptor")
       }
     }
   }

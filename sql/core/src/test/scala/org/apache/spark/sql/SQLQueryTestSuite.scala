@@ -25,7 +25,6 @@ import java.util.Locale
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
@@ -153,7 +152,7 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
-class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
+class SQLQueryTestSuite extends SharedSparkSession
     with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._
@@ -179,6 +178,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
     .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
+    // SPARK-57667: pin so AQE keeps SMJ regardless of the default
+    .set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD, 0L)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.

@@ -16,11 +16,11 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: "Build / SparkR-only (master, 4.4.3, windows-2025)"
+name: "Build / SparkR-only (4.4.3, windows-2025)"
 
 on:
   schedule:
-    - cron: '0 17 * * *'
+    - cron: '0 17 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -43,16 +43,16 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: build-sparkr-windows-maven-${{ hashFiles('**/pom.xml') }}
+        key: build-sparkr-windows-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          build-sparkr-windows-maven-
+          build-sparkr-windows-maven-${{ runner.os }}-
     - name: Install Java 17
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: 17
     - name: Install R 4.4.3
-      uses: r-lib/actions/setup-r@6f6e5bc62fba3a704f74e7ad7ef7676c5c6a2590 # v2
+      uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6 # v2.12.1
       with:
         r-version: 4.4.3
     - name: Install R dependencies
@@ -79,6 +79,13 @@ jobs:
         mvn -DskipTests -Psparkr -Djna.nosys=true package -Dmaven.version=3.8.7
       shell: cmd
     - name: Run SparkR tests
+      # The SparkR test launch occasionally hangs while the R process waits on the
+      # SparkR backend socket handshake on the windows-2025 runner. Without a
+      # step-level bound this silently consumes the full 120-minute job timeout and
+      # is reported as a cancellation rather than a fast, retryable failure. Cap the
+      # step so a stalled handshake fails fast; successful runs finish it in well
+      # under 60 minutes (the whole job normally completes in ~75-85 minutes).
+      timeout-minutes: 60
       run: |
         set HADOOP_HOME=%USERPROFILE%\hadoop-3.3.6
         set PATH=%HADOOP_HOME%\bin;%PATH%

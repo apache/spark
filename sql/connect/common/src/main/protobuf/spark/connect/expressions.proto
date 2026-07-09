@@ -205,6 +205,11 @@ message Expression {
 
       SpecializedArray specialized_array = 25;
       Time time = 26;
+
+      // Nanosecond-capable timestamp literals (precision 7..9). NTZ and LTZ are distinct
+      // arms so the literal kind is self-describing.
+      TimestampNTZNanos timestamp_ntz_nanos = 29;
+      TimestampLTZNanos timestamp_ltz_nanos = 30;
     }
 
     // Reserved for Geometry and Geography.
@@ -288,6 +293,29 @@ message Expression {
       int64 nano = 1;
       // The precision of this time, if omitted, uses the default value of MICROS_PRECISION.
       optional int32 precision = 2;
+    }
+
+    // A TIMESTAMP_NTZ literal with nanosecond-capable precision. The physical value is carried
+    // as microseconds since the UNIX epoch plus the extra nanoseconds within that microsecond,
+    // because a single int64 of nanoseconds cannot span the supported year range.
+    message TimestampNTZNanos {
+      // Microseconds since the UNIX epoch (without timezone information).
+      int64 epoch_micros = 1;
+      // Additional nanoseconds within epoch_micros, in [0, 999].
+      uint32 nanos_within_micro = 2;
+      // Number of fractional-second digits (7, 8, or 9). If omitted, defaults to 9 (nanoseconds).
+      optional uint32 precision = 3;
+    }
+
+    // A TIMESTAMP_LTZ literal with nanosecond-capable precision. See TimestampNTZNanos for the
+    // rationale behind the two-component physical value.
+    message TimestampLTZNanos {
+      // Microseconds since the UNIX epoch.
+      int64 epoch_micros = 1;
+      // Additional nanoseconds within epoch_micros, in [0, 999].
+      uint32 nanos_within_micro = 2;
+      // Number of fractional-second digits (7, 8, or 9). If omitted, defaults to 9 (nanoseconds).
+      optional uint32 precision = 3;
     }
   }
 

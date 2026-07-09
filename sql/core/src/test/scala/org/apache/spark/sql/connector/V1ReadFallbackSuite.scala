@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, CatalogV2Util, Column, Identifier, SupportsRead, Table, TableCapability, TableInfo}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1Scan}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-abstract class V1ReadFallbackSuite extends QueryTest with SharedSparkSession {
+abstract class V1ReadFallbackSuite extends SharedSparkSession {
   protected def baseTableScan(): DataFrame
 
   test("full scan") {
