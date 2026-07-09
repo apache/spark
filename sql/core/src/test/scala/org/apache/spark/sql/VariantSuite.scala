@@ -521,6 +521,68 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("variant_array_append with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    // A basic invocation, exercising the SQL parse/registration path end to end.
+    checkAnswer(
+      sql("SELECT to_json(variant_array_append(parse_json('{\"a\": [1, 2]}'), '$.a', 3))"),
+      rows("""{"a":[1,2,3]}"""))
+    // The root `$` targets the whole variant.
+    checkAnswer(
+      sql("SELECT to_json(variant_array_append(parse_json('[1, 2]'), '$', 3))"),
+      rows("[1,2,3]"))
+
+    // NULL-intolerant.
+    checkAnswer(
+      sql("SELECT to_json(variant_array_append(parse_json('[1]'), '$', NULL))"),
+      rows(null))
+
+    // The target is not an array.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_array_append(parse_json('{\"a\": 1}'), '$.a', 2)").collect()
+      },
+      condition = "VARIANT_PATH_TYPE_MISMATCH",
+      parameters = Map(
+        "path" -> "$.a", "failedAt" -> "$.a", "functionName" -> toSQLId("variant_array_append")))
+    // The root `$` is valid here, but a malformed path is still rejected.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_array_append(parse_json('[]'), 'bad', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "bad", "functionName" -> toSQLId("variant_array_append")))
+
+    // A raw struct/map value is not castable to variant and is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_array_append(parse_json('[]'), '$', named_struct('x', 1))")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+  }
+
+  test("variant_array_append with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": [1, 2]}""", "$.a", 3),
+          ("""[1, 2]""", "$", 9),
+          (null, "$", 2)
+        ).toDF("json", "path", "val")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(variant_array_append(v, col("path"), col("val"))).alias("r"))
+        checkAnswer(out, rows("""{"a":[1,2,3]}""", "[1,2,9]", null))
+
+        // String-path overload of the DataFrame API (root array).
+        val arrDf = Seq(("[1, 2]", 3), (null, 3)).toDF("json", "val")
+        val arrV = parse_json(arrDf("json"))
+        checkAnswer(
+          arrDf.select(to_json(variant_array_append(arrV, "$", col("val"))).alias("r")),
+          rows("[1,2,3]", null))
+      }
+    }
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)

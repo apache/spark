@@ -1654,4 +1654,107 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "VARIANT_SIZE_LIMIT",
       Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_set`"))
   }
+
+  test("variant_array_append") {
+    def checkAppend(input: String, path: String, value: Expression, expected: String): Unit = {
+      val expr = VariantArrayAppend(
+        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // Append to the root array, and to nested arrays reached through object keys / array indices.
+    checkAppend("[1, 2, 3]", "$", Literal(4), "[1,2,3,4]")
+    checkAppend("[]", "$", Literal("a"), """["a"]""")
+    checkAppend("""{"a": [1, 2]}""", "$.a", Literal(3), """{"a":[1,2,3]}""")
+    checkAppend("""{"a": [[0], [1, 2]]}""", "$.a[1]", Literal(9), """{"a":[[0],[1,2,9]]}""")
+
+    // Non-numeric scalar values (boolean, floating point).
+    checkAppend("[1]", "$", Literal(true), "[1,true]")
+    checkAppend("[1]", "$", Literal(2.5), "[1,2.5]")
+
+    // An array value is cast to a variant and appended as a single element (nested, not flattened);
+    // a variant null appends a null element.
+    checkAppend("[1]", "$", Literal.create(Array(2, 3), ArrayType(IntegerType)), "[1,[2,3]]")
+    checkAppend("[1, 2]", "$", Literal(parseJson("null")), "[1,2,null]")
+    // Strings are stored verbatim; use parse_json for structured JSON.
+    checkAppend("[]", "$", Literal("""{"x":1}"""), """["{\"x\":1}"]""")
+    checkAppend("[]", "$", Literal(parseJson("""{"x":1}""")), """[{"x":1}]""")
+
+    // scalastyle:off nonascii
+    checkAppend("""{"你好": [1]}""", """$['你好']""", Literal(2), """{"你好":[1,2]}""")
+    checkAppend("[]", "$", Literal("café"), """["café"]""")
+    // scalastyle:on nonascii
+
+    // A missing key or out-of-range index leaves the variant unchanged.
+    checkAppend("""{"a": [1]}""", "$.missing", Literal(2), """{"a":[1]}""")
+    checkAppend("[[1]]", "$[5]", Literal(2), "[[1]]")
+
+    // NULL-intolerant: any NULL argument yields NULL.
+    checkEvaluation(
+      VariantArrayAppend(Literal.create(null, VariantType), Literal("$"), Literal(1)),
+      null)
+    checkAppend("[1]", null, Literal(1), null)
+    checkAppend("[1]", "$", Literal.create(null, VariantType), null)
+    checkAppend("[1]", "$", Literal.create(null, NullType), null)
+
+    // Dynamic (non-foldable) path.
+    val dynamic = VariantArrayAppend(
+      Literal(parseJson("""{"a": [1, 2]}""")),
+      BoundReference(0, StringType, nullable = true),
+      Literal(3))
+    checkEvaluation(
+      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+      """{"a":[1,2,3]}""",
+      InternalRow(UTF8String.fromString("$.a")))
+
+    // The target is not an array (a scalar leaf, or an object at the root).
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
+
+    // A segment applied to an incompatible container: descending into a scalar, an array index on
+    // an object, or an object key on an array.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_array_append`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("[1, 2]")), Literal("$.a"), Literal(2)),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_array_append`"))
+
+    // Structs and maps are rejected at analysis.
+    Seq(
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
+    ).foreach { v =>
+      assert(
+        VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), v).checkInputDataTypes()
+          .isFailure)
+    }
+
+    // The root `$` is a valid target here, but a malformed path is still rejected.
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("[]")), Literal("abc"), Literal(1)),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "abc", "functionName" -> "`variant_array_append`"))
+
+    // Appending a value that overflows the variant size limit surfaces as VARIANT_SIZE_LIMIT.
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("[]")), Literal("$"), Literal(tooBig)),
+      "VARIANT_SIZE_LIMIT",
+      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_array_append`"))
+  }
 }

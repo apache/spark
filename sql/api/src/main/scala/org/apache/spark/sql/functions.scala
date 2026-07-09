@@ -9988,6 +9988,43 @@ object functions {
     Column.fn("variant_set", v, lit(path), value, lit(createIfMissing))
 
   /**
+   * Appends a value to the array in a variant at the given JSONPath location. Returns the variant
+   * unchanged if a path key or index is absent, throws an error if a path segment hits a value of
+   * an incompatible type or the target is not an array, and returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the target array. A valid path should
+   *   start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
+   *   `["name"]`.
+   * @param value
+   *   the value to append. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_array_append(v: Column, path: Column, value: Column): Column =
+    Column.fn("variant_array_append", v, path, value)
+
+  /**
+   * Appends a value to the array in a variant at the given JSONPath location. Returns the variant
+   * unchanged if a path key or index is absent, throws an error if a path segment hits a value of
+   * an incompatible type or the target is not an array, and returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the target array. A valid path should start with `$` and is followed
+   *   by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   * @param value
+   *   the value to append. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_array_append(v: Column, path: String, value: Column): Column =
+    Column.fn("variant_array_append", v, lit(path), value)
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *
