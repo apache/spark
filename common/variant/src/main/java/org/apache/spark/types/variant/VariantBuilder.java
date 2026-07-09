@@ -145,11 +145,11 @@ public class VariantBuilder {
   }
 
   // Return a new variant with the field or array element at `segments` set to the given value
-  // (`segments` must be non-empty). An object leaf replaces the field if present, otherwise adds it;
-  // an array leaf replaces the element at the index. When `createIfMissing` is true, missing leaves
-  // and intermediate keys/indices are created; when false, a missing key/index leaves the variant
-  // unchanged. A segment that targets an incompatible value throws VariantPathTypeMismatchException,
-  // which the caller maps to VARIANT_PATH_TYPE_MISMATCH.
+  // (`segments` must be non-empty). An object leaf replaces the field if present, otherwise adds
+  // it; an array leaf replaces the element at the index. When `createIfMissing` is true, missing
+  // leaves and intermediate keys/indices are created; when false, a missing key/index leaves the
+  // variant unchanged. A segment that targets an incompatible value throws
+  // VariantPathTypeMismatchException, which the caller maps to VARIANT_PATH_TYPE_MISMATCH.
   public static Variant setAtPath(
       Variant v, PathSegment[] segments, Variant val, boolean createIfMissing) {
     if (segments.length == 0) {
