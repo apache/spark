@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform}
@@ -273,14 +272,4 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       assert(cmd.tableSpec.collation == collationOpt)
     }
   }
-
-  /** Return an ExpectedContext that is equivalent to the passed QueryContext. Used to no-op
-   * queryContext checks on error validation */
-  def toExpectedContext(actualQueryContext: QueryContext): ExpectedContext = ExpectedContext(
-    objectType = actualQueryContext.objectType(),
-    objectName = actualQueryContext.objectName(),
-    startIndex = actualQueryContext.startIndex(),
-    stopIndex = actualQueryContext.stopIndex(),
-    fragment = actualQueryContext.fragment()
-  )
 }
