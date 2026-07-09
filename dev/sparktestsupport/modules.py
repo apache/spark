@@ -503,7 +503,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_pin_thread",
@@ -829,6 +828,7 @@ pyspark_install = Module(
         "python/pyspark/tests/test_install_spark.py",
     ],
     python_test_goals=[
+        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
     ],
 )
