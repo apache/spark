@@ -388,8 +388,9 @@ def _launch_server(master: str, opts: Dict[str, Any]) -> str:
                     raise PySparkRuntimeError(
                         errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
                         messageParameters={
-                            "reason": "the server exited during start-up; see logs under "
-                            "{}".format(log_dir)
+                            "reason": "the server exited during start-up; see logs under {}".format(
+                                log_dir
+                            )
                         },
                     )
             time.sleep(0.25)
