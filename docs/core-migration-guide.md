@@ -30,9 +30,11 @@ license: |
 
 - Since Spark 4.3, Spark sets `allowPrivilegeEscalation` to `false` on the driver and executor containers' security context by default. To restore the legacy behavior, you can set `spark.kubernetes.securityContext.allowPrivilegeEscalation` to `true`.
 
-- Since Spark 4.3, the default value of `spark.ui.xXssProtection` has been changed from `1; mode=block` to `0`. The XSS Auditor has been removed from Chrome and Edge, and was never implemented in Firefox. It can introduce side-channel vulnerabilities in browsers that still support it (Safari). To restore the legacy behavior, you can set `spark.ui.xXssProtection` to `1; mode=block`. For modern XSS protection, consider enabling `spark.ui.contentSecurityPolicy.enabled`.
+- Since Spark 4.3, Spark sets the HTTP `Content-Security-Policy` (CSP) response header for the Spark UI by default, restricting the sources from which the browser is allowed to load resources. To restore the legacy behavior, you can set `spark.ui.contentSecurityPolicy.enabled` to `false`.
 
-- Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true`. When CSP is disabled (the default), `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value. To allow framing from a specific origin, set both `spark.ui.contentSecurityPolicy.enabled=true` and `spark.ui.allowFramingFrom=<uri>`.
+- Since Spark 4.3, the default value of `spark.ui.xXssProtection` has been changed from `1; mode=block` to `0`. The XSS Auditor has been removed from Chrome and Edge, and was never implemented in Firefox. It can introduce side-channel vulnerabilities in browsers that still support it (Safari). To restore the legacy behavior, you can set `spark.ui.xXssProtection` to `1; mode=block`.
+
+- Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true` (the default). When CSP is disabled, `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value.
 
 ## Upgrading from Core 4.1 to 4.2
 
