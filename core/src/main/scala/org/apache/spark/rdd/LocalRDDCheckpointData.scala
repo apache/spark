@@ -55,10 +55,12 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val 
       rdd.sparkContext.runJob(rdd, action, missingPartitionIndices.toImmutableArraySeq)
     }
 
-    // The checkpoint is not yet exposed to readers (markCheckpointed runs after doCheckpoint
-    // returns), so this is the point to finalize one consistent version per partition.
-    if (rdd.verifySealedChecksum) {
-      rdd.sealChecksums()
+    // Finalization point: partitions are materialized (missing ones by the runJob above) and the
+    // checkpoint is not yet exposed to readers (markCheckpointed runs after doCheckpoint returns),
+    // so seal one consistent version per partition here. See `RDD.sealCheckpointChecksums` for the
+    // timing guarantees (eager vs lazy).
+    if (rdd.verifyCheckpointChecksums) {
+      rdd.sealCheckpointChecksums()
     }
 
     new LocalCheckpointRDD[T](rdd)

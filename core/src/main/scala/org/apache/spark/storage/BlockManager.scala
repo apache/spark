@@ -269,6 +269,11 @@ private[spark] class BlockManager(
    * does a non-matching local copy become a stale replica to skip in favor of a remote one.
    */
   private def localCopyMatchesSealedChecksum(blockId: BlockId, info: BlockInfo): Boolean = {
+    // The sealed value is cached once known (immutable thereafter). While still unsealed we
+    // re-pull on each read rather than caching a "not sealed" sentinel: a seal may land between
+    // reads and must then be observed. This costs a driver round-trip per pre-seal read, but the
+    // only pre-seal reader is the producing job itself (the eager store-time readback), so the
+    // window is bounded.
     if (info.sealedChecksum.isEmpty) {
       info.sealedChecksum = master.getSealedChecksum(blockId)
     }

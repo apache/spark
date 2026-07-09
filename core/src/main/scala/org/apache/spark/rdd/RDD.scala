@@ -380,7 +380,7 @@ abstract class RDD[T: ClassTag](
    * Read in `getOrCompute` to decide whether to compute a checksum, and at the commit point to
    * decide whether to seal. Travels with the RDD to executors.
    */
-  private[rdd] var verifySealedChecksum: Boolean = false
+  private[rdd] var verifyCheckpointChecksums: Boolean = false
 
   /**
    * Seal this RDD's checksummed blocks so every later read sees a single consistent version, even
@@ -389,27 +389,29 @@ abstract class RDD[T: ClassTag](
    * divergent copies, and rejects future divergent registrations; reads then self-check against the
    * sealed checksum. No-op unless this RDD is marked for verification. Relies on the per-replica
    * checksums recorded by BlockManager at store time (see `SerializerManager.wrapForChecksum`).
+   *
+   * Called at checkpoint finalization (`doCheckpoint`, before lineage is cut): the seal covers
+   * whatever copies are registered by then and rejects any that arrive later. With an eager
+   * checkpoint the RDD is fully materialized before any consumer reads it, so every read sees the
+   * sealed version. With a lazy checkpoint the seal still runs after the first job materializes the
+   * RDD, but reads *within that same job*, before finalization, may still observe an unsealed
+   * (possibly divergent) copy; only reads after finalization are guaranteed consistent. Marking is
+   * gated on a serialized storage level (see `localCheckpoint`), so a marked RDD always has
+   * checksummable blocks.
    */
-  private[rdd] def sealChecksums(): Unit = {
-    if (!verifySealedChecksum) {
-      logWarning(log"sealChecksums called on RDD ${MDC(RDD_ID, id)} that was not marked for " +
-        log"checksum verification; nothing to seal.")
+  private[rdd] def sealCheckpointChecksums(): Unit = {
+    if (!verifyCheckpointChecksums) {
+      logWarning(log"sealCheckpointChecksums called on RDD ${MDC(RDD_ID, id)} that was not " +
+        log"marked for checksum verification; nothing to seal.")
       return
     }
     val unverified = SparkEnv.get.blockManager.master.sealRddChecksums(id)
     if (unverified > 0) {
-      // A non-zero count means some materialized partitions carry no checksum, so could not be
-      // sealed: either a deserialized storage level (in-memory objects are not checksummed), or
-      // blocks materialized before this RDD was marked for verification.
-      if (getStorageLevel.deserialized) {
-        logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but its " +
-          log"storage level is deserialized, so ${MDC(NUM_PARTITIONS, unverified)} in-memory " +
-          log"partition(s) were left unverified.")
-      } else {
-        logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but " +
-          log"${MDC(NUM_PARTITIONS, unverified)} partition(s) were materialized before it was " +
-          log"marked and were left unverified.")
-      }
+      // Marking requires a serialized level, so any partition without a checksum was materialized
+      // before this RDD was marked for verification (e.g. a prior persist() + action).
+      logWarning(log"Content verification is enabled for RDD ${MDC(RDD_ID, id)} but " +
+        log"${MDC(NUM_PARTITIONS, unverified)} partition(s) were materialized before it was " +
+        log"marked and were left unverified.")
     }
   }
 
@@ -425,7 +427,7 @@ abstract class RDD[T: ClassTag](
         readCachedBlock = false
         computeOrReadCheckpoint(partition, context)
       },
-      verifySealedChecksum = verifySealedChecksum
+      verifySealedChecksum = verifyCheckpointChecksums
     ) match {
       // Block hit.
       case Left(blockResult) =>
@@ -1776,11 +1778,24 @@ abstract class RDD[T: ClassTag](
     // the storage level he/she specified to one that is appropriate for local checkpointing
     // (i.e. uses disk) to guarantee correctness.
 
-    if (storageLevel == StorageLevel.NONE) {
-      persist(LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL)
+    val baseLevel = if (storageLevel == StorageLevel.NONE) {
+      LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL
     } else {
-      persist(LocalRDDCheckpointData.transformStorageLevel(storageLevel), allowOverride = true)
+      LocalRDDCheckpointData.transformStorageLevel(storageLevel)
     }
+    // Content verification only covers serialized blocks. When enabled together with the
+    // force-serialized flag, adapt the level to a serialized one so a plain localCheckpoint()
+    // (whose default level is deserialized) becomes verifiable.
+    val checkpointLevel =
+      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED) &&
+          conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED) &&
+          baseLevel.deserialized) {
+        StorageLevel(baseLevel.useDisk, baseLevel.useMemory, baseLevel.useOffHeap,
+          deserialized = false, baseLevel.replication)
+      } else {
+        baseLevel
+      }
+    persist(checkpointLevel, allowOverride = true)
 
     // If this RDD is already checkpointed and materialized, its lineage is already truncated.
     // We must not override our `checkpointData` in this case because it is needed to recover
@@ -1797,8 +1812,13 @@ abstract class RDD[T: ClassTag](
         case _ =>
       }
       checkpointData = Some(new LocalRDDCheckpointData(this))
-      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED)) {
-        verifySealedChecksum = true
+      // Mark for checksum + seal only when the checkpoint's storage level is serialized: a
+      // deserialized level keeps in-memory objects with no bytes to checksum, so there is
+      // nothing to verify and marking would only add cost. (A deserialized default is expected,
+      // hence no warning; `...forceSerialized` above opts a default checkpoint into a serialized
+      // level so it can be verified.) `getStorageLevel` reflects the level set above.
+      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED) && !getStorageLevel.deserialized) {
+        verifyCheckpointChecksums = true
       }
     }
     this

@@ -851,9 +851,14 @@ class BlockManagerMasterEndpoint(
 
     if (storageLevel.isValid) {
       // Once a block is sealed, do not admit a copy whose checksum differs from the sealed
-      // (authoritative) value - acknowledge the report but drop the divergent copy.
+      // (authoritative) value - acknowledge the report but drop the divergent copy, and ask its
+      // executor to reclaim the local copy (fire-and-forget, mirroring the seal's eviction).
       if (sealedChecksums.containsKey(blockId) &&
           !checksum.contains(sealedChecksums.get(blockId).longValue)) {
+        blockManagerInfo.get(blockManagerId).foreach { bm =>
+          bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
+          () // fire-and-forget; correctness comes from the directory + read-side self-check
+        }
         return true
       }
       val firstBlock = locations.isEmpty
@@ -924,7 +929,10 @@ class BlockManagerMasterEndpoint(
     rddBlocks.foreach { blockId =>
       val perReplica = blockChecksums.get(blockId)
       if (perReplica != null && perReplica.nonEmpty) {
-        // Plurality checksum wins; ties broken arbitrarily (any sample is a valid snapshot).
+        // Any surviving version is a valid snapshot, so correctness does not require a particular
+        // winner. We keep the plurality checksum (ties broken arbitrarily) so the survivor is the
+        // best-replicated version - the one most resilient to replica loss, which matters here
+        // because a lost local-checkpoint block cannot be recomputed.
         val winner = perReplica.values.groupBy(identity).maxBy(_._2.size)._1
         sealedChecksums.put(blockId, winner)
         val losers = perReplica.collect { case (bmId, c) if c != winner => bmId }.toSeq

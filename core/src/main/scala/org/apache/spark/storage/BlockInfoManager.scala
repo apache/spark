@@ -91,8 +91,8 @@ private[storage] class BlockInfo(
 
   /**
    * Whether this block is subject to the read-side seal self-check (see `getLocalValues`). Set for
-   * blocks of RDDs with `verifySealedChecksum` set; a block merely checksummed for observation is
-   * not.
+   * blocks of RDDs with `verifyCheckpointChecksums` set; a block merely checksummed for observation
+   * is not.
    */
   var verifySealedChecksum: Boolean = false
 

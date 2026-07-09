@@ -2923,12 +2923,29 @@ package object config {
         "were materialized inconsistently by more than one task attempt (Spark non-determinism " +
         "combined with retries/speculation) and seals each partition to a single version. Guards " +
         "against silently inconsistent local checkpoints. This implies checksum computation for " +
-        "the checkpointed RDD regardless of spark.storage.rddBlockChecksum.enabled. Only " +
-        "serialized blocks materialized after localCheckpoint() is called are covered; " +
-        "deserialized in-memory blocks are not checksummed (a warning is logged).")
+        "the checkpointed RDD regardless of spark.storage.rddBlockChecksum.enabled. Only applied " +
+        "to a localCheckpoint with a SERIALIZED storage level (e.g. DISK_ONLY); a deserialized " +
+        "level (the default MEMORY_AND_DISK) has no checksummable bytes and is left unverified - " +
+        "see spark.checkpoint.local.verifyChecksum.forceSerialized to opt a default checkpoint " +
+        "into a serialized level. Sealing runs at checkpoint finalization: an eager checkpoint " +
+        "is sealed before any consumer reads it, while a lazy one is sealed after its first job " +
+        "materializes it (so reads within that job, before finalization, may still see an " +
+        "unsealed copy).")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
+
+  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED =
+    ConfigBuilder("spark.checkpoint.local.verifyChecksum.forceSerialized")
+      .internal()
+      .doc("When true (and verifyChecksum.enabled is true), localCheckpoint adapts a " +
+        "deserialized storage level to its serialized equivalent so the checkpoint's blocks " +
+        "can be checksummed and sealed. Off by default so localCheckpoint's storage level is " +
+        "not silently changed; enable it to verify checkpoints that would otherwise use the " +
+        "deserialized default.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val STAGE_MAX_ATTEMPTS =
     ConfigBuilder("spark.stage.maxAttempts")

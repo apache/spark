@@ -2558,6 +2558,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(store2.getLocalValues(blockId).isEmpty)
   }
 
+  test("read-side self-check skips a divergent local copy of a sealed block (no eviction)") {
+    // Isolates the read-side self-check from the seal's fire-and-forget eviction: the block is the
+    // sole replica, so the seal keeps it (no RemoveBlock is sent), then we make the local copy's
+    // checksum differ from the sealed value. getLocalValues must skip it purely via the self-check.
+    val store = makeBlockManager(20000, "exec1")
+    val blockId = RDDBlockId(24, 0)
+    store.getOrElseUpdateRDDBlock(
+      1L, blockId, StorageLevel.DISK_ONLY, classTag[Int], () => (1 to 16).iterator,
+      verifySealedChecksum = true)
+    assert(master.sealRddChecksums(24) === 0)
+    val sealedChecksum = master.getSealedChecksum(blockId)
+    assert(sealedChecksum.isDefined)
+    assert(store.getLocalValues(blockId).isDefined) // matches the seal, served
+
+    // Diverge the local copy from the sealed value (a stale replica the seal is evicting), and
+    // clear the cached pull so the read re-consults the master.
+    val info = store.blockInfoManager.get(blockId).get
+    info.checksum = sealedChecksum.map(_ + 1)
+    info.sealedChecksum = None
+    // The self-check now skips the local copy; getLocalValues returns None without any eviction.
+    assert(store.getLocalValues(blockId).isEmpty)
+  }
+
   test("verifySealed tracks the seal request, not merely the presence of a checksum") {
     // A seal-path store (verifySealedChecksum = true) marks the block for the read-side self-check.
     val sealStore = makeBlockManager(20000, "exec1")
