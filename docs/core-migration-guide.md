@@ -36,6 +36,8 @@ license: |
 
 - Since Spark 4.3, `spark.ui.allowFramingFrom` now uses CSP `frame-ancestors` instead of the deprecated `X-Frame-Options: ALLOW-FROM` (which was ignored by all modern browsers). This setting only takes effect when `spark.ui.contentSecurityPolicy.enabled=true` (the default). When CSP is disabled, `X-Frame-Options: SAMEORIGIN` is always used regardless of the `allowFramingFrom` value.
 
+- Since Spark 4.3, the Spark Master REST API rejects a submission whose request body exceeds `spark.master.rest.maxRequestBodySize` (default `100m`) with HTTP 413. To allow larger request bodies, increase `spark.master.rest.maxRequestBodySize`.
+
 ## Upgrading from Core 4.1 to 4.2
 
 - Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.
