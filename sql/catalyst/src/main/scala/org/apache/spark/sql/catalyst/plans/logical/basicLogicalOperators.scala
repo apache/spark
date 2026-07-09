@@ -1804,9 +1804,7 @@ case class UnresolvedBinBy(
  *                            `ExprId`s, same names/types as `distributeColumns`); they replace
  *                            `distributeColumns` in `output`.
  * @param appendedAttributes  The three output attributes appended after the child columns.
- * @param unrequiredChildIndex Child-output positions not forwarded to `output`; starts as `Nil` and
- *                            is filled by `ColumnPruning`. The kernel-read range and DISTRIBUTE
- *                            columns stay in the child even when listed here.
+ * @param unrequiredChildIndex Child-output positions not forwarded to `output`.
  * @param child               Input relation.
  * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
  *                            Required when `rangeStart.dataType` is `TimestampType`; must be

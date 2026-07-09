@@ -484,48 +484,33 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Column pruning for BinBy") {
-    // 4-column relation: two range inputs, one DISTRIBUTE column, one unused pass-through.
+    // Two range inputs, one DISTRIBUTE column, one unused pass-through.
     val tsStart = AttributeReference("ts_start", TimestampType, nullable = false)()
     val tsEnd = AttributeReference("ts_end", TimestampType, nullable = false)()
     val value = AttributeReference("value", DoubleType, nullable = false)()
     val label = AttributeReference("label", StringType, nullable = true)()
     val relation = LocalRelation(tsStart, tsEnd, value, label)
 
-    // Minted produced attributes: scaled DISTRIBUTE column + three BIN BY output columns.
+    // Produced attributes: scaled DISTRIBUTE column + three appended columns.
     val scaledValue = AttributeReference("value", DoubleType, nullable = true)()
     val binStart = AttributeReference("bin_start", TimestampType, nullable = true)()
     val binEnd = AttributeReference("bin_end", TimestampType, nullable = true)()
     val binRatio = AttributeReference("bin_distribute_ratio", DoubleType, nullable = true)()
-    val appended = Seq(binStart, binEnd, binRatio)
 
-    val binBy = BinBy(
-      binWidthMicros = 300000000L,
-      rangeStart = tsStart,
-      rangeEnd = tsEnd,
-      originMicros = 0L,
-      distributeColumns = Seq(value),
-      scaledDistributeColumns = Seq(scaledValue),
-      appendedAttributes = appended,
-      unrequiredChildIndex = Nil,
-      child = relation,
-      timeZoneId = Some("UTC"))
-
-    // Project keeps only bin_start (a produced attr). `label` is forwarded by neither the project
-    // nor the kernel, so it is pruned out of the child entirely. The range columns stay in the
-    // child (the kernel reads them) but are not forwarded to output, so they populate
-    // unrequiredChildIndex.
-    val query = Project(Seq(binStart), binBy)
+    val query = relation
+      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio))
+      .select(binStart)
 
     val optimized = Optimize.execute(query)
 
-    val binByResult = optimized.collectFirst { case b: BinBy => b }.get
-    assert(binByResult.unrequiredChildIndex.nonEmpty,
-      "unforwarded range columns must populate unrequiredChildIndex after ColumnPruning")
-    // range inputs and DISTRIBUTE column remain in the child output (the kernel reads them).
-    val keptNames = binByResult.child.output.map(_.name).toSet
-    assert(keptNames.contains("ts_start"), "rangeStart must remain in child output")
-    assert(keptNames.contains("ts_end"), "rangeEnd must remain in child output")
-    assert(keptNames.contains("value"), "DISTRIBUTE column must remain in child output")
-    assert(!keptNames.contains("label"), "label must have been pruned from child output")
+    // `label` is pruned from the child; the range columns stay in the child (the kernel reads
+    // them) but unforwarded, so they are unrequired; `value` stays (DISTRIBUTE, scaled in place).
+    val correctAnswer = relation
+      .select(tsStart, tsEnd, value)
+      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio),
+        unrequiredChildIndex = Seq(0, 1))
+      .select(binStart)
+
+    comparePlans(optimized, correctAnswer, checkAnalysis = false)
   }
 }
