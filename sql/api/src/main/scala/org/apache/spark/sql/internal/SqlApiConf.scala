@@ -47,6 +47,8 @@ private[sql] trait SqlApiConf {
   def stackTracesInDataFrameContext: Int
   def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
+  def allowCreatingUDTFromString: Boolean
+  def allowedDynamicUDTClasses: Seq[String]
 }
 
 private[sql] object SqlApiConf {
@@ -60,6 +62,8 @@ private[sql] object SqlApiConf {
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = {
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
   }
+  val ALLOW_CREATING_UDT_FROM_STRING: String = SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING
+  val ALLOWED_DYNAMIC_UDT_CLASSES: String = SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -88,4 +92,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def stackTracesInDataFrameContext: Int = 1
   override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
+  override def allowCreatingUDTFromString: Boolean = true
+  override def allowedDynamicUDTClasses: Seq[String] = Nil
 }

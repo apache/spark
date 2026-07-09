@@ -5166,6 +5166,18 @@
     ],
     "sqlState" : "42802"
   },
+  "UDT_CLASS_LOADING_DISABLED" : {
+    "message" : [
+      "Cannot load the class <udtClass> as a user-defined type. Loading UserDefinedType classes by name is disabled by `spark.sql.udt.allowCreatingUDTFromString`, and <udtClass> is not in the allow list `spark.sql.udt.allowedDynamicUDTClasses` (currently <allowed>). Set `spark.sql.udt.allowCreatingUDTFromString` to true, or add the class to the allow list, only if you trust the source of the data being read."
+    ],
+    "sqlState" : "2203G"
+  },
+  "UDT_CLASS_NOT_USER_DEFINED_TYPE" : {
+    "message" : [
+      "The class <udtClass> cannot be loaded as a user-defined type because it is not a subtype of UserDefinedType."
+    ],
+    "sqlState" : "2203G"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."

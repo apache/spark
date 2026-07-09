@@ -793,6 +793,42 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("loading UDT classes named in Parquet metadata respects the UDT allow list") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val udtClass = classOf[TestNestedStructUDT].getName
+      val schema = new StructType().add("s", new TestNestedStructUDT, nullable = true)
+      val data = Seq(Row(TestNestedStruct(1, 2L, 3.5D)))
+      // Writing a UDT column embeds the UDT class name in the Parquet key-value metadata, which is
+      // read back and passed to DataType.fromJson during schema inference (the vulnerable path).
+      spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        .coalesce(1)
+        .write
+        .parquet(path)
+
+      def inferredColumnType: DataType = spark.read.parquet(path).schema("s").dataType
+
+      // By default the UDT class named in the file metadata is loaded during schema inference.
+      assert(inferredColumnType.isInstanceOf[TestNestedStructUDT])
+
+      // With UDT loading disabled and the class not on the allow list, Spark must not load the
+      // class named in the file. Schema inference falls back to the underlying physical schema
+      // rather than instantiating the attacker-named class.
+      withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+        assert(!inferredColumnType.isInstanceOf[TestNestedStructUDT])
+        assert(!inferredColumnType.isInstanceOf[UserDefinedType[_]])
+        assert(inferredColumnType.isInstanceOf[StructType])
+      }
+
+      // Explicitly allow-listing the class restores UDT resolution end to end.
+      withSQLConf(
+          SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+          SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udtClass) {
+        assert(inferredColumnType.isInstanceOf[TestNestedStructUDT])
+      }
+    }
+  }
+
   testStandardAndLegacyModes("SPARK-39086: UDT read support in vectorized reader") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath

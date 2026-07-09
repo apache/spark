@@ -33,6 +33,8 @@ private[sql] object SqlApiConfHelper {
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES = "spark.sql.execution.arrow.useLargeVarTypes"
+  val ALLOW_CREATING_UDT_FROM_STRING: String = "spark.sql.udt.allowCreatingUDTFromString"
+  val ALLOWED_DYNAMIC_UDT_CLASSES: String = "spark.sql.udt.allowedDynamicUDTClasses"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

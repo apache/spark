@@ -83,6 +83,21 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       cause = null)
   }
 
+  def udtClassLoadingDisabledError(udtClass: String, allowed: Seq[String]): Throwable = {
+    new SparkException(
+      errorClass = "UDT_CLASS_LOADING_DISABLED",
+      messageParameters =
+        Map("udtClass" -> udtClass, "allowed" -> allowed.map(toSQLValue).mkString(", ")),
+      cause = null)
+  }
+
+  def udtClassNotUserDefinedTypeError(udtClass: String): Throwable = {
+    new SparkException(
+      errorClass = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+      messageParameters = Map("udtClass" -> udtClass),
+      cause = null)
+  }
+
   def unsupportedArrayTypeError(clazz: Class[_]): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2120",
