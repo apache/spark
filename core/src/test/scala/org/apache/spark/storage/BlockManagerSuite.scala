@@ -52,7 +52,7 @@ import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService, TransportContext}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient}
-import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
+import org.apache.spark.network.netty.{BlockReplicationMetadata, NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
@@ -1821,7 +1821,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
           blockId: BlockId,
           blockData: ManagedBuffer,
           level: StorageLevel,
-          classTag: ClassTag[_]): Future[Unit] = {
+          classTag: ClassTag[_],
+          checksum: Option[Long] = None,
+          verifySealedChecksum: Boolean = false): Future[Unit] = {
         throw new InterruptedException("Intentional interrupt")
       }
     }
@@ -2456,6 +2458,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     master.updateBlockInfo(
       store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(99L))
     assert(!master.getLocations(blockId).contains(store2.blockManagerId))
+    // A checksum-less report of a sealed block is also rejected (a sealed block must always
+    // report its checksum; a None here is anomalous and must not enter the directory unverified).
+    master.updateBlockInfo(
+      store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, None)
+    assert(!master.getLocations(blockId).contains(store2.blockManagerId))
     // A matching checksum is admitted.
     master.updateBlockInfo(
       store2.blockManagerId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(42L))
@@ -2630,6 +2637,37 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(master.sealRddChecksums(22) === 0)
     assert(master.getLocations(blockId).size === 1)
     assert(master.getSealedChecksum(blockId).isDefined)
+  }
+
+  test("BlockReplicationMetadata round-trips checksum and seal mark through serialization") {
+    val ser = new JavaSerializer(conf).newInstance()
+    Seq(
+      BlockReplicationMetadata(StorageLevel.DISK_ONLY, classTag[Int]),
+      BlockReplicationMetadata(StorageLevel.DISK_ONLY, classTag[Int], Some(42L), true)
+    ).foreach { meta =>
+      assert(ser.deserialize[BlockReplicationMetadata](ser.serialize(meta)) === meta)
+    }
+  }
+
+  test("a seal-path RDD block replicates its checksum and mark, and the replica is verifiable") {
+    val store1 = makeBlockManager(20000, "exec1")
+    val store2 = makeBlockManager(20000, "exec2")
+    val blockId = RDDBlockId(30, 0)
+    // Store a seal-path block with replication 2; the replica is uploaded to a peer.
+    val level =
+      StorageLevel(useDisk = true, useMemory = false, deserialized = false, replication = 2)
+    store1.getOrElseUpdateRDDBlock(
+      1L, blockId, level, classTag[Int], () => Seq(1, 2, 3, 4).iterator,
+      verifySealedChecksum = true)
+    // Both the primary and the replica registered a checksum, and they agree (same bytes).
+    assert(master.getLocations(blockId).size === 2)
+    assert(
+      master.sealRddChecksums(30) === 0, "both copies carried a checksum, so none is unverified")
+    assert(master.getSealedChecksum(blockId).isDefined)
+    // Both locations survive the seal (they agreed), and the sealed block is served from each.
+    assert(master.getLocations(blockId).size === 2)
+    assert(store1.getLocalValues(blockId).isDefined)
+    assert(store2.getLocalValues(blockId).isDefined)
   }
 
   test("SPARK-41497: mark rdd block as visible") {
@@ -2954,7 +2992,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
         blockId: BlockId,
         blockData: ManagedBuffer,
         level: StorageLevel,
-        classTag: ClassTag[_]): Future[Unit] = {
+        classTag: ClassTag[_],
+        checksum: Option[Long] = None,
+        verifySealedChecksum: Boolean = false): Future[Unit] = {
       // scalastyle:off executioncontextglobal
       import scala.concurrent.ExecutionContext.Implicits.global
       // scalastyle:on executioncontextglobal

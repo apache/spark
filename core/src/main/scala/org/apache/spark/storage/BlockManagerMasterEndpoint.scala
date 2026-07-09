@@ -850,9 +850,16 @@ class BlockManagerMasterEndpoint(
     }
 
     if (storageLevel.isValid) {
-      // Once a block is sealed, do not admit a copy whose checksum differs from the sealed
-      // (authoritative) value - acknowledge the report but drop the divergent copy, and ask its
-      // executor to reclaim the local copy (fire-and-forget, mirroring the seal's eviction).
+      // Once a block is sealed, admit a copy only if its checksum equals the sealed
+      // (authoritative) value - otherwise acknowledge the report but drop the divergent copy, and
+      // ask its executor to reclaim the local copy (fire-and-forget, mirroring the seal's
+      // eviction). A `None` (checksum-less) report of a sealed block is also rejected: every path
+      // that stores or re-reports a block which could be sealed carries its checksum (store,
+      // eviction/spill, replica receive, and heartbeat re-report all set/forward `info.checksum`),
+      // and a block that was never checksummed anywhere is never sealed (`sealRddChecksums` only
+      // seals partitions with a recorded checksum), so it never reaches this branch. A `None` here
+      // is therefore anomalous, and admitting it would put an unverifiable copy into the directory
+      // that remote reads (which do not run the read-side self-check) would trust.
       if (sealedChecksums.containsKey(blockId) &&
           !checksum.contains(sealedChecksums.get(blockId).longValue)) {
         blockManagerInfo.get(blockManagerId).foreach { bm =>

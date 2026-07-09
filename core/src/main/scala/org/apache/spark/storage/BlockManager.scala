@@ -262,6 +262,19 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Fold a content checksum over a received (replicated) RDD block's bytes. The bytes are the
+   * decrypted serialized+compressed plaintext (the same form `wrapForChecksum` covers on the store
+   * path), so the value is comparable to the source's and to the seal.
+   */
+  private def computeReceivedBlockChecksum(data: BlockData): Long = {
+    val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(rddBlockChecksumAlgorithm)
+    val out = serializerManager.wrapForChecksum(checksum, OutputStream.nullOutputStream())
+    Utils.tryWithResource(data.toInputStream()) { in => in.transferTo(out) }
+    out.close()
+    checksum.getValue
+  }
+
+  /**
    * For a block that carries its own content checksum, whether this executor's local copy is the
    * one to serve: it must match the block's sealed checksum. The sealed value is pulled from the
    * master once and cached on the `BlockInfo` (immutable once set). A block with no sealed checksum
@@ -428,6 +441,10 @@ private[spark] class BlockManager(
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
    *
    * @param blockSize the decrypted size of the block
+   * @param sourceChecksum the source replica's content checksum, when it had one (seal path or the
+   *                       global compute switch); used to verify the transfer (see `save`).
+   * @param sourceVerifySealedChecksum whether the source was on the seal path, propagated so this
+   *                       replica records the mark and self-checks reads.
    */
   private[spark] abstract class BlockStoreUpdater[T](
       blockSize: Long,
@@ -435,7 +452,9 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       tellMaster: Boolean,
-      keepReadLock: Boolean) {
+      keepReadLock: Boolean,
+      sourceChecksum: Option[Long] = None,
+      sourceVerifySealedChecksum: Boolean = false) {
 
     /**
      *  Reads the block content into the memory. If the update of the block store is based on a
@@ -499,8 +518,11 @@ private[spark] class BlockManager(
         val replicationFuture = if (level.replication > 1) {
           Future {
             // This is a blocking action and should run in futureExecutionContext which is a cached
-            // thread pool.
-            replicate(blockId, blockData(), level, classTag)
+            // thread pool. Forward this replica's checksum + seal mark so downstream replicas are
+            // verified against the seal too.
+            replicate(blockId, blockData(), level, classTag,
+              sourceChecksum = info.checksum,
+              sourceVerifySealedChecksum = info.verifySealedChecksum)
           }(futureExecutionContext)
         } else {
           null
@@ -523,11 +545,26 @@ private[spark] class BlockManager(
         val putBlockStatus = getCurrentBlockStatus(blockId, info)
         val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
         if (blockWasSuccessfullyStored) {
+          // Propagate the source replica's verify mark, and (when the source carried a checksum or
+          // was on the seal path) recompute the checksum over the received bytes and record it, so
+          // the master can verify this replica and this executor's reads self-check it.
+          if (blockId.isRDD) {
+            if (sourceVerifySealedChecksum) info.verifySealedChecksum = true
+            if (sourceChecksum.isDefined || sourceVerifySealedChecksum) {
+              val recomputed = computeReceivedBlockChecksum(blockData())
+              if (sourceChecksum.exists(_ != recomputed)) {
+                logWarning(log"Replicated block ${MDC(BLOCK_ID, blockId)} arrived with a source " +
+                  log"checksum that does not match its received bytes; storing the recomputed " +
+                  log"value (possible transmission corruption or non-deterministic serialization).")
+              }
+              info.checksum = Some(recomputed)
+            }
+          }
           // Now that the block is in either the memory or disk store,
           // tell the master about it.
           info.size = blockSize
           if (tellMaster && info.tellMaster) {
-            reportBlockStatus(blockId, putBlockStatus)
+            reportBlockStatus(blockId, putBlockStatus, checksum = info.checksum)
           }
           addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
         }
@@ -560,8 +597,11 @@ private[spark] class BlockManager(
       classTag: ClassTag[T],
       bytes: ChunkedByteBuffer,
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
-    extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock) {
+      keepReadLock: Boolean = false,
+      sourceChecksum: Option[Long] = None,
+      sourceVerifySealedChecksum: Boolean = false)
+    extends BlockStoreUpdater[T](bytes.size, blockId, level, classTag, tellMaster, keepReadLock,
+      sourceChecksum, sourceVerifySealedChecksum) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = bytes
 
@@ -585,8 +625,11 @@ private[spark] class BlockManager(
       tmpFile: File,
       blockSize: Long,
       tellMaster: Boolean = true,
-      keepReadLock: Boolean = false)
-    extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock) {
+      keepReadLock: Boolean = false,
+      sourceChecksum: Option[Long] = None,
+      sourceVerifySealedChecksum: Boolean = false)
+    extends BlockStoreUpdater[T](blockSize, blockId, level, classTag, tellMaster, keepReadLock,
+      sourceChecksum, sourceVerifySealedChecksum) {
 
     override def readToByteBuffer(): ChunkedByteBuffer = {
       val allocator = level.memoryMode match {
@@ -740,7 +783,10 @@ private[spark] class BlockManager(
     logInfo(log"Reporting ${MDC(NUM_BLOCKS, blockInfoManager.size)} blocks to the master.")
     for ((blockId, info) <- blockInfoManager.entries) {
       val status = getCurrentBlockStatus(blockId, info)
-      if (info.tellMaster && !tryToReportBlockStatus(blockId, status)) {
+      // Forward the block's content checksum so a re-report re-verifies against the seal (a sealed
+      // block must never report checksum-less; see BlockManagerMasterEndpoint.updateBlockInfo).
+      if (info.tellMaster &&
+          !tryToReportBlockStatus(blockId, status, checksum = info.checksum)) {
         logError(log"Failed to report ${MDC(BLOCK_ID, blockId)} to master; giving up.")
         return
       }
@@ -846,14 +892,19 @@ private[spark] class BlockManager(
       blockId: BlockId,
       data: ManagedBuffer,
       level: StorageLevel,
-      classTag: ClassTag[_]): Boolean = {
-    putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level)(classTag)
+      classTag: ClassTag[_],
+      checksum: Option[Long] = None,
+      verifySealedChecksum: Boolean = false): Boolean = {
+    putBytes(blockId, new ChunkedByteBuffer(data.nioByteBuffer()), level,
+      sourceChecksum = checksum, sourceVerifySealedChecksum = verifySealedChecksum)(classTag)
   }
 
   override def putBlockDataAsStream(
       blockId: BlockId,
       level: StorageLevel,
-      classTag: ClassTag[_]): StreamCallbackWithID = {
+      classTag: ClassTag[_],
+      checksum: Option[Long] = None,
+      verifySealedChecksum: Boolean = false): StreamCallbackWithID = {
 
     checkShouldStore(blockId, level)
 
@@ -890,7 +941,9 @@ private[spark] class BlockManager(
         channel.close()
         val blockSize = channel.getCount
         val blockStored = TempFileBasedBlockStoreUpdater(
-          blockId, level, classTag, tmpFile, blockSize).save()
+          blockId, level, classTag, tmpFile, blockSize,
+          sourceChecksum = checksum,
+          sourceVerifySealedChecksum = verifySealedChecksum).save()
         if (!blockStored) {
           throw SparkCoreErrors.failToStoreBlockOnBlockManagerError(blockManagerId, blockId)
         }
@@ -1631,10 +1684,14 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ChunkedByteBuffer,
       level: StorageLevel,
-      tellMaster: Boolean = true): Boolean = {
+      tellMaster: Boolean = true,
+      sourceChecksum: Option[Long] = None,
+      sourceVerifySealedChecksum: Boolean = false): Boolean = {
     require(bytes != null, "Bytes is null")
     val blockStoreUpdater =
-      ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
+      ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster,
+        sourceChecksum = sourceChecksum,
+        sourceVerifySealedChecksum = sourceVerifySealedChecksum)
     blockStoreUpdater.save()
   }
 
@@ -1772,8 +1829,8 @@ private[spark] class BlockManager(
             case Right(s) =>
               size = s
               // A deserialized block resident in memory has no serialized bytes, so no checksum is
-              // computed here; it gets one only if/when it is later serialized (the spill-to-disk
-              // branch below, or replication).
+              // computed here; it gets one only if/when it is later serialized - the spill-to-disk
+              // branch below, eviction (`dropFromMemory`), or on a replica when received.
             case Left(iter) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
@@ -1806,6 +1863,9 @@ private[spark] class BlockManager(
                   val out = Channels.newOutputStream(channel)
                   partiallySerializedValues.finishWritingToStream(out)
                 }
+                // checksumOpt folds over the whole serialized stream (in-memory portion plus the
+                // values finished to disk here), so its value now covers the full block.
+                checksumOpt.foreach(c => info.checksum = Some(c.getValue))
                 size = diskStore.getSize(blockId)
               } else {
                 iteratorFromFailedMemoryStorePut = Some(partiallySerializedValues.valuesIterator)
@@ -1839,7 +1899,9 @@ private[spark] class BlockManager(
           val remoteStartTimeNs = System.nanoTime()
           val bytesToReplicate = doGetLocalBytes(blockId, info)
           try {
-            replicate(blockId, bytesToReplicate, level, classTag)
+            replicate(blockId, bytesToReplicate, level, classTag,
+              sourceChecksum = info.checksum,
+              sourceVerifySealedChecksum = info.verifySealedChecksum)
           } finally {
             bytesToReplicate.dispose()
           }
@@ -1988,7 +2050,9 @@ private[spark] class BlockManager(
       getPeers(forceFetch = true)
       try {
         replicate(
-          blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures)
+          blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures,
+          sourceChecksum = info.checksum,
+          sourceVerifySealedChecksum = info.verifySealedChecksum)
       } finally {
         logDebug(s"Releasing lock for $blockId")
         releaseLockAndDispose(blockId, data)
@@ -2006,7 +2070,11 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[_],
       existingReplicas: Set[BlockManagerId] = Set.empty,
-      maxReplicationFailures: Option[Int] = None): Boolean = {
+      maxReplicationFailures: Option[Int] = None,
+      // Source block's content checksum + seal-path mark, forwarded to each replica so it can be
+      // verified against the seal like a primary.
+      sourceChecksum: Option[Long] = None,
+      sourceVerifySealedChecksum: Boolean = false): Boolean = {
 
     val maxReplicationFailureCount = maxReplicationFailures.getOrElse(
       conf.get(config.STORAGE_MAX_REPLICATION_FAILURE))
@@ -2051,7 +2119,9 @@ private[spark] class BlockManager(
           blockId,
           buffer,
           tLevel,
-          classTag)
+          classTag,
+          sourceChecksum,
+          sourceVerifySealedChecksum)
         logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
           s" in ${(System.nanoTime - onePeerStartTime).toDouble / 1e6} ms")
         peersForReplication = peersForReplication.tail
@@ -2138,15 +2208,22 @@ private[spark] class BlockManager(
     // Drop to disk, if storage level requires
     if (level.useDisk && !diskStore.contains(blockId)) {
       logInfo(log"Writing block ${MDC(BLOCK_ID, blockId)} to disk")
+      // The Left branch is the block's first serialized form, so checksum it here (same rule as the
+      // store path) and record it, so an evicted block is verifiable and never re-reports
+      // checksum-less once sealed. The Right branch writes bytes whose checksum was set at store.
+      val checksumOpt = newRddBlockChecksum(blockId, info.verifySealedChecksum)
       data() match {
         case Left(elements) =>
           diskStore.put(blockId) { channel =>
-            val out = Channels.newOutputStream(channel)
+            val rawOut = Channels.newOutputStream(channel)
+            val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut))
+              .getOrElse(rawOut)
             serializerManager.dataSerializeStream(
               blockId,
               out,
               elements.iterator)(info.classTag.asInstanceOf[ClassTag[T]])
           }
+          checksumOpt.foreach(c => info.checksum = Some(c.getValue))
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
@@ -2166,7 +2243,7 @@ private[spark] class BlockManager(
 
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
-      reportBlockStatus(blockId, status, droppedMemorySize)
+      reportBlockStatus(blockId, status, droppedMemorySize, checksum = info.checksum)
     }
     if (blockIsUpdated) {
       addUpdatedBlockStatusToTaskMetrics(blockId, status)
