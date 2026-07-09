@@ -1372,6 +1372,11 @@
           "Struct literal is not set."
         ]
       },
+      "UDT_JVM_CLASS_NOT_UDT" : {
+        "message" : [
+          "The 'jvm_class' <jvmClass> in the UDT is not a subclass of UserDefinedType."
+        ]
+      },
       "UDT_TYPE_FIELD_INVALID" : {
         "message" : [
           "UserDefinedType requires the 'type' field to be 'udt', but got '<udtType>'."
