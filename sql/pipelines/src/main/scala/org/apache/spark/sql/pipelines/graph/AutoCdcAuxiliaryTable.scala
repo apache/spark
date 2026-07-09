@@ -65,7 +65,7 @@ object AutoCdcAuxiliaryTable {
    * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
    * upstream.
    */
-  def serializeKeyColumnNames(names: Seq[String]): String = {
+  private[graph] def serializeKeyColumnNames(names: Seq[String]): String = {
     compact(JArray(names.map(JString(_)).toList))
   }
 
@@ -74,7 +74,7 @@ object AutoCdcAuxiliaryTable {
    * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
    * upstream.
    */
-  def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
+  private[graph] def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
     val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
     parsed.flatMap {
       case JArray(elems) =>
@@ -85,24 +85,24 @@ object AutoCdcAuxiliaryTable {
   }
 
   /**
-   * Build the auxiliary table spec given an AutoCdc flow and the destination table it writes to.
+   * Build the auxiliary table spec given an AutoCdc flow and the target table it writes to.
    *
-   * @param destinationTable the dataset that owns the auxiliary table
-   * @param destinationTableSchema the AutoCDC target's evolved schema as of the latest pipeline run
-   *                               (the union of all flows writing to the target after schema
-   *                               evolution, NOT the target's `specifiedSchema`)
-   * @param inputAutoCdcFlow the AutoCDC flow writing to `destinationTable`
+   * @param targetTable the dataset that owns the auxiliary table
+   * @param targetTableSchema the AutoCDC target's evolved schema as of the latest pipeline run
+   *                          (the union of all flows writing to the target after schema
+   *                          evolution, NOT the target's `specifiedSchema`)
+   * @param inputAutoCdcFlow the AutoCDC flow writing to `targetTable`
    * @return the auxiliary-table spec
    */
   def buildAuxiliaryTableSpecFor(
-      destinationTable: Table,
-      destinationTableSchema: StructType,
+      targetTable: Table,
+      targetTableSchema: StructType,
       inputAutoCdcFlow: AutoCdcMergeFlow): AuxiliaryTableSpec = {
     inputAutoCdcFlow.changeArgs.storedAsScdType match {
       case ScdType.Type1 =>
         buildScd1AuxiliaryTableSpecFor(
-          destinationTable,
-          destinationTableSchema,
+          targetTable,
+          targetTableSchema,
           inputAutoCdcFlow
         )
       case ScdType.Type2 =>
@@ -115,41 +115,41 @@ object AutoCdcAuxiliaryTable {
   }
 
   /**
-   * Build the SCD1 auxiliary table spec given the AutoCdc flow's declared keys and the destination
+   * Build the SCD1 auxiliary table spec given the AutoCdc flow's declared keys and the target
    * table it writes to.
    *
-   * @param destinationTable the dataset that owns the SCD1 auxiliary table
-   * @param destinationTableSchema the AutoCDC target's evolved schema as of the latest pipeline run
-   *                               (the union of all flows writing to the target after schema
-   *                               evolution), from which the key and CDC metadata fields are
-   *                               resolved
-   * @param inputAutoCdcFlow the AutoCDC flow writing to `destinationTable`
+   * @param targetTable the dataset that owns the SCD1 auxiliary table
+   * @param targetTableSchema the AutoCDC target's evolved schema as of the latest pipeline run
+   *                          (the union of all flows writing to the target after schema
+   *                          evolution), from which the key and CDC metadata fields are
+   *                          resolved
+   * @param inputAutoCdcFlow the AutoCDC flow writing to `targetTable`
    * @return the SCD1 auxiliary-table spec
    */
   private def buildScd1AuxiliaryTableSpecFor(
-      destinationTable: Table,
-      destinationTableSchema: StructType,
+      targetTable: Table,
+      targetTableSchema: StructType,
       inputAutoCdcFlow: AutoCdcMergeFlow
   ): AuxiliaryTableSpec = {
-    val scd1AuxiliaryTableIdentifier = identifier(destinationTable.identifier)
+    val scd1AuxiliaryTableIdentifier = identifier(targetTable.identifier)
 
     val resolver = inputAutoCdcFlow.df.sparkSession.sessionState.conf.resolver
     val autoCdcKeyColumnNames = inputAutoCdcFlow.changeArgs.keys.map(_.name)
 
     // The auxiliary table should derive its schema from the exact same key/CDC metadata column
-    // schema in its corresponding destination table. Retrieve those column schemas.
+    // schema in its corresponding target table. Retrieve those column schemas.
     val keyFields = autoCdcKeyColumnNames.map { keyColumnName =>
-      findFieldInDestinationSchema(
-        destinationTableSchema = destinationTableSchema,
-        destinationTableIdentifier = destinationTable.identifier,
+      findFieldInTargetSchema(
+        targetTableSchema = targetTableSchema,
+        targetTableIdentifier = targetTable.identifier,
         autoCdcFlowIdentifier = inputAutoCdcFlow.identifier,
         fieldName = keyColumnName,
         resolver = resolver
       )
     }
-    val cdcMetadataField = findFieldInDestinationSchema(
-      destinationTableSchema = destinationTableSchema,
-      destinationTableIdentifier = destinationTable.identifier,
+    val cdcMetadataField = findFieldInTargetSchema(
+      targetTableSchema = targetTableSchema,
+      targetTableIdentifier = targetTable.identifier,
       autoCdcFlowIdentifier = inputAutoCdcFlow.identifier,
       fieldName = AutoCdcReservedNames.cdcMetadataColName,
       resolver = resolver
@@ -166,42 +166,42 @@ object AutoCdcAuxiliaryTable {
       Map(keyColumnNamesProperty -> serializeKeyColumnNames(keyFields.map(_.name))) ++
       // Inherit the target's format so MERGE semantics line up. When unspecified, omit the provider
       // so the catalog falls back to its default.
-      destinationTable.format.map(TableCatalog.PROP_PROVIDER -> _)
+      targetTable.format.map(TableCatalog.PROP_PROVIDER -> _)
 
     AutoCdcAuxiliaryTableSpec(
       identifier = scd1AuxiliaryTableIdentifier,
       schema = scd1AuxiliaryTableSchema,
       properties = scd1AuxiliaryTableProperties,
-      targetTableIdentifier = destinationTable.identifier,
+      targetTableIdentifier = targetTable.identifier,
       expectedKeyFields = keyFields,
       expectedScdType = ScdType.Type1
     )
   }
 
   /**
-   * Resolve the [[StructField]] named `fieldName` in `destinationTableSchema` (the AutoCDC target's
+   * Resolve the [[StructField]] named `fieldName` in `targetTableSchema` (the AutoCDC target's
    * evolved schema). The key columns and the CDC metadata column are always present in that schema,
    * so a miss is an implementation invariant and surfaces as an internal error.
    *
-   * @param destinationTableSchema the AutoCDC target's evolved schema to resolve against
+   * @param targetTableSchema the AutoCDC target's evolved schema to resolve against
    * @param fieldName the column name to resolve
    * @param resolver the session resolver used for case-sensitivity-aware field lookups
-   * @param destinationTableIdentifier the AutoCDC target's identifier, named in the error message
+   * @param targetTableIdentifier the AutoCDC target's identifier, named in the error message
    * @param autoCdcFlowIdentifier the AutoCDC flow writing to the target, named in the error message
    * @return the matching field
    */
-  private def findFieldInDestinationSchema(
-      destinationTableSchema: StructType,
+  private def findFieldInTargetSchema(
+      targetTableSchema: StructType,
       fieldName: String,
       resolver: Resolver,
-      destinationTableIdentifier: TableIdentifier,
+      targetTableIdentifier: TableIdentifier,
       autoCdcFlowIdentifier: TableIdentifier): StructField = {
-    destinationTableSchema.fields
+    targetTableSchema.fields
       .find(field => resolver(field.name, fieldName))
       .getOrElse(
         throw SparkException.internalError(
           s"Expected but unable to find column $fieldName in target table " +
-          s"$destinationTableIdentifier written to by AutoCDC flow $autoCdcFlowIdentifier."
+          s"$targetTableIdentifier written to by AutoCDC flow $autoCdcFlowIdentifier."
         )
       )
   }
@@ -224,6 +224,10 @@ object AutoCdcAuxiliaryTable {
     val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxiliaryTable.columns())
     val recordedKeyNames =
       parseRecordedKeyColumnNames(existingAuxiliaryTable, targetTableIdentifier)
+    // First validate the existing auxiliary table is internally consistent: every key column name
+    // recorded in its table property must still resolve to a field in its schema. A missing key
+    // column means the table was corrupted or modified externally, and is rejected before any
+    // drift comparison against the expected key fields.
     val recordedKeyFields: Seq[StructField] = recordedKeyNames.map { name =>
       existingAuxSchema.fields
         .find(field => resolver(field.name, name))

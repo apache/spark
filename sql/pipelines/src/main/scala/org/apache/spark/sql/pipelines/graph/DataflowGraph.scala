@@ -202,8 +202,8 @@ case class DataflowGraph(
           .collectFirst { case f: AutoCdcMergeFlow => f }
           .map { autoCdcFlow =>
             val spec = AutoCdcAuxiliaryTable.buildAuxiliaryTableSpecFor(
-              destinationTable = destinationTable,
-              destinationTableSchema = inferredSchema(destinationTableIdentifier),
+              targetTable = destinationTable,
+              targetTableSchema = inferredSchema(destinationTableIdentifier),
               inputAutoCdcFlow = autoCdcFlow
             )
             destinationTableIdentifier -> spec

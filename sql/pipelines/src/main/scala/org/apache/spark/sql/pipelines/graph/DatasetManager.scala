@@ -113,7 +113,7 @@ object DatasetManager extends Logging {
                   isFullRefresh = isFullRefresh,
                   context = context
                 )
-                // Auxiliary tables' lifecycle should follow the table that it is complimentary to.
+                // Auxiliary tables' lifecycle should follow the table that it is complementary to.
                 // If this table has any auxiliary tables, validate the target can host them and
                 // materialize/full-refresh them accordingly.
                 resolvedDataflowGraph.auxiliaryTableSpecs.get(table.identifier).foreach {

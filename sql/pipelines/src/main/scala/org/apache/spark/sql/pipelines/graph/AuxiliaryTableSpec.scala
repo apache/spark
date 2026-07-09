@@ -24,7 +24,10 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * A specification for an internal auxiliary table whose lifecycle follows a materialized
  * dataset of the [[DataflowGraph]]: it is created/evolved alongside that dataset during dataset
- * materialization and dropped when that dataset is fully refreshed.
+ * materialization and dropped when that dataset is fully refreshed and still accompanied by an
+ * auxiliary table spec in the current pipeline definition. If the accompanying flow (e.g. the
+ * AutoCDC flow) is removed and the target is fully refreshed, the orphaned auxiliary table is
+ * intentionally left in place.
  *
  * An [[AuxiliaryTableSpec]] describes a table that is deliberately NOT part of the logical
  * [[DataflowGraph]]: it is never resolved, connected, materialized as a user-facing dataset, nor
