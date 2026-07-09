@@ -9862,10 +9862,10 @@ object functions {
     Column.fn("variant_insert", v, lit(path), value)
 
   /**
-   * Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
-   * an array path inserts at the index, shifting later elements right. Missing intermediate keys
-   * are created. Returns NULL if the field already exists or a path segment hits a value of an
-   * incompatible type, or if any argument is NULL.
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field; an array path inserts at the index, shifting later elements right. Missing
+   * intermediate keys are created. Returns NULL if the field already exists or a path segment
+   * hits a value of an incompatible type, or if any argument is NULL.
    *
    * @param v
    *   a variant column.
@@ -9882,10 +9882,10 @@ object functions {
     Column.fn("try_variant_insert", v, path, value)
 
   /**
-   * Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
-   * an array path inserts at the index, shifting later elements right. Missing intermediate keys
-   * are created. Returns NULL if the field already exists or a path segment hits a value of an
-   * incompatible type, or if any argument is NULL.
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field; an array path inserts at the index, shifting later elements right. Missing
+   * intermediate keys are created. Returns NULL if the field already exists or a path segment
+   * hits a value of an incompatible type, or if any argument is NULL.
    *
    * @param v
    *   a variant column.

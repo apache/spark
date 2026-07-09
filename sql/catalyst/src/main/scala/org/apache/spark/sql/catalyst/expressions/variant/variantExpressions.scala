@@ -872,7 +872,8 @@ case class VariantInsert(
           failOnError)
       case None =>
         VariantExpressionEvalUtils.insertAtPath(
-          inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName, failOnError)
+          inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName,
+          failOnError)
     }
   }
 
@@ -889,7 +890,8 @@ case class VariantInsert(
         s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
     }
     if (failOnError) {
-      nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
+      nullSafeCodeGen(ctx, ev,
+        (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
     } else {
       val resultType = CodeGenerator.javaType(VariantType)
       val tmp = ctx.freshName("insertResult")
