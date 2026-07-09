@@ -1246,9 +1246,9 @@ case class VariantArrayAppend(input: Expression, path: Expression, value: Expres
     }
   }
 
-  // When the path is a foldable expression, parse it once at planning time and cache it (the root
-  // `$` is allowed here, unlike insert/delete). `None` means the path is dynamic (or a foldable
-  // NULL, which makes the whole expression NULL and is never evaluated).
+  // When the path is a foldable expression, parse it once at planning time and cache it. `None`
+  // means the path is dynamic (or a foldable NULL, which makes the whole expression NULL
+  // and is never evaluated).
   @transient private lazy val foldablePath: Option[VariantArrayAppend.ParsedAppendPath] = {
     if (path.foldable) {
       val p = path.eval()

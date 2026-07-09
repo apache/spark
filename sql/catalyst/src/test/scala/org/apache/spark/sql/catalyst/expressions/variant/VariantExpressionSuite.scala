@@ -1668,14 +1668,14 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppend("[1, 2, 3]", "$", Literal(4), "[1,2,3,4]")
     checkAppend("[]", "$", Literal("a"), """["a"]""")
     checkAppend("""{"a": [1, 2]}""", "$.a", Literal(3), """{"a":[1,2,3]}""")
+    checkAppend("""{"a": [1], "b": 2}""", "$.a", Literal(9), """{"a":[1,9],"b":2}""")
     checkAppend("""{"a": [[0], [1, 2]]}""", "$.a[1]", Literal(9), """{"a":[[0],[1,2,9]]}""")
 
     // Non-numeric scalar values (boolean, floating point).
     checkAppend("[1]", "$", Literal(true), "[1,true]")
     checkAppend("[1]", "$", Literal(2.5), "[1,2.5]")
 
-    // An array value is cast to a variant and appended as a single element (nested, not flattened);
-    // a variant null appends a null element.
+    // An array value is cast to a variant and appended as a single element..
     checkAppend("[1]", "$", Literal.create(Array(2, 3), ArrayType(IntegerType)), "[1,[2,3]]")
     checkAppend("[1, 2]", "$", Literal(parseJson("null")), "[1,2,null]")
     // Strings are stored verbatim; use parse_json for structured JSON.

@@ -222,9 +222,9 @@ object VariantExpressionEvalUtils {
 
   /**
    * Append `value` to the array in `input` at `javaSegments`. `path` is the source string used in
-   * error messages. `value` is cast to a variant first; a size overflow maps to `VARIANT_SIZE_LIMIT`
-   * and a target that is not an array (or an incompatible path segment) maps to
-   * `VARIANT_PATH_TYPE_MISMATCH`.
+   * error messages. `value` is cast to a variant first; a size overflow maps to
+   * `VARIANT_SIZE_LIMIT` and a target that is not an array (or an incompatible path segment) maps
+   * to `VARIANT_PATH_TYPE_MISMATCH`.
    */
   def arrayAppendAtPath(
       input: VariantVal,

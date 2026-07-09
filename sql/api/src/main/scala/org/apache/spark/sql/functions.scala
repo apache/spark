@@ -9996,8 +9996,8 @@ object functions {
    *   a variant column.
    * @param path
    *   the column containing the JSONPath string identifying the target array. A valid path should
-   *   start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`, or
-   *   `["name"]`.
+   *   start with `$` and is followed by zero or more segments like `[123]`, `.name`, `['name']`,
+   *   or `["name"]`.
    * @param value
    *   the value to append. Any expression castable to variant.
    * @group variant_funcs
@@ -10014,8 +10014,8 @@ object functions {
    * @param v
    *   a variant column.
    * @param path
-   *   the JSONPath identifying the target array. A valid path should start with `$` and is followed
-   *   by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+   *   the JSONPath identifying the target array. A valid path should start with `$` and is
+   *   followed by zero or more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
    * @param value
    *   the value to append. Any expression castable to variant.
    * @group variant_funcs

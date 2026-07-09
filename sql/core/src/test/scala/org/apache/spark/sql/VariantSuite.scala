@@ -538,7 +538,6 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       sql("SELECT to_json(variant_array_append(parse_json('[1]'), '$', NULL))"),
       rows(null))
 
-    // The target is not an array.
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("SELECT variant_array_append(parse_json('{\"a\": 1}'), '$.a', 2)").collect()
@@ -546,7 +545,6 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       condition = "VARIANT_PATH_TYPE_MISMATCH",
       parameters = Map(
         "path" -> "$.a", "failedAt" -> "$.a", "functionName" -> toSQLId("variant_array_append")))
-    // The root `$` is valid here, but a malformed path is still rejected.
     checkError(
       exception = intercept[SparkRuntimeException] {
         sql("SELECT variant_array_append(parse_json('[]'), 'bad', 1)").collect()
