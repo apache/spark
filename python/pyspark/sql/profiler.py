@@ -17,11 +17,13 @@
 import cProfile
 import os
 import pstats
+import sys
+import threading
 import warnings
 from abc import ABC, abstractmethod
 from io import StringIO
 from threading import RLock
-from types import CodeType, TracebackType
+from types import CodeType, FrameType, TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -48,6 +50,7 @@ from pyspark.profiler import (
     MemoryProfiler,
     MemUsageParam,
     PStatsParam,
+    SamplingResultParam,
 )
 
 if TYPE_CHECKING:
@@ -119,10 +122,81 @@ class _ProfileResultsParamV2(AccumulatorParam["ProfileResultsV2"]):
                 )
                 if memory is not None:
                     value1[key]["memory"] = memory
+                sampling = SamplingResultParam.addInPlace(
+                    value1[key].get("sampling", {}), result.get("sampling", {})
+                )
+                if sampling:
+                    value1[key]["sampling"] = {}
         return value1
 
 
 ProfileResultsParamV2 = _ProfileResultsParamV2()
+
+
+class WorkerSamplingProfiler:
+    """
+    SamplingProfiler is a profiler for sampling profiling.
+    """
+
+    _sampling_thread = None
+
+    def __init__(
+        self,
+        sampling_interval: float = 10,
+    ) -> None:
+        self._data = {}
+        self._sampling_interval = sampling_interval
+        self._stop_event = threading.Event()
+
+    def __enter__(self) -> "WorkerSamplingProfiler":
+        self._start_sampling_thread()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        self._stop_event.set()
+        self._sampling_thread.join()
+        WorkerSamplingProfiler._sampling_thread = None
+
+    def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
+        accumulator.add(self._data)
+
+    def _start_sampling_thread(self) -> None:
+        if self._sampling_thread is not None:
+            raise RuntimeError("Sampling thread already started")
+        self._sampling_thread = threading.Thread(target=self._sample_loop)
+        self._sampling_thread.start()
+
+    def _sample_loop(self) -> None:
+        self_tid = threading.get_ident()
+        while not self._stop_event.wait(self._sampling_interval):
+            for tid, frame in sys._current_frames().items():
+                if tid != self_tid:
+                    self._add_sample(tid, frame)
+
+    def _add_sample(self, tid: int, frame: Optional[FrameType]) -> None:
+        if tid not in self._data:
+            self._data[tid] = {}
+        frames: list[FrameType] = []
+        while frame is not None:
+            frames.append(frame)
+            frame = frame.f_back
+
+        d = self._data[tid]
+        for f in reversed(frames):
+            ident = self._get_ident_from_frame(f)
+            if ident not in d:
+                d[ident] = {"count": 0}
+            d[ident]["count"] += 1
+            d = d[ident]
+
+    def _get_ident_from_frame(self, frame: FrameType) -> str:
+        code = frame.f_code
+        return f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
 
 
 class WorkerPerfProfiler:

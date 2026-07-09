@@ -5457,7 +5457,7 @@ object SQLConf {
       .version("4.0.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("perf", "memory"))
+      .checkValues(Set("perf", "memory", "sampling"))
       .createOptional
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
