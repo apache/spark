@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.data_type_ops.test_num_ops import NumOpsTestsMixin
+from pyspark.pandas.tests.data_type_ops.test_num_ops_integral_ext_astype_cmp import (
+    IntegralExtensionAstypeCmpOpsTestsMixin,
+)
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class NumOpsParityTests(
-    NumOpsTestsMixin,
+class IntegralExtensionAstypeCmpOpsParityTests(
+    IntegralExtensionAstypeCmpOpsTestsMixin,
     PandasOnSparkTestUtils,
     OpsTestBase,
     ReusedConnectTestCase,
