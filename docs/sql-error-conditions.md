@@ -1733,6 +1733,18 @@ SQLSTATE: none assigned
 
 The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF. Expected `<aliasesSize>` aliases, but got `<aliasesNames>`. Please ensure that the number of aliases provided matches the number of columns output by the UDTF.
 
+### UDT_CLASS_LOADING_DISABLED
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+Cannot load the class `<udtClass>` as a user-defined type. Loading UserDefinedType classes by name is disabled by `spark.sql.udt.allowCreatingUDTFromString`, and `<udtClass>` is not in the allow list `spark.sql.udt.allowedDynamicUDTClasses` (currently `<allowed>`). Set `spark.sql.udt.allowCreatingUDTFromString` to true, or add the class to the allow list, only if you trust the source of the data being read.
+
+### UDT_CLASS_NOT_USER_DEFINED_TYPE
+
+[SQLSTATE: 2203G](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The class `<udtClass>` cannot be loaded as a user-defined type because it is not a subtype of UserDefinedType.
+
 ### UNABLE_TO_ACQUIRE_MEMORY
 
 [SQLSTATE: 53200](sql-error-conditions-sqlstates.html#class-53-insufficient-resources)

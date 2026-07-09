@@ -43,6 +43,8 @@ private[sql] trait SqlApiConf {
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
+  def allowCreatingUDTFromString: Boolean
+  def allowedDynamicUDTClasses: Seq[String]
 }
 
 private[sql] object SqlApiConf {
@@ -53,6 +55,8 @@ private[sql] object SqlApiConf {
   val SESSION_LOCAL_TIMEZONE_KEY: String = SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String =
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
+  val ALLOW_CREATING_UDT_FROM_STRING: String = SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING
+  val ALLOWED_DYNAMIC_UDT_CLASSES: String = SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -77,4 +81,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
+  override def allowCreatingUDTFromString: Boolean = true
+  override def allowedDynamicUDTClasses: Seq[String] = Nil
 }
