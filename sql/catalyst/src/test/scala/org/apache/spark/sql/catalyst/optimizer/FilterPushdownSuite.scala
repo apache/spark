@@ -1644,4 +1644,41 @@ class FilterPushdownSuite extends PlanTest {
       .analyze
     comparePlans(optimizedQueryWithoutStep, correctAnswer)
   }
+
+  test("push down deterministic predicate through BinBy") {
+    // Relation: ts_start, ts_end, value (DISTRIBUTE), label (pass-through).
+    val tsStart = AttributeReference("ts_start", TimestampType, nullable = false)()
+    val tsEnd = AttributeReference("ts_end", TimestampType, nullable = false)()
+    val value = AttributeReference("value", DoubleType, nullable = false)()
+    val label = AttributeReference("label", StringType, nullable = true)()
+    val relation = LocalRelation(tsStart, tsEnd, value, label)
+
+    // Produced attributes: scaled DISTRIBUTE output and appended BIN BY columns.
+    val scaledValue = AttributeReference("value", DoubleType, nullable = true)()
+    val binStart = AttributeReference("bin_start", TimestampType, nullable = true)()
+    val binEnd = AttributeReference("bin_end", TimestampType, nullable = true)()
+    val binRatio = AttributeReference("bin_distribute_ratio", DoubleType, nullable = true)()
+
+    def binByOver(child: LogicalPlan): BinBy = BinBy(
+      binWidthMicros = 300000000L,
+      rangeStart = tsStart,
+      rangeEnd = tsEnd,
+      originMicros = 0L,
+      distributeColumns = Seq(value),
+      scaledDistributeColumns = Seq(scaledValue),
+      appendedAttributes = Seq(binStart, binEnd, binRatio),
+      child = child,
+      timeZoneId = Some("UTC"))
+
+    // (a) A predicate on a forwarded pass-through column (label) must push BELOW BinBy.
+    val queryA = Filter(EqualTo(label, Literal("x")), binByOver(relation))
+    val optimizedA = Optimize.execute(queryA)
+    val expectedA = binByOver(Filter(EqualTo(label, Literal("x")), relation))
+    comparePlans(optimizedA, expectedA, checkAnalysis = false)
+
+    // (b) A predicate on a produced (fresh-ExprId) appended column must stay ABOVE BinBy.
+    val queryB = Filter(GreaterThan(binRatio, Literal(0.5)), binByOver(relation))
+    val optimizedB = Optimize.execute(queryB)
+    comparePlans(optimizedB, queryB, checkAnalysis = false)
+  }
 }
