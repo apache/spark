@@ -397,13 +397,6 @@ class StreamingShuffleReader[K, C](
     factory.createClient(remoteHost, remotePort)
   }
 
-  private var streamingShuffleReaderIteratorFactory: StreamingShuffleReaderIteratorFactory = _
-
-  def setStreamingShuffleReaderIteratorFactory(
-      factory: StreamingShuffleReaderIteratorFactory): Unit = {
-    streamingShuffleReaderIteratorFactory = factory
-  }
-
   private def checkTaskFailure(): Unit = {
     context.getTaskFailure.foreach(throw _)
     // Surface any background error on the task thread so that markTaskFailed and
@@ -490,10 +483,7 @@ class StreamingShuffleReader[K, C](
       }
     }
 
-    if (streamingShuffleReaderIteratorFactory == null) {
-      streamingShuffleReaderIteratorFactory = new StreamingShuffleReaderIteratorFactory()
-    }
-    streamingShuffleReaderIteratorFactory.create(
+    new StreamingShuffleReaderIteratorFactory().create(
       messageQueue,
       handleTerminationMessage,
       handleDataMessage,
