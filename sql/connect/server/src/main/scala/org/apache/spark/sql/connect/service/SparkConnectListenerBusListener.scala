@@ -99,11 +99,19 @@ private[sql] class SparkConnectListenerBusListener(
     with Logging {
 
   val sessionHolder = serverSideListenerHolder.sessionHolder
+
+  // Number of attempts to transmit an event to the client before giving up. A single transient
+  // onNext failure (e.g. a momentary gRPC hiccup) should not permanently remove the listener and
+  // silently drop all subsequent events for the session, including the terminal
+  // QueryTerminatedEvent; only tear down when sending keeps failing across retries.
+  private val maxSendAttempts = 3
+  private val sendRetryBackoffMs = 200L
+
   // The method used to stream back the events to the client.
   // The event is serialized to json and sent to the client.
-  // If any exception is thrown while transmitting back the event, the listener is removed,
-  // all related sources are cleaned up, and the long-running thread will proceed to send
-  // the final ResultComplete response.
+  // If any exception is thrown while transmitting back the event (after a few retries), the
+  // listener is removed, all related sources are cleaned up, and the long-running thread will
+  // proceed to send the final ResultComplete response.
   private def send(eventJson: String, eventType: StreamingQueryEventType): Unit = {
     try {
       val event = StreamingQueryListenerEvent
@@ -117,7 +125,7 @@ private[sql] class SparkConnectListenerBusListener(
         .addAllEvents(Array[StreamingQueryListenerEvent](event).toImmutableArraySeq.asJava)
         .build()
 
-      responseObserver.onNext(
+      sendWithRetry(
         ExecutePlanResponse
           .newBuilder()
           .setSessionId(sessionHolder.sessionId)
@@ -134,6 +142,22 @@ private[sql] class SparkConnectListenerBusListener(
         // remove this listener and cleanup resources.
         serverSideListenerHolder.cleanUp()
     }
+  }
+
+  // Sends a response, retrying onNext a bounded number of times on a transient failure. The
+  // exception from the final attempt propagates to send()'s handler, which removes the listener.
+  private def sendWithRetry(response: ExecutePlanResponse): Unit = {
+    var attempt = 1
+    while (attempt < maxSendAttempts) {
+      try {
+        responseObserver.onNext(response)
+        return
+      } catch {
+        case NonFatal(_) => Thread.sleep(sendRetryBackoffMs)
+      }
+      attempt += 1
+    }
+    responseObserver.onNext(response)
   }
 
   def sendResultComplete(): Unit = {
