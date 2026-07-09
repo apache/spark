@@ -260,6 +260,61 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
 /**
  * :: DeveloperApi ::
+ * A [[ShuffleDependency]] whose output can be read incrementally: a consumer stage may begin
+ * reading the shuffle output while the producer stage is still running, rather than waiting for the
+ * producer's full, materialized output.
+ *
+ * This is a subtype of [[ShuffleDependency]] -- and thus, like it, a first-class dependency kind
+ * alongside [[NarrowDependency]] under [[Dependency]]. It is intended to be the marker the
+ * `DAGScheduler` will use to decide that the producer and consumer
+ * stages connected by this edge may run concurrently (a "pipelined group"), and that the shuffle
+ * layer should serve this shuffle with an incremental shuffle implementation. A plain
+ * [[ShuffleDependency]] keeps the existing semantics: its output is fully materialized before any
+ * consumer reads it.
+ *
+ * This class only declares the capability. On its own it behaves exactly like its parent
+ * [[ShuffleDependency]] -- code that matches `ShuffleDependency` continues to treat it as an
+ * ordinary (materialized) shuffle -- so introducing it changes no existing behavior. The concurrent
+ * scheduling and incremental-shuffle behavior will be added separately by the components that match
+ * on this type.
+ *
+ * The name is *pipelined* rather than *streaming*: reading producer output as it is produced is a
+ * general execution capability (software-pipelining of dependent stages), not specific to
+ * streaming. Streaming / real-time mode is the first caller, but nothing here is
+ * streaming-specific.
+ *
+ * Note: the parent's `checksumMismatchFullRetryEnabled` /
+ * `checksumMismatchQueryLevelRollbackEnabled` parameters are intentionally not exposed here, so
+ * they stay at their `false` defaults for a pipelined shuffle. Their checksum retry / query-level
+ * rollback recomputes and re-runs succeeding stages after a mismatch; in a pipelined group any
+ * failure aborts the whole group and the caller reruns from scratch, so that stage-level recompute
+ * never fires -- the mechanism is moot by construction (it is also incompatible with a consumer
+ * that has already read the output incrementally). Leaving the params unset keeps the idiom
+ * unreachable.
+ */
+@DeveloperApi
+class PipelinedShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    _rdd: RDD[_ <: Product2[K, V]],
+    partitioner: Partitioner,
+    serializer: Serializer = SparkEnv.get.serializer,
+    keyOrdering: Option[Ordering[K]] = None,
+    aggregator: Option[Aggregator[K, V, C]] = None,
+    mapSideCombine: Boolean = false,
+    shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS)
+  extends ShuffleDependency[K, V, C](
+    _rdd,
+    partitioner,
+    serializer,
+    keyOrdering,
+    aggregator,
+    mapSideCombine,
+    shuffleWriterProcessor,
+    rowBasedChecksums)
+
+
+/**
+ * :: DeveloperApi ::
  * Represents a one-to-one dependency between partitions of the parent and child RDDs.
  */
 @DeveloperApi

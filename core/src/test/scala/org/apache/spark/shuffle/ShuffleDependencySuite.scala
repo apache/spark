@@ -17,6 +17,7 @@
 package org.apache.spark.shuffle
 
 import org.apache.spark._
+import org.apache.spark.rdd.RDD
 
 case class KeyClass()
 
@@ -62,6 +63,57 @@ class ShuffleDependencySuite extends SparkFunSuite with LocalSparkContext {
     assert(dep.keyClassName == classOf[KeyClass].getName)
     assert(dep.valueClassName == classOf[ValueClass].getName)
     assert(dep.combinerClassName == None)
+  }
+
+  test("PipelinedShuffleDependency is a ShuffleDependency and preserves its fields") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val rdd: RDD[(KeyClass, ValueClass)] =
+      sc.parallelize(1 to 5, 4).map(_ => (KeyClass(), ValueClass()))
+    val partitioner = new HashPartitioner(2)
+    val dep = new PipelinedShuffleDependency[KeyClass, ValueClass, ValueClass](rdd, partitioner)
+
+    // It is a first-class dependency kind, but IS-A ShuffleDependency: code that matches
+    // ShuffleDependency continues to see it as an ordinary shuffle, so it changes no existing
+    // behavior. The concurrent-scheduling behavior is keyed on the subtype elsewhere.
+    assert(dep.isInstanceOf[ShuffleDependency[_, _, _]])
+    assert(dep.partitioner === partitioner)
+    assert(dep.keyClassName == classOf[KeyClass].getName)
+    assert(dep.valueClassName == classOf[ValueClass].getName)
+    assert(dep.rdd === rdd)
+    // Construction goes through the normal ShuffleDependency path: the shuffle is registered with
+    // the ShuffleManager (a handle is produced) and a second instance gets a distinct shuffleId.
+    assert(dep.shuffleHandle != null)
+    val dep2 = new PipelinedShuffleDependency[KeyClass, ValueClass, ValueClass](rdd, partitioner)
+    assert(dep2.shuffleId != dep.shuffleId)
+
+    // The checksum retry / query-level rollback params are intentionally not exposed by the
+    // subclass (see PipelinedShuffleDependency scaladoc): their stage-level recompute is moot for a
+    // pipelined group, so they must stay at their false defaults.
+    assert(!dep.checksumMismatchFullRetryEnabled)
+    assert(!dep.checksumMismatchQueryLevelRollbackEnabled)
+  }
+
+  test("PipelinedShuffleDependency forwards non-default constructor args to ShuffleDependency") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val rdd: RDD[(KeyClass, ValueClass)] =
+      sc.parallelize(1 to 5, 4).map(_ => (KeyClass(), ValueClass()))
+    val partitioner = new HashPartitioner(2)
+    val aggregator = new Aggregator[KeyClass, ValueClass, ValueClass](
+      v => v, (c, _) => c, (c1, _) => c1)
+    val dep = new PipelinedShuffleDependency[KeyClass, ValueClass, ValueClass](
+      rdd, partitioner, aggregator = Some(aggregator), mapSideCombine = true)
+
+    // The subclass forwards its constructor args positionally to ShuffleDependency; assert the
+    // non-default ones land where expected rather than on the wrong parameter.
+    assert(dep.aggregator.contains(aggregator))
+    assert(dep.mapSideCombine)
+  }
+
+  test("an ordinary ShuffleDependency is not a PipelinedShuffleDependency") {
+    sc = new SparkContext("local", "test", conf.clone())
+    val rdd = sc.parallelize(1 to 5, 4).map(_ => (KeyClass(), ValueClass())).groupByKey()
+    val dep = rdd.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
+    assert(!dep.isInstanceOf[PipelinedShuffleDependency[_, _, _]])
   }
 
 }
