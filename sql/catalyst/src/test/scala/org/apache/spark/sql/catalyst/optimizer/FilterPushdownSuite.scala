@@ -1676,9 +1676,18 @@ class FilterPushdownSuite extends PlanTest {
     val expectedA = binByOver(Filter(EqualTo(label, Literal("x")), relation))
     comparePlans(optimizedA, expectedA, checkAnalysis = false)
 
-    // (b) A predicate on a produced (fresh-ExprId) appended column must stay ABOVE BinBy.
-    val queryB = Filter(GreaterThan(binRatio, Literal(0.5)), binByOver(relation))
+    // (b) A predicate on a range column (ts_start) must push BELOW BinBy. The range columns are
+    // consumed by the binning logic yet forwarded unchanged in output, so their value is identical
+    // on every sub-row and filtering before vs. after binning is equivalent.
+    val tsLiteral = Literal(0L, TimestampType)
+    val queryB = Filter(GreaterThan(tsStart, tsLiteral), binByOver(relation))
     val optimizedB = Optimize.execute(queryB)
-    comparePlans(optimizedB, queryB, checkAnalysis = false)
+    val expectedB = binByOver(Filter(GreaterThan(tsStart, tsLiteral), relation))
+    comparePlans(optimizedB, expectedB, checkAnalysis = false)
+
+    // (c) A predicate on a produced (fresh-ExprId) appended column must stay ABOVE BinBy.
+    val queryC = Filter(GreaterThan(binRatio, Literal(0.5)), binByOver(relation))
+    val optimizedC = Optimize.execute(queryC)
+    comparePlans(optimizedC, queryC, checkAnalysis = false)
   }
 }
