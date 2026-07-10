@@ -1550,7 +1550,7 @@ object DateFormatClass {
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string which is returned as a UNIX timestamp.
-        An expression that evaluates to a string, date, timestamp, or timestamp_ntz.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
               Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a>
               for valid date and time format patterns.
@@ -1606,7 +1606,7 @@ case class ToUnixTimestamp(
   arguments = """
     Arguments:
       * timeExp - A date/timestamp or string. If not provided, this defaults to current time.
-        An expression that evaluates to a string, date, timestamp, or timestamp_ntz.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date/time format pattern to follow. Ignored if `timeExp` is not a string.
               Default value is "yyyy-MM-dd HH:mm:ss". See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> Datetime Patterns</a>
               for valid date and time format patterns.
@@ -1693,7 +1693,7 @@ case class GetTimestamp(
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp without time zone.
-        An expression that evaluates to a string, date, timestamp, or timestamp_ntz.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -1732,7 +1732,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
-        An expression that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
@@ -1771,7 +1771,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
-        An expression that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
@@ -2749,7 +2749,7 @@ case class MonthsBetween(
   arguments = """
     Arguments:
       * date_str - A string to be parsed to date.
-        An expression that evaluates to a string, date, timestamp, or timestamp_ntz.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2827,7 +2827,7 @@ case class ParseToDate(
   arguments = """
     Arguments:
       * date_str - A string to be parsed to date.
-        An expression that evaluates to a string, date, timestamp, or timestamp_ntz.
+        An expression that evaluates to a string, date, or timestamp.
       * fmt - Date format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2872,7 +2872,7 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
-        An expression that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
   """,
@@ -4472,7 +4472,7 @@ object SubtractDates {
       * targetTz - the time zone to which the input timestamp should be converted
         An expression that evaluates to a string.
       * sourceTs - a timestamp without time zone
-        An expression that evaluates to a timestamp_ntz or timestamp.
+        An expression that evaluates to a timestamp.
   """,
   examples = """
     Examples:

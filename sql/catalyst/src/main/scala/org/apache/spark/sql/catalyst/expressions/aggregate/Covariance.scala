@@ -93,9 +93,9 @@ abstract class Covariance(val left: Expression, val right: Expression, nullOnDiv
   arguments = """
     Arguments:
       * expr1 - The first variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * expr2 - The second variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -129,9 +129,9 @@ case class CovPopulation(
   arguments = """
     Arguments:
       * expr1 - The first variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * expr2 - The second variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

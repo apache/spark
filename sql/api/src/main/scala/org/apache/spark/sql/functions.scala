@@ -8822,7 +8822,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.3.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def localtimestamp(): Column = Column.fn("localtimestamp")
 
@@ -9419,7 +9419,7 @@ object functions {
    * @param s
    *   A date, timestamp or string. If a string, the data must be in a format that can be cast to
    *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
-   *   a string, date, timestamp, timestamp_ntz, or numeric.
+   *   a string, date, timestamp, or numeric.
    * @return
    *   A timestamp, or null if the input was a string that could not be cast to a timestamp.
    *   Returns a column that evaluates to a timestamp.
@@ -9585,7 +9585,7 @@ object functions {
    * @group datetime_funcs
    * @since 4.3.0
    * @return
-   *   Returns a column that evaluates to a long.
+   *   Returns a column that evaluates to a decimal.
    */
   def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
 
@@ -10191,7 +10191,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def to_timestamp_ntz(timestamp: Column, format: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp, format)
@@ -10203,7 +10203,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def to_timestamp_ntz(timestamp: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp)
@@ -10386,7 +10386,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    * @return
-   *   Returns a column of the element type of the input array.
+   *   Returns a column of the element type of the input array, or the value type of the input map.
    */
   def element_at(column: Column, value: Any): Column = Column.fn("element_at", column, lit(value))
 
@@ -10401,7 +10401,7 @@ object functions {
    * @group collection_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column of the element type of the input array.
+   *   Returns a column of the element type of the input array, or the value type of the input map.
    */
   def try_element_at(column: Column, value: Column): Column =
     Column.fn("try_element_at", column, value)
@@ -10891,7 +10891,8 @@ object functions {
    * @group generator_funcs
    * @since 1.3.0
    * @return
-   *   Returns a column of the element type of the input array.
+   *   Returns a column of the element type of the input array, or the key and value columns of the
+   *   input map.
    */
   def explode(e: Column): Column = Column.fn("explode", e)
 
@@ -10903,7 +10904,8 @@ object functions {
    * @group generator_funcs
    * @since 2.2.0
    * @return
-   *   Returns a column of the element type of the input array.
+   *   Returns a column of the element type of the input array, or the key and value columns of the
+   *   input map.
    */
   def explode_outer(e: Column): Column = Column.fn("explode_outer", e)
 
@@ -12428,11 +12430,11 @@ object functions {
    *   the time zone to which the input timestamp should be converted. A column that evaluates to
    *   a string.
    * @param sourceTs
-   *   a timestamp without time zone. A column that evaluates to a timestamp_ntz or timestamp.
+   *   a timestamp without time zone. A column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def convert_timezone(sourceTz: Column, targetTz: Column, sourceTs: Column): Column =
     Column.fn("convert_timezone", sourceTz, targetTz, sourceTs)
@@ -12447,7 +12449,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def convert_timezone(targetTz: Column, sourceTs: Column): Column =
     Column.fn("convert_timezone", targetTz, sourceTs)
@@ -12923,7 +12925,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp_ntz(
       years: Column,
@@ -12940,7 +12942,7 @@ object functions {
    * @group datetime_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("make_timestamp_ntz", date, time)
@@ -12952,7 +12954,7 @@ object functions {
    * @group datetime_funcs
    * @since 4.0.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp_ntz(
       years: Column,
@@ -12969,7 +12971,7 @@ object functions {
    * @group datetime_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a timestamp_ntz.
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp_ntz", date, time)

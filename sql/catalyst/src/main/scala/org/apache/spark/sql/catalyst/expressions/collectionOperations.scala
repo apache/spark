@@ -1489,7 +1489,7 @@ case class Reverse(child: Expression)
       * array - The array to search.
         An expression that evaluates to an array.
       * value - The value to check for membership in the array.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -1776,7 +1776,7 @@ trait ArrayPendBase extends RuntimeReplaceable
       * array - The array to prepend the element to.
         An expression that evaluates to an array.
       * element - The element to add at the beginning of the array.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -1818,7 +1818,7 @@ case class ArrayPrepend(left: Expression, right: Expression) extends ArrayPendBa
       * array - The array to append the element to.
         An expression that evaluates to an array.
       * element - The element to add at the end of the array.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -2563,7 +2563,7 @@ case class ArrayMax(child: Expression)
       * array - The array to search within.
         An expression that evaluates to an array.
       * element - The element to find the position of.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -2726,8 +2726,8 @@ case class Get(left: Expression, right: Expression)
     Arguments:
       * array - The array to retrieve the element from.
         An expression that evaluates to an array or map.
-      * index - The 1-based index of the element to return.
-        An expression that evaluates to an integer.
+      * index - The 1-based index of the array element, or the key of the map entry, to return.
+        An expression that evaluates to an integer for an array, or the key type for a map.
   """,
   examples = """
     Examples:
@@ -4136,7 +4136,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
       * array - The array to remove elements from.
         An expression that evaluates to an array.
       * element - The element to remove from the array.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:
@@ -5207,7 +5207,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
       * pos - The 1-based index at which to insert the value.
         An expression that evaluates to an integer.
       * val - The value to insert into the array.
-        An expression that evaluates to an integer.
+        An expression of the same type as the array elements.
   """,
   examples = """
     Examples:

@@ -112,9 +112,9 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
   arguments = """
     Arguments:
       * dividend - The expression to be divided.
-        An expression that evaluates to a double, decimal, or interval.
+        An expression that evaluates to a numeric or interval.
       * divisor - The expression to divide by.
-        An expression that evaluates to a double or decimal.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

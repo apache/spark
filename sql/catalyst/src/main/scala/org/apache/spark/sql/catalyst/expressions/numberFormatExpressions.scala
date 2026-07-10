@@ -240,7 +240,7 @@ case class TryToNumber(left: Expression, right: Expression)
   arguments = """
     Arguments:
       * expr - The expression to convert to a string.
-        An expression that evaluates to a decimal, timestamp, time, or binary.
+        An expression that evaluates to a numeric, date, timestamp, time, or binary.
       * format - The format that specifies how to render the value as a string.
         An expression that evaluates to a string. Must be a constant.
   """,

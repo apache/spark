@@ -108,9 +108,9 @@ abstract class PearsonCorrelation(x: Expression, y: Expression, nullOnDivideByZe
   arguments = """
     Arguments:
       * expr1 - The first variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * expr2 - The second variable of the number pairs.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

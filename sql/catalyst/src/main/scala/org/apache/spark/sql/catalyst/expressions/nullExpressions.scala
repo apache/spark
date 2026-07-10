@@ -229,7 +229,7 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   arguments = """
     Arguments:
       * expr - The expression that returns null when equal to zero.
-        An expression of any orderable type.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

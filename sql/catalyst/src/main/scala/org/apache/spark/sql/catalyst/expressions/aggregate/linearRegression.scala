@@ -151,9 +151,9 @@ case class RegrAvgY(
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -191,9 +191,9 @@ case class RegrR2(y: Expression, x: Expression) extends PearsonCorrelation(y, x,
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -233,9 +233,9 @@ case class RegrSXX(
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -269,9 +269,9 @@ case class RegrSXY(y: Expression, x: Expression) extends Covariance(y, x, true) 
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -311,9 +311,9 @@ case class RegrSYY(
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -381,9 +381,9 @@ case class RegrSlope(left: Expression, right: Expression) extends DeclarativeAgg
   arguments = """
     Arguments:
       * y - The dependent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
       * x - The independent variable.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

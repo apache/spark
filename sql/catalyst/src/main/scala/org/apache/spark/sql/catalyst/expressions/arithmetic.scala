@@ -843,9 +843,9 @@ trait DivModLike extends BinaryArithmetic {
   arguments = """
     Arguments:
       * expr1 - The dividend.
-        An expression that evaluates to a double, decimal, or interval.
+        An expression that evaluates to a numeric or interval.
       * expr2 - The divisor.
-        An expression that evaluates to a double or decimal.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -932,9 +932,9 @@ object Divide {
   arguments = """
     Arguments:
       * expr1 - The dividend to be divided.
-        An expression that evaluates to a long, decimal, or interval.
+        An expression that evaluates to an integral, decimal, or interval.
       * expr2 - The divisor to divide by.
-        An expression that evaluates to a long, decimal, or interval.
+        An expression that evaluates to an integral, decimal, or interval.
   """,
   examples = """
     Examples:

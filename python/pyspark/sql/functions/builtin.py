@@ -697,10 +697,10 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     ----------
     left : :class:`~pyspark.sql.Column` or column name
         dividend.
-        A column that evaluates to a double, decimal, or interval.
+        A column that evaluates to a numeric or interval.
     right : :class:`~pyspark.sql.Column` or column name
         divisor.
-        A column that evaluates to a double or decimal.
+        A column that evaluates to a numeric.
 
     Examples
     --------
@@ -2696,7 +2696,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the ceiling on.
-        A column that evaluates to a double, decimal, or long.
+        A column that evaluates to a numeric.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
         A column that evaluates to an integer. Must be a constant.
@@ -2757,7 +2757,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the ceiling on.
-        A column that evaluates to a double, decimal, or long.
+        A column that evaluates to a numeric.
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
         A column that evaluates to an integer. Must be a constant.
@@ -3162,7 +3162,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the floor on.
-        A column that evaluates to a double, decimal, or long.
+        A column that evaluates to a numeric.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
         A column that evaluates to an integer. Must be a constant.
@@ -4370,7 +4370,7 @@ def stddev(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     See Also
     --------
@@ -4410,7 +4410,7 @@ def std(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4454,7 +4454,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4496,7 +4496,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4537,7 +4537,7 @@ def variance(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4582,7 +4582,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4623,7 +4623,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -4939,10 +4939,10 @@ def regr_intercept(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -5031,10 +5031,10 @@ def regr_r2(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -5123,10 +5123,10 @@ def regr_slope(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -5215,10 +5215,10 @@ def regr_sxx(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -5307,10 +5307,10 @@ def regr_sxy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     See Also
     --------
@@ -5399,10 +5399,10 @@ def regr_syy(y: "ColumnOrName", x: "ColumnOrName") -> Column:
     ----------
     y : :class:`~pyspark.sql.Column` or column name
         the dependent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     x : :class:`~pyspark.sql.Column` or column name
         the independent variable.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -5932,7 +5932,7 @@ def skewness(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     See Also
     --------
@@ -5974,7 +5974,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -7013,10 +7013,10 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate correlation.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate correlation.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -7053,10 +7053,10 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -7097,10 +7097,10 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
     col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
-        A column that evaluates to a double.
+        A column that evaluates to a numeric.
 
     Returns
     -------
@@ -11832,7 +11832,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
-        A column that evaluates to a string, date, timestamp, or timestamp_ntz.
+        A column that evaluates to a string, date, or timestamp.
     format: literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
@@ -11892,7 +11892,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
-        A column that evaluates to a string, date, timestamp, or timestamp_ntz.
+        A column that evaluates to a string, date, or timestamp.
     format: literal string, optional
         format to use to convert date values.
         A column that evaluates to a string.
@@ -12276,7 +12276,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
-        A column that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        A column that evaluates to a string, date, timestamp, or numeric.
     format: literal string, optional
         format to use to convert timestamp values.
 
@@ -12421,7 +12421,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
-        A column that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        A column that evaluates to a string, date, timestamp, or numeric.
     format: literal string, optional
         format to use to convert timestamp values.
 
@@ -13090,7 +13090,7 @@ def unix_timestamp(
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name, optional
         timestamps of string values.
-        A column that evaluates to a string, date, timestamp, or timestamp_ntz.
+        A column that evaluates to a string, date, or timestamp.
     format : literal string, optional
         alternative format to use for converting (default: yyyy-MM-dd HH:mm:ss).
         A column that evaluates to a string.
@@ -14035,7 +14035,7 @@ def to_unix_timestamp(
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-        A column that evaluates to a string, date, timestamp, or timestamp_ntz.
+        A column that evaluates to a string, date, or timestamp.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert UNIX timestamp values.
         A column that evaluates to a string.
@@ -14110,7 +14110,7 @@ def to_timestamp_ltz(
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-        A column that evaluates to a string, date, timestamp, timestamp_ntz, or numeric.
+        A column that evaluates to a string, date, timestamp, or numeric.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
 
@@ -14182,7 +14182,7 @@ def to_timestamp_ntz(
     ----------
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-        A column that evaluates to a string, date, timestamp, or timestamp_ntz.
+        A column that evaluates to a string, date, or timestamp.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampNTZType` timestamp values.
         A column that evaluates to a string.
@@ -17814,7 +17814,7 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The value to convert to a string.
-        A column that evaluates to a decimal, timestamp, time, or binary.
+        A column that evaluates to a numeric, date, timestamp, time, or binary.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert char values.
         A column that evaluates to a string. Must be a constant.
@@ -17862,7 +17862,7 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         The value to convert to a string.
-        A column that evaluates to a decimal, timestamp, time, or binary.
+        A column that evaluates to a numeric, date, timestamp, time, or binary.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert char values.
         A column that evaluates to a string. Must be a constant.
@@ -19701,7 +19701,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
         A column that evaluates to an array.
     value :
         The value or column to check for in the array.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
     Returns
     -------
@@ -20144,7 +20144,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
         A column that evaluates to an array.
     value : Any
         value or a :class:`~pyspark.sql.Column` expression to look for.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
         .. versionchanged:: 4.0.0
             `value` now also accepts a Column type.
@@ -20259,7 +20259,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         value at given position.
-        Returns a column of the element type of the input array.
+        Returns a column of the element type of the input array, or the value type of the input map.
 
     Notes
     -----
@@ -20357,7 +20357,7 @@ def try_element_at(col: "ColumnOrName", extraction: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        Returns a column of the element type of the input array.
+        Returns a column of the element type of the input array, or the value type of the input map.
 
     Notes
     -----
@@ -20554,7 +20554,7 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
         A column that evaluates to an array.
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
     Returns
     -------
@@ -20647,7 +20647,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
         A column that evaluates to an array.
     element :
         element or a :class:`~pyspark.sql.Column` expression to be removed from the array.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
         .. versionchanged:: 4.0.0
             `element` now also accepts a Column type.
@@ -20839,10 +20839,10 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     pos : :class:`~pyspark.sql.Column` or str or int
         name of Numeric type column indicating position of insertion
         (starting at index 1, negative position is a start from the back of the array).
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
     Returns
     -------
@@ -21313,7 +21313,7 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
         A column that evaluates to an array.
     value :
         A literal value, or a :class:`~pyspark.sql.Column` expression to be appended to the array.
-        A column that evaluates to an integer.
+        A column of the same type as the array elements.
 
     Returns
     -------
@@ -21414,7 +21414,7 @@ def explode(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         One row per array item or map key value.
-        Returns a column of the element type of the input array.
+        Returns a column of the element type of the input array, or the key and value columns of the input map.
 
     See Also
     --------
@@ -21729,7 +21729,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         one row per array item or map key value.
-        Returns a column of the element type of the input array.
+        Returns a column of the element type of the input array, or the key and value columns of the input map.
 
     See Also
     --------
@@ -25833,13 +25833,13 @@ def convert_timezone(
         A column that evaluates to a string.
     sourceTs : :class:`~pyspark.sql.Column` or column name
         A timestamp without time zone.
-        A column that evaluates to a timestamp_ntz or timestamp.
+        A column that evaluates to a timestamp.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains a timestamp for converted time zone.
-        Returns a column that evaluates to a timestamp_ntz.
+        Returns a column that evaluates to a timestamp.
 
     See Also
     --------
@@ -27316,7 +27316,7 @@ def make_timestamp_ntz(
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains a local date-time.
-        Returns a column that evaluates to a timestamp_ntz.
+        Returns a column that evaluates to a timestamp.
 
     See Also
     --------
@@ -27478,7 +27478,7 @@ def try_make_timestamp_ntz(
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains a local date-time, or NULL in case of an error.
-        Returns a column that evaluates to a timestamp_ntz.
+        Returns a column that evaluates to a timestamp.
 
     See Also
     --------
@@ -28726,7 +28726,7 @@ def kll_sketch_agg_bigint(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         The column containing bigint values to aggregate.
-        A column that evaluates to a byte, integer, long, or short.
+        A column that evaluates to an integral.
     k : :class:`~pyspark.sql.Column` or int, optional
         The k parameter that controls size and accuracy (default 200, range 8-65535)
 
@@ -30700,7 +30700,7 @@ def nullifzero(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column of any orderable type.
+        A column that evaluates to a numeric.
 
     Examples
     --------

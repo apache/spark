@@ -150,7 +150,7 @@ abstract class CentralMomentAgg(child: Expression, nullOnDivideByZero: Boolean)
   arguments = """
     Arguments:
       * expr - The expression to compute the population standard deviation of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -186,7 +186,7 @@ case class StddevPop(
   arguments = """
     Arguments:
       * expr - The expression to compute the sample standard deviation of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -223,7 +223,7 @@ case class StddevSamp(
   arguments = """
     Arguments:
       * expr - The expression to compute the population variance of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -257,7 +257,7 @@ case class VariancePop(
   arguments = """
     Arguments:
       * expr - The expression to compute the sample variance of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -304,7 +304,7 @@ case class RegrReplacement(child: Expression)
   arguments = """
     Arguments:
       * expr - The expression to compute the skewness of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:
@@ -340,7 +340,7 @@ case class Skewness(
   arguments = """
     Arguments:
       * expr - The expression to compute the kurtosis of.
-        An expression that evaluates to a double.
+        An expression that evaluates to a numeric.
   """,
   examples = """
     Examples:

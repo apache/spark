@@ -331,7 +331,7 @@ trait CeilFloorExpressionBuilderBase extends ExpressionBuilder {
   arguments = """
     Arguments:
       * expr - The expression to round up.
-        An expression that evaluates to a double, decimal, or long.
+        An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
   """,
@@ -621,7 +621,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   arguments = """
     Arguments:
       * expr - The expression to round down.
-        An expression that evaluates to a double, decimal, or long.
+        An expression that evaluates to a numeric.
       * scale - The number of decimal places to round to.
         An expression that evaluates to an integer. Must be a constant.
   """,
