@@ -2317,6 +2317,55 @@ class DDLParserSuite extends AnalysisTest {
         withSchemaEvolution = false))
   }
 
+  test("SPARK-58007: merge into table: with target and source options") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target WITH (`write.split-size` = 10)
+        |USING testcat2.ns1.ns2.tbl WITH (`split-size` = 5) AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+        |WHEN NOT MATCHED THEN INSERT (target.col1, target.col2) values (source.col1, source.col2)
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target",
+          UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("write.split-size", "10")))),
+        SubqueryAlias("source",
+          UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("split-size", "5")))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(UpdateAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col2"),
+            UnresolvedAttribute("source.col2"))))),
+        Seq(InsertAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+            Assignment(UnresolvedAttribute("target.col2"), UnresolvedAttribute("source.col2"))))),
+        Seq.empty,
+        withSchemaEvolution = false))
+  }
+
+  test("SPARK-58007: merge into table: with target options only") {
+    parseCompare(
+      """
+        |MERGE INTO testcat1.ns1.ns2.tbl AS target WITH (`k` = 'v')
+        |USING testcat2.ns1.ns2.tbl AS source
+        |ON target.col1 = source.col1
+        |WHEN MATCHED THEN UPDATE SET target.col2 = source.col2
+      """.stripMargin,
+      MergeIntoTable(
+        SubqueryAlias("target",
+          UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(java.util.Map.of("k", "v")))),
+        SubqueryAlias("source", UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))),
+        EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
+        Seq(UpdateAction(None,
+          Seq(Assignment(UnresolvedAttribute("target.col2"),
+            UnresolvedAttribute("source.col2"))))),
+        Seq.empty,
+        Seq.empty,
+        withSchemaEvolution = false))
+  }
+
   test("merge into table: using subquery") {
     parseCompare(
       """

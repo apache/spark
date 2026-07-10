@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites MERGE operations using plans that operate on individual or groups of rows.
@@ -128,7 +127,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, MERGE)
           validateMergeIntoConditions(m)
-          val table = buildOperationTable(tbl, MERGE, CaseInsensitiveStringMap.empty())
+          val table = buildOperationTable(tbl, MERGE, r.options)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(

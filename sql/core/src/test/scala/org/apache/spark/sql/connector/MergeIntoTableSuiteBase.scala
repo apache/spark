@@ -20,14 +20,16 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableInfo}
+import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, RowLevelOperationWithOptions, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.MergeSummary
+import org.apache.spark.sql.connector.write.{MergeSummary, RowLevelOperationTable}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.MergeRowsExec
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, MergeRowsExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
@@ -2849,6 +2851,127 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     assert(e.getMessage.contains("ON search condition of the MERGE statement"))
     assert(catalog.lastTransaction.currentState == Aborted)
     assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("SPARK-58007: merge with dynamic options on the target") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (3, 300, 'hr')")
+
+      // the target options become the row-level operation options: they reach the rewritten
+      // DataSourceV2Relation, the RowLevelOperationInfo, and the write builder's LogicalWriteInfo
+      val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        sql(
+          s"""MERGE INTO $tableNameAsString t WITH (`write.split-size` = 10)
+             |USING $sourceNameAsString s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET t.salary = s.salary
+             |WHEN NOT MATCHED THEN INSERT *
+             |""".stripMargin)
+      }
+      val writeRelation = qe.optimizedPlan.collectFirst {
+        case rd: ReplaceData => rd.table
+        case wd: WriteDelta => wd.table
+      }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+        .asInstanceOf[DataSourceV2Relation]
+      val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+        .asInstanceOf[RowLevelOperationWithOptions]
+      assert(writeRelation.options.get("write.split-size") === "10", "relation option")
+      assert(operation.options.get("write.split-size") === "10", "row-level operation option")
+      assert(table.lastWriteInfo.options().get("write.split-size") === "10", "write option")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 150, "hr") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
+    }
+  }
+
+  test("SPARK-58007: merge with dynamic options on the source") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (3, 300, 'hr')")
+
+      // the source is read-only; its options must reach the source scan the same way a
+      // SELECT ... WITH (...) does
+      val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING $sourceNameAsString WITH (`split-size` = 5) s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET t.salary = s.salary
+             |WHEN NOT MATCHED THEN INSERT *
+             |""".stripMargin)
+      }
+      val sourceOptions = qe.optimizedPlan.collect {
+        case r: DataSourceV2Relation => r.options
+        case s: DataSourceV2ScanRelation => s.relation.options
+      }.filter(_.containsKey("split-size"))
+      assert(sourceOptions.nonEmpty, "source relation carrying the option was not found")
+      sourceOptions.foreach(opts => assert(opts.get("split-size") === "5"))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 150, "hr") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
+    }
+  }
+
+  test("SPARK-58007: merge with dynamic options on both the target and the source") {
+    withTable(sourceNameAsString) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+      sql(s"CREATE TABLE $sourceNameAsString (pk INT NOT NULL, salary INT, dep STRING)")
+      sql(s"INSERT INTO $sourceNameAsString VALUES (1, 150, 'hr'), (3, 300, 'hr')")
+
+      // the target and source each carry their own options bag; the two must not cross-contaminate
+      val Seq(qe) = withQueryExecutionsCaptured(spark) {
+        sql(
+          s"""MERGE INTO $tableNameAsString t WITH (`write.split-size` = 10)
+             |USING $sourceNameAsString WITH (`split-size` = 5) s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN UPDATE SET t.salary = s.salary
+             |WHEN NOT MATCHED THEN INSERT *
+             |""".stripMargin)
+      }
+
+      // target: the write bag reaches the row-level operation and the write builder, and does not
+      // pick up the source's option
+      val writeRelation = qe.optimizedPlan.collectFirst {
+        case rd: ReplaceData => rd.table
+        case wd: WriteDelta => wd.table
+      }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
+        .asInstanceOf[DataSourceV2Relation]
+      val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
+        .asInstanceOf[RowLevelOperationWithOptions]
+      assert(writeRelation.options.get("write.split-size") === "10", "target relation option")
+      assert(!writeRelation.options.containsKey("split-size"), "target must not see source option")
+      assert(operation.options.get("write.split-size") === "10", "row-level operation option")
+      assert(table.lastWriteInfo.options().get("write.split-size") === "10", "write option")
+
+      // source: the read bag reaches the source scan and does not pick up the target's option
+      val sourceOptions = qe.optimizedPlan.collect {
+        case r: DataSourceV2Relation => r.options
+        case s: DataSourceV2ScanRelation => s.relation.options
+      }.filter(_.containsKey("split-size"))
+      assert(sourceOptions.nonEmpty, "source relation carrying the option was not found")
+      sourceOptions.foreach { opts =>
+        assert(opts.get("split-size") === "5", "source relation option")
+        assert(!opts.containsKey("write.split-size"), "source must not see target option")
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, 150, "hr") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
+    }
   }
 
   private def assertMetric(
