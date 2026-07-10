@@ -6148,6 +6148,403 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, metricPeaks, taskInfo)
   }
+
+  // ==========================================================================================
+  // Pipelined shuffle dependency: group formation + concurrent submission (M1.2)
+  // ==========================================================================================
+
+  test("pipelined shuffle: consumer stage is submitted concurrently with its producer") {
+    // producer (shuffle map) --[pipelined]--> consumer (result)
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Both the producer's and the consumer's task sets must be submitted before the producer
+    // completes: the pipelined edge is non-sequencing, so the consumer does not wait.
+    assert(taskSets.size === 2,
+      s"expected producer and consumer submitted concurrently, got ${taskSets.size} task sets")
+    val producerStageId = taskSets.head.stageId
+    val consumerStageId = taskSets(1).stageId
+    assert(producerStageId != consumerStageId)
+    // The consumer is actually running (not parked in waitingStages), co-resident with the
+    // producer -- both are in runningStages.
+    assert(!scheduler.waitingStages.exists(_.rdd eq consumerRdd),
+      "consumer should not be waiting; it is co-scheduled with its pipelined producer")
+    assert(scheduler.runningStages.exists(_.rdd eq consumerRdd))
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd))
+
+    // Now complete the producer, then the consumer, and the job finishes.
+    completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle still waits (pipelined change is inert without a pipelined dependency)") {
+    // Identical shape but a REGULAR shuffle dependency: the consumer must NOT be submitted until
+    // the producer materializes -- verifying the concurrent-submission path is inert here.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Only the producer is submitted initially; the consumer waits.
+    assert(taskSets.size === 1, s"expected only the producer submitted, got ${taskSets.size}")
+    val producerStageId = taskSets.head.stageId
+    completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+    // Now the consumer is submitted.
+    assert(taskSets.size === 2)
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: mixed parents wait for the regular parent, co-schedule the pipelined") {
+    // consumer depends on a pipelined producer AND a regular producer. It must wait for the
+    // regular one, but when resubmitted it co-schedules with the (still-running) pipelined one.
+    val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(pipelinedProducerRdd, new HashPartitioner(2))
+    val regularProducerRdd = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularProducerRdd, new HashPartitioner(2))
+    val consumerRdd =
+      new MyRDD(sc, 2, List(pipelinedDep, regularDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Both producers are submitted, but the consumer waits (it has a regular missing parent).
+    assert(taskSets.size === 2, s"expected both producers submitted, got ${taskSets.size}")
+    assert(scheduler.waitingStages.exists(_.rdd eq consumerRdd),
+      "consumer should be waiting on its regular parent")
+
+    // Complete the regular producer. Now the consumer is resubmitted and, since its only remaining
+    // missing parent is pipelined, co-scheduled with it (a 3rd task set appears).
+    val regularStageId = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq regularProducerRdd
+    }.get.stageId
+    completeShuffleMapStageSuccessfully(regularStageId, 0, 2)
+    assert(taskSets.size === 3, "consumer should be co-scheduled once the regular parent finishes")
+
+    // Finish the pipelined producer and the consumer.
+    val pipelinedStageId = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq pipelinedProducerRdd
+    }.get.stageId
+    completeShuffleMapStageSuccessfully(pipelinedStageId, 0, 2)
+    val consumerTaskSet = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {
+    // A --pipelined--> B --pipelined--> C : all three co-scheduled (each edge is non-sequencing).
+    val rddA = new MyRDD(sc, 2, Nil)
+    val psdAB = new PipelinedShuffleDependency(rddA, new HashPartitioner(2))
+    val rddB = new MyRDD(sc, 2, List(psdAB), tracker = mapOutputTracker)
+    val psdBC = new PipelinedShuffleDependency(rddB, new HashPartitioner(2))
+    val rddC = new MyRDD(sc, 2, List(psdBC), tracker = mapOutputTracker)
+    submit(rddC, Array(0, 1))
+
+    // All three stages must be running concurrently; none parked.
+    assert(taskSets.size === 3, s"expected A, B, C co-scheduled, got ${taskSets.size}")
+    assert(scheduler.waitingStages.isEmpty, "no stage should be waiting in an all-pipelined chain")
+    Seq(rddA, rddB, rddC).foreach { rdd =>
+      assert(scheduler.runningStages.exists(_.rdd eq rdd), s"stage for $rdd should be running")
+    }
+
+    // Drain in dependency order: A, then B, then the result stage C.
+    val idA = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddA).get.stageId
+    completeShuffleMapStageSuccessfully(idA, 0, 2)
+    val idB = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddB).get.stageId
+    completeShuffleMapStageSuccessfully(idB, 0, 2)
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a pipelined producer behind a regular shuffle is NOT co-scheduled early") {
+    // A --regular--> B --pipelined--> C. B cannot run until A materializes, so C must NOT be
+    // co-scheduled with B while B is still parked. (Regression: the naive check co-scheduled C
+    // against a not-yet-running B, stranding C -- a hang under slot pressure.)
+    val rddA = new MyRDD(sc, 2, Nil)
+    val regAB = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val rddB = new MyRDD(sc, 2, List(regAB), tracker = mapOutputTracker)
+    val psdBC = new PipelinedShuffleDependency(rddB, new HashPartitioner(2))
+    val rddC = new MyRDD(sc, 2, List(psdBC), tracker = mapOutputTracker)
+    submit(rddC, Array(0, 1))
+
+    // Only A runs initially. B waits on A; C waits on B (its pipelined parent isn't running yet).
+    assert(taskSets.size === 1, s"expected only A submitted, got ${taskSets.size}")
+    assert(scheduler.waitingStages.exists(_.rdd eq rddB), "B should wait on its regular parent A")
+    assert(scheduler.waitingStages.exists(_.rdd eq rddC),
+      "C must NOT be co-scheduled while its pipelined producer B is still parked")
+
+    // A finishes -> B becomes runnable and is now co-scheduled with C (its pipelined consumer).
+    val idA = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddA).get.stageId
+    completeShuffleMapStageSuccessfully(idA, 0, 2)
+    assert(scheduler.runningStages.exists(_.rdd eq rddB), "B should now be running")
+    assert(scheduler.runningStages.exists(_.rdd eq rddC),
+      "C should now be co-scheduled with the running B")
+
+    val idB = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddB).get.stageId
+    completeShuffleMapStageSuccessfully(idB, 0, 2)
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: consumer with two pipelined parents co-schedules with both") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val psdA = new PipelinedShuffleDependency(rddA, new HashPartitioner(2))
+    val rddB = new MyRDD(sc, 2, Nil)
+    val psdB = new PipelinedShuffleDependency(rddB, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdA, psdB), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Both producers and the consumer are all co-scheduled.
+    assert(taskSets.size === 3, s"expected both producers + consumer, got ${taskSets.size}")
+    assert(!scheduler.waitingStages.exists(_.rdd eq consumerRdd))
+    Seq(rddA, rddB, consumerRdd).foreach { rdd =>
+      assert(scheduler.runningStages.exists(_.rdd eq rdd))
+    }
+
+    val idA = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddA).get.stageId
+    completeShuffleMapStageSuccessfully(idA, 0, 2)
+    val idB = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddB).get.stageId
+    completeShuffleMapStageSuccessfully(idB, 0, 2)
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: consumer with two pipelined parents re-parks until BOTH are running") {
+    // R1 --regular--> P1 --pipelined--> C ; R2 --regular--> P2 --pipelined--> C.
+    // When P1 starts (R1 done) but P2 is still parked (R2 not done), C must RE-PARK, not
+    // co-schedule -- else it would run against a not-yet-running P2. (Guards the `forall` in the
+    // co-schedule gate against a `.exists` regression.)
+    val rddR1 = new MyRDD(sc, 2, Nil)
+    val rddP1 = new MyRDD(sc, 2, List(new ShuffleDependency(rddR1, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val psdP1 = new PipelinedShuffleDependency(rddP1, new HashPartitioner(2))
+    val rddR2 = new MyRDD(sc, 2, Nil)
+    val rddP2 = new MyRDD(sc, 2, List(new ShuffleDependency(rddR2, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val psdP2 = new PipelinedShuffleDependency(rddP2, new HashPartitioner(2))
+    val rddC = new MyRDD(sc, 2, List(psdP1, psdP2), tracker = mapOutputTracker)
+    submit(rddC, Array(0, 1))
+
+    // Initially only the two regular roots R1, R2 run; P1, P2, C all wait.
+    assert(taskSets.size === 2, s"expected R1, R2 submitted, got ${taskSets.size}")
+    assert(scheduler.waitingStages.exists(_.rdd eq rddC))
+
+    // R1 completes -> P1 runs and reconsiders C. But P2 is still parked, so C must re-park.
+    val idR1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR1).get.stageId
+    completeShuffleMapStageSuccessfully(idR1, 0, 2)
+    assert(scheduler.runningStages.exists(_.rdd eq rddP1), "P1 should be running")
+    assert(!scheduler.runningStages.exists(_.rdd eq rddP2), "P2 should not be running yet")
+    assert(scheduler.waitingStages.exists(_.rdd eq rddC),
+      "C must re-park while its second pipelined parent P2 is not yet running")
+
+    // R2 completes -> P2 runs and reconsiders C; now both pipelined parents run, so C co-schedules.
+    val idR2 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR2).get.stageId
+    completeShuffleMapStageSuccessfully(idR2, 0, 2)
+    assert(scheduler.runningStages.exists(_.rdd eq rddC), "C should now be co-scheduled")
+
+    val idP1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP1).get.stageId
+    completeShuffleMapStageSuccessfully(idP1, 0, 2)
+    val idP2 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP2).get.stageId
+    completeShuffleMapStageSuccessfully(idP2, 0, 2)
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: one producer feeding two pipelined consumers reconsiders both") {
+    // R --regular--> P --pipelined--> C1 and C2 ; C1,C2 --regular--> D.
+    // When P starts (R done), reconsideration must resubmit BOTH parked consumers C1 and C2.
+    // (Guards the `.filter` in submitWaitingPipelinedChildStages against a `.find` regression.)
+    val rddR = new MyRDD(sc, 2, Nil)
+    val rddP = new MyRDD(sc, 2, List(new ShuffleDependency(rddR, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddC1 = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddP, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddC2 = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddP, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddD = new MyRDD(sc, 2,
+      List(new ShuffleDependency(rddC1, new HashPartitioner(2)),
+        new ShuffleDependency(rddC2, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    submit(rddD, Array(0, 1))
+
+    // Only R runs initially; P, C1, C2 wait (D waits on its regular parents C1, C2).
+    assert(taskSets.size === 1, s"expected only R submitted, got ${taskSets.size}")
+
+    // R completes -> P runs and reconsiders BOTH C1 and C2.
+    val idR = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR).get.stageId
+    completeShuffleMapStageSuccessfully(idR, 0, 2)
+    assert(scheduler.runningStages.exists(_.rdd eq rddC1), "C1 should be co-scheduled with P")
+    assert(scheduler.runningStages.exists(_.rdd eq rddC2), "C2 should be co-scheduled with P")
+
+    // Drain P, then C1, C2, then D.
+    val idP = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP).get.stageId
+    completeShuffleMapStageSuccessfully(idP, 0, 2)
+    val idC1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC1).get.stageId
+    completeShuffleMapStageSuccessfully(idC1, 0, 2)
+    val idC2 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC2).get.stageId
+    completeShuffleMapStageSuccessfully(idC2, 0, 2)
+    val tsD = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddD).get
+    complete(tsD, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: reconsideration cascades transitively (B->C->D behind a regular root)") {
+    // Z --regular--> B --pipelined--> C --pipelined--> D. When Z completes, B runs and reconsiders
+    // C; co-scheduling C must in turn reconsider D (transitive cascade through the co-schedule
+    // branch's submitWaitingPipelinedChildStages call).
+    val rddZ = new MyRDD(sc, 2, Nil)
+    val rddB = new MyRDD(sc, 2, List(new ShuffleDependency(rddZ, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddC = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddB, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddD = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddC, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    submit(rddD, Array(0, 1))
+
+    assert(taskSets.size === 1, s"expected only Z submitted, got ${taskSets.size}")
+
+    // Z completes -> B runs -> reconsiders C -> co-schedules C -> reconsiders D -> co-schedules D.
+    val idZ = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddZ).get.stageId
+    completeShuffleMapStageSuccessfully(idZ, 0, 2)
+    assert(scheduler.runningStages.exists(_.rdd eq rddB), "B running")
+    assert(scheduler.runningStages.exists(_.rdd eq rddC), "C co-scheduled with B")
+    assert(scheduler.runningStages.exists(_.rdd eq rddD), "D co-scheduled transitively with C")
+
+    val idB = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddB).get.stageId
+    completeShuffleMapStageSuccessfully(idB, 0, 2)
+    val idC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get.stageId
+    completeShuffleMapStageSuccessfully(idC, 0, 2)
+    val tsD = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddD).get
+    complete(tsD, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: reconsidered consumer is not submitted twice when producer completes") {
+    // R --regular--> B --pipelined--> C. C is co-scheduled when B starts (reconsideration). When B
+    // later COMPLETES, submitWaitingChildStages(B) must NOT submit C a second time.
+    val rddR = new MyRDD(sc, 2, Nil)
+    val rddB = new MyRDD(sc, 2, List(new ShuffleDependency(rddR, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val rddC = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddB, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    submit(rddC, Array(0, 1))
+
+    val idR = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR).get.stageId
+    completeShuffleMapStageSuccessfully(idR, 0, 2)
+    // C co-scheduled exactly once via reconsideration.
+    def cTaskSets = taskSets.count(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC)
+    assert(cTaskSets === 1, "C should be submitted once by reconsideration")
+
+    // B completes -> submitWaitingChildStages(B) fires, but C is already running, not waiting.
+    val idB = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddB).get.stageId
+    completeShuffleMapStageSuccessfully(idB, 0, 2)
+    assert(cTaskSets === 1, "C must not be submitted a second time when B completes")
+
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC).get
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle job with speculation enabled is NOT rejected (rejection path is inert)") {
+    // The speculation fail-fast must apply only to jobs with a pipelined dependency; a plain
+    // regular-shuffle job with speculation on runs normally.
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+      submit(consumerRdd, Array(0, 1))
+      // Not rejected: the producer is submitted and the job proceeds normally.
+      assert(taskSets.nonEmpty, "regular-shuffle job must not be rejected under speculation")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    } finally {
+      sc.conf.set(config.SPECULATION_ENABLED, false)
+    }
+  }
+
+  test("pipelined shuffle: speculation is rejected for a job with a pipelined dependency") {
+    // Speculation races a producer copy against a consumer reading its partial output; reject.
+    // The scheduler reads sc.conf live, so toggling it here takes effect for the submit below.
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(consumerRdd, Array(0, 1), listener = failListener)
+      assert(failure.get() != null,
+        "job with pipelined dependency + speculation should be rejected")
+      assert(failure.get().getMessage.contains("Speculative execution is not supported"))
+      // No task sets were submitted for the rejected job.
+      assert(taskSets.isEmpty)
+      assertDataStructuresEmpty()
+    } finally {
+      sc.conf.set(config.SPECULATION_ENABLED, false)
+    }
+  }
+
+  test("pipelined shuffle: submitting a pipelined dependency as a map-stage job is rejected") {
+    // A map-stage job (SparkContext.submitMapStage, e.g. AQE's ShuffleExchangeExec) materializes a
+    // shuffle to produce map-output statistics. A PipelinedShuffleDependency cannot serve that -- it
+    // is transient with no durable map output (getStatistics would return all-zero stats), and its
+    // producer/consumer co-scheduling makes speculation unsafe. It is rejected outright, regardless
+    // of speculation. No partial scheduler state is left behind.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submitMapStage(pipelinedDep, listener = failListener)
+    assert(failure.get() != null,
+      "submitMapStage with a pipelined dependency must be rejected")
+    assert(failure.get().getMessage.contains("cannot be submitted as a map-stage job"),
+      s"expected a map-stage-rejection error, got: ${failure.get().getMessage}")
+    // No task sets were submitted for the rejected map-stage job, and no partial state remains.
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle map-stage job with speculation enabled is NOT rejected (inertness)") {
+    // The map-stage speculation fail-fast must be inert for a regular ShuffleDependency.
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+      submitMapStage(regularDep)
+      // Not rejected: the map stage is submitted and runs normally.
+      assert(taskSets.nonEmpty, "regular-shuffle map-stage job must not be rejected under speculation")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      assertDataStructuresEmpty()
+    } finally {
+      sc.conf.set(config.SPECULATION_ENABLED, false)
+    }
+  }
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {
