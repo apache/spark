@@ -2915,6 +2915,17 @@ package object config {
       .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("CRC32C")
 
+  private[spark] val STORAGE_RDD_BLOCK_CHECKSUM_VERIFY_ON_REPLICATION =
+    ConfigBuilder("spark.storage.rddBlockChecksum.verifyOnReplication")
+      .internal()
+      .doc("When true, a replica of a checksummed RDD block recomputes the content checksum over " +
+        "the received bytes to verify the transfer, instead of trusting the checksum sent by the " +
+        "source. Off by default: the source's checksum is recorded directly, since the transport " +
+        "layer already provides integrity.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
     ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
       .internal()

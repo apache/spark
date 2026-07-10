@@ -239,6 +239,10 @@ private[spark] class BlockManager(
   private val rddBlockChecksumAlgorithm: String =
     conf.get(config.STORAGE_RDD_BLOCK_CHECKSUM_ALGORITHM)
 
+  /** Whether a replica recomputes the checksum on receive rather than trusting the sent value. */
+  private val rddBlockChecksumVerifyOnReplication: Boolean =
+    conf.get(config.STORAGE_RDD_BLOCK_CHECKSUM_VERIFY_ON_REPLICATION)
+
   /**
    * Returns a fresh content-checksum accumulator for an RDD block, or None when checksum
    * computation is disabled or this is not an RDD block.
@@ -545,12 +549,14 @@ private[spark] class BlockManager(
         val putBlockStatus = getCurrentBlockStatus(blockId, info)
         val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
         if (blockWasSuccessfullyStored) {
-          // Propagate the source replica's verify mark, and (when the source carried a checksum or
-          // was on the seal path) recompute the checksum over the received bytes and record it, so
-          // the master can verify this replica and this executor's reads self-check it.
+          // Propagate the source replica's verify mark and record its content checksum, so the
+          // master can verify this replica and this executor's reads self-check it. By default the
+          // source's checksum is trusted; with verifyOnReplication on, recompute over the received
+          // bytes to also verify the transfer.
           if (blockId.isRDD) {
             if (sourceVerifySealedChecksum) info.verifySealedChecksum = true
-            if (sourceChecksum.isDefined || sourceVerifySealedChecksum) {
+            if (rddBlockChecksumVerifyOnReplication &&
+                (sourceChecksum.isDefined || sourceVerifySealedChecksum)) {
               val recomputed = computeReceivedBlockChecksum(blockData())
               if (sourceChecksum.exists(_ != recomputed)) {
                 logWarning(log"Replicated block ${MDC(BLOCK_ID, blockId)} arrived with a source " +
@@ -558,6 +564,8 @@ private[spark] class BlockManager(
                   log"value (possible transmission corruption or non-deterministic serialization).")
               }
               info.checksum = Some(recomputed)
+            } else if (sourceChecksum.isDefined) {
+              info.checksum = sourceChecksum
             }
           }
           // Now that the block is in either the memory or disk store,
@@ -2211,9 +2219,12 @@ private[spark] class BlockManager(
     // Drop to disk, if storage level requires
     if (level.useDisk && !diskStore.contains(blockId)) {
       logInfo(log"Writing block ${MDC(BLOCK_ID, blockId)} to disk")
-      // The Left branch is the block's first serialized form, so checksum it here (same rule as the
-      // store path) and record it, so an evicted block is verifiable and never re-reports
-      // checksum-less once sealed. The Right branch writes bytes whose checksum was set at store.
+      // Compute a content checksum for this serialize-to-disk on eviction (same rule as the store
+      // path: only when requested). In practice the Left branch below is reached only by a
+      // deserialized in-memory block, which is never on the seal path (the mark is gated on a
+      // serialized level), so here the checksum is driven purely by the global compute flag; a
+      // sealed (serialized) block dropped from memory takes the Right branch, writing bytes whose
+      // checksum was already set at store time.
       val checksumOpt = newRddBlockChecksum(blockId, info.verifySealedChecksum)
       data() match {
         case Left(elements) =>
