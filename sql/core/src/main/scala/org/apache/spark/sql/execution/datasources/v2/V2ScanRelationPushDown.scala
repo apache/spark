@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, Colla
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.DATA_SOURCE_V2_RELATION
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
@@ -49,12 +48,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    // All pushdown sub-rules enter through a `DataSourceV2Relation` (createScanBuilder), so skip
-    // the whole fold when the plan has no such relation.
-    if (!plan.containsPattern(DATA_SOURCE_V2_RELATION)) {
-      return plan
-    }
-
     val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
       createScanBuilder,
       pushDownSample,

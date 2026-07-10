@@ -17,10 +17,18 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.ProjectingInternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Pins the tree-pattern identity contract for the DSv2 row-level command nodes: each node carries
@@ -30,6 +38,19 @@ class V2CommandTreePatternSuite extends SparkFunSuite {
 
   private val target = LocalRelation($"a".int, $"b".int)
   private val source = LocalRelation($"c".int, $"d".int)
+
+  // A minimal `NamedRelation` for the row-level write nodes, whose `nodePatternsInternal()`
+  // returns a compile-time constant, so no resolution is needed to pin the identity bit.
+  private val v2Relation: DataSourceV2Relation = {
+    val table = new Table {
+      override def name(): String = "t"
+      override def columns(): Array[Column] = Array(Column.create("a", IntegerType))
+      override def capabilities(): util.Set[TableCapability] = util.Set.of[TableCapability]()
+    }
+    DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
+  }
+
+  private val emptyRow = ProjectingInternalRow(new StructType(), IndexedSeq.empty)
 
   test("DeleteFromTable declares COMMAND and DELETE_FROM_TABLE") {
     val plan = DeleteFromTable(target, Literal.TrueLiteral)
@@ -52,5 +73,25 @@ class V2CommandTreePatternSuite extends SparkFunSuite {
       notMatchedBySourceActions = Seq(DeleteAction(None)),
       withSchemaEvolution = false)
     assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.MERGE_INTO_TABLE))
+  }
+
+  test("ReplaceData declares COMMAND and REPLACE_DATA") {
+    val plan = ReplaceData(
+      v2Relation,
+      Literal.TrueLiteral,
+      source,
+      v2Relation,
+      ReplaceDataProjections(emptyRow, None))
+    assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.REPLACE_DATA))
+  }
+
+  test("WriteDelta declares COMMAND and WRITE_DELTA") {
+    val plan = WriteDelta(
+      v2Relation,
+      Literal.TrueLiteral,
+      source,
+      v2Relation,
+      WriteDeltaProjections(None, emptyRow, None))
+    assert(plan.containsAllPatterns(TreePattern.COMMAND, TreePattern.WRITE_DELTA))
   }
 }
