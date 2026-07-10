@@ -595,6 +595,7 @@ package object config {
         "which can leave the map output pointing at the decommissioned origin executor and " +
         "surface downstream as a fetch failure once that executor is removed.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
