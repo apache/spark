@@ -1185,9 +1185,9 @@ object VariantSetExpressionBuilder extends ExpressionBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(v, path, val) - Appends a value to the array in a variant at the given JSONPath " +
-    "location. Returns the variant unchanged if a path key or index is absent, throws an error if " +
-    "a path segment hits a value of an incompatible type or the target is not an array, and " +
-    "returns NULL if any argument is NULL.",
+    "location. Returns the variant unchanged if a path key or index is absent. Throws an error " +
+    "if a path segment hits a value of an incompatible type or the target is not an array. " +
+    "Returns NULL if any argument is NULL.",
   arguments = """
     Arguments:
       * v - A variant value to mutate.
