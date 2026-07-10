@@ -78,7 +78,7 @@ class StreamingShuffleWriter[K, V](
   // The per-partition floor (2 buffers per partition) can push the total in-force budget above
   // the configured writerMaxMemory when the partition count is high; surface the effective total
   // (including TCP buffers) so operators can see the limit they set is not the one in force.
-  val effectiveBudget = MAX_BUFFER_BYTES + TOTAL_TCPBUF_BYTES
+  private val effectiveBudget = MAX_BUFFER_BYTES + TOTAL_TCPBUF_BYTES
   if (effectiveBudget > conf.get(STREAMING_SHUFFLE_WRITER_MAX_MEMORY).toLong) {
     logWarning(log"Streaming shuffle writer effective memory budget " +
       log"${MDC(LogKeys.MAX_MEMORY_SIZE, Utils.bytesToString(effectiveBudget))} exceeds the " +
