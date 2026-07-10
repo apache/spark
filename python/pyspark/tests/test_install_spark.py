@@ -14,12 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import io
 import os
+import tarfile
 import tempfile
 import unittest
 
 from pyspark.install import (
     install_spark,
+    _extract_tar,
     DEFAULT_HADOOP,
     DEFAULT_HIVE,
     UNSUPPORTED_COMBINATIONS,
@@ -45,6 +48,40 @@ class SparkInstallationTestCase(unittest.TestCase):
             self.assertTrue(os.path.isdir("%s/jars" % tmp_dir))
             self.assertTrue(os.path.exists("%s/bin/spark-submit" % tmp_dir))
             self.assertTrue(os.path.exists("%s/RELEASE" % tmp_dir))
+
+    def test_extract_tar(self):
+        # A benign member is extracted with the top-level package directory
+        # stripped, while a member whose path escapes the destination
+        # directory (zip slip) is rejected rather than extracted.
+        package_name = "spark-4.1.1-bin-hadoop3"
+
+        def make_tar(path, member_name):
+            with tarfile.open(path, "w") as tar:
+                data = b"content"
+                info = tarfile.TarInfo(name=member_name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+
+        with tempfile.TemporaryDirectory(prefix="test_install_spark") as tmp_dir:
+            # Benign archive extracts into dest with the package prefix removed.
+            safe_tar = os.path.join(tmp_dir, "safe.tar")
+            make_tar(safe_tar, "%s/bin/spark-submit" % package_name)
+            safe_dest = os.path.join(tmp_dir, "safe_dest")
+            os.makedirs(safe_dest)
+            with tarfile.open(safe_tar, "r") as tar:
+                _extract_tar(tar, package_name, safe_dest)
+            self.assertTrue(os.path.exists(os.path.join(safe_dest, "bin", "spark-submit")))
+
+            # Malicious archive member escaping dest is rejected, and nothing
+            # is written into the destination directory.
+            evil_tar = os.path.join(tmp_dir, "evil.tar")
+            make_tar(evil_tar, "%s/../../evil" % package_name)
+            evil_dest = os.path.join(tmp_dir, "evil_dest")
+            os.makedirs(evil_dest)
+            with tarfile.open(evil_tar, "r") as tar:
+                with self.assertRaisesRegex(ValueError, "outside of the destination"):
+                    _extract_tar(tar, package_name, evil_dest)
+            self.assertEqual([], os.listdir(evil_dest))
 
     def test_package_name(self):
         self.assertEqual(
