@@ -114,3 +114,59 @@ class NullableLongArrowToPandasBenchmark:
 
     def peakmem_long_with_nulls_to_pandas_ext(self, n_rows, method):
         self.run_long_with_nulls_to_pandas_ext(n_rows, method)
+
+
+class ArrowListColumnToRowsBenchmark:
+    """
+    Benchmark for converting Arrow list-typed columns to Python rows, the hot
+    path of Arrow-optimized Python UDF inputs and Spark Connect collect().
+
+    ``baseline`` measures plain ``column.to_pylist()``; ``bulk`` measures
+    ``ArrowTableToRowsConversion._to_pylist`` (see apache/arrow#50326).
+    """
+
+    params = [
+        [100000, 1000000],
+        ["baseline", "bulk"],
+    ]
+    param_names = ["n_rows", "method"]
+
+    def setup(self, n_rows, method):
+        from pyspark.sql.conversion import ArrowTableToRowsConversion
+
+        self.list_of_strings = pa.array(
+            [[f"s{i}", f"t{i}"] for i in range(n_rows)], type=pa.list_(pa.string())
+        )
+        self.nested_ints_with_nulls = pa.array(
+            [[[i, i + 1], None, [i + 2]] if i % 10 != 0 else None for i in range(n_rows)],
+            type=pa.list_(pa.list_(pa.int32())),
+        )
+        self.array_of_structs = pa.array(
+            [
+                [{"i": i, "s": f"a{i}"}, {"i": i + 1, "s": f"b{i}"}] if i % 10 != 0 else None
+                for i in range(n_rows)
+            ],
+            type=pa.list_(pa.struct([("i", pa.int32()), ("s", pa.string())])),
+        )
+        if method == "bulk":
+            self.convert = ArrowTableToRowsConversion._to_pylist
+        else:
+            self.convert = lambda column: column.to_pylist()
+
+    def time_list_of_strings_to_rows(self, n_rows, method):
+        self.convert(self.list_of_strings)
+
+    def time_nested_ints_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.nested_ints_with_nulls)
+
+    def time_array_of_structs_to_rows(self, n_rows, method):
+        self.convert(self.array_of_structs)
+
+    def peakmem_list_of_strings_to_rows(self, n_rows, method):
+        self.convert(self.list_of_strings)
+
+    def peakmem_nested_ints_with_nulls_to_rows(self, n_rows, method):
+        self.convert(self.nested_ints_with_nulls)
+
+    def peakmem_array_of_structs_to_rows(self, n_rows, method):
+        self.convert(self.array_of_structs)
