@@ -8206,7 +8206,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         shifted value.
-        Returns a column that evaluates to an integer.
+        Returns a column of the same type as the input.
 
     Examples
     --------
@@ -8264,7 +8264,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         shifted values.
-        Returns a column that evaluates to an integer.
+        Returns a column of the same type as the input.
 
     Examples
     --------
@@ -8322,7 +8322,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         shifted value.
-        Returns a column that evaluates to an integer.
+        Returns a column of the same type as the input.
 
     Examples
     --------
@@ -15833,7 +15833,7 @@ def overlay(
     -------
     :class:`~pyspark.sql.Column`
         string with replaced values.
-        Returns a column that evaluates to a string.
+        Returns a column of the same type as the input.
 
     Examples
     --------
@@ -20839,7 +20839,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     pos : :class:`~pyspark.sql.Column` or str or int
         name of Numeric type column indicating position of insertion
         (starting at index 1, negative position is a start from the back of the array).
-        A column of the same type as the array elements.
+        A column that evaluates to an integer.
     value :
         a literal value, or a :class:`~pyspark.sql.Column` expression.
         A column of the same type as the array elements.
@@ -25204,11 +25204,9 @@ def reduce(
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
         of the same type as ``zero``.
-        A column that evaluates to an array.
     finish : function, optional
         an optional unary function ``(x: Column) -> Column: ...``
         used to convert accumulated value.
-        A column of any type.
 
     Returns
     -------

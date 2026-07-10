@@ -1082,7 +1082,7 @@ object functions {
    * @group agg_funcs
    * @since 4.2.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column that evaluates to an array.
    */
   def max_by(e: Column, ord: Column, k: Int): Column = Column.fn("max_by", e, ord, lit(k))
 
@@ -1102,7 +1102,7 @@ object functions {
    * @group agg_funcs
    * @since 4.2.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column that evaluates to an array.
    */
   def max_by(e: Column, ord: Column, k: Column): Column = Column.fn("max_by", e, ord, k)
 
@@ -1187,7 +1187,7 @@ object functions {
    * @group agg_funcs
    * @since 4.2.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column that evaluates to an array.
    */
   def min_by(e: Column, ord: Column, k: Int): Column = Column.fn("min_by", e, ord, lit(k))
 
@@ -1208,7 +1208,7 @@ object functions {
    * @group agg_funcs
    * @since 4.2.0
    * @return
-   *   Returns a column of the same type as the input.
+   *   Returns a column that evaluates to an array.
    */
   def min_by(e: Column, ord: Column, k: Column): Column = Column.fn("min_by", e, ord, k)
 
@@ -2541,7 +2541,7 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    * @return
-   *   Returns a column that evaluates to a string.
+   *   Returns a column of the same type as the input.
    */
   def listagg(e: Column): Column = Column.fn("listagg", e)
 
@@ -2552,7 +2552,7 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    * @return
-   *   Returns a column that evaluates to a string.
+   *   Returns a column of the same type as the input.
    */
   def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
 
@@ -2584,7 +2584,7 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    * @return
-   *   Returns a column that evaluates to a string.
+   *   Returns a column of the same type as the input.
    */
   def string_agg(e: Column): Column = Column.fn("string_agg", e)
 
@@ -2595,7 +2595,7 @@ object functions {
    * @group agg_funcs
    * @since 4.0.0
    * @return
-   *   Returns a column that evaluates to a string.
+   *   Returns a column of the same type as the input.
    */
   def string_agg(e: Column, delimiter: Column): Column = Column.fn("string_agg", e, delimiter)
 
@@ -3670,7 +3670,7 @@ object functions {
    * @group math_funcs
    * @since 3.5.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column of the same type as the input.
    */
   def try_divide(left: Column, right: Column): Column = Column.fn("try_divide", left, right)
 
@@ -4837,7 +4837,7 @@ object functions {
    * @group bitwise_funcs
    * @since 3.2.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   Returns a column of the same type as the input.
    */
   def shiftleft(e: Column, numBits: Int): Column = Column.fn("shiftleft", e, lit(numBits))
 
@@ -4860,7 +4860,7 @@ object functions {
    * @group bitwise_funcs
    * @since 3.2.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   Returns a column of the same type as the input.
    */
   def shiftright(e: Column, numBits: Int): Column = Column.fn("shiftright", e, lit(numBits))
 
@@ -4883,7 +4883,7 @@ object functions {
    * @group bitwise_funcs
    * @since 3.2.0
    * @return
-   *   Returns a column that evaluates to an integer.
+   *   Returns a column of the same type as the input.
    */
   def shiftrightunsigned(e: Column, numBits: Int): Column =
     Column.fn("shiftrightunsigned", e, lit(numBits))
@@ -6642,7 +6642,7 @@ object functions {
    * @group string_funcs
    * @since 3.0.0
    * @return
-   *   Returns a column that evaluates to a string.
+   *   Returns a column of the same type as the input.
    */
   def overlay(src: Column, replace: Column, pos: Column, len: Column): Column =
     Column.fn("overlay", src, replace, pos, len)
