@@ -1,5 +1,6 @@
 -- A test suite for set-operations in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--ONLY_IF spark
 --SET spark.sql.autoBroadcastJoinThreshold=-1
 
 create temporary view t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i) as values

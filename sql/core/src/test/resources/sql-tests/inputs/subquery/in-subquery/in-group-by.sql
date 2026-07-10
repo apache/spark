@@ -6,6 +6,7 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+--ONLY_IF spark
 create temporary view t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i) as values
   ('t1a', 6, 8, 10, 15.0, 20.0, 2000.0, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
   ('t1b', 8, 16, 19, 17.0, 25.0, 2600.0, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),

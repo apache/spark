@@ -3,6 +3,7 @@
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+--ONLY_IF spark
 
 create temporary view t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i) as values
   ('t1a', 6, 8, 10, 15.0, 20.0, 2000.0, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
