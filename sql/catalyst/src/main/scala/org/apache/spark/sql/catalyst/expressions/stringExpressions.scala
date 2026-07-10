@@ -3383,9 +3383,9 @@ object Decode {
   arguments = """
     Arguments:
       * bin - a binary expression to decode
-        An expression of any type.
+        An expression that evaluates to a binary.
       * charset - one of the charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32' to decode `bin` into a STRING. It is case insensitive.
-        An expression of any type.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:

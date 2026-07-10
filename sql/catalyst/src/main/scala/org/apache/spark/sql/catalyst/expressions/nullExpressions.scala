@@ -191,9 +191,9 @@ private case class TypedNullLiteral(child: Expression)
   arguments = """
     Arguments:
       * expr1 - The value returned when it is not equal to the other expression.
-        An expression of any type.
+        An expression of any orderable type.
       * expr2 - The value compared against the first expression.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -229,7 +229,7 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   arguments = """
     Arguments:
       * expr - The expression that returns null when equal to zero.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:

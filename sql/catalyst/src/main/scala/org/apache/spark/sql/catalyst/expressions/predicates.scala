@@ -1110,7 +1110,7 @@ object Equality {
       * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
           and must be a type that can be used in equality comparison. Map type is not supported.
           For complex types such array/struct, the data types of fields must be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1159,7 +1159,7 @@ case class EqualTo(left: Expression, right: Expression)
       * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
           and must be a type that can be used in equality comparison. Map type is not supported.
           For complex types such array/struct, the data types of fields must be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1223,7 +1223,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
           and must be a type that can be used in equality comparison. Map type is not supported.
           For complex types such array/struct, the data types of fields must be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1260,7 +1260,7 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
           and must be a type that can be ordered. For example, map type is not orderable, so it
           is not supported. For complex types such array/struct, the data types of fields must
           be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1296,7 +1296,7 @@ case class LessThan(left: Expression, right: Expression)
           and must be a type that can be ordered. For example, map type is not orderable, so it
           is not supported. For complex types such array/struct, the data types of fields must
           be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1332,7 +1332,7 @@ case class LessThanOrEqual(left: Expression, right: Expression)
           and must be a type that can be ordered. For example, map type is not orderable, so it
           is not supported. For complex types such array/struct, the data types of fields must
           be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:
@@ -1369,7 +1369,7 @@ case class GreaterThan(left: Expression, right: Expression)
           and must be a type that can be ordered. For example, map type is not orderable, so it
           is not supported. For complex types such array/struct, the data types of fields must
           be orderable.
-        An expression of any type.
+        An expression of any orderable type.
   """,
   examples = """
     Examples:

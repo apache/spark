@@ -62,7 +62,7 @@ import org.apache.spark.unsafe.types.UTF8String
   arguments = """
     Arguments:
       * expr - The expression to compute the top k most frequent items of.
-        An expression of any type.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
       * k - The number of top items to return.
         An expression that evaluates to an integer. Must be a constant.
       * maxItemsTracked - The maximum number of items to track in the sketch.
@@ -500,7 +500,7 @@ object ApproxTopKAggregateBuffer {
   arguments = """
     Arguments:
       * expr - The expression whose values are accumulated into the sketch.
-        An expression of any type.
+        An expression that evaluates to a boolean, numeric, date, timestamp, or string.
       * maxItemsTracked - The maximum number of items to track in the sketch.
         An expression that evaluates to an integer. Must be a constant.
   """,

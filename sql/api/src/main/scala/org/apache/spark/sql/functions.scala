@@ -3361,7 +3361,7 @@ object functions {
 
   /**
    * @return
-   *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos` Returns a column
+   *   inverse cosine of `e` in radians, as if computed by `java.lang.Math.acos`. Returns a column
    *   that evaluates to a double.
    *
    * @group math_funcs
@@ -3380,7 +3380,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic cosine of `e` Returns a column that evaluates to a double.
+   *   inverse hyperbolic cosine of `e`. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3398,7 +3398,7 @@ object functions {
 
   /**
    * @return
-   *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin` Returns a column
+   *   inverse sine of `e` in radians, as if computed by `java.lang.Math.asin`. Returns a column
    *   that evaluates to a double.
    *
    * @group math_funcs
@@ -3417,7 +3417,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic sine of `e` Returns a column that evaluates to a double.
+   *   inverse hyperbolic sine of `e`. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3435,7 +3435,7 @@ object functions {
 
   /**
    * @return
-   *   inverse tangent of `e` as if computed by `java.lang.Math.atan` Returns a column that
+   *   inverse tangent of `e` as if computed by `java.lang.Math.atan`. Returns a column that
    *   evaluates to a double.
    *
    * @group math_funcs
@@ -3460,7 +3460,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2` Returns a column that evaluates to a double.
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -3575,7 +3575,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic tangent of `e` Returns a column that evaluates to a double.
+   *   inverse hyperbolic tangent of `e`. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.1.0
@@ -3688,7 +3688,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cosine of the angle, as if computed by `java.lang.Math.cos` Returns a column that evaluates
+   *   cosine of the angle, as if computed by `java.lang.Math.cos`. Returns a column that evaluates
    *   to a double.
    *
    * @group math_funcs
@@ -3711,7 +3711,7 @@ object functions {
    * @param e
    *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh` Returns a column
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`. Returns a column
    *   that evaluates to a double.
    *
    * @group math_funcs
@@ -3734,7 +3734,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cotangent of the angle Returns a column that evaluates to a double.
+   *   cotangent of the angle. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -3745,7 +3745,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   cosecant of the angle Returns a column that evaluates to a double.
+   *   cosecant of the angle. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -4256,7 +4256,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   secant of the angle Returns a column that evaluates to a double.
+   *   secant of the angle. Returns a column that evaluates to a double.
    *
    * @group math_funcs
    * @since 3.3.0
@@ -4359,7 +4359,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   sine of the angle, as if computed by `java.lang.Math.sin` Returns a column that evaluates
+   *   sine of the angle, as if computed by `java.lang.Math.sin`. Returns a column that evaluates
    *   to a double.
    *
    * @group math_funcs
@@ -4405,7 +4405,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   tangent of the given value, as if computed by `java.lang.Math.tan` Returns a column that
+   *   tangent of the given value, as if computed by `java.lang.Math.tan`. Returns a column that
    *   evaluates to a double.
    *
    * @group math_funcs
@@ -4468,7 +4468,7 @@ object functions {
    * @param e
    *   angle in radians. A column that evaluates to a double.
    * @return
-   *   angle in degrees, as if computed by `java.lang.Math.toDegrees` Returns a column that
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`. Returns a column that
    *   evaluates to a double.
    *
    * @group math_funcs
@@ -4511,7 +4511,7 @@ object functions {
    * @param e
    *   angle in degrees. A column that evaluates to a double.
    * @return
-   *   angle in radians, as if computed by `java.lang.Math.toRadians` Returns a column that
+   *   angle in radians, as if computed by `java.lang.Math.toRadians`. Returns a column that
    *   evaluates to a double.
    *
    * @group math_funcs
@@ -4548,7 +4548,7 @@ object functions {
    * @param numBucket
    *   the number of buckets. A column that evaluates to a long.
    * @return
-   *   the bucket number into which the value would fall after being evaluated Returns a column
+   *   the bucket number into which the value would fall after being evaluated. Returns a column
    *   that evaluates to a long.
    * @group math_funcs
    * @since 3.5.0
@@ -5457,7 +5457,7 @@ object functions {
    * Computes the Levenshtein distance of the two given string columns if it's less than or equal
    * to a given threshold.
    * @return
-   *   result distance, or -1 Returns a column that evaluates to an integer.
+   *   result distance, or -1. Returns a column that evaluates to an integer.
    * @group string_funcs
    * @since 3.5.0
    */
@@ -7944,7 +7944,7 @@ object functions {
    *   The number of days to add to `start`, can be negative to subtract days. A column that
    *   evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
@@ -7977,7 +7977,7 @@ object functions {
    *   A column of the number of days to add to `start`, can be negative to subtract days. A
    *   column that evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
    * @group datetime_funcs
    * @since 3.5.0
@@ -7995,7 +7995,7 @@ object functions {
    *   The number of days to subtract from `start`, can be negative to add days. A column that
    *   evaluates to an integer, short, or byte.
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date Returns a column
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8037,7 +8037,7 @@ object functions {
    *   date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
-   *   date. Negative if `end` is before `start` Returns a column that evaluates to an integer.
+   *   date. Negative if `end` is before `start`. Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8062,7 +8062,7 @@ object functions {
    *   date.
    * @return
    *   An integer, or null if either `end` or `start` were strings that could not be cast to a
-   *   date. Negative if `end` is before `start` Returns a column that evaluates to an integer.
+   *   date. Negative if `end` is before `start`. Returns a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
    */
@@ -8169,7 +8169,7 @@ object functions {
    * @param source
    *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   a part of the date/timestamp or interval source. Returns a column that evaluates to a
    *   double.
    * @group datetime_funcs
    * @since 3.5.0
@@ -8187,7 +8187,7 @@ object functions {
    * @param source
    *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   a part of the date/timestamp or interval source. Returns a column that evaluates to a
    *   double.
    * @group datetime_funcs
    * @since 3.5.0
@@ -8205,7 +8205,7 @@ object functions {
    * @param source
    *   a date/timestamp or interval column from where `field` should be extracted.
    * @return
-   *   a part of the date/timestamp or interval source Returns a column that evaluates to a
+   *   a part of the date/timestamp or interval source. Returns a column that evaluates to a
    *   double.
    * @group datetime_funcs
    * @since 3.5.0
@@ -8223,7 +8223,7 @@ object functions {
    *   a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to a
    *   date.
    * @return
-   *   A date, or null if the input was a string that could not be cast to a date Returns a column
+   *   A date, or null if the input was a string that could not be cast to a date. Returns a column
    *   that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8283,7 +8283,7 @@ object functions {
    *   timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @return
    *   A double, or null if either `end` or `start` were strings that could not be cast to a
-   *   timestamp. Negative if `end` is before `start` Returns a column that evaluates to a double.
+   *   timestamp. Negative if `end` is before `start`. Returns a column that evaluates to a double.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8315,7 +8315,7 @@ object functions {
    *   that evaluates to a string.
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
-   *   was an invalid value Returns a column that evaluates to a date.
+   *   was an invalid value. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8699,7 +8699,7 @@ object functions {
    *
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or `format` was an
-   *   invalid value Returns a column that evaluates to a date.
+   *   invalid value. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8720,7 +8720,7 @@ object functions {
    *   a timestamp.
    * @return
    *   A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp or
-   *   `format` was an invalid value Returns a column that evaluates to a timestamp.
+   *   `format` was an invalid value. Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -8745,7 +8745,7 @@ object functions {
    *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
-   *   an invalid value Returns a column that evaluates to a timestamp.
+   *   an invalid value. Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8779,7 +8779,7 @@ object functions {
    *   column that evaluates to a string.
    * @return
    *   A timestamp, or null if `ts` was a string that could not be cast to a timestamp or `tz` was
-   *   an invalid value Returns a column that evaluates to a timestamp.
+   *   an invalid value. Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 1.5.0
    */

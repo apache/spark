@@ -1380,7 +1380,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be maximized. This could be the column instance
         or the column name as string.
-        A column of any type.
+        A column of any orderable type.
     k : int, optional
         If specified, returns an array of up to `k` values associated with the top `k`
         maximum ordering values, sorted in descending order by the ordering column.
@@ -1494,7 +1494,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName", k: Optional[int] = None) ->
     ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be minimized. This could be the column instance
         or the column name as string.
-        A column of any type.
+        A column of any orderable type.
     k : int, optional
         If specified, returns an array of up to `k` values associated with the bottom `k`
         minimum ordering values, sorted in ascending order by the ordering column.
@@ -30626,9 +30626,9 @@ def equal_null(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
-        A column of any type.
+        A column of any orderable type.
     col2 : :class:`~pyspark.sql.Column` or column name
-        A column of any type.
+        A column of any orderable type.
 
     Examples
     --------
@@ -30663,9 +30663,9 @@ def nullif(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Parameters
     ----------
     col1 : :class:`~pyspark.sql.Column` or column name
-        A column of any type.
+        A column of any orderable type.
     col2 : :class:`~pyspark.sql.Column` or column name
-        A column of any type.
+        A column of any orderable type.
 
     Examples
     --------
@@ -30700,7 +30700,7 @@ def nullifzero(col: "ColumnOrName") -> Column:
     Parameters
     ----------
     col : :class:`~pyspark.sql.Column` or column name
-        A column of any type.
+        A column of any orderable type.
 
     Examples
     --------
