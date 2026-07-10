@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.planning.{DeltaBasedRowLevelOperation, GroupBasedRowLevelOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, RowLevelWrite}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{REPLACE_DATA, WRITE_DELTA}
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Implicits, DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Scan}
@@ -49,7 +50,8 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
   import DataSourceV2Implicits._
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+      _.containsAnyPattern(REPLACE_DATA, WRITE_DELTA)) {
     case GroupBasedRowLevelOperation(replaceData, _, Some(cond),
         ExtractV2Scan(scan: SupportsRuntimeV2Filtering)) if canInjectGroupFilters(cond, scan) =>
       injectGroupFilters(replaceData, cond, scan)
