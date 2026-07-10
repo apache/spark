@@ -3509,7 +3509,13 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [
                 Row(json="""{ "a" : 1 }""", path="$.a", newpath="$.z", arr="[1, 2]", arrpath="$"),
-                Row(json="""{ "b" : 2 }""", path="$.b", newpath="$.z", arr="[[3], 4]", arrpath="$[0]"),
+                Row(
+                    json="""{ "b" : 2 }""",
+                    path="$.b",
+                    newpath="$.z",
+                    arr="[[3], 4]",
+                    arrpath="$[0]",
+                ),
             ]
         )
         v = F.parse_json(df.json)
