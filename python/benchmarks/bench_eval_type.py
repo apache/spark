@@ -141,7 +141,7 @@ class MockProtocolWriter:
     ) -> None:
         """Write the initial message with header, length + its data."""
 
-        # Write everything to a seperate buffer so we can
+        # Write everything to a separate buffer so we can
         # determine the length of the initial message.
         buf = io.BytesIO()
         cls.write_preamble(buf)
