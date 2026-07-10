@@ -8499,7 +8499,7 @@ object functions {
    *   a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`. A column that evaluates to
    *   a string, date, timestamp, timestamp_ntz, or numeric.
    * @return
-   *   A timestamp, or null if the input was a string that could not be cast to a timestamp
+   *   A timestamp, or null if the input was a string that could not be cast to a timestamp.
    *   Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.2.0

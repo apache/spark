@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
       If `isIgnoreNull` is true, returns only non-null values.""",
   arguments = """
     Arguments:
-      * expr - The expression to return some value of for a group of rows.
+      * expr - The expression to return some value of.
         An expression of any type.
       * isIgnoreNull - Whether to return only non-null values.
         An expression that evaluates to a boolean. Must be a constant.
