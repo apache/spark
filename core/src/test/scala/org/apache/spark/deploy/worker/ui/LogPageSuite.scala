@@ -79,27 +79,28 @@ class LogPageSuite extends SparkFunSuite with PrivateMethodTester {
   test("render encodes request parameters embedded in the inline script") {
     val webui = mock(classOf[WorkerWebUI])
     val worker = mock(classOf[Worker])
-    val tmpDir = new File(sys.props("java.io.tmpdir"))
-    val workDir = new File(tmpDir, "work-dir")
-    workDir.mkdir()
-    when(webui.workDir).thenReturn(workDir)
-    when(webui.worker).thenReturn(worker)
-    when(worker.conf).thenReturn(new SparkConf())
-    when(worker.activeMasterWebUiUrl).thenReturn("http://master:8080")
-    val logPage = new LogPage(webui)
+    withTempDir { tmpDir =>
+      val workDir = new File(tmpDir, "work-dir")
+      workDir.mkdir()
+      when(webui.workDir).thenReturn(workDir)
+      when(webui.worker).thenReturn(worker)
+      when(worker.conf).thenReturn(new SparkConf())
+      when(worker.activeMasterWebUiUrl).thenReturn("http://master:8080")
+      val logPage = new LogPage(webui)
 
-    val request = mock(classOf[HttpServletRequest])
-    // appId is user-controlled; a '&' in it would inject an extra parameter into the /log
-    // requests, and the '</script>' would break out of the inline <script> block, if emitted raw.
-    when(request.getParameter("appId")).thenReturn("app&byteLength=0</script>")
-    when(request.getParameter("executorId")).thenReturn("0")
-    when(request.getParameter("logType")).thenReturn("stdout")
-    val html = logPage.render(request).mkString
+      val request = mock(classOf[HttpServletRequest])
+      // appId is user-controlled; a '&' in it would inject an extra parameter into the /log
+      // requests, and the '</script>' would break out of the inline <script> block, if emitted raw.
+      when(request.getParameter("appId")).thenReturn("app&byteLength=0</script>")
+      when(request.getParameter("executorId")).thenReturn("0")
+      when(request.getParameter("logType")).thenReturn("stdout")
+      val html = logPage.render(request).mkString
 
-    // The value is percent-encoded, so it stays a single opaque appId value and cannot inject a
-    // parameter or close the script element.
-    assert(html.contains("appId=app%26byteLength%3D0%3C%2Fscript%3E&executorId=0"))
-    assert(!html.contains("app&byteLength=0</script>"))
+      // The value is percent-encoded, so it stays a single opaque appId value and cannot inject a
+      // parameter or close the script element.
+      assert(html.contains("appId=app%26byteLength%3D0%3C%2Fscript%3E&executorId=0"))
+      assert(!html.contains("app&byteLength=0</script>"))
+    }
   }
 
   /** Write the specified string to the file. */
