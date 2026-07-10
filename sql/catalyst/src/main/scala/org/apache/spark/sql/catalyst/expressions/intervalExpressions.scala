@@ -233,6 +233,7 @@ case class DivideInterval(
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
+        An expression that evaluates to an integer.
       * months - the number of months, positive or negative
       * weeks - the number of weeks, positive or negative
       * days - the number of days, positive or negative
@@ -316,6 +317,7 @@ case class TryMakeInterval(
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
+        An expression that evaluates to an integer.
       * months - the number of months, positive or negative
       * weeks - the number of weeks, positive or negative
       * days - the number of days, positive or negative
@@ -474,9 +476,13 @@ case class MakeInterval(
   arguments = """
     Arguments:
       * days - the number of days, positive or negative
+        An expression that evaluates to an integer.
       * hours - the number of hours, positive or negative
+        An expression that evaluates to an integer.
       * mins - the number of minutes, positive or negative
+        An expression that evaluates to an integer.
       * secs - the number of seconds with the fractional part in microsecond precision.
+        An expression that evaluates to a decimal.
   """,
   examples = """
     Examples:
@@ -557,7 +563,9 @@ case class MakeDTInterval(
   arguments = """
     Arguments:
       * years - the number of years, positive or negative
+        An expression that evaluates to an integer.
       * months - the number of months, positive or negative
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:

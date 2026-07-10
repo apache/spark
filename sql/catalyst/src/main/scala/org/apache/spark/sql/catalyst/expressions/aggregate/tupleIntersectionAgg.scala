@@ -54,6 +54,14 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
     _FUNC_(child, mode) - Returns the intersected TupleSketch compact binary representation.
       `child` should be a binary TupleSketch representation created with a double type summary.
       `mode` is the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with a double type summary, to
+      intersect.
+        An expression that evaluates to a binary.
+      * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
+      alwaysone).
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D), (3, 15.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D), (4, 12.0D) tab(key, summary));
@@ -143,6 +151,14 @@ case class TupleIntersectionAggDouble(
     _FUNC_(child, mode) - Returns the intersected TupleSketch compact binary representation.
       `child` should be a binary TupleSketch representation created with an integer type summary.
       `mode` is the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with an integer type summary, to
+      intersect.
+        An expression that evaluates to a binary.
+      * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
+      alwaysone).
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 1), (2, 2), (3, 3) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 2), (3, 3), (4, 4) tab(key, summary));
