@@ -142,7 +142,7 @@ class WorkerSamplingProfiler:
 
     def __init__(
         self,
-        sampling_interval: float = 10,
+        sampling_interval: float = 1000,
     ) -> None:
         self._callstack_data = {}
         self._sampling_interval = sampling_interval
@@ -173,7 +173,7 @@ class WorkerSamplingProfiler:
 
     def _sample_loop(self) -> None:
         self_tid = threading.get_ident()
-        while not self._stop_event.wait(self._sampling_interval):
+        while not self._stop_event.wait(self._sampling_interval / 1000):
             for tid, frame in sys._current_frames().items():
                 if tid != self_tid:
                     self._add_sample(tid, frame)

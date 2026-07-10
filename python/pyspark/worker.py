@@ -309,7 +309,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
                 )
 
-                with WorkerSamplingProfiler(sampling_interval=0.1) as profiler:
+                with WorkerSamplingProfiler(
+                    sampling_interval=runner_conf.udf_profiler_sampling_interval
+                ) as profiler:
                     run_process()
                 profiler.save(accumulator)
             else:
