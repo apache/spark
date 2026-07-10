@@ -526,8 +526,10 @@ class GrpcWorkerSession(
     // Derive the Termination from the settled terminal. close() is the
     // finalizer/cleanup path and must NOT re-throw: a UDF / data-phase error is
     // already surfaced while the result iterator is consumed, and an init error
-    // from init(). settledTermination returns the response proto for the clean
-    // terminators and a best-effort empty Cancelled for the failure terminals.
+    // is surfaced from init(). settledTermination returns the settled terminal
+    // as-is: the response proto for the clean terminators, and the failure
+    // terminals (Failed / TransportFailed) carrying their cause -- not a bare
+    // Cancelled.
     settledTermination
   }
 
