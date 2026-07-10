@@ -28,6 +28,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   CaseSensitivityLabels,
   ChangeArgs,
+  ChangelogAutoCdcBridge,
   ColumnSelection,
   Scd1BatchProcessor,
   ScdType
@@ -253,6 +254,12 @@ class AutoCdcMergeFlow(
 ) extends ResolvedFlow {
   requireReservedPrefixAbsentInSourceColumns()
 
+  protected val caseSensitiveAnalysis: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
+  /**
+   * The effective CDC configuration for this flow.
+   * Subclasses can override this method to return derived ChangeArgs.
+   */
   def changeArgs: ChangeArgs = flow.changeArgs
 
   /** The user-selected projection of [[df.schema]] (i.e. before the SCD metadata column). */
@@ -395,4 +402,39 @@ class AutoCdcMergeFlow(
         )
       }
   }
+
+}
+
+/**
+ * An [[AutoCdcMergeFlow]] whose source is a native CDC
+ * [[org.apache.spark.sql.connector.catalog.Changelog]] read (e.g. a view defined via
+ * `STREAM ... CHANGES` or `DataStreamReader.changes`). AutoCDC derives its CDC semantics (delete
+ * detection, metadata-column exclusion, and `update_preimage` filtering) from the changelog
+ * contract rather than requiring the user to hand-map them.
+ */
+class ChangelogAutoCdcMergeFlow(
+    flow: AutoCdcFlow,
+    funcResult: FlowFunctionResult,
+    changelogSource: ChangelogAutoCdcBridge.ChangelogSource
+) extends AutoCdcMergeFlow(flow, funcResult) {
+
+  ChangelogAutoCdcBridge.validateSource(
+    source = changelogSource,
+    df = df,
+    sequencing = flow.changeArgs.sequencing,
+    destinationName = destinationIdentifier.quotedString,
+    caseSensitive = caseSensitiveAnalysis
+  )
+
+  /** The `_change_type` column name, used to filter `update_preimage` rows from the live feed. */
+  private[graph] def changeTypeColumn: String = changelogSource.changeTypeColumn
+
+  override def changeArgs: ChangeArgs = effectiveChangeArgs
+
+  private lazy val effectiveChangeArgs: ChangeArgs =
+    ChangelogAutoCdcBridge.deriveEffectiveChangeArgs(
+      base = flow.changeArgs,
+      sourceSchema = df.schema,
+      caseSensitive = caseSensitiveAnalysis
+    )
 }

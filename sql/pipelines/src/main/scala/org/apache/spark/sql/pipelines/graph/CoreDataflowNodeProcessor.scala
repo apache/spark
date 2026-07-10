@@ -23,6 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.pipelines.autocdc.ChangelogAutoCdcBridge
 import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
   TransformNodeFailedException,
   TransformNodeRetryableException
@@ -203,7 +204,15 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       flow: UnresolvedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
     flow match {
-      case acf: AutoCdcFlow => new AutoCdcMergeFlow(acf, funcResult)
+      case acf: AutoCdcFlow =>
+        val df = funcResult.dataFrame.get
+        val caseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
+        ChangelogAutoCdcBridge.analyzeSource(df, caseSensitive) match {
+          case Some(changelogSource) =>
+            new ChangelogAutoCdcMergeFlow(acf, funcResult, changelogSource)
+          case None =>
+            new AutoCdcMergeFlow(acf, funcResult)
+        }
       case utf: UntypedFlow => transformUntypedFlowToResolvedFlow(utf, funcResult)
     }
   }
