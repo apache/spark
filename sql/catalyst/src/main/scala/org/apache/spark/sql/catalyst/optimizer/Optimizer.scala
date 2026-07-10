@@ -1135,13 +1135,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
         .map(_._2)
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
-    // prune unused pass-through columns from the child of BinBy. The range and DISTRIBUTE inputs
-    // the kernel reads are kept via `b.references`; only fully-unused pass-throughs are dropped.
-    case p @ Project(_, b: BinBy)
-        if !b.child.outputSet.subsetOf(p.references -- b.producedAttributes ++ b.references) =>
-      val requiredAttrs = p.references -- b.producedAttributes ++ b.references
-      p.copy(child = b.copy(child = prunedChild(b.child, requiredAttrs)))
-
     // prune unrequired nested fields from `Generate`.
     case GeneratorNestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
