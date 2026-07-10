@@ -80,7 +80,7 @@ jobs:
       image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       id: checkout
@@ -344,7 +344,7 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -473,7 +473,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Bootstrap local composite action
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
@@ -564,7 +564,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -681,7 +681,7 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -857,7 +857,7 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -937,7 +937,7 @@ jobs:
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -993,7 +993,7 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -1192,7 +1192,7 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -1383,7 +1383,7 @@ jobs:
     env:
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -1508,7 +1508,7 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Bootstrap local composite action
+    - name: Bootstrap composite actions
       uses: actions/checkout@v6
     - name: Checkout and sync Spark repository
       uses: ./.github/actions/checkout-and-sync
@@ -1587,7 +1587,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Bootstrap local composite action
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync

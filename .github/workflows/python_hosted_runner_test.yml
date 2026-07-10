@@ -74,7 +74,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-      - name: Bootstrap local composite action
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
       - name: Checkout and sync Spark repository
         id: checkout
@@ -176,7 +176,7 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
     steps:
-      - name: Bootstrap local composite action
+      - name: Bootstrap composite actions
         uses: actions/checkout@v6
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
