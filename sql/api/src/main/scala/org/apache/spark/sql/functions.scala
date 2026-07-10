@@ -2964,7 +2964,8 @@ object functions {
    *
    * @return
    *   The difference between the current and previous counter value within the window partition,
-   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same type as the input.
+   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same
+   *   type as the input.
    * @group window_funcs
    * @since 4.3.0
    */
@@ -2993,7 +2994,8 @@ object functions {
    *
    * @return
    *   The difference between the current and previous counter value within the window partition,
-   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same type as the input.
+   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same
+   *   type as the input.
    * @group window_funcs
    * @since 4.3.0
    */
@@ -3861,7 +3863,8 @@ object functions {
 
   /**
    * @return
-   *   inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`. Returns a column that evaluates to a double.
+   *   inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`. Returns a column
+   *   that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3896,7 +3899,8 @@ object functions {
 
   /**
    * @return
-   *   inverse sine of `columnName`, as if computed by `java.lang.Math.asin`. Returns a column that evaluates to a double.
+   *   inverse sine of `columnName`, as if computed by `java.lang.Math.asin`. Returns a column that
+   *   evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3931,7 +3935,8 @@ object functions {
 
   /**
    * @return
-   *   inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`. Returns a column that evaluates to a double.
+   *   inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`. Returns a column
+   *   that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4187,7 +4192,8 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   cosine of the angle, as if computed by `java.lang.Math.cos`. Returns a column that evaluates to a double.
+   *   cosine of the angle, as if computed by `java.lang.Math.cos`. Returns a column that evaluates
+   *   to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4209,7 +4215,8 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`. Returns a column that evaluates to a double.
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`. Returns a column
+   *   that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4934,7 +4941,8 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   sine of the angle, as if computed by `java.lang.Math.sin`. Returns a column that evaluates to a double.
+   *   sine of the angle, as if computed by `java.lang.Math.sin`. Returns a column that evaluates to
+   *   a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4955,7 +4963,8 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a column that evaluates to a double.
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a column
+   *   that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4977,7 +4986,8 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   tangent of the given value, as if computed by `java.lang.Math.tan`. Returns a column that evaluates to a double.
+   *   tangent of the given value, as if computed by `java.lang.Math.tan`. Returns a column that
+   *   evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4998,7 +5008,8 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a column that evaluates to a double.
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a
+   *   column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -5044,7 +5055,8 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`. Returns a column that evaluates to a double.
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`. Returns a column that
+   *   evaluates to a double.
    * @group math_funcs
    * @since 2.1.0
    */
@@ -5090,7 +5102,8 @@ object functions {
    * @param columnName
    *   angle in degrees
    * @return
-   *   angle in radians, as if computed by `java.lang.Math.toRadians`. Returns a column that evaluates to a double.
+   *   angle in radians, as if computed by `java.lang.Math.toRadians`. Returns a column that
+   *   evaluates to a double.
    * @group math_funcs
    * @since 2.1.0
    */
@@ -8754,7 +8767,8 @@ object functions {
    * @param numMonths
    *   A column of the number of months to add to `startDate`, can be negative to subtract months
    * @return
-   *   A date, or null if `startDate` was a string that could not be cast to a date. Returns a column that evaluates to a date.
+   *   A date, or null if `startDate` was a string that could not be cast to a date. Returns a
+   *   column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -8881,7 +8895,8 @@ object functions {
    * @param days
    *   A column of the number of days to add to `start`, can be negative to subtract days
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column that evaluates to a date.
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -8932,7 +8947,8 @@ object functions {
    * @param days
    *   A column of the number of days to subtract from `start`, can be negative to add days
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column that evaluates to a date.
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column
+   *   that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -9352,7 +9368,8 @@ object functions {
    *   A date, timestamp or string. If a string, the data must be in the `yyyy-MM-dd HH:mm:ss`
    *   format
    * @return
-   *   A long, or null if the input was a string not of the correct format. Returns a column that evaluates to a long.
+   *   A long, or null if the input was a string not of the correct format. Returns a column that
+   *   evaluates to a long.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -9405,7 +9422,8 @@ object functions {
    * @param format
    *   A time format pattern to follow.
    * @return
-   *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a time.
+   *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a
+   *   time.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -11507,7 +11525,7 @@ object functions {
    *   Source Option</a> in the version you use.
    * @return
    *   a column with string literal containing schema in DDL format. Returns a column that
-   *   evaluates to an integer.
+   *   evaluates to a string.
    *
    * @group json_funcs
    * @since 3.0.0
@@ -12048,7 +12066,8 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
-   *   a column with string literal containing schema in DDL format. Returns a column that evaluates to a string.
+   *   a column with string literal containing schema in DDL format. Returns a column that evaluates
+   *   to a string.
    * @group csv_funcs
    * @since 3.0.0
    */
@@ -12239,7 +12258,8 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
-   *   a column with string literal containing schema in DDL format. Returns a column that evaluates to a string.
+   *   a column with string literal containing schema in DDL format. Returns a column that evaluates
+   *   to a string.
    * @group xml_funcs
    * @since 4.0.0
    */
