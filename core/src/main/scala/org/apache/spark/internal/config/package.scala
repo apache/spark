@@ -586,6 +586,19 @@ package object config {
       .checkValue(_ > 0, "The maximum number of threads should be positive")
       .createWithDefault(8)
 
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.bufferRacingMigrations")
+      .internal()
+      .doc("Whether to buffer a shuffle-migration relocation report that arrives before the " +
+        "map output it relocates has been registered on the driver, and replay it once " +
+        "registration happens. When false, such a relocation is dropped (legacy behavior), " +
+        "which can leave the map output pointing at the decommissioned origin executor and " +
+        "surface downstream as a fetch failure once that executor is removed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
