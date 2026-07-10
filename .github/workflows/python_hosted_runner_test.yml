@@ -67,29 +67,20 @@ jobs:
     continue-on-error: true
     outputs:
       # Pinned so the build job checks out the same snapshot, even if the branch advances mid-run.
-      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
+      head_sha: ${{ steps.checkout.outputs.head_sha }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       SPARK_LOCAL_IP: localhost
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-      - name: Checkout Spark repository
+      - name: Bootstrap local composite action
         uses: actions/checkout@v6
+      - name: Checkout and sync Spark repository
+        id: checkout
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ inputs.branch }}
-      - name: Resolve apache/spark HEAD SHA
-        id: resolve-sha
-        run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
@@ -185,21 +176,12 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
     steps:
-      - name: Checkout Spark repository
+      - name: Bootstrap local composite action
         uses: actions/checkout@v6
-        # In order to fetch changed files
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
-          # Fall back to the branch when the precompile job failed before resolving the SHA.
           ref: ${{ needs.precompile.outputs.head_sha || inputs.branch }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
       - name: Cache SBT and Maven
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341

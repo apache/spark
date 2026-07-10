@@ -69,7 +69,7 @@ jobs:
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
-      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
+      head_sha: ${{ steps.checkout.outputs.head_sha }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
@@ -80,22 +80,13 @@ jobs:
       image_pyspark_url: ${{ steps.infra-image-pyspark-outputs.outputs.image_pyspark_url }}
       image_pyspark_url_link: ${{ steps.infra-image-link.outputs.image_pyspark_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      id: checkout
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ inputs.branch }}
-    - name: Resolve apache/spark HEAD SHA
-      id: resolve-sha
-      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Check all modules
       id: set-outputs
       run: |
@@ -353,20 +344,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -490,20 +473,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Checkout Spark repository
+      - name: Bootstrap local composite action
         uses: actions/checkout@v6
-        # In order to fetch changed files
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
       - name: Set up Docker Buildx
@@ -589,19 +564,12 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -713,23 +681,13 @@ jobs:
       BRANCH: ${{ inputs.branch }}
       PYSPARK_TEST_TIMEOUT: 450
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -899,23 +857,13 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
-      # In order to fetch changed files
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -989,18 +937,12 @@ jobs:
     name: Protobuf breaking change detection and Python CodeGen check
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Install Buf
       uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1
       with:
@@ -1051,22 +993,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1259,22 +1192,13 @@ jobs:
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Add GITHUB_WORKSPACE to git trust safe.directory
-      run: |
-        git config --global --add safe.directory ${GITHUB_WORKSPACE}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        set-safe-directory: 'true'
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
@@ -1459,18 +1383,12 @@ jobs:
     env:
       SPARK_LOCAL_IP: localhost
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1590,19 +1508,12 @@ jobs:
       SKIP_MIMA: true
       SKIP_PACKAGING: true
     steps:
-    - name: Checkout Spark repository
+    - name: Bootstrap local composite action
       uses: actions/checkout@v6
+    - name: Checkout and sync Spark repository
+      uses: ./.github/actions/checkout-and-sync
       with:
-        fetch-depth: 0
-        repository: apache/spark
         ref: ${{ needs.precondition.outputs.head_sha }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
     - name: Cache SBT and Maven
       uses: actions/cache@v5
       with:
@@ -1676,19 +1587,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout Spark repository
+      - name: Bootstrap local composite action
         uses: actions/checkout@v6
+      - name: Checkout and sync Spark repository
+        uses: ./.github/actions/checkout-and-sync
         with:
-          fetch-depth: 0
-          repository: apache/spark
           ref: ${{ needs.precondition.outputs.head_sha }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
         uses: actions/cache@v5
         with:
