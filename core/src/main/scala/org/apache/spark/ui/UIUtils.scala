@@ -659,7 +659,8 @@ private[spark] object UIUtils extends Logging {
    * This keeps characters such as '&', '=', '#' and whitespace from changing the structure of the
    * subsequent `/log` requests (parameter injection / query truncation).
    */
-  def encodeLogParam(value: String): String = URLEncoder.encode(String.valueOf(value), UTF_8)
+  def encodeLogParam(value: String): String =
+    URLEncoder.encode(Option(value).getOrElse("null"), UTF_8)
 
   /**
    * Build the inline `window.onload = initLogPage(...)` bootstrap script shared by the log pages
