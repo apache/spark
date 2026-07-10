@@ -4382,7 +4382,7 @@ object functions {
    * @param e
    *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh` Returns a
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a
    *   column that evaluates to a double.
    *
    * @group math_funcs
@@ -4428,7 +4428,7 @@ object functions {
    * @param e
    *   hyperbolic angle. A column that evaluates to a double.
    * @return
-   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh` Returns a
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a
    *   column that evaluates to a double.
    *
    * @group math_funcs
@@ -7828,7 +7828,7 @@ object functions {
    *   The number of months to add to `startDate`, can be negative to subtract months. A column
    *   that evaluates to an integer.
    * @return
-   *   A date, or null if `startDate` was a string that could not be cast to a date Returns a
+   *   A date, or null if `startDate` was a string that could not be cast to a date. Returns a
    *   column that evaluates to a date.
    * @group datetime_funcs
    * @since 1.5.0
@@ -7920,7 +7920,7 @@ object functions {
    *   A pattern `dd.MM.yyyy` would return a string like `18.03.1993`. A column that evaluates to
    *   a string.
    * @return
-   *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp Returns
+   *   A string, or null if `dateExpr` was a string that could not be cast to a timestamp. Returns
    *   a column that evaluates to a string.
    * @note
    *   Use specialized functions like [[year]] whenever possible as they benefit from a
@@ -8081,7 +8081,7 @@ object functions {
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8091,7 +8091,7 @@ object functions {
   /**
    * Extracts the quarter as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8101,7 +8101,7 @@ object functions {
   /**
    * Extracts the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8112,7 +8112,7 @@ object functions {
    * Extracts the day of the week as an integer from a given date/timestamp/string. Ranges from 1
    * for a Sunday through to 7 for a Saturday
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 2.3.0
@@ -8122,7 +8122,7 @@ object functions {
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8132,7 +8132,7 @@ object functions {
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 3.5.0
@@ -8142,7 +8142,7 @@ object functions {
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8154,7 +8154,7 @@ object functions {
    * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8235,7 +8235,7 @@ object functions {
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8348,7 +8348,7 @@ object functions {
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
    * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a timestamp Returns
+   *   An integer, or null if the input was a string that could not be cast to a timestamp. Returns
    *   a column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8362,7 +8362,7 @@ object functions {
    * as defined by ISO 8601
    *
    * @return
-   *   An integer, or null if the input was a string that could not be cast to a date Returns a
+   *   An integer, or null if the input was a string that could not be cast to a date. Returns a
    *   column that evaluates to an integer.
    * @group datetime_funcs
    * @since 1.5.0
@@ -8378,7 +8378,7 @@ object functions {
    *   A number of a type that is castable to a long, such as string or integer. Can be negative
    *   for timestamps before the unix epoch
    * @return
-   *   A string, or null if the input was a string that could not be cast to a long Returns a
+   *   A string, or null if the input was a string that could not be cast to a long. Returns a
    *   column that evaluates to a string.
    * @group datetime_funcs
    * @since 1.5.0
