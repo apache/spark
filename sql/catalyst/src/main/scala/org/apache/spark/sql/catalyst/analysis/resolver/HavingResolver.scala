@@ -91,7 +91,7 @@ class HavingResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
    * Window [col1#0, sum(col1#0) windowspec...#2]
    * +- Aggregate [col1#0], [col1#0]
    *
-   * Since [[Filter]] is not dependant on the [[Window]], we push a [[Filter]] operator down to
+   * Since [[Filter]] is not dependent on the [[Window]], we push a [[Filter]] operator down to
    * the nearest [[Aggregate]] and perform the rest of resolution using its output:
    *
    * Window [col1#0, sum(col1#0) windowspec...#1]

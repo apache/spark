@@ -343,7 +343,7 @@ private[yarn] class YarnAllocator(
       // config off if you only want YARN containers with the extra resources but Spark not to
       // schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way
       // to only specify YARN resources without Spark scheduling off of them. This means for
-      // custom ResourceProfiles we propogate all the resources defined in the ResourceProfile
+      // custom ResourceProfiles we propagate all the resources defined in the ResourceProfile
       // to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires
       // that the name of any custom resources you specify match what they are defined as in YARN.
       val customResources = if (rp.id == DEFAULT_RESOURCE_PROFILE_ID) {
