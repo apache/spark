@@ -1042,8 +1042,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw SparkException.internalError(
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")
-      case _: logical.BinBy =>
-        throw new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.BIN_BY")
+      case b: logical.BinBy =>
+        execution.BinByExec(
+          binWidthMicros = b.binWidthMicros,
+          originMicros = b.originMicros,
+          rangeStart = b.rangeStart,
+          rangeEnd = b.rangeEnd,
+          distributeColumns = b.distributeColumns,
+          scaledDistributeColumns = b.scaledDistributeColumns,
+          appendedAttributes = b.appendedAttributes,
+          timeZoneId = b.timeZoneId,
+          child = planLater(b.child)) :: Nil
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
