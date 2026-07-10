@@ -87,9 +87,9 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of `expr1` and `expr2`.",
   arguments = """
     Arguments:
-      * expr1 - The expr1 argument.
+      * expr1 - The first operand of the bitwise OR.
         An expression that evaluates to an integral.
-      * expr2 - The expr2 argument.
+      * expr2 - The second operand of the bitwise OR.
         An expression that evaluates to an integral.
   """,
   examples = """

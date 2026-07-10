@@ -113,6 +113,8 @@ object functions {
    *
    * @group normal_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lit(literal: Any): Column = {
     literal match {
@@ -135,6 +137,8 @@ object functions {
    *
    * @group normal_funcs
    * @since 2.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def typedLit[T: TypeTag](literal: T): Column = {
     typedlit(literal)
@@ -154,6 +158,8 @@ object functions {
    *
    * @group normal_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def typedlit[T: TypeTag](literal: T): Column = {
     literal match {
@@ -246,6 +252,8 @@ object functions {
   /**
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(e: Column): Column = approx_count_distinct(e)
@@ -253,6 +261,8 @@ object functions {
   /**
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(columnName: String): Column = approx_count_distinct(columnName)
@@ -260,6 +270,8 @@ object functions {
   /**
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(e: Column, rsd: Double): Column = approx_count_distinct(e, rsd)
@@ -267,6 +279,8 @@ object functions {
   /**
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @deprecated("Use approx_count_distinct", "2.1.0")
   def approxCountDistinct(columnName: String, rsd: Double): Column = {
@@ -278,6 +292,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def approx_count_distinct(e: Column): Column = Column.fn("approx_count_distinct", e)
 
@@ -286,6 +302,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def approx_count_distinct(columnName: String): Column = approx_count_distinct(
     column(columnName))
@@ -298,6 +316,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def approx_count_distinct(e: Column, rsd: Double): Column = {
     Column.fn("approx_count_distinct", e, lit(rsd))
@@ -311,6 +331,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def approx_count_distinct(columnName: String, rsd: Double): Column = {
     approx_count_distinct(Column(columnName), rsd)
@@ -321,6 +343,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric.
    */
   def avg(e: Column): Column = Column.fn("avg", e)
 
@@ -329,6 +353,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric.
    */
   def avg(columnName: String): Column = avg(Column(columnName))
 
@@ -341,6 +367,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def collect_list(e: Column): Column = Column.fn("collect_list", e)
 
@@ -353,6 +381,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def collect_list(columnName: String): Column = collect_list(Column(columnName))
 
@@ -365,6 +395,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def collect_set(e: Column): Column = Column.fn("collect_set", e)
 
@@ -377,6 +409,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def collect_set(columnName: String): Column = collect_set(Column(columnName))
 
@@ -388,6 +422,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def count_min_sketch(e: Column, eps: Column, confidence: Column, seed: Column): Column =
     Column.fn("count_min_sketch", e, eps, confidence, seed)
@@ -400,6 +436,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def count_min_sketch(e: Column, eps: Column, confidence: Column): Column =
     count_min_sketch(e, eps, confidence, lit(SparkClassUtils.random.nextLong))
@@ -409,6 +447,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def corr(column1: Column, column2: Column): Column = Column.fn("corr", column1, column2)
 
@@ -417,6 +457,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def corr(columnName1: String, columnName2: String): Column = {
     corr(Column(columnName1), Column(columnName2))
@@ -427,6 +469,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def count(e: Column): Column =
     Column.fn("count", e)
@@ -436,6 +480,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def count(columnName: String): TypedColumn[Any, Long] =
     count(Column(columnName)).as(PrimitiveLongEncoder)
@@ -447,6 +493,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column = count_distinct(expr, exprs: _*)
@@ -458,6 +506,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
@@ -468,6 +518,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def count_distinct(expr: Column, exprs: Column*): Column =
@@ -478,6 +530,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def covar_pop(column1: Column, column2: Column): Column =
     Column.fn("covar_pop", column1, column2)
@@ -487,6 +541,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def covar_pop(columnName1: String, columnName2: String): Column = {
     covar_pop(Column(columnName1), Column(columnName2))
@@ -497,6 +553,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def covar_samp(column1: Column, column2: Column): Column =
     Column.fn("covar_samp", column1, column2)
@@ -506,6 +564,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def covar_samp(columnName1: String, columnName2: String): Column = {
     covar_samp(Column(columnName1), Column(columnName2))
@@ -523,6 +583,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first(e: Column, ignoreNulls: Boolean): Column =
     Column.fn("first", false, e, lit(ignoreNulls))
@@ -539,6 +601,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first(columnName: String, ignoreNulls: Boolean): Column = {
     first(Column(columnName), ignoreNulls)
@@ -556,6 +620,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first(e: Column): Column = first(e, ignoreNulls = false)
 
@@ -571,6 +637,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first(columnName: String): Column = first(Column(columnName))
 
@@ -583,6 +651,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first_value(e: Column): Column = Column.fn("first_value", e)
 
@@ -598,6 +668,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def first_value(e: Column, ignoreNulls: Column): Column =
     Column.fn("first_value", e, ignoreNulls)
@@ -608,6 +680,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a byte.
    */
   def grouping(e: Column): Column = Column.fn("grouping", e)
 
@@ -617,6 +691,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a byte.
    */
   def grouping(columnName: String): Column = grouping(Column(columnName))
 
@@ -633,6 +709,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def grouping_id(cols: Column*): Column = Column.fn("grouping_id", cols: _*)
@@ -649,6 +727,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def grouping_id(colName: String, colNames: String*): Column = {
@@ -661,6 +741,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_sketch_agg(e: Column, lgConfigK: Column): Column =
     Column.fn("hll_sketch_agg", e, lgConfigK)
@@ -671,6 +753,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_sketch_agg(e: Column, lgConfigK: Int): Column =
     Column.fn("hll_sketch_agg", e, lit(lgConfigK))
@@ -681,6 +765,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_sketch_agg(columnName: String, lgConfigK: Int): Column = {
     hll_sketch_agg(Column(columnName), lgConfigK)
@@ -692,6 +778,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_sketch_agg(e: Column): Column =
     Column.fn("hll_sketch_agg", e)
@@ -702,6 +790,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_sketch_agg(columnName: String): Column = {
     hll_sketch_agg(Column(columnName))
@@ -715,6 +805,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union_agg(e: Column, allowDifferentLgConfigK: Column): Column =
     Column.fn("hll_union_agg", e, allowDifferentLgConfigK)
@@ -727,6 +819,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union_agg(e: Column, allowDifferentLgConfigK: Boolean): Column =
     Column.fn("hll_union_agg", e, lit(allowDifferentLgConfigK))
@@ -739,6 +833,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union_agg(columnName: String, allowDifferentLgConfigK: Boolean): Column = {
     hll_union_agg(Column(columnName), allowDifferentLgConfigK)
@@ -751,6 +847,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union_agg(e: Column): Column =
     Column.fn("hll_union_agg", e)
@@ -762,6 +860,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union_agg(columnName: String): Column = {
     hll_union_agg(Column(columnName))
@@ -772,6 +872,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kurtosis(e: Column): Column = Column.fn("kurtosis", e)
 
@@ -780,6 +882,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
@@ -795,6 +899,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last(e: Column, ignoreNulls: Boolean): Column =
     Column.fn("last", false, e, lit(ignoreNulls))
@@ -811,6 +917,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last(columnName: String, ignoreNulls: Boolean): Column = {
     last(Column(columnName), ignoreNulls)
@@ -828,6 +936,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last(e: Column): Column = last(e, ignoreNulls = false)
 
@@ -843,6 +953,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
@@ -855,6 +967,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last_value(e: Column): Column = Column.fn("last_value", e)
 
@@ -870,6 +984,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def last_value(e: Column, ignoreNulls: Column): Column =
     Column.fn("last_value", e, ignoreNulls)
@@ -897,6 +1013,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def mode(e: Column): Column = Column.fn("mode", e)
 
@@ -909,6 +1027,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def mode(e: Column, deterministic: Boolean): Column = Column.fn("mode", e, lit(deterministic))
 
@@ -917,6 +1037,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def max(e: Column): Column = Column.fn("max", e)
 
@@ -925,6 +1047,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def max(columnName: String): Column = max(Column(columnName))
 
@@ -937,6 +1061,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def max_by(e: Column, ord: Column): Column = Column.fn("max_by", e, ord)
 
@@ -955,6 +1081,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def max_by(e: Column, ord: Column, k: Int): Column = Column.fn("max_by", e, ord, lit(k))
 
@@ -973,6 +1101,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def max_by(e: Column, ord: Column, k: Column): Column = Column.fn("max_by", e, ord, k)
 
@@ -981,6 +1111,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def mean(e: Column): Column = avg(e)
 
@@ -989,6 +1121,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def mean(columnName: String): Column = avg(columnName)
 
@@ -997,6 +1131,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def median(e: Column): Column = Column.fn("median", e)
 
@@ -1005,6 +1141,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def min(e: Column): Column = Column.fn("min", e)
 
@@ -1013,6 +1151,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def min(columnName: String): Column = min(Column(columnName))
 
@@ -1025,6 +1165,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def min_by(e: Column, ord: Column): Column = Column.fn("min_by", e, ord)
 
@@ -1044,6 +1186,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def min_by(e: Column, ord: Column, k: Int): Column = Column.fn("min_by", e, ord, lit(k))
 
@@ -1063,6 +1207,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def min_by(e: Column, ord: Column, k: Column): Column = Column.fn("min_by", e, ord, k)
 
@@ -1072,6 +1218,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def percentile(e: Column, percentage: Column): Column = Column.fn("percentile", e, percentage)
 
@@ -1081,6 +1229,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def percentile(e: Column, percentage: Column, frequency: Column): Column =
     Column.fn("percentile", e, percentage, frequency)
@@ -1099,6 +1249,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def percentile_approx(e: Column, percentage: Column, accuracy: Column): Column =
     Column.fn("percentile_approx", e, percentage, accuracy)
@@ -1117,6 +1269,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def approx_percentile(e: Column, percentage: Column, accuracy: Column): Column = {
     Column.fn("approx_percentile", e, percentage, accuracy)
@@ -1127,6 +1281,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def product(e: Column): Column = Column.internalFn("product", e)
 
@@ -1135,6 +1291,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def skewness(e: Column): Column = Column.fn("skewness", e)
 
@@ -1143,6 +1301,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def skewness(columnName: String): Column = skewness(Column(columnName))
 
@@ -1151,6 +1311,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def std(e: Column): Column = Column.fn("std", e)
 
@@ -1159,6 +1321,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev(e: Column): Column = Column.fn("stddev", e)
 
@@ -1167,6 +1331,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev(columnName: String): Column = stddev(Column(columnName))
 
@@ -1175,6 +1341,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev_samp(e: Column): Column = Column.fn("stddev_samp", e)
 
@@ -1183,6 +1351,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev_samp(columnName: String): Column = stddev_samp(Column(columnName))
 
@@ -1191,6 +1361,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev_pop(e: Column): Column = Column.fn("stddev_pop", e)
 
@@ -1199,6 +1371,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def stddev_pop(columnName: String): Column = stddev_pop(Column(columnName))
 
@@ -1207,6 +1381,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric or interval.
    */
   def sum(e: Column): Column = Column.fn("sum", e)
 
@@ -1215,6 +1391,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric or interval.
    */
   def sum(columnName: String): Column = sum(Column(columnName))
 
@@ -1223,6 +1401,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric or interval.
    */
   @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(e: Column): Column = sum_distinct(e)
@@ -1232,6 +1412,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column that evaluates to a numeric or interval.
    */
   @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(columnName: String): Column = sum_distinct(Column(columnName))
@@ -1241,6 +1423,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to a numeric or interval.
    */
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
@@ -1251,6 +1435,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_intersection_agg(e: Column): Column =
     Column.fn("theta_intersection_agg", e)
@@ -1262,6 +1448,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_intersection_agg(columnName: String): Column =
     theta_intersection_agg(Column(columnName))
@@ -1273,6 +1461,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_sketch_agg", e, lgNomEntries)
@@ -1284,6 +1474,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_sketch_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_sketch_agg", e, lit(lgNomEntries))
@@ -1295,6 +1487,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_sketch_agg(columnName: String, lgNomEntries: Int): Column =
     theta_sketch_agg(Column(columnName), lgNomEntries)
@@ -1306,6 +1500,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_sketch_agg(e: Column): Column =
     Column.fn("theta_sketch_agg", e)
@@ -1317,6 +1513,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_sketch_agg(columnName: String): Column =
     theta_sketch_agg(Column(columnName))
@@ -1329,6 +1527,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union_agg(e: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union_agg", e, lgNomEntries)
@@ -1341,6 +1541,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union_agg(e: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union_agg", e, lit(lgNomEntries))
@@ -1353,6 +1555,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union_agg(columnName: String, lgNomEntries: Int): Column =
     theta_union_agg(Column(columnName), lgNomEntries)
@@ -1365,6 +1569,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union_agg(e: Column): Column =
     Column.fn("theta_union_agg", e)
@@ -1377,6 +1583,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union_agg(columnName: String): Column =
     theta_union_agg(Column(columnName))
@@ -1389,6 +1597,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_double(e: Column, mode: Column): Column =
     Column.fn("tuple_intersection_agg_double", e, mode)
@@ -1401,6 +1611,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_double(e: Column, mode: String): Column =
     Column.fn("tuple_intersection_agg_double", e, lit(mode))
@@ -1413,6 +1625,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_double(columnName: String, mode: String): Column =
     tuple_intersection_agg_double(Column(columnName), mode)
@@ -1425,6 +1639,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_double(e: Column): Column =
     Column.fn("tuple_intersection_agg_double", e)
@@ -1437,6 +1653,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_double(columnName: String): Column =
     tuple_intersection_agg_double(Column(columnName))
@@ -1450,6 +1668,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_integer(e: Column, mode: Column): Column =
     Column.fn("tuple_intersection_agg_integer", e, mode)
@@ -1463,6 +1683,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_integer(e: Column, mode: String): Column =
     Column.fn("tuple_intersection_agg_integer", e, lit(mode))
@@ -1476,6 +1698,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_integer(columnName: String, mode: String): Column =
     tuple_intersection_agg_integer(Column(columnName), mode)
@@ -1488,6 +1712,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_integer(e: Column): Column =
     Column.fn("tuple_intersection_agg_integer", e)
@@ -1500,6 +1726,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_agg_integer(columnName: String): Column =
     tuple_intersection_agg_integer(Column(columnName))
@@ -1512,6 +1740,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(
       key: Column,
@@ -1528,6 +1758,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(
       key: Column,
@@ -1544,6 +1776,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(
       keyColumnName: String,
@@ -1559,6 +1793,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(key: Column, summary: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_sketch_agg_double", key, summary, lit(lgNomEntries))
@@ -1570,6 +1806,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(
       keyColumnName: String,
@@ -1584,6 +1822,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(key: Column, summary: Column): Column =
     Column.fn("tuple_sketch_agg_double", key, summary)
@@ -1595,6 +1835,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_double(keyColumnName: String, summaryColumnName: String): Column =
     tuple_sketch_agg_double(Column(keyColumnName), Column(summaryColumnName))
@@ -1607,6 +1849,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(
       key: Column,
@@ -1623,6 +1867,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(
       key: Column,
@@ -1639,6 +1885,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(
       keyColumnName: String,
@@ -1654,6 +1902,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(key: Column, summary: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_sketch_agg_integer", key, summary, lit(lgNomEntries))
@@ -1665,6 +1915,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(
       keyColumnName: String,
@@ -1679,6 +1931,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(key: Column, summary: Column): Column =
     Column.fn("tuple_sketch_agg_integer", key, summary)
@@ -1690,6 +1944,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_sketch_agg_integer(keyColumnName: String, summaryColumnName: String): Column =
     tuple_sketch_agg_integer(Column(keyColumnName), Column(summaryColumnName))
@@ -1703,6 +1959,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(e: Column, lgNomEntries: Column, mode: Column): Column =
     Column.fn("tuple_union_agg_double", e, lgNomEntries, mode)
@@ -1716,6 +1974,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(e: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_agg_double", e, lit(lgNomEntries), lit(mode))
@@ -1729,6 +1989,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(columnName: String, lgNomEntries: Int, mode: String): Column =
     tuple_union_agg_double(Column(columnName), lgNomEntries, mode)
@@ -1741,6 +2003,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(e: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_agg_double", e, lit(lgNomEntries))
@@ -1753,6 +2017,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(columnName: String, lgNomEntries: Int): Column =
     tuple_union_agg_double(Column(columnName), lgNomEntries)
@@ -1765,6 +2031,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(e: Column): Column =
     Column.fn("tuple_union_agg_double", e)
@@ -1777,6 +2045,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_double(columnName: String): Column =
     tuple_union_agg_double(Column(columnName))
@@ -1790,6 +2060,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(e: Column, lgNomEntries: Column, mode: Column): Column =
     Column.fn("tuple_union_agg_integer", e, lgNomEntries, mode)
@@ -1803,6 +2075,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(e: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_agg_integer", e, lit(lgNomEntries), lit(mode))
@@ -1816,6 +2090,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(columnName: String, lgNomEntries: Int, mode: String): Column =
     tuple_union_agg_integer(Column(columnName), lgNomEntries, mode)
@@ -1828,6 +2104,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(e: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_agg_integer", e, lit(lgNomEntries))
@@ -1840,6 +2118,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(columnName: String, lgNomEntries: Int): Column =
     tuple_union_agg_integer(Column(columnName), lgNomEntries)
@@ -1852,6 +2132,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(e: Column): Column =
     Column.fn("tuple_union_agg_integer", e)
@@ -1864,6 +2146,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_agg_integer(columnName: String): Column =
     tuple_union_agg_integer(Column(columnName))
@@ -1875,6 +2159,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_bigint", e, k)
@@ -1886,6 +2172,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_bigint", e, lit(k))
@@ -1897,6 +2185,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_bigint(columnName: String, k: Int): Column =
     kll_sketch_agg_bigint(Column(columnName), k)
@@ -1907,6 +2197,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_bigint(e: Column): Column =
     Column.fn("kll_sketch_agg_bigint", e)
@@ -1917,6 +2209,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_bigint(columnName: String): Column =
     kll_sketch_agg_bigint(Column(columnName))
@@ -1928,6 +2222,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_float", e, k)
@@ -1939,6 +2235,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_float", e, lit(k))
@@ -1950,6 +2248,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_float(columnName: String, k: Int): Column =
     kll_sketch_agg_float(Column(columnName), k)
@@ -1960,6 +2260,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_float(e: Column): Column =
     Column.fn("kll_sketch_agg_float", e)
@@ -1970,6 +2272,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_float(columnName: String): Column =
     kll_sketch_agg_float(Column(columnName))
@@ -1981,6 +2285,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_sketch_agg_double", e, k)
@@ -1992,6 +2298,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_sketch_agg_double", e, lit(k))
@@ -2003,6 +2311,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_double(columnName: String, k: Int): Column =
     kll_sketch_agg_double(Column(columnName), k)
@@ -2013,6 +2323,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_double(e: Column): Column =
     Column.fn("kll_sketch_agg_double", e)
@@ -2023,6 +2335,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_sketch_agg_double(columnName: String): Column =
     kll_sketch_agg_double(Column(columnName))
@@ -2035,6 +2349,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_bigint", e, k)
@@ -2047,6 +2363,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_bigint", e, lit(k))
@@ -2059,6 +2377,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_bigint(columnName: String, k: Int): Column =
     kll_merge_agg_bigint(Column(columnName), k)
@@ -2070,6 +2390,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_bigint(e: Column): Column =
     Column.fn("kll_merge_agg_bigint", e)
@@ -2081,6 +2403,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_bigint(columnName: String): Column =
     kll_merge_agg_bigint(Column(columnName))
@@ -2092,6 +2416,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_float", e, k)
@@ -2103,6 +2429,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_float", e, lit(k))
@@ -2114,6 +2442,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_float(columnName: String, k: Int): Column =
     kll_merge_agg_float(Column(columnName), k)
@@ -2124,6 +2454,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_float(e: Column): Column =
     Column.fn("kll_merge_agg_float", e)
@@ -2134,6 +2466,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_float(columnName: String): Column =
     kll_merge_agg_float(Column(columnName))
@@ -2145,6 +2479,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_double", e, k)
@@ -2156,6 +2492,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_double", e, lit(k))
@@ -2167,6 +2505,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_double(columnName: String, k: Int): Column =
     kll_merge_agg_double(Column(columnName), k)
@@ -2177,6 +2517,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_double(e: Column): Column =
     Column.fn("kll_merge_agg_double", e)
@@ -2187,6 +2529,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.2
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def kll_merge_agg_double(columnName: String): Column =
     kll_merge_agg_double(Column(columnName))
@@ -2196,6 +2540,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def listagg(e: Column): Column = Column.fn("listagg", e)
 
@@ -2205,6 +2551,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
 
@@ -2213,6 +2561,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def listagg_distinct(e: Column): Column = Column.fn("listagg", isDistinct = true, e)
 
@@ -2222,6 +2572,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def listagg_distinct(e: Column, delimiter: Column): Column =
     Column.fn("listagg", isDistinct = true, e, delimiter)
@@ -2231,6 +2583,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def string_agg(e: Column): Column = Column.fn("string_agg", e)
 
@@ -2240,6 +2594,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def string_agg(e: Column, delimiter: Column): Column = Column.fn("string_agg", e, delimiter)
 
@@ -2249,6 +2605,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def string_agg_distinct(e: Column): Column = Column.fn("string_agg", isDistinct = true, e)
 
@@ -2258,6 +2616,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def string_agg_distinct(e: Column, delimiter: Column): Column =
     Column.fn("string_agg", isDistinct = true, e, delimiter)
@@ -2267,6 +2627,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def variance(e: Column): Column = Column.fn("variance", e)
 
@@ -2275,6 +2637,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def variance(columnName: String): Column = variance(Column(columnName))
 
@@ -2283,6 +2647,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def var_samp(e: Column): Column = Column.fn("var_samp", e)
 
@@ -2291,6 +2657,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def var_samp(columnName: String): Column = var_samp(Column(columnName))
 
@@ -2299,6 +2667,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def var_pop(e: Column): Column = Column.fn("var_pop", e)
 
@@ -2307,6 +2677,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def var_pop(columnName: String): Column = var_pop(Column(columnName))
 
@@ -2316,6 +2688,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
 
@@ -2325,6 +2699,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_avgy(y: Column, x: Column): Column = Column.fn("regr_avgy", y, x)
 
@@ -2334,6 +2710,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def regr_count(y: Column, x: Column): Column = Column.fn("regr_count", y, x)
 
@@ -2344,6 +2722,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_intercept(y: Column, x: Column): Column = Column.fn("regr_intercept", y, x)
 
@@ -2353,6 +2733,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_r2(y: Column, x: Column): Column = Column.fn("regr_r2", y, x)
 
@@ -2362,6 +2744,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_slope(y: Column, x: Column): Column = Column.fn("regr_slope", y, x)
 
@@ -2371,6 +2755,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_sxx(y: Column, x: Column): Column = Column.fn("regr_sxx", y, x)
 
@@ -2380,6 +2766,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_sxy(y: Column, x: Column): Column = Column.fn("regr_sxy", y, x)
 
@@ -2389,6 +2777,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def regr_syy(y: Column, x: Column): Column = Column.fn("regr_syy", y, x)
 
@@ -2397,6 +2787,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def any_value(e: Column): Column = Column.fn("any_value", e)
 
@@ -2406,6 +2798,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def any_value(e: Column, ignoreNulls: Column): Column =
     Column.fn("any_value", e, ignoreNulls)
@@ -2415,6 +2809,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def count_if(e: Column): Column = Column.fn("count_if", e)
 
@@ -2423,8 +2819,7 @@ object functions {
    * 6 fractional digits of seconds.
    *
    * @return
-   *   A time.
-   *
+   *   A time. Returns a column that evaluates to a time.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -2439,8 +2834,7 @@ object functions {
    *   An integer literal in the range [0..6], indicating how many fractional digits of seconds to
    *   include in the result.
    * @return
-   *   A time.
-   *
+   *   A time. Returns a column that evaluates to a time.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -2461,6 +2855,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def histogram_numeric(e: Column, nBins: Column): Column =
     Column.fn("histogram_numeric", e, nBins)
@@ -2470,6 +2866,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def every(e: Column): Column = Column.fn("every", e)
 
@@ -2478,6 +2876,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def bool_and(e: Column): Column = Column.fn("bool_and", e)
 
@@ -2486,6 +2886,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def some(e: Column): Column = Column.fn("some", e)
 
@@ -2494,6 +2896,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def any(e: Column): Column = Column.fn("any", e)
 
@@ -2502,6 +2906,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def bool_or(e: Column): Column = Column.fn("bool_or", e)
 
@@ -2510,6 +2916,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bit_and(e: Column): Column = Column.fn("bit_and", e)
 
@@ -2518,6 +2926,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bit_or(e: Column): Column = Column.fn("bit_or", e)
 
@@ -2526,6 +2936,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bit_xor(e: Column): Column = Column.fn("bit_xor", e)
 
@@ -2552,8 +2964,7 @@ object functions {
    *
    * @return
    *   The difference between the current and previous counter value within the window partition,
-   *   according to the order defined by the window's ORDER BY clause.
-   *
+   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same type as the input.
    * @group window_funcs
    * @since 4.3.0
    */
@@ -2582,8 +2993,7 @@ object functions {
    *
    * @return
    *   The difference between the current and previous counter value within the window partition,
-   *   according to the order defined by the window's ORDER BY clause.
-   *
+   *   according to the order defined by the window's ORDER BY clause. Returns a column of the same type as the input.
    * @group window_funcs
    * @since 4.3.0
    */
@@ -2601,6 +3011,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def cume_dist(): Column = Column.fn("cume_dist")
 
@@ -2617,6 +3029,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def dense_rank(): Column = Column.fn("dense_rank")
 
@@ -2629,6 +3043,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lag(e: Column, offset: Int): Column = lag(e, offset, null)
 
@@ -2641,6 +3057,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lag(columnName: String, offset: Int): Column = lag(columnName, offset, null)
 
@@ -2653,6 +3071,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lag(columnName: String, offset: Int, defaultValue: Any): Column = {
     lag(Column(columnName), offset, defaultValue)
@@ -2667,6 +3087,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lag(e: Column, offset: Int, defaultValue: Any): Column = {
     lag(e, offset, defaultValue, false)
@@ -2683,6 +3105,8 @@ object functions {
    *
    * @group window_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
     Column.fn("lag", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
@@ -2696,6 +3120,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lead(columnName: String, offset: Int): Column = { lead(columnName, offset, null) }
 
@@ -2708,6 +3134,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lead(e: Column, offset: Int): Column = { lead(e, offset, null) }
 
@@ -2720,6 +3148,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lead(columnName: String, offset: Int, defaultValue: Any): Column = {
     lead(Column(columnName), offset, defaultValue)
@@ -2734,6 +3164,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lead(e: Column, offset: Int, defaultValue: Any): Column = {
     lead(e, offset, defaultValue, false)
@@ -2750,6 +3182,8 @@ object functions {
    *
    * @group window_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column =
     Column.fn("lead", false, e, lit(offset), lit(defaultValue), lit(ignoreNulls))
@@ -2765,6 +3199,8 @@ object functions {
    *
    * @group window_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nth_value(e: Column, offset: Int, ignoreNulls: Boolean): Column =
     Column.fn("nth_value", false, e, lit(offset), lit(ignoreNulls))
@@ -2777,6 +3213,8 @@ object functions {
    *
    * @group window_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def nth_value(e: Column, offset: Int): Column = nth_value(e, offset, false)
 
@@ -2789,6 +3227,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def ntile(n: Int): Column = Column.fn("ntile", lit(n))
 
@@ -2805,6 +3245,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def percent_rank(): Column = Column.fn("percent_rank")
 
@@ -2821,6 +3263,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def rank(): Column = Column.fn("rank")
 
@@ -2829,6 +3273,8 @@ object functions {
    *
    * @group window_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def row_number(): Column = Column.fn("row_number")
 
@@ -2841,6 +3287,8 @@ object functions {
    *
    * @group array_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   @scala.annotation.varargs
   def array(cols: Column*): Column = Column.fn("array", cols: _*)
@@ -2850,6 +3298,8 @@ object functions {
    *
    * @group array_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
@@ -2863,6 +3313,8 @@ object functions {
    *
    * @group map_funcs
    * @since 2.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   @scala.annotation.varargs
   def map(cols: Column*): Column = Column.fn("map", cols: _*)
@@ -2872,6 +3324,8 @@ object functions {
    *
    * @group struct_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   @scala.annotation.varargs
   def named_struct(cols: Column*): Column = Column.fn("named_struct", cols: _*)
@@ -2906,6 +3360,8 @@ object functions {
    *
    * @group map_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def str_to_map(text: Column, pairDelim: Column): Column =
     Column.fn("str_to_map", text, pairDelim)
@@ -2915,6 +3371,8 @@ object functions {
    *
    * @group map_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def str_to_map(text: Column): Column = Column.fn("str_to_map", text)
 
@@ -2942,6 +3400,8 @@ object functions {
    *
    * @group conditional_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def coalesce(e: Column*): Column = Column.fn("coalesce", e: _*)
@@ -2951,6 +3411,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def input_file_name(): Column = Column.fn("input_file_name")
 
@@ -2991,6 +3453,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @deprecated("Use monotonically_increasing_id()", "2.0.0")
   def monotonicallyIncreasingId(): Column = monotonically_increasing_id()
@@ -3012,6 +3476,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def monotonically_increasing_id(): Column = Column.fn("monotonically_increasing_id")
 
@@ -3040,6 +3506,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.3.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def negate(e: Column): Column = -e
 
@@ -3083,6 +3551,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def rand(): Column = rand(SparkClassUtils.random.nextLong)
 
@@ -3109,6 +3579,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def randn(): Column = randn(SparkClassUtils.random.nextLong)
 
@@ -3132,6 +3604,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def randstr(length: Column, seed: Column): Column = Column.fn("randstr", length, seed)
 
@@ -3143,6 +3617,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def spark_partition_id(): Column = Column.fn("spark_partition_id")
 
@@ -3161,6 +3637,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def sqrt(colName: String): Column = sqrt(Column(colName))
 
@@ -3180,6 +3658,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def try_avg(e: Column): Column = Column.fn("try_avg", e)
 
@@ -3231,6 +3711,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a numeric.
    */
   def try_sum(e: Column): Column = Column.fn("try_sum", e)
 
@@ -3242,6 +3724,8 @@ object functions {
    *
    * @group struct_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   @scala.annotation.varargs
   def struct(cols: Column*): Column = Column.fn("struct", cols: _*)
@@ -3251,6 +3735,8 @@ object functions {
    *
    * @group struct_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
@@ -3288,6 +3774,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @deprecated("Use bitwise_not", "3.2.0")
   def bitwiseNOT(e: Column): Column = bitwise_not(e)
@@ -3297,6 +3785,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bitwise_not(e: Column): Column = Column.fn("~", e)
 
@@ -3371,8 +3861,7 @@ object functions {
 
   /**
    * @return
-   *   inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`
-   *
+   *   inverse cosine of `columnName`, as if computed by `java.lang.Math.acos`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3389,8 +3878,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic cosine of `columnName`
-   *
+   *   inverse hyperbolic cosine of `columnName`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 3.1.0
    */
@@ -3408,8 +3896,7 @@ object functions {
 
   /**
    * @return
-   *   inverse sine of `columnName`, as if computed by `java.lang.Math.asin`
-   *
+   *   inverse sine of `columnName`, as if computed by `java.lang.Math.asin`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3426,8 +3913,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic sine of `columnName`
-   *
+   *   inverse hyperbolic sine of `columnName`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 3.1.0
    */
@@ -3445,8 +3931,7 @@ object functions {
 
   /**
    * @return
-   *   inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`
-   *
+   *   inverse tangent of `columnName`, as if computed by `java.lang.Math.atan`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3475,8 +3960,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3490,8 +3974,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3505,8 +3988,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3521,8 +4003,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3536,8 +4017,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3551,8 +4031,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3566,8 +4045,7 @@ object functions {
    * @return
    *   the <i>theta</i> component of the point (<i>r</i>, <i>theta</i>) in polar coordinates that
    *   corresponds to the point (<i>x</i>, <i>y</i>) in Cartesian coordinates, as if computed by
-   *   `java.lang.Math.atan2`
-   *
+   *   `java.lang.Math.atan2`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3584,8 +4062,7 @@ object functions {
 
   /**
    * @return
-   *   inverse hyperbolic tangent of `columnName`
-   *
+   *   inverse hyperbolic tangent of `columnName`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 3.1.0
    */
@@ -3608,6 +4085,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def bin(columnName: String): Column = bin(Column(columnName))
 
@@ -3626,6 +4105,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def cbrt(columnName: String): Column = cbrt(Column(columnName))
 
@@ -3644,6 +4125,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def ceil(e: Column): Column = Column.fn("ceil", e)
 
@@ -3652,6 +4135,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def ceil(columnName: String): Column = ceil(Column(columnName))
 
@@ -3670,6 +4155,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def ceiling(e: Column): Column = Column.fn("ceiling", e)
 
@@ -3700,8 +4187,7 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   cosine of the angle, as if computed by `java.lang.Math.cos`
-   *
+   *   cosine of the angle, as if computed by `java.lang.Math.cos`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3723,8 +4209,7 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`
-   *
+   *   hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -3757,6 +4242,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def e(): Column = Column.fn("e")
 
@@ -3775,6 +4262,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def exp(columnName: String): Column = exp(Column(columnName))
 
@@ -3793,6 +4282,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def expm1(columnName: String): Column = expm1(Column(columnName))
 
@@ -3821,6 +4312,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def floor(e: Column): Column = Column.fn("floor", e)
 
@@ -3829,6 +4322,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a long or decimal.
    */
   def floor(columnName: String): Column = floor(Column(columnName))
 
@@ -3838,6 +4333,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def greatest(exprs: Column*): Column = Column.fn("greatest", exprs: _*)
@@ -3848,6 +4345,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def greatest(columnName: String, columnNames: String*): Column = {
@@ -3890,6 +4389,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(l: Column, rightName: String): Column = hypot(l, Column(rightName))
 
@@ -3898,6 +4399,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(leftName: String, r: Column): Column = hypot(Column(leftName), r)
 
@@ -3906,6 +4409,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(leftName: String, rightName: String): Column =
     hypot(Column(leftName), Column(rightName))
@@ -3915,6 +4420,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(l: Column, r: Double): Column = hypot(l, lit(r))
 
@@ -3923,6 +4430,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(leftName: String, r: Double): Column = hypot(Column(leftName), r)
 
@@ -3931,6 +4440,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(l: Double, r: Column): Column = hypot(lit(l), r)
 
@@ -3939,6 +4450,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def hypot(l: Double, rightName: String): Column = hypot(l, Column(rightName))
 
@@ -3948,6 +4461,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def least(exprs: Column*): Column = Column.fn("least", exprs: _*)
@@ -3958,6 +4473,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def least(columnName: String, columnNames: String*): Column = {
@@ -3989,6 +4506,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log(columnName: String): Column = log(Column(columnName))
 
@@ -3997,6 +4516,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log(base: Double, a: Column): Column = Column.fn("log", lit(base), a)
 
@@ -4005,6 +4526,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log(base: Double, columnName: String): Column = log(base, Column(columnName))
 
@@ -4023,6 +4546,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log10(columnName: String): Column = log10(Column(columnName))
 
@@ -4041,6 +4566,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log1p(columnName: String): Column = log1p(Column(columnName))
 
@@ -4059,6 +4586,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def log2(columnName: String): Column = log2(Column(columnName))
 
@@ -4077,6 +4606,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pi(): Column = Column.fn("pi")
 
@@ -4105,6 +4636,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(l: Column, rightName: String): Column = pow(l, Column(rightName))
 
@@ -4113,6 +4646,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(leftName: String, r: Column): Column = pow(Column(leftName), r)
 
@@ -4121,6 +4656,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(leftName: String, rightName: String): Column = pow(Column(leftName), Column(rightName))
 
@@ -4129,6 +4666,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(l: Column, r: Double): Column = pow(l, lit(r))
 
@@ -4137,6 +4676,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(leftName: String, r: Double): Column = pow(Column(leftName), r)
 
@@ -4145,6 +4686,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(l: Double, r: Column): Column = pow(lit(l), r)
 
@@ -4153,6 +4696,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def pow(l: Double, rightName: String): Column = pow(l, Column(rightName))
 
@@ -4193,6 +4738,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def rint(columnName: String): Column = rint(Column(columnName))
 
@@ -4212,6 +4759,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def round(e: Column, scale: Int): Column = Column.fn("round", e, lit(scale))
 
@@ -4221,6 +4770,8 @@ object functions {
    *
    * @group math_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def round(e: Column, scale: Column): Column = Column.fn("round", e, scale)
 
@@ -4240,6 +4791,8 @@ object functions {
    *
    * @group math_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bround(e: Column, scale: Int): Column = Column.fn("bround", e, lit(scale))
 
@@ -4249,6 +4802,8 @@ object functions {
    *
    * @group math_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def bround(e: Column, scale: Column): Column = Column.fn("bround", e, scale)
 
@@ -4269,6 +4824,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @deprecated("Use shiftleft", "3.2.0")
   def shiftLeft(e: Column, numBits: Int): Column = shiftleft(e, numBits)
@@ -4290,6 +4847,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @deprecated("Use shiftright", "3.2.0")
   def shiftRight(e: Column, numBits: Int): Column = shiftright(e, numBits)
@@ -4311,6 +4870,8 @@ object functions {
    *
    * @group bitwise_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @deprecated("Use shiftrightunsigned", "3.2.0")
   def shiftRightUnsigned(e: Column, numBits: Int): Column = shiftrightunsigned(e, numBits)
@@ -4352,6 +4913,8 @@ object functions {
    *
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def signum(columnName: String): Column = signum(Column(columnName))
 
@@ -4371,8 +4934,7 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   sine of the angle, as if computed by `java.lang.Math.sin`
-   *
+   *   sine of the angle, as if computed by `java.lang.Math.sin`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4384,7 +4946,6 @@ object functions {
    * @return
    *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a
    *   column that evaluates to a double.
-   *
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4394,8 +4955,7 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`
-   *
+   *   hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4417,8 +4977,7 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   tangent of the given value, as if computed by `java.lang.Math.tan`
-   *
+   *   tangent of the given value, as if computed by `java.lang.Math.tan`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4430,7 +4989,6 @@ object functions {
    * @return
    *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a
    *   column that evaluates to a double.
-   *
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4440,8 +4998,7 @@ object functions {
    * @param columnName
    *   hyperbolic angle
    * @return
-   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`
-   *
+   *   hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 1.4.0
    */
@@ -4450,6 +5007,8 @@ object functions {
   /**
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   @deprecated("Use degrees", "2.1.0")
   def toDegrees(e: Column): Column = degrees(e)
@@ -4457,6 +5016,8 @@ object functions {
   /**
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   @deprecated("Use degrees", "2.1.0")
   def toDegrees(columnName: String): Column = degrees(Column(columnName))
@@ -4483,8 +5044,7 @@ object functions {
    * @param columnName
    *   angle in radians
    * @return
-   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`
-   *
+   *   angle in degrees, as if computed by `java.lang.Math.toDegrees`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 2.1.0
    */
@@ -4493,6 +5053,8 @@ object functions {
   /**
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   @deprecated("Use radians", "2.1.0")
   def toRadians(e: Column): Column = radians(e)
@@ -4500,6 +5062,8 @@ object functions {
   /**
    * @group math_funcs
    * @since 1.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   @deprecated("Use radians", "2.1.0")
   def toRadians(columnName: String): Column = radians(Column(columnName))
@@ -4526,8 +5090,7 @@ object functions {
    * @param columnName
    *   angle in degrees
    * @return
-   *   angle in radians, as if computed by `java.lang.Math.toRadians`
-   *
+   *   angle in radians, as if computed by `java.lang.Math.toRadians`. Returns a column that evaluates to a double.
    * @group math_funcs
    * @since 2.1.0
    */
@@ -4565,6 +5128,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_catalog(): Column = Column.fn("current_catalog")
 
@@ -4573,6 +5138,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_database(): Column = Column.fn("current_database")
 
@@ -4581,6 +5148,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_schema(): Column = Column.fn("current_schema")
 
@@ -4589,6 +5158,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_path(): Column = Column.fn("current_path")
 
@@ -4597,6 +5168,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_user(): Column = Column.fn("current_user")
 
@@ -4659,6 +5232,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   @scala.annotation.varargs
   def hash(cols: Column*): Column = Column.fn("hash", cols: _*)
@@ -4669,6 +5244,8 @@ object functions {
    *
    * @group hash_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   @scala.annotation.varargs
   def xxhash64(cols: Column*): Column = Column.fn("xxhash64", cols: _*)
@@ -4688,6 +5265,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column that always evaluates to NULL.
    */
   def assert_true(c: Column, e: Column): Column = Column.fn("assert_true", c, e)
 
@@ -4706,6 +5285,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def user(): Column = Column.fn("user")
 
@@ -4714,6 +5295,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def session_user(): Column = Column.fn("session_user")
 
@@ -4734,6 +5317,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def uuid(seed: Column): Column = Column.fn("uuid", seed)
 
@@ -4789,6 +5374,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column, iv: Column): Column =
     Column.fn("aes_encrypt", input, key, mode, padding, iv)
@@ -4802,6 +5389,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_encrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
     Column.fn("aes_encrypt", input, key, mode, padding)
@@ -4815,6 +5404,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_encrypt(input: Column, key: Column, mode: Column): Column =
     Column.fn("aes_encrypt", input, key, mode)
@@ -4828,6 +5419,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_encrypt(input: Column, key: Column): Column =
     Column.fn("aes_encrypt", input, key)
@@ -4876,6 +5469,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
     Column.fn("aes_decrypt", input, key, mode, padding)
@@ -4888,6 +5483,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_decrypt(input: Column, key: Column, mode: Column): Column =
     Column.fn("aes_decrypt", input, key, mode)
@@ -4900,6 +5497,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def aes_decrypt(input: Column, key: Column): Column =
     Column.fn("aes_decrypt", input, key)
@@ -4945,6 +5544,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_aes_decrypt(input: Column, key: Column, mode: Column, padding: Column): Column =
     Column.fn("try_aes_decrypt", input, key, mode, padding)
@@ -4957,6 +5558,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_aes_decrypt(input: Column, key: Column, mode: Column): Column =
     Column.fn("try_aes_decrypt", input, key, mode)
@@ -4969,6 +5572,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_aes_decrypt(input: Column, key: Column): Column =
     Column.fn("try_aes_decrypt", input, key)
@@ -4988,6 +5593,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def input_file_block_length(): Column = Column.fn("input_file_block_length")
 
@@ -4996,6 +5603,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def input_file_block_start(): Column = Column.fn("input_file_block_start")
 
@@ -5004,6 +5613,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def reflect(cols: Column*): Column = Column.fn("reflect", cols: _*)
@@ -5013,6 +5624,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def java_method(cols: Column*): Column = Column.fn("java_method", cols: _*)
@@ -5023,6 +5636,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def try_reflect(cols: Column*): Column = Column.fn("try_reflect", cols: _*)
@@ -5033,6 +5648,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def version(): Column = Column.fn("version")
 
@@ -5052,6 +5669,8 @@ object functions {
    *
    * @group generator_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def stack(cols: Column*): Column = Column.fn("stack", cols: _*)
@@ -5080,6 +5699,8 @@ object functions {
    *
    * @group math_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def uniform(min: Column, max: Column, seed: Column): Column =
     Column.fn("uniform", min, max, seed)
@@ -5101,6 +5722,8 @@ object functions {
    *
    * @group math_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def random(): Column = random(lit(SparkClassUtils.random.nextLong))
 
@@ -5132,6 +5755,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def bitmap_construct_agg(col: Column): Column =
     Column.fn("bitmap_construct_agg", col)
@@ -5141,6 +5766,8 @@ object functions {
    *
    * @group misc_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def bitmap_count(col: Column): Column = Column.fn("bitmap_count", col)
 
@@ -5150,6 +5777,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def bitmap_or_agg(col: Column): Column = Column.fn("bitmap_or_agg", col)
 
@@ -5159,6 +5788,8 @@ object functions {
    *
    * @group agg_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
@@ -5207,6 +5838,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def concat_ws(sep: String, exprs: Column*): Column =
@@ -5219,6 +5852,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def decode(value: Column, charset: String): Column =
     Column.fn("decode", value, lit(charset))
@@ -5301,6 +5936,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def format_string(format: String, arguments: Column*): Column =
@@ -5344,6 +5981,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: Column): Column = Column.fn("instr", str, substring)
 
@@ -5360,6 +5999,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: Column, start: Int): Column =
     Column.fn("instr", str, substring, lit(start))
@@ -5377,6 +6018,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: Column, start: Column): Column =
     Column.fn("instr", str, substring, start)
@@ -5396,6 +6039,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: Column, start: Int, occurrence: Int): Column =
     Column.fn("instr", str, substring, lit(start), lit(occurrence))
@@ -5415,6 +6060,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def instr(str: Column, substring: Column, start: Column, occurrence: Column): Column =
     Column.fn("instr", str, substring, start, occurrence)
@@ -5468,6 +6115,8 @@ object functions {
    * Computes the Levenshtein distance of the two given string columns.
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
@@ -5505,6 +6154,8 @@ object functions {
    *
    * @group string_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def locate(substr: String, str: Column, pos: Int): Column =
     Column.fn("locate", lit(substr), str, lit(pos))
@@ -5526,6 +6177,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def lpad(str: Column, len: Int, pad: Array[Byte]): Column = lpad(str, lit(len), lit(pad))
 
@@ -5535,6 +6188,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def lpad(str: Column, len: Column, pad: Column): Column = Column.fn("lpad", str, len, pad)
 
@@ -5552,6 +6207,8 @@ object functions {
    * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def ltrim(e: Column, trimString: String): Column = ltrim(e, lit(trimString))
 
@@ -5559,6 +6216,8 @@ object functions {
    * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def ltrim(e: Column, trim: Column): Column = Column.fn("ltrim", trim, e)
 
@@ -5577,6 +6236,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def collate(e: Column, collation: String): Column = Column.fn("collate", e, lit(collation))
 
@@ -5663,6 +6324,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def regexp_extract_all(str: Column, regexp: Column, idx: Column): Column =
     Column.fn("regexp_extract_all", str, regexp, idx)
@@ -5684,6 +6347,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_replace(e: Column, pattern: String, replacement: String, pos: Int): Column =
     regexp_replace(e, lit(pattern), lit(replacement), lit(pos))
@@ -5693,6 +6358,8 @@ object functions {
    *
    * @group string_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
@@ -5703,6 +6370,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column, pos: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement, pos)
@@ -5737,6 +6406,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def regexp_instr(str: Column, regexp: Column, idx: Column): Column =
     Column.fn("regexp_instr", str, regexp, idx)
@@ -5769,6 +6440,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rpad(str: Column, len: Int, pad: Array[Byte]): Column = rpad(str, lit(len), lit(pad))
 
@@ -5778,6 +6451,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rpad(str: Column, len: Column, pad: Column): Column = Column.fn("rpad", str, len, pad)
 
@@ -5796,6 +6471,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def repeat(str: Column, n: Column): Column = Column.fn("repeat", str, n)
 
@@ -5813,6 +6490,8 @@ object functions {
    * Trim the specified character string from right end for the specified string column.
    * @group string_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rtrim(e: Column, trimString: String): Column = rtrim(e, lit(trimString))
 
@@ -5820,6 +6499,8 @@ object functions {
    * Trim the specified character string from right end for the specified string column.
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def rtrim(e: Column, trim: Column): Column = Column.fn("rtrim", trim, e)
 
@@ -5860,6 +6541,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def split(str: Column, pattern: Column): Column = Column.fn("split", str, pattern)
 
@@ -5880,6 +6563,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def split(str: Column, pattern: String, limit: Int): Column =
     Column.fn("split", str, lit(pattern), lit(limit))
@@ -5901,6 +6586,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def split(str: Column, pattern: Column, limit: Column): Column =
     Column.fn("split", str, pattern, limit)
@@ -5929,6 +6616,8 @@ object functions {
    *
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def substring(str: Column, pos: Column, len: Column): Column =
     Column.fn("substring", str, pos, len)
@@ -5964,6 +6653,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def overlay(src: Column, replace: Column, pos: Column): Column =
     Column.fn("overlay", src, replace, pos)
@@ -5983,6 +6674,8 @@ object functions {
    * default `country`('') is used.
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sentences(string: Column, language: Column): Column =
     Column.fn("sentences", string, language)
@@ -5992,6 +6685,8 @@ object functions {
    * default locale is used.
    * @group string_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sentences(string: Column): Column = Column.fn("sentences", string)
 
@@ -6022,6 +6717,8 @@ object functions {
    * Trim the specified character from both ends for the specified string column.
    * @group string_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def trim(e: Column, trimString: String): Column = trim(e, lit(trimString))
 
@@ -6029,6 +6726,8 @@ object functions {
    * Trim the specified character from both ends for the specified string column.
    * @group string_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def trim(e: Column, trim: Column): Column = Column.fn("trim", trim, e)
 
@@ -6061,6 +6760,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def to_binary(e: Column): Column = Column.fn("to_binary", e)
 
@@ -6090,6 +6791,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_char(e: Column, format: Column): Column = Column.fn("to_char", e, format)
@@ -6120,6 +6823,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_varchar(e: Column, format: Column): Column = Column.fn("to_varchar", e, format)
@@ -6178,6 +6883,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def replace(src: Column, search: Column): Column = Column.fn("replace", src, search)
 
@@ -6213,6 +6920,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
 
@@ -6232,6 +6941,8 @@ object functions {
    *
    * @group url_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def try_parse_url(url: Column, partToExtract: Column): Column =
     Column.fn("try_parse_url", url, partToExtract)
@@ -6252,6 +6963,8 @@ object functions {
    *
    * @group url_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def parse_url(url: Column, partToExtract: Column): Column =
     Column.fn("parse_url", url, partToExtract)
@@ -6261,6 +6974,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def printf(format: Column, arguments: Column*): Column =
@@ -6317,6 +7032,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def position(substr: Column, str: Column): Column =
     Column.fn("position", substr, str)
@@ -6373,6 +7090,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def btrim(str: Column, trim: Column): Column = Column.fn("btrim", str, trim)
 
@@ -6393,6 +7112,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def try_to_binary(e: Column): Column = Column.fn("try_to_binary", e)
 
@@ -6461,6 +7182,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def elt(inputs: Column*): Column = Column.fn("elt", inputs: _*)
@@ -6495,6 +7218,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def like(str: Column, pattern: Column): Column = Column.fn("like", str, pattern)
 
@@ -6516,6 +7241,8 @@ object functions {
    *
    * @group predicate_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def ilike(str: Column, pattern: Column): Column = Column.fn("ilike", str, pattern)
 
@@ -6582,6 +7309,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def hll_sketch_estimate(c: Column): Column = Column.fn("hll_sketch_estimate", c)
 
@@ -6591,6 +7320,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def hll_sketch_estimate(columnName: String): Column = {
     hll_sketch_estimate(Column(columnName))
@@ -6602,6 +7333,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union(c1: Column, c2: Column): Column =
     Column.fn("hll_union", c1, c2)
@@ -6612,6 +7345,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union(columnName1: String, columnName2: String): Column = {
     hll_union(Column(columnName1), Column(columnName2))
@@ -6624,6 +7359,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union(c1: Column, c2: Column, allowDifferentLgConfigK: Boolean): Column =
     Column.fn("hll_union", c1, c2, lit(allowDifferentLgConfigK))
@@ -6635,6 +7372,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def hll_union(
       columnName1: String,
@@ -6649,6 +7388,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_difference(c1: Column, c2: Column): Column =
     Column.fn("theta_difference", c1, c2)
@@ -6659,6 +7400,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_difference(columnName1: String, columnName2: String): Column = {
     theta_difference(Column(columnName1), Column(columnName2))
@@ -6670,6 +7413,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_intersection(c1: Column, c2: Column): Column =
     Column.fn("theta_intersection", c1, c2)
@@ -6680,6 +7425,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_intersection(columnName1: String, columnName2: String): Column = {
     theta_intersection(Column(columnName1), Column(columnName2))
@@ -6691,6 +7438,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def theta_sketch_estimate(c: Column): Column = Column.fn("theta_sketch_estimate", c)
 
@@ -6700,6 +7449,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def theta_sketch_estimate(columnName: String): Column = {
     theta_sketch_estimate(Column(columnName))
@@ -6712,6 +7463,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union(c1: Column, c2: Column): Column =
     Column.fn("theta_union", c1, c2)
@@ -6723,6 +7476,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union(columnName1: String, columnName2: String): Column = {
     theta_union(Column(columnName1), Column(columnName2))
@@ -6735,6 +7490,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("theta_union", c1, c2, lit(lgNomEntries))
@@ -6746,6 +7503,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union(columnName1: String, columnName2: String, lgNomEntries: Int): Column = {
     theta_union(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -6758,6 +7517,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def theta_union(c1: Column, c2: Column, lgNomEntries: Column): Column =
     Column.fn("theta_union", c1, c2, lgNomEntries)
@@ -6769,6 +7530,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_difference_double", c1, c2)
@@ -6780,6 +7543,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_double(columnName1: String, columnName2: String): Column =
     tuple_difference_double(Column(columnName1), Column(columnName2))
@@ -6791,6 +7556,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_difference_integer", c1, c2)
@@ -6802,6 +7569,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_integer(columnName1: String, columnName2: String): Column =
     tuple_difference_integer(Column(columnName1), Column(columnName2))
@@ -6814,6 +7583,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_intersection_double", c1, c2)
@@ -6826,6 +7597,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_double(columnName1: String, columnName2: String): Column =
     tuple_intersection_double(Column(columnName1), Column(columnName2))
@@ -6838,6 +7611,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_double(c1: Column, c2: Column, mode: String): Column =
     Column.fn("tuple_intersection_double", c1, c2, lit(mode))
@@ -6850,6 +7625,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_double(columnName1: String, columnName2: String, mode: String): Column =
     tuple_intersection_double(Column(columnName1), Column(columnName2), mode)
@@ -6862,6 +7639,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_double(c1: Column, c2: Column, mode: Column): Column =
     Column.fn("tuple_intersection_double", c1, c2, mode)
@@ -6874,6 +7653,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_intersection_integer", c1, c2)
@@ -6886,6 +7667,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_integer(columnName1: String, columnName2: String): Column =
     tuple_intersection_integer(Column(columnName1), Column(columnName2))
@@ -6898,6 +7681,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_integer(c1: Column, c2: Column, mode: String): Column =
     Column.fn("tuple_intersection_integer", c1, c2, lit(mode))
@@ -6910,6 +7695,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_integer(columnName1: String, columnName2: String, mode: String): Column =
     tuple_intersection_integer(Column(columnName1), Column(columnName2), mode)
@@ -6922,6 +7709,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_integer(c1: Column, c2: Column, mode: Column): Column =
     Column.fn("tuple_intersection_integer", c1, c2, mode)
@@ -6932,6 +7721,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_estimate_double(c: Column): Column =
     Column.fn("tuple_sketch_estimate_double", c)
@@ -6942,6 +7733,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_estimate_double(columnName: String): Column =
     tuple_sketch_estimate_double(Column(columnName))
@@ -6952,6 +7745,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_estimate_integer(c: Column): Column =
     Column.fn("tuple_sketch_estimate_integer", c)
@@ -6962,6 +7757,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_estimate_integer(columnName: String): Column =
     tuple_sketch_estimate_integer(Column(columnName))
@@ -6973,6 +7770,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_summary_double(c: Column): Column =
     Column.fn("tuple_sketch_summary_double", c)
@@ -6984,6 +7783,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_summary_double(columnName: String): Column =
     tuple_sketch_summary_double(Column(columnName))
@@ -6994,6 +7795,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_summary_double(c: Column, mode: String): Column =
     Column.fn("tuple_sketch_summary_double", c, lit(mode))
@@ -7004,6 +7807,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_summary_double(columnName: String, mode: String): Column =
     tuple_sketch_summary_double(Column(columnName), mode)
@@ -7014,6 +7819,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_summary_double(c: Column, mode: Column): Column =
     Column.fn("tuple_sketch_summary_double", c, mode)
@@ -7025,6 +7832,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def tuple_sketch_summary_integer(c: Column): Column =
     Column.fn("tuple_sketch_summary_integer", c)
@@ -7036,6 +7845,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def tuple_sketch_summary_integer(columnName: String): Column =
     tuple_sketch_summary_integer(Column(columnName))
@@ -7046,6 +7857,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def tuple_sketch_summary_integer(c: Column, mode: String): Column =
     Column.fn("tuple_sketch_summary_integer", c, lit(mode))
@@ -7056,6 +7869,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def tuple_sketch_summary_integer(columnName: String, mode: String): Column =
     tuple_sketch_summary_integer(Column(columnName), mode)
@@ -7066,6 +7881,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def tuple_sketch_summary_integer(c: Column, mode: Column): Column =
     Column.fn("tuple_sketch_summary_integer", c, mode)
@@ -7077,6 +7894,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_theta_double(c: Column): Column =
     Column.fn("tuple_sketch_theta_double", c)
@@ -7088,6 +7907,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_theta_double(columnName: String): Column =
     tuple_sketch_theta_double(Column(columnName))
@@ -7099,6 +7920,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_theta_integer(c: Column): Column =
     Column.fn("tuple_sketch_theta_integer", c)
@@ -7110,6 +7933,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def tuple_sketch_theta_integer(columnName: String): Column =
     tuple_sketch_theta_integer(Column(columnName))
@@ -7121,6 +7946,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_union_double", c1, c2)
@@ -7132,6 +7959,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(columnName1: String, columnName2: String): Column =
     tuple_union_double(Column(columnName1), Column(columnName2))
@@ -7144,6 +7973,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_double", c1, c2, lit(lgNomEntries))
@@ -7156,6 +7987,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(columnName1: String, columnName2: String, lgNomEntries: Int): Column =
     tuple_union_double(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -7168,6 +8001,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_double", c1, c2, lit(lgNomEntries), lit(mode))
@@ -7180,6 +8015,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(
       columnName1: String,
@@ -7196,6 +8033,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_double(c1: Column, c2: Column, lgNomEntries: Column, mode: Column): Column =
     Column.fn("tuple_union_double", c1, c2, lgNomEntries, mode)
@@ -7207,6 +8046,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_union_integer", c1, c2)
@@ -7218,6 +8059,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(columnName1: String, columnName2: String): Column =
     tuple_union_integer(Column(columnName1), Column(columnName2))
@@ -7230,6 +8073,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_integer", c1, c2, lit(lgNomEntries))
@@ -7242,6 +8087,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(columnName1: String, columnName2: String, lgNomEntries: Int): Column =
     tuple_union_integer(Column(columnName1), Column(columnName2), lgNomEntries)
@@ -7254,6 +8101,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_integer", c1, c2, lit(lgNomEntries), lit(mode))
@@ -7266,6 +8115,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(
       columnName1: String,
@@ -7282,6 +8133,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_integer(c1: Column, c2: Column, lgNomEntries: Column, mode: Column): Column =
     Column.fn("tuple_union_integer", c1, c2, lgNomEntries, mode)
@@ -7293,6 +8146,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_theta_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_difference_theta_double", c1, c2)
@@ -7304,6 +8159,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_theta_double(columnName1: String, columnName2: String): Column =
     tuple_difference_theta_double(Column(columnName1), Column(columnName2))
@@ -7315,6 +8172,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_theta_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_difference_theta_integer", c1, c2)
@@ -7326,6 +8185,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_difference_theta_integer(columnName1: String, columnName2: String): Column =
     tuple_difference_theta_integer(Column(columnName1), Column(columnName2))
@@ -7338,6 +8199,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_intersection_theta_double", c1, c2)
@@ -7350,6 +8213,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_double(columnName1: String, columnName2: String): Column =
     tuple_intersection_theta_double(Column(columnName1), Column(columnName2))
@@ -7362,6 +8227,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_double(c1: Column, c2: Column, mode: String): Column =
     Column.fn("tuple_intersection_theta_double", c1, c2, lit(mode))
@@ -7374,6 +8241,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_double(
       columnName1: String,
@@ -7389,6 +8258,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_double(c1: Column, c2: Column, mode: Column): Column =
     Column.fn("tuple_intersection_theta_double", c1, c2, mode)
@@ -7401,6 +8272,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_intersection_theta_integer", c1, c2)
@@ -7413,6 +8286,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_integer(columnName1: String, columnName2: String): Column =
     tuple_intersection_theta_integer(Column(columnName1), Column(columnName2))
@@ -7425,6 +8300,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: String): Column =
     Column.fn("tuple_intersection_theta_integer", c1, c2, lit(mode))
@@ -7437,6 +8314,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_integer(
       columnName1: String,
@@ -7452,6 +8331,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_intersection_theta_integer(c1: Column, c2: Column, mode: Column): Column =
     Column.fn("tuple_intersection_theta_integer", c1, c2, mode)
@@ -7463,6 +8344,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(c1: Column, c2: Column): Column =
     Column.fn("tuple_union_theta_double", c1, c2)
@@ -7474,6 +8357,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(columnName1: String, columnName2: String): Column =
     tuple_union_theta_double(Column(columnName1), Column(columnName2))
@@ -7486,6 +8371,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries))
@@ -7498,6 +8385,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(
       columnName1: String,
@@ -7513,6 +8402,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_theta_double", c1, c2, lit(lgNomEntries), lit(mode))
@@ -7525,6 +8416,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(
       columnName1: String,
@@ -7541,6 +8434,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_double(
       c1: Column,
@@ -7556,6 +8451,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(c1: Column, c2: Column): Column =
     Column.fn("tuple_union_theta_integer", c1, c2)
@@ -7567,6 +8464,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(columnName1: String, columnName2: String): Column =
     tuple_union_theta_integer(Column(columnName1), Column(columnName2))
@@ -7579,6 +8478,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int): Column =
     Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries))
@@ -7591,6 +8492,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(
       columnName1: String,
@@ -7606,6 +8509,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(c1: Column, c2: Column, lgNomEntries: Int, mode: String): Column =
     Column.fn("tuple_union_theta_integer", c1, c2, lit(lgNomEntries), lit(mode))
@@ -7618,6 +8523,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(
       columnName1: String,
@@ -7634,6 +8541,8 @@ object functions {
    *
    * @group sketch_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def tuple_union_theta_integer(
       c1: Column,
@@ -7845,7 +8754,7 @@ object functions {
    * @param numMonths
    *   A column of the number of months to add to `startDate`, can be negative to subtract months
    * @return
-   *   A date, or null if `startDate` was a string that could not be cast to a date
+   *   A date, or null if `startDate` was a string that could not be cast to a date. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -7858,6 +8767,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def curdate(): Column = Column.fn("curdate")
 
@@ -7867,6 +8778,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def current_date(): Column = Column.fn("current_date")
 
@@ -7875,6 +8788,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def current_timezone(): Column = Column.fn("current_timezone")
 
@@ -7884,6 +8799,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def current_timestamp(): Column = Column.fn("current_timestamp")
 
@@ -7892,6 +8809,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def now(): Column = Column.fn("now")
 
@@ -7902,6 +8821,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def localtimestamp(): Column = Column.fn("localtimestamp")
 
@@ -7960,7 +8881,7 @@ object functions {
    * @param days
    *   A column of the number of days to add to `start`, can be negative to subtract days
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -8011,7 +8932,7 @@ object functions {
    * @param days
    *   A column of the number of days to subtract from `start`, can be negative to add days
    * @return
-   *   A date, or null if `start` was a string that could not be cast to a date
+   *   A date, or null if `start` was a string that could not be cast to a date. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.0.0
    */
@@ -8295,6 +9216,8 @@ object functions {
    * result is rounded off to 8 digits; it is not rounded otherwise.
    * @group datetime_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a double.
    */
   def months_between(end: Column, start: Column, roundOff: Boolean): Column =
     Column.fn("months_between", end, start, lit(roundOff))
@@ -8336,7 +9259,7 @@ object functions {
    *   "Fri", "Sat", "Sun"
    * @return
    *   A date, or null if `date` was a string that could not be cast to a date or if `dayOfWeek`
-   *   was an invalid value
+   *   was an invalid value. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 3.2.0
    */
@@ -8400,7 +9323,7 @@ object functions {
    *   A date time pattern that the input will be formatted to
    * @return
    *   A string, or null if `ut` was a string that could not be cast to a long or `f` was an
-   *   invalid date time pattern
+   *   invalid date time pattern. Returns a column that evaluates to a string.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8429,7 +9352,7 @@ object functions {
    *   A date, timestamp or string. If a string, the data must be in the `yyyy-MM-dd HH:mm:ss`
    *   format
    * @return
-   *   A long, or null if the input was a string not of the correct format
+   *   A long, or null if the input was a string not of the correct format. Returns a column that evaluates to a long.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8448,7 +9371,7 @@ object functions {
    *   A date time pattern detailing the format of `s` when `s` is a string
    * @return
    *   A long, or null if `s` was a string that could not be cast to a date or `p` was an invalid
-   *   format
+   *   format. Returns a column that evaluates to a long.
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -8462,7 +9385,7 @@ object functions {
    *   A string to be parsed to time.
    * @return
    *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a
-   *   string.
+   *   time.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8482,8 +9405,7 @@ object functions {
    * @param format
    *   A time format pattern to follow.
    * @return
-   *   A time, or raises an error if the input is malformed.
-   *
+   *   A time, or raises an error if the input is malformed. Returns a column that evaluates to a time.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -8519,7 +9441,7 @@ object functions {
    *   A date time pattern detailing the format of `s` when `s` is a string
    * @return
    *   A timestamp, or null if `s` was a string that could not be cast to a timestamp or `fmt` was
-   *   an invalid format
+   *   an invalid format. Returns a column that evaluates to a timestamp.
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -8531,7 +9453,7 @@ object functions {
    * @param str
    *   A string to be parsed to time.
    * @return
-   *   A time, or null if the input is malformed. Returns a column that evaluates to a string.
+   *   A time, or null if the input is malformed. Returns a column that evaluates to a time.
    *
    * @group datetime_funcs
    * @since 4.1.0
@@ -8551,8 +9473,7 @@ object functions {
    * @param format
    *   A time format pattern to follow.
    * @return
-   *   A time, or null if the input is malformed.
-   *
+   *   A time, or null if the input is malformed. Returns a column that evaluates to a time.
    * @group datetime_funcs
    * @since 4.1.0
    */
@@ -8580,6 +9501,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_to_timestamp(s: Column): Column = Column.fn("try_to_timestamp", s)
 
@@ -8606,7 +9529,7 @@ object functions {
    *   A date time pattern detailing the format of `e` when `e`is a string
    * @return
    *   A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
-   *   invalid format
+   *   invalid format. Returns a column that evaluates to a date.
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -8629,6 +9552,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a date.
    */
   def try_to_date(e: Column, fmt: String): Column = Column.fn("try_to_date", e, lit(fmt))
 
@@ -8659,6 +9584,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
 
@@ -8757,6 +9684,8 @@ object functions {
    * 03:40:00.0'.
    * @group datetime_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def from_utc_timestamp(ts: Column, tz: Column): Column =
     Column.fn("from_utc_timestamp", ts, tz)
@@ -8791,6 +9720,8 @@ object functions {
    * '2017-07-14 01:40:00.0'.
    * @group datetime_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def to_utc_timestamp(ts: Column, tz: Column): Column = Column.fn("to_utc_timestamp", ts, tz)
 
@@ -8838,6 +9769,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def window(
       timeColumn: Column,
@@ -8887,6 +9820,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
     window(timeColumn, windowDuration, slideDuration, "0 second")
@@ -8925,6 +9860,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 2.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
@@ -8943,6 +9880,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def window_time(windowColumn: Column): Column = Column.fn("window_time", windowColumn)
 
@@ -9007,6 +9946,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.2.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def session_window(timeColumn: Column, gapDuration: Column): Column =
     Column.fn("session_window", timeColumn, gapDuration)
@@ -9046,6 +9987,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def timestamp_nanos(e: Column): Column = Column.fn("timestamp_nanos", e)
 
@@ -9055,6 +9998,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def timestamp_diff(unit: String, start: Column, end: Column): Column =
     Column.internalFn("timestampdiff", lit(unit), start, end)
@@ -9064,6 +10009,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
@@ -9080,6 +10027,8 @@ object functions {
    *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def time_bucket(bucketSize: Column, ts: Column): Column =
     Column.fn("time_bucket", bucketSize, ts)
@@ -9098,6 +10047,8 @@ object functions {
    *   Alignment anchor. Must be the same type as `ts` and must be foldable.
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   def time_bucket(bucketSize: Column, ts: Column, origin: Column): Column =
     Column.fn("time_bucket", bucketSize, ts, origin)
@@ -9184,6 +10135,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a decimal.
    */
   def time_to_seconds(e: Column): Column = Column.fn("time_to_seconds", e)
 
@@ -9192,6 +10145,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def time_to_millis(e: Column): Column = Column.fn("time_to_millis", e)
 
@@ -9200,6 +10155,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def time_to_micros(e: Column): Column = Column.fn("time_to_micros", e)
 
@@ -9221,6 +10178,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def to_timestamp_ltz(timestamp: Column): Column =
     Column.fn("to_timestamp_ltz", timestamp)
@@ -9243,6 +10202,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def to_timestamp_ntz(timestamp: Column): Column =
     Column.fn("to_timestamp_ntz", timestamp)
@@ -9263,6 +10224,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a long.
    */
   def to_unix_timestamp(timeExp: Column): Column =
     Column.fn("to_unix_timestamp", timeExp)
@@ -9358,6 +10321,8 @@ object functions {
    *
    * @group array_funcs
    * @since 3.1.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def slice(x: Column, start: Column, length: Column): Column =
     Column.fn("slice", x, start, length)
@@ -9377,6 +10342,8 @@ object functions {
    * Concatenates the elements of `column` using the `delimiter`.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def array_join(column: Column, delimiter: String): Column =
     Column.fn("array_join", column, lit(delimiter))
@@ -9390,6 +10357,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column of the same type as the input.
    */
   @scala.annotation.varargs
   def concat(exprs: Column*): Column = Column.fn("concat", exprs: _*)
@@ -9472,6 +10441,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_sort(e: Column, comparator: (Column, Column) => Column): Column =
     Column.fn("array_sort", e, createLambda(comparator))
@@ -9620,6 +10591,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def transform(column: Column, f: (Column, Column) => Column): Column =
     Column.fn("transform", column, createLambda(f))
@@ -9695,6 +10668,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def filter(column: Column, f: (Column, Column) => Column): Column =
     Column.fn("filter", column, createLambda(f))
@@ -9746,6 +10721,8 @@ object functions {
    *   to the combined_value
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column of the same type as the initial value.
    */
   def aggregate(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, initialValue, merge, c => c)
@@ -9797,6 +10774,8 @@ object functions {
    *   to the combined_value
    * @group collection_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column of the same type as the initial value.
    */
   def reduce(expr: Column, initialValue: Column, merge: (Column, Column) => Column): Column =
     reduce(expr, initialValue, merge, c => c)
@@ -9838,6 +10817,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def transform_keys(expr: Column, f: (Column, Column) => Column): Column =
     Column.fn("transform_keys", expr, createLambda(f))
@@ -9856,6 +10837,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def transform_values(expr: Column, f: (Column, Column) => Column): Column =
     Column.fn("transform_values", expr, createLambda(f))
@@ -9873,6 +10856,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def map_filter(expr: Column, f: (Column, Column) => Column): Column =
     Column.fn("map_filter", expr, createLambda(f))
@@ -9892,6 +10877,8 @@ object functions {
    *
    * @group collection_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def map_zip_with(left: Column, right: Column, f: (Column, Column, Column) => Column): Column =
     Column.fn("map_zip_with", left, right, createLambda(f))
@@ -9946,6 +10933,8 @@ object functions {
    *
    * @group generator_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def inline(e: Column): Column = Column.fn("inline", e)
 
@@ -9955,6 +10944,8 @@ object functions {
    *
    * @group generator_funcs
    * @since 3.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def inline_outer(e: Column): Column = Column.fn("inline_outer", e)
 
@@ -9975,6 +10966,8 @@ object functions {
    *
    * @group json_funcs
    * @since 1.6.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   @scala.annotation.varargs
   def json_tuple(json: Column, fields: String*): Column = {
@@ -9999,6 +10992,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: Map[String, String]): Column =
@@ -10022,6 +11017,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.2.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
@@ -10045,6 +11042,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
@@ -10068,6 +11067,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.2.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
@@ -10085,6 +11086,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def from_json(e: Column, schema: StructType): Column =
     from_json(e, schema, Map.empty[String, String])
@@ -10101,6 +11104,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.2.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def from_json(e: Column, schema: DataType): Column =
     from_json(e, schema, Map.empty[String, String])
@@ -10123,6 +11128,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
@@ -10147,6 +11154,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
@@ -10165,6 +11174,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def from_json(e: Column, schema: Column): Column = {
     from_json(e, schema, Map.empty[String, String].asJava)
@@ -10188,6 +11199,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
@@ -10249,6 +11262,8 @@ object functions {
    *   a variant column.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
 
@@ -10260,6 +11275,8 @@ object functions {
    *   a variant column.
    * @group variant_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
 
@@ -10277,6 +11294,8 @@ object functions {
    *   additional JSONPath arguments, applied after `path` in order.
    * @group variant_funcs
    * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   @scala.annotation.varargs
   def variant_delete(v: Column, path: Column, paths: Column*): Column =
@@ -10296,6 +11315,8 @@ object functions {
    *   additional JSONPath strings, applied after `path` in order.
    * @group variant_funcs
    * @since 5.0.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   @scala.annotation.varargs
   def variant_delete(v: Column, path: String, paths: String*): Column =
@@ -10316,6 +11337,8 @@ object functions {
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   def variant_insert(v: Column, path: Column, value: Column): Column =
     Column.fn("variant_insert", v, path, value)
@@ -10335,6 +11358,8 @@ object functions {
    *   the value to insert. Any expression castable to variant.
    * @group variant_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a variant.
    */
   def variant_insert(v: Column, path: String, value: Column): Column =
     Column.fn("variant_insert", v, lit(path), value)
@@ -10352,6 +11377,8 @@ object functions {
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the type specified by the `targetType` argument.
    */
   def variant_get(v: Column, path: String, targetType: String): Column =
     Column.fn("variant_get", v, lit(path), lit(targetType))
@@ -10370,6 +11397,8 @@ object functions {
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the type specified by the `targetType` argument.
    */
   def variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("variant_get", v, path, lit(targetType))
@@ -10387,6 +11416,8 @@ object functions {
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the type specified by the `targetType` argument.
    */
   def try_variant_get(v: Column, path: String, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
@@ -10405,6 +11436,8 @@ object functions {
    *   the target data type to cast into, in a DDL-formatted string.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column of the type specified by the `targetType` argument.
    */
   def try_variant_get(v: Column, path: Column, targetType: String): Column =
     Column.fn("try_variant_get", v, lit(path), lit(targetType))
@@ -10416,6 +11449,8 @@ object functions {
    *   a variant column.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_variant(v: Column): Column = Column.fn("schema_of_variant", v)
 
@@ -10426,6 +11461,8 @@ object functions {
    *   a variant column.
    * @group variant_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_variant_agg(v: Column): Column = Column.fn("schema_of_variant_agg", v)
 
@@ -10437,6 +11474,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_json(json: String): Column = schema_of_json(lit(json))
 
@@ -10448,6 +11487,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_json(json: Column): Column = Column.fn("schema_of_json", json)
 
@@ -10479,6 +11520,8 @@ object functions {
    *
    * @group json_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def json_array_length(e: Column): Column = Column.fn("json_array_length", e)
 
@@ -10511,6 +11554,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_json(e: Column, options: Map[String, String]): Column =
@@ -10533,6 +11578,8 @@ object functions {
    *
    * @group json_funcs
    * @since 2.1.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_json(e: Column, options: java.util.Map[String, String]): Column =
@@ -10580,6 +11627,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def mask(input: Column, upperChar: Column): Column =
     Column.fn("mask", input, upperChar)
@@ -10598,6 +11647,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def mask(input: Column, upperChar: Column, lowerChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar)
@@ -10618,6 +11669,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def mask(input: Column, upperChar: Column, lowerChar: Column, digitChar: Column): Column =
     Column.fn("mask", input, upperChar, lowerChar, digitChar)
@@ -10639,6 +11692,8 @@ object functions {
    *
    * @group string_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def mask(
       input: Column,
@@ -10696,6 +11751,8 @@ object functions {
    *
    * @group array_funcs
    * @since 1.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sort_array(e: Column, asc: Boolean): Column = Column.fn("sort_array", e, lit(asc))
 
@@ -10739,6 +11796,8 @@ object functions {
    *   order of the rows which may be non-deterministic after a shuffle.
    * @group agg_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_agg(e: Column): Column = Column.fn("array_agg", e)
 
@@ -10763,6 +11822,8 @@ object functions {
    *
    * @group array_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def shuffle(e: Column, seed: Column): Column = Column.fn("shuffle", e, seed)
 
@@ -10780,6 +11841,8 @@ object functions {
    * than two levels, only one level of nesting is removed.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def flatten(e: Column): Column = Column.fn("flatten", e)
 
@@ -10800,6 +11863,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def sequence(start: Column, stop: Column): Column = Column.fn("sequence", start, stop)
 
@@ -10820,6 +11885,8 @@ object functions {
    *
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def array_repeat(e: Column, count: Int): Column = array_repeat(e, lit(count))
 
@@ -10827,6 +11894,8 @@ object functions {
    * Returns true if the map contains the key.
    * @group map_funcs
    * @since 3.3.0
+   * @return
+   *   Returns a column that evaluates to a boolean.
    */
   def map_contains_key(column: Column, key: Any): Column =
     Column.fn("map_contains_key", column, lit(key))
@@ -10835,6 +11904,8 @@ object functions {
    * Returns an unordered array containing the keys of the map.
    * @group map_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def map_keys(e: Column): Column = Column.fn("map_keys", e)
 
@@ -10842,6 +11913,8 @@ object functions {
    * Returns an unordered array containing the values of the map.
    * @group map_funcs
    * @since 2.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def map_values(e: Column): Column = Column.fn("map_values", e)
 
@@ -10849,6 +11922,8 @@ object functions {
    * Returns an unordered array of all entries in the given map.
    * @group map_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def map_entries(e: Column): Column = Column.fn("map_entries", e)
 
@@ -10856,6 +11931,8 @@ object functions {
    * Returns a map created from the given array of entries.
    * @group map_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   def map_from_entries(e: Column): Column = Column.fn("map_from_entries", e)
 
@@ -10864,6 +11941,8 @@ object functions {
    * arrays.
    * @group array_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   @scala.annotation.varargs
   def arrays_zip(e: Column*): Column = Column.fn("arrays_zip", e: _*)
@@ -10872,6 +11951,8 @@ object functions {
    * Returns the union of all the given maps.
    * @group map_funcs
    * @since 2.4.0
+   * @return
+   *   Returns a column that evaluates to a map.
    */
   @scala.annotation.varargs
   def map_concat(cols: Column*): Column = Column.fn("map_concat", cols: _*)
@@ -10893,6 +11974,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: StructType, options: Map[String, String]): Column =
@@ -10915,6 +11998,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_csv(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
@@ -10931,6 +12016,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_csv(csv: String): Column = schema_of_csv(lit(csv))
 
@@ -10942,6 +12029,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_csv(csv: Column): Column = schema_of_csv(csv, Collections.emptyMap())
 
@@ -10957,8 +12046,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
-   *   a column with string literal containing schema in DDL format.
-   *
+   *   a column with string literal containing schema in DDL format. Returns a column that evaluates to a string.
    * @group csv_funcs
    * @since 3.0.0
    */
@@ -10981,6 +12069,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_csv(e: Column, options: java.util.Map[String, String]): Column =
@@ -10995,6 +12085,8 @@ object functions {
    *
    * @group csv_funcs
    * @since 3.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
 
@@ -11014,6 +12106,8 @@ object functions {
    *   Source Option</a> in the version you use.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
@@ -11035,6 +12129,8 @@ object functions {
    *   Source Option</a> in the version you use.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
@@ -11052,6 +12148,8 @@ object functions {
    *   the schema to use when parsing the XML string
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column): Column = {
@@ -11074,6 +12172,8 @@ object functions {
    *   Source Option</a> in the version you use.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: Column, options: java.util.Map[String, String]): Column =
@@ -11090,6 +12190,8 @@ object functions {
    *
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a struct.
    */
   def from_xml(e: Column, schema: StructType): Column =
     from_xml(e, schema, Map.empty[String, String].asJava)
@@ -11105,6 +12207,8 @@ object functions {
    *   a XML string.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_xml(xml: String): Column = schema_of_xml(lit(xml))
 
@@ -11115,6 +12219,8 @@ object functions {
    *   a foldable string column containing a XML string.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def schema_of_xml(xml: Column): Column = Column.fn("schema_of_xml", xml)
 
@@ -11131,7 +12237,7 @@ object functions {
    *   "https://spark.apache.org/docs/latest/sql-data-sources-xml.html#data-source-option"> Data
    *   Source Option</a> in the version you use.
    * @return
-   *   a column with string literal containing schema in DDL format.
+   *   a column with string literal containing schema in DDL format. Returns a column that evaluates to a string.
    * @group xml_funcs
    * @since 4.0.0
    */
@@ -11154,6 +12260,8 @@ object functions {
    *   Source Option</a> in the version you use.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   // scalastyle:on line.size.limit
   def to_xml(e: Column, options: java.util.Map[String, String]): Column =
@@ -11167,6 +12275,8 @@ object functions {
    *   a column containing a struct.
    * @group xml_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a string.
    */
   def to_xml(e: Column): Column = to_xml(e, Map.empty[String, String].asJava)
 
@@ -11336,6 +12446,8 @@ object functions {
    *   a timestamp without time zone.
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def convert_timezone(targetTz: Column, sourceTs: Column): Column =
     Column.fn("convert_timezone", targetTz, sourceTs)
@@ -11356,6 +12468,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_dt_interval(days: Column, hours: Column, mins: Column): Column =
     Column.fn("make_dt_interval", days, hours, mins)
@@ -11365,6 +12479,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_dt_interval(days: Column, hours: Column): Column =
     Column.fn("make_dt_interval", days, hours)
@@ -11374,6 +12490,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_dt_interval(days: Column): Column =
     Column.fn("make_dt_interval", days)
@@ -11383,6 +12501,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_dt_interval(): Column =
     Column.fn("make_dt_interval")
@@ -11430,6 +12550,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(
       years: Column,
@@ -11445,6 +12567,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(
       years: Column,
@@ -11461,6 +12585,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(
       years: Column,
@@ -11475,6 +12601,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(
       years: Column,
@@ -11490,6 +12618,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
     Column.fn("try_make_interval", years, months, weeks, days)
@@ -11499,6 +12629,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
     Column.fn("make_interval", years, months, weeks, days)
@@ -11509,6 +12641,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(years: Column, months: Column, weeks: Column): Column =
     Column.fn("try_make_interval", years, months, weeks)
@@ -11518,6 +12652,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(years: Column, months: Column, weeks: Column): Column =
     Column.fn("make_interval", years, months, weeks)
@@ -11528,6 +12664,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(years: Column, months: Column): Column =
     Column.fn("try_make_interval", years, months)
@@ -11537,6 +12675,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(years: Column, months: Column): Column =
     Column.fn("make_interval", years, months)
@@ -11547,6 +12687,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def try_make_interval(years: Column): Column =
     Column.fn("try_make_interval", years)
@@ -11556,6 +12698,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(years: Column): Column =
     Column.fn("make_interval", years)
@@ -11565,6 +12709,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_interval(): Column =
     Column.fn("make_interval")
@@ -11598,6 +12744,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp(
       years: Column,
@@ -11613,6 +12761,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("make_timestamp", date, time, timezone)
@@ -11622,6 +12772,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp(date: Column, time: Column): Column =
     Column.fn("make_timestamp", date, time)
@@ -11653,6 +12805,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp(
       years: Column,
@@ -11668,6 +12822,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp(date: Column, time: Column, timezone: Column): Column =
     Column.fn("try_make_timestamp", date, time, timezone)
@@ -11677,6 +12833,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp", date, time)
@@ -11708,6 +12866,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def make_timestamp_ltz(
       years: Column,
@@ -11743,6 +12903,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.0.0
+   * @return
+   *   Returns a column that evaluates to a timestamp.
    */
   def try_make_timestamp_ltz(
       years: Column,
@@ -11777,6 +12939,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("make_timestamp_ntz", date, time)
@@ -11804,6 +12968,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a timestamp_ntz.
    */
   def try_make_timestamp_ntz(date: Column, time: Column): Column =
     Column.fn("try_make_timestamp_ntz", date, time)
@@ -11824,6 +12990,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_ym_interval(years: Column): Column = Column.fn("make_ym_interval", years)
 
@@ -11832,6 +13000,8 @@ object functions {
    *
    * @group datetime_funcs
    * @since 3.5.0
+   * @return
+   *   Returns a column that evaluates to an interval.
    */
   def make_ym_interval(): Column = Column.fn("make_ym_interval")
 
@@ -11989,6 +13159,8 @@ object functions {
    *
    * @group st_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def st_asbinary(geo: Column): Column =
     Column.fn("st_asbinary", geo)
@@ -11998,6 +13170,8 @@ object functions {
    *
    * @group st_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def st_asbinary(geo: Column, endianness: Column): Column =
     Column.fn("st_asbinary", geo, endianness)
@@ -12007,6 +13181,8 @@ object functions {
    *
    * @group st_funcs
    * @since 4.2.0
+   * @return
+   *   Returns a column that evaluates to a binary.
    */
   def st_asbinary(geo: Column, endianness: String): Column =
     Column.fn("st_asbinary", geo, lit(endianness))
@@ -12070,6 +13246,8 @@ object functions {
    *
    * @group st_funcs
    * @since 4.1.0
+   * @return
+   *   Returns a column that evaluates to an integer.
    */
   def st_srid(geo: Column): Column =
     Column.fn("st_srid", geo)
@@ -12657,6 +13835,8 @@ object functions {
    * Returns the cosine similarity between two float vectors.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def vector_cosine_similarity(left: Column, right: Column): Column =
     Column.fn("vector_cosine_similarity", left, right)
@@ -12665,6 +13845,8 @@ object functions {
    * Returns the inner product (dot product) between two float vectors.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def vector_inner_product(left: Column, right: Column): Column =
     Column.fn("vector_inner_product", left, right)
@@ -12673,6 +13855,8 @@ object functions {
    * Returns the Euclidean (L2) distance between two float vectors.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def vector_l2_distance(left: Column, right: Column): Column =
     Column.fn("vector_l2_distance", left, right)
@@ -12681,6 +13865,8 @@ object functions {
    * Returns the Lp norm of a float vector. Degree defaults to 2.0 if unspecified.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def vector_norm(vector: Column, degree: Column): Column =
     Column.fn("vector_norm", vector, degree)
@@ -12689,6 +13875,8 @@ object functions {
    * Returns the Lp norm of a float vector using degree 2.0 (Euclidean norm).
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to a float.
    */
   def vector_norm(vector: Column): Column =
     Column.fn("vector_norm", vector)
@@ -12697,6 +13885,8 @@ object functions {
    * Normalizes a float vector to unit length. Degree defaults to 2.0 if unspecified.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def vector_normalize(vector: Column, degree: Column): Column =
     Column.fn("vector_normalize", vector, degree)
@@ -12705,6 +13895,8 @@ object functions {
    * Normalizes a float vector to unit length using degree 2.0 (Euclidean norm).
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def vector_normalize(vector: Column): Column =
     Column.fn("vector_normalize", vector)
@@ -12713,6 +13905,8 @@ object functions {
    * Aggregate function: returns the element-wise mean of float vectors in a group.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
 
@@ -12720,6 +13914,8 @@ object functions {
    * Aggregate function: returns the element-wise sum of float vectors in a group.
    * @group vector_funcs
    * @since 4.3.0
+   * @return
+   *   Returns a column that evaluates to an array.
    */
   def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 

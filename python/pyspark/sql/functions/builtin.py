@@ -12213,7 +12213,7 @@ def to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> Col
     -------
     :class:`~pyspark.sql.Column`
         time value as :class:`pyspark.sql.types.TimeType` type.
-        Returns a column that evaluates to a string.
+        Returns a column that evaluates to a time.
 
     See Also
     --------
@@ -12360,7 +12360,7 @@ def try_to_time(str: "ColumnOrName", format: Optional["ColumnOrName"] = None) ->
     -------
     :class:`~pyspark.sql.Column`
         time value as :class:`pyspark.sql.types.TimeType` type.
-        Returns a column that evaluates to a string.
+        Returns a column that evaluates to a time.
 
     See Also
     --------
