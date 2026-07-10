@@ -102,7 +102,9 @@ case class AdaptiveSparkPlanExec(
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) =>
         CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
-      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+      case _ => SimpleCostEvaluator(
+        conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
+        conf.costEvaluatorCountLocalSortEnabled)
     }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
@@ -126,6 +128,7 @@ case class AdaptiveSparkPlanExec(
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,
+      ReplaceSortMergeJoinToShuffledHashJoin(ensureRequirements),
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,

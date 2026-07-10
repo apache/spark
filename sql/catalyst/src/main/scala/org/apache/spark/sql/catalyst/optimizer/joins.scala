@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
@@ -287,7 +289,15 @@ case object BuildRight extends BuildSide
 
 case object BuildLeft extends BuildSide
 
-trait JoinSelectionHelper extends Logging {
+trait JoinSelectionHelper extends SQLConfHelper with Logging {
+
+  def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
+    val maxShuffledHashJoinLocalMapThreshold =
+      conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
+    val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
+      mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+  }
 
   def getBroadcastBuildSide(
       join: Join,

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Join, JoinStrategyHint, LogicalPlan, NO_BROADCAST_HASH, PREFER_SHUFFLE_HASH, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This optimization rule includes three join selection:
@@ -42,14 +41,6 @@ object DynamicJoinSelection extends Rule[LogicalPlan] with JoinSelectionHelper {
     val nonZeroCnt = mapStats.bytesByPartitionId.count(_ > 0)
     partitionCnt > 0 && nonZeroCnt > 0 &&
       (nonZeroCnt * 1.0 / partitionCnt) < conf.nonEmptyPartitionRatioForBroadcastJoin
-  }
-
-  private def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
-    val maxShuffledHashJoinLocalMapThreshold =
-      conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
-    val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
-      mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
   }
 
   private def selectJoinStrategy(

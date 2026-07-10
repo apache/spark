@@ -29,11 +29,11 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EqualTo, IsNull, Or}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
-import org.apache.spark.sql.catalyst.plans.physical.CoalescedNullAwareHashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -2461,6 +2461,190 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-58084: Replace sort merge join to shuffled hash join through operators") {
+    withTempView("t1", "t2", "t3") {
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      // The t2 side has a non-shuffle operator (aggregate, optionally with a filter) between the
+      // join and its input shuffle, so DynamicJoinSelection's hint path does not fire. The new
+      // physical rule looks through those operators to the materialized shuffle stage.
+      val queries = Seq(
+        "SELECT t1.c1, x.cnt FROM t1 JOIN " +
+          "(SELECT c1, count(*) AS cnt FROM t2 GROUP BY c1) x ON t1.c1 = x.c1",
+        "SELECT t1.c1, x.cnt FROM t1 JOIN " +
+          "(SELECT c1, count(*) AS cnt FROM t2 GROUP BY c1 HAVING count(*) >= 0) x " +
+          "ON t1.c1 = x.c1")
+
+      // t1 partition size: [926, 729, 731]; t2 (aggregated) side: [372, 126, 0]. With a small
+      // advisory partition size and a local map threshold of 500, only the t2 side has all
+      // partitions within the threshold, so the join is converted with the t2 side as build side.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500") {
+        queries.foreach { query =>
+          // Enabled (default): the sort merge join is converted to a shuffled hash join.
+          withSQLConf(
+            SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+            val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
+            assert(findTopLevelSortMergeJoin(origin).size === 1)
+            val shj = findTopLevelShuffledHashJoin(adaptive)
+            assert(shj.size === 1, s"expected a shuffled hash join for query: $query")
+            assert(shj.head.buildSide == BuildRight)
+            assert(findTopLevelSortMergeJoin(adaptive).isEmpty)
+          }
+          // Disabled: the join stays a sort merge join (previous behavior).
+          withSQLConf(
+            SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "false") {
+            val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+            assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
+              s"expected no shuffled hash join for query: $query")
+            assert(findTopLevelSortMergeJoin(adaptive).size === 1,
+              s"expected a sort merge join for query: $query")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58084: Replace sort merge join keeps required ordering valid") {
+    withTempView("small1", "small2", "big") {
+      spark.sparkContext.parallelize(
+        (1 to 20).map(i => TestData(i, i.toString)), 4)
+        .toDF("c1", "c2").createOrReplaceTempView("small1")
+      spark.sparkContext.parallelize(
+        (1 to 20).map(i => TestData(i, i.toString)), 4)
+        .toDF("c1", "c2").createOrReplaceTempView("small2")
+      spark.sparkContext.parallelize(
+        (1 to 4000).map(i => TestData(i % 20 + 1, i.toString)), 4)
+        .toDF("c1", "c2").createOrReplaceTempView("big")
+
+      // The inner join over the two small tables is convertible, but the outer sort merge join
+      // requires its (left) child ordered on the join key. When the inner join is converted to a
+      // shuffled hash join (ordering Nil), EnsureRequirements must re-insert the sort above it so
+      // the outer sort merge join's required ordering is still satisfied and the result is correct.
+      val query = "SELECT small1.c1 FROM small1 JOIN small2 ON small1.c1 = small2.c1 " +
+        "JOIN big ON small1.c1 = big.c1"
+
+      // Exclude DynamicJoinSelection so only the new physical rule can convert, isolating it.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
+        SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+        val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+        // The inner join is converted; the outer join stays a sort merge join whose (left) child
+        // ordering is re-established by EnsureRequirements, so the plan remains valid.
+        val smj = findTopLevelSortMergeJoin(adaptive)
+        assert(smj.size === 1)
+        assert(smj.head.left.outputOrdering.nonEmpty,
+          "outer sort merge join must keep its left child ordered on the join key")
+        assert(findTopLevelShuffledHashJoin(adaptive).size === 1)
+      }
+    }
+  }
+
+  test("SPARK-58084: SimpleCostEvaluator counts local sorts as a lower-priority tiebreaker") {
+    def leaf: SparkPlan = CostTestLeafExec()
+    def shuffle(child: SparkPlan): SparkPlan = ShuffleExchangeExec(SinglePartition, child)
+    def localSort(child: SparkPlan): SparkPlan =
+      SortExec(SortOrder(child.output.head, Ascending) :: Nil, global = false, child)
+
+    val evaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = false, countLocalSort = true)
+    def cost(plan: SparkPlan): Cost = evaluator.evaluateCost(plan)
+
+    // Same number of shuffles: fewer local sorts is cheaper.
+    val oneShuffleTwoSorts = localSort(localSort(shuffle(leaf)))
+    val oneShuffleOneSort = localSort(shuffle(leaf))
+    val oneShuffleNoSort = shuffle(leaf)
+    assert(cost(oneShuffleOneSort).compare(cost(oneShuffleTwoSorts)) < 0)
+    assert(cost(oneShuffleNoSort).compare(cost(oneShuffleOneSort)) < 0)
+
+    // The number of shuffles dominates: a plan with more shuffles is costlier even with no sorts.
+    val twoShufflesNoSort = shuffle(shuffle(leaf))
+    assert(cost(oneShuffleTwoSorts).compare(cost(twoShufflesNoSort)) < 0)
+
+    // When countLocalSort is disabled, local sorts do not affect the cost.
+    val noSortEvaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = false, countLocalSort = false)
+    assert(noSortEvaluator.evaluateCost(oneShuffleTwoSorts)
+      .compare(noSortEvaluator.evaluateCost(oneShuffleNoSort)) === 0)
+
+    // Skew join dominates, ahead of shuffles and sorts: with forceOptimizeSkewedJoin, a plan with
+    // a skew join is cheaper than one without, even if the skew-join plan has more shuffles and
+    // local sorts.
+    def join(l: SparkPlan, r: SparkPlan, isSkew: Boolean): SparkPlan =
+      SortMergeJoinExec(l.output.take(1), r.output.take(1), Inner, None, l, r, isSkewJoin = isSkew)
+    val skewEvaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = true, countLocalSort = true)
+    // Skew-join plan: 1 skew join, 3 shuffles, 2 local sorts.
+    val withSkewJoin = skewEvaluator.evaluateCost(
+      join(localSort(shuffle(shuffle(leaf))), localSort(shuffle(leaf)), isSkew = true))
+    // Non-skew plan: 0 skew joins, 2 shuffles, 0 local sorts.
+    val withoutSkewJoin = skewEvaluator.evaluateCost(
+      join(shuffle(leaf), shuffle(leaf), isSkew = false))
+    assert(withSkewJoin.compare(withoutSkewJoin) < 0)
+  }
+
+  test("SPARK-58084: do not convert sort merge join when it adds local sorts") {
+    withTempView("big", "small") {
+      spark.sparkContext.parallelize(
+        (1 to 2000).map(i => TestData(i % 20 + 1, i.toString)), 4)
+        .toDF("k", "v").createOrReplaceTempView("big")
+      spark.sparkContext.parallelize(
+        (1 to 20).map(i => TestData(i, i.toString)), 4)
+        .toDF("k", "v").createOrReplaceTempView("small")
+
+      // Both join sides are sort aggregates grouped by the join key, so each child is already
+      // ordered on the key for free and the sort merge join needs no explicit child sort. A parent
+      // window partitions by the right join key. A sort merge inner join keeps both sides' key
+      // orderings, satisfying the window; a shuffled hash join with build-right keeps only the left
+      // ordering (see HashJoin.outputOrdering), so converting it forces an extra local sort above
+      // the window. The conversion is therefore only beneficial without counting local sorts.
+      val query =
+        "SELECT l.k, count(*) OVER (PARTITION BY r.k) c " +
+          "FROM (SELECT k, count(*) c FROM big GROUP BY k) l " +
+          "JOIN (SELECT k, count(*) c FROM small GROUP BY k) r ON l.k = r.k"
+
+      def countLocalSorts(plan: SparkPlan): Int = collect(plan) {
+        case s: SortExec if !s.global => s
+      }.size
+
+      // Force sort aggregate and exclude DynamicJoinSelection so only the new rule can convert.
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false",
+        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
+        SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+        // Not counting local sorts: the conversion is adopted even though it adds a local sort.
+        withSQLConf(SQLConf.ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED.key -> "false") {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelShuffledHashJoin(adaptive).size === 1)
+          assert(findTopLevelSortMergeJoin(adaptive).isEmpty)
+          assert(countLocalSorts(adaptive) == 5)
+        }
+        // Counting local sorts: the converted plan has more local sorts, so it is rejected and the
+        // sort merge join is kept.
+        withSQLConf(SQLConf.ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED.key -> "true") {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelShuffledHashJoin(adaptive).isEmpty)
+          assert(findTopLevelSortMergeJoin(adaptive).size === 1)
+          assert(countLocalSorts(adaptive) == 4)
+        }
+      }
+    }
+  }
+
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
       Seq("REPARTITION", "REBALANCE(key)")
@@ -3707,6 +3891,16 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+}
+
+/**
+ * A minimal leaf plan with a single output attribute, used to build tiny plans for cost tests.
+ */
+private case class CostTestLeafExec() extends LeafExecNode {
+  override protected def doExecute(): RDD[InternalRow] =
+    throw SparkException.internalError("should not be executed")
+  override def output: Seq[Attribute] =
+    AttributeReference("a", org.apache.spark.sql.types.IntegerType)() :: Nil
 }
 
 /**

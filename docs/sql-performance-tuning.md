@@ -375,6 +375,22 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
        </td>
        <td>3.2.0</td>
      </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled</code></td>
+       <td>false</td>
+       <td>
+         When true, Spark converts a sort-merge join to a shuffled hash join during adaptive execution when the build side's materialized per-partition sizes are all within <code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code>, even when non-shuffle operators (such as aggregate, project, filter and window) sit between the join and its input shuffle.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.costEvaluator.countLocalSort.enabled</code></td>
+       <td>false</td>
+       <td>
+         When true, the default AQE cost evaluator also counts the number of local sorts as a lower-priority tiebreaker below the number of shuffles, so that among plans with the same number of shuffles the one with fewer local sorts is preferred. For example, a sort-merge join is replaced by a shuffled hash join only when the conversion does not push extra sorts elsewhere in the plan.
+       </td>
+       <td>4.3.0</td>
+     </tr>
   </table>
 
 ### Optimizing Skew Join

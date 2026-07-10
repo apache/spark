@@ -1361,6 +1361,30 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
 
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled")
+      .doc("When true, Spark converts a sort merge join to a shuffled hash join during adaptive " +
+        "execution when the build side's materialized per-partition sizes are all within " +
+        s"${ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key}, even when non-shuffle " +
+        "operators sit between the join and its input shuffle.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED =
+    buildConf("spark.sql.adaptive.costEvaluator.countLocalSort.enabled")
+      .doc("When true, the default AQE cost evaluator also counts the number of local sorts as a " +
+        "lower-priority tiebreaker below the number of shuffles. This lets adaptive execution " +
+        "prefer a plan with fewer local sorts among plans with the same number of shuffles, for " +
+        s"example a shuffled hash join produced by " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} over a " +
+        "sort merge join when the conversion does not push extra sorts elsewhere.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
       .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will optimize the " +
@@ -8237,6 +8261,12 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
+
+  def convertSortMergeJoinToShuffledHashJoinEnabled: Boolean =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED)
+
+  def costEvaluatorCountLocalSortEnabled: Boolean =
+    getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 

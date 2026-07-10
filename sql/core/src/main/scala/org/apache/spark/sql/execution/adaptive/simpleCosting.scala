@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SortExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledJoin}
 
@@ -37,24 +37,52 @@ case class SimpleCost(value: Long) extends Cost {
 
 /**
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
- * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
+ * [[ShuffleExchangeLike]] nodes, skew join nodes and (optionally) local [[SortExec]] nodes in the
+ * plan.
+ *
+ * The cost is packed into a single [[Long]] so that the components are compared in priority order.
+ * From the most significant bits to the least significant:
+ *   - `-numSkewJoins` (only when `forceOptimizeSkewedJoin` is true), so that more skew joins means
+ *     lower cost and is compared first;
+ *   - `numShuffles`, so that fewer shuffles means lower cost;
+ *   - `numLocalSorts` (only when `countLocalSort` is true), the lowest-priority tiebreaker, so that
+ *     among plans with the same number of skew joins and shuffles the one with fewer local sorts is
+ *     preferred (e.g. a shuffled hash join over a sort merge join when the conversion does not push
+ *     extra sorts elsewhere).
  */
-case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEvaluator {
+case class SimpleCostEvaluator(forceOptimizeSkewedJoin: Boolean, countLocalSort: Boolean)
+  extends CostEvaluator {
+
+  import SimpleCostEvaluator._
+
   override def evaluateCost(plan: SparkPlan): Cost = {
-    val numShuffles = plan.collect {
-      case s: ShuffleExchangeLike => s
-    }.size
+    var numShuffles = 0
+    var numLocalSorts = 0
+    plan.foreach {
+      case _: ShuffleExchangeLike => numShuffles += 1
+      case s: SortExec if !s.global => numLocalSorts += 1
+      case _ =>
+    }
+    val sortCost = if (countLocalSort) numLocalSorts.toLong else 0L
+    val shuffleAndSortCost = (numShuffles.toLong << SHUFFLE_SHIFT) | sortCost
 
     if (forceOptimizeSkewedJoin) {
       val numSkewJoins = plan.collect {
         case j: ShuffledJoin if j.isSkewJoin => j
         case j: BroadcastHashJoinExec if j.isSkewJoin => j
       }.size
-      // We put `-numSkewJoins` in the first 32 bits of the long value, so that it's compared first
-      // when comparing the cost, and larger `numSkewJoins` means lower cost.
-      SimpleCost(-numSkewJoins.toLong << 32 | numShuffles)
+      SimpleCost((-numSkewJoins.toLong << SKEW_SHIFT) | shuffleAndSortCost)
     } else {
-      SimpleCost(numShuffles)
+      SimpleCost(shuffleAndSortCost)
     }
   }
+}
+
+object SimpleCostEvaluator {
+  // Bit shifts that place each cost component in its own band of the packed Long: the local-sort
+  // count occupies the low 32 bits, the number of shuffles the next band, and the skew-join term
+  // above both. 32 bits is far more than the number of sorts or shuffles a single query plan can
+  // contain.
+  private val SHUFFLE_SHIFT = 32
+  private val SKEW_SHIFT = 48
 }
