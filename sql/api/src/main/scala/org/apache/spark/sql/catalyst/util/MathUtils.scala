@@ -129,7 +129,7 @@ object MathUtils {
   // paths of `Ceil`/`Floor` so the two never diverge.
   def doubleToLong(value: Double, context: QueryContext): Long = {
     if (!value.isNaN &&
-        (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
       throw ExecutionErrors.arithmeticOverflowError("long overflow", context = context)
     }
     value.toLong
