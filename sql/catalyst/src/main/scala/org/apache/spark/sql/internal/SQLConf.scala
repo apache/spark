@@ -6490,6 +6490,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_VARIANT_INTO_SCAN_PULL_OUT_EXTRACTIONS =
+    buildConf("spark.sql.variant.pushVariantIntoScan.pullOutExtractions")
+      .internal()
+      .doc("When true, extend variant field pushdown to extractions used inside aggregate " +
+        "functions, join conditions, sort keys, and projections above joins (including through " +
+        "chained joins), so that only the requested fields are read from the scan for these " +
+        "cases too instead of the whole variant column. Has no effect unless " +
+        "spark.sql.variant.pushVariantIntoScan is also true.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR =
     buildConf("spark.sql.variant.pushVariantIntoScan.deferCastError")
       .internal()
