@@ -528,19 +528,23 @@ def _has_fast_native_to_pylist() -> bool:
     return _pyarrow_native_to_pylist_is_fast
 
 
-_numpy_available: Optional[bool] = None
+# None means not yet checked; True/False after the first _is_numpy_available()
+# call. NumPy is only needed indirectly here (pyarrow's Array.to_numpy in
+# _to_pylist), so unlike stateful_processor_api_client.py no np module
+# reference is cached.
+has_numpy: Optional[bool] = None
 
 
 def _is_numpy_available() -> bool:
-    global _numpy_available
-    if _numpy_available is None:
+    global has_numpy
+    if has_numpy is None:
         try:
             import numpy  # noqa: F401
 
-            _numpy_available = True
+            has_numpy = True
         except ImportError:
-            _numpy_available = False
-    return _numpy_available
+            has_numpy = False
+    return has_numpy
 
 
 class LocalDataToArrowConversion:
@@ -1038,7 +1042,6 @@ class ArrowTableToRowsConversion:
         for apache/arrow#50326.
         """
         import pyarrow as pa
-        import pyarrow.types as pa_types
 
         if _has_fast_native_to_pylist() or not _is_numpy_available():
             # Recent PyArrow converts without per-element Scalars natively
@@ -1047,13 +1050,13 @@ class ArrowTableToRowsConversion:
             return column.to_pylist()
 
         if isinstance(column, pa.ChunkedArray):
-            result: List[Any] = []
+            result = []
             for chunk in column.chunks:
                 result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
             return result
 
         column_type = column.type
-        if (pa_types.is_list(column_type) or pa_types.is_large_list(column_type)) and len(
+        if (pa.types.is_list(column_type) or pa.types.is_large_list(column_type)) and len(
             column
         ) > 0:
             n = len(column)
