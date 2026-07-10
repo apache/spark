@@ -251,6 +251,30 @@ object SQLConf {
     }
   }
 
+  val ALLOW_CREATING_UDT_FROM_STRING =
+    buildConf(SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING)
+      .doc("When true, Spark loads and instantiates the UserDefinedType class named in a schema " +
+        "string (for example the schema stored in Parquet/ORC file metadata) while inferring or " +
+        "parsing a schema. Because the class name is taken from the data being read, a crafted " +
+        "file can make Spark load an arbitrary class from the classpath. Set this to false to " +
+        "block loading UDT classes by name, optionally allowing specific classes via " +
+        s"'${SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES}'.")
+      .version("4.1.3")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ALLOWED_DYNAMIC_UDT_CLASSES =
+    buildConf(SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES)
+      .doc(s"When '${SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING}' is false, UserDefinedType " +
+        "classes listed here (by fully qualified class name) may still be loaded and " +
+        "instantiated from a schema string. Has no effect when UDT loading is enabled.")
+      .version("4.1.3")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
     buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
       .internal()
@@ -7186,8 +7210,11 @@ object SQLConf {
   val TIME_TRAVEL_AT_SYNTAX_ENABLED =
     buildConf("spark.sql.timeTravel.atSyntax.enabled")
       .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
-        "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
-        "table names fails at parse time.")
+        "travel suffix: 'name@v123' reads version 123 of the table, and " +
+        "'name@20240101000000000' (format yyyyMMddHHmmssSSS, interpreted in the session " +
+        "time zone) reads the table as of that timestamp, to millisecond precision (use " +
+        "TIMESTAMP AS OF for finer granularity). When false, '@' in table names fails at " +
+        "parse time.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -7406,6 +7433,112 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val SINGLE_TASK_EXECUTION_ENABLED =
+    buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
+      .doc("When true, eligible query fragments that read a small single-partition scan can run " +
+        "in a single task, skipping the shuffle that would otherwise be inserted before an " +
+        "operator such as a sort or aggregation. This avoids the scheduling overhead of an " +
+        "unnecessary shuffle for small, low-latency queries.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val SINGLE_TASK_EXECUTION_AGGREGATION =
+    buildConf("spark.sql.optimizer.singleTaskExecution.aggregation")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with aggregation operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_EXPAND =
+    buildConf("spark.sql.optimizer.singleTaskExecution.expand")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with expand operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_LIMIT_OFFSET =
+    buildConf("spark.sql.optimizer.singleTaskExecution.limitOffset")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with limit or offset operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_SORT =
+    buildConf("spark.sql.optimizer.singleTaskExecution.sort")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with sort operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_WINDOW =
+    buildConf("spark.sql.optimizer.singleTaskExecution.window")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with window operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_MAX_NUM_FILES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.maxNumFiles")
+      .internal()
+      .doc("The maximum number of files that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_MIN_NUM_FILES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.minNumFiles")
+      .internal()
+      .doc("The minimum number of files that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_MIN_NUM_BYTES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.minNumBytes")
+      .internal()
+      .doc("The minimum total size in bytes that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_MIN_ROWS =
+    buildConf("spark.sql.optimizer.singleTaskExecution.localTableScan.minRows")
+      .internal()
+      .doc("The minimum number of rows that a local in-memory relation may have for the " +
+        "single-task optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_THRESHOLD =
+    buildConf("spark.sql.optimizer.singleTaskExecution.localTableScan.threshold")
+      .internal()
+      .doc("The maximum number of rows that a local in-memory relation may have for the " +
+        "single-task optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1000)
 
   val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
     .internal()
@@ -8934,6 +9067,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sessionFunctionResolutionOrder: String =
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  // UDT loading configuration.
+  override def allowCreatingUDTFromString: Boolean = getConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING)
+  override def allowedDynamicUDTClasses: Seq[String] = getConf(SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES)
 
   /**
    * Returns true when the system catalog is prioritized for 2-part builtin/session resolution.

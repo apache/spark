@@ -221,7 +221,7 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.15.Final</netty.version>
+    <netty.version>4.2.16.Final</netty.version>
     <netty-tcnative.version>2.0.80.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
@@ -878,7 +878,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.11.0</version>
+        <version>1.11.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>

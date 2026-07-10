@@ -1455,11 +1455,6 @@
           "Struct literal is not set."
         ]
       },
-      "UDT_JVM_CLASS_NOT_UDT" : {
-        "message" : [
-          "The 'jvm_class' <jvmClass> in the UDT is not a subclass of UserDefinedType."
-        ]
-      },
       "UDT_TYPE_FIELD_INVALID" : {
         "message" : [
           "UserDefinedType requires the 'type' field to be 'udt', but got '<udtType>'."
@@ -5121,6 +5116,12 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT" : {
+    "message" : [
+      "The provided timestamp <timestamp> doesn't match the expected syntax <format>."
+    ],
+    "sqlState" : "22000"
+  },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
       "The value of the typed literal <valueType> is invalid: <value>."
@@ -7397,6 +7398,12 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_SHUFFLE_INCORRECT_SEQUENCE_NUMBER" : {
     "message" : [
       "Streaming shuffle <messageType> between writer <writerId> and reader <readerId> expected to have sequence number <expSeqNum>, but the actual sequence number is <actSeqNum>. Please verify that the messages are sent in order."
@@ -7693,6 +7700,18 @@
       "Failed to evaluate the user-defined table function because its 'analyze' method returned a requested 'select' expression (<expression>) that does not include a corresponding alias; please update the UDTF to specify an alias there and then try the query again."
     ],
     "sqlState" : "42802"
+  },
+  "UDT_CLASS_LOADING_DISABLED" : {
+    "message" : [
+      "Cannot load the class <udtClass> as a user-defined type. Loading UserDefinedType classes by name is disabled by `spark.sql.udt.allowCreatingUDTFromString`, and <udtClass> is not in the allow list `spark.sql.udt.allowedDynamicUDTClasses` (currently <allowed>). Set `spark.sql.udt.allowCreatingUDTFromString` to true, or add the class to the allow list, only if you trust the source of the data being read."
+    ],
+    "sqlState" : "2203G"
+  },
+  "UDT_CLASS_NOT_USER_DEFINED_TYPE" : {
+    "message" : [
+      "The class <udtClass> cannot be loaded as a user-defined type because it is not a subtype of UserDefinedType."
+    ],
+    "sqlState" : "2203G"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [

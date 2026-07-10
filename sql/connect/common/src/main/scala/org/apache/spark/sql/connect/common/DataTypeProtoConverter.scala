@@ -159,8 +159,8 @@ object DataTypeProtoConverter {
         SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
       if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
         throw InvalidPlanInput(
-          "CONNECT_INVALID_PLAN.UDT_JVM_CLASS_NOT_UDT",
-          Map("jvmClass" -> t.getJvmClass))
+          "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          Map("udtClass" -> t.getJvmClass))
       }
       clazz.getConstructor().newInstance()
     } else {
