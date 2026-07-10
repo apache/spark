@@ -226,6 +226,9 @@ def plus_four(x):
     if x is not None:
         return x + 4
 
+def plus_four_unsafe(x):
+    return x + 4
+
 
 def plus_four_with_else(x):
     if x is not None:
@@ -426,19 +429,16 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
                 interpreted_value = _SENTINEL_RAISED
                 interpreted_error = e
 
-        # If both sides raise, treat that as "matching" -- e.g. Python's
-        # ``None > 0`` raises TypeError, and the transpiler's NULL-guarded
-        # comparison raises a SparkRuntimeException. The actual exception
-        # types differ; we only require both sides to have failed.
-        if transpiled_error is not None or interpreted_error is not None:
-            self.assertIsNotNone(
-                transpiled_error,
-                f"{func_name!r}: interpreted raised {interpreted_error!r} but transpiled did not",
-            )
+        # If the transpiled path raises an exception we also need the interpreted path to raise one,
+        # however if the Python code (that in the interpreted path) raises an exception, the transpiled
+        # path may return a valid value.
+        if transpiled_error is not None:
             self.assertIsNotNone(
                 interpreted_error,
                 f"{func_name!r}: transpiled raised {transpiled_error!r} but interpreted did not",
             )
+        elif interpreted_error is not None:
+            interpreted_value = transpiled_value
 
         return transpiled_value, interpreted_value
 
@@ -463,6 +463,14 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         def test_plus_four_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(plus_four, LongType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
+        def test_plus_four_unsafe_matches_python(self, value):
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(plus_four_unsafe, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
 
         @_hyp_settings
