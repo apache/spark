@@ -26,7 +26,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
-  ExecutionError, Finish, Init, InitResponse, UdfControlRequest,
+  ExecutionError, Finish, FinishResponse, Init, InitResponse, UdfControlRequest,
   UdfControlResponse, UdfRequest, UdfResponse, UdfWorkerGrpc}
 import org.apache.spark.udf.worker.core.{Termination, WorkerHandle, WorkerLogger, WorkerSession}
 import org.apache.spark.udf.worker.core.WorkerSession.SessionState
@@ -54,8 +54,11 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  * '''Driving model.''' Consumption-driven (Volcano / pull): the thread that
  * consumes the [[doProcess]] result iterator is the one that pulls the next
  * input batch and sends its `DataRequest`. Nothing is sent until the iterator
- * is consumed, and input flows one batch per output pull. The gRPC callback
- * thread only receives output.
+ * is consumed, and the gRPC callback thread only receives output. Note this is
+ * pull-driven, not strictly one-input-per-output: `advance` sends the next input
+ * batch whenever the output queue is momentarily empty, so under asynchronous
+ * delivery it can push several input batches before any output is read (bounded
+ * only by HTTP/2 flow control), rather than lock-stepping one input per output.
  *
  * '''State machine.''' This class does not keep its own state machine: it
  * drives the single [[WorkerSession.SessionState]] owned by the base. The base
@@ -132,14 +135,14 @@ class GrpcWorkerSession(
   // stalled consumer).
   private val outputQueue = new LinkedBlockingQueue[QueueItem]()
 
-  // Latch fired when `InitResponse` (success or error) or a transport error
-  // arrives. init() blocks on this; until it fires we have no proof the
-  // worker actually accepted the session.
-  private val initLatch = new CountDownLatch(1)
-
-  // The InitResponse the worker sent (success or error), captured so init()
-  // can return it. None until InitResponse arrives.
-  private val initResponse = new AtomicReference[Option[InitResponse]](None)
+  // The worker's `InitResponse` (success or error) coupled with the latch that
+  // init() blocks on. Fires when the InitResponse arrives (`complete`) or when a
+  // terminal settles first without one -- transport error, half-close, or a
+  // premature terminator (`signalWithoutValue`). Until it fires we have no proof
+  // the worker accepted the session. Bundling the value and the latch in one
+  // object keeps the "publish then release" ordering in a single place rather
+  // than leaving callers to remember to count down after setting the reference.
+  private val initValue = new OneShotValue[InitResponse]
 
   // Fired when the session reaches a terminal [[SessionState]]. doClose() and
   // the init-error path block on this to drain the terminator.
@@ -169,36 +172,48 @@ class GrpcWorkerSession(
     override def onNext(response: UdfResponse): Unit = {
       response.getResponseCase match {
         case UdfResponse.ResponseCase.DATA =>
-          outputQueue.put(QueueItem.Batch(response.getData))
+          // A DataResponse before InitResponse violates the protocol
+          // (InitResponse must precede any DataResponse). Enqueuing it would
+          // leave init() blocked on initValue until initResponseTimeoutMs, then
+          // fail with a misleading "timed out" instead of the real protocol
+          // fault. Settle a transport-failure terminal and release init(), the
+          // same fast-fail discipline the malformed / terminator branches use.
+          if (!initResolved) {
+            Transitions.transportFailed(new IllegalStateException(
+              "worker sent a DataResponse before InitResponse"))
+            initValue.signalWithoutValue()
+          } else {
+            outputQueue.put(QueueItem.Batch(response.getData))
+          }
 
         case UdfResponse.ResponseCase.CONTROL =>
           handleControl(response.getControl)
 
         case other =>
           // A malformed response (empty / unknown oneof) is a terminal
-          // transport failure. Count down initLatch like every other
+          // transport failure. Release initValue like every other
           // terminal-settling path here (onError / onCompleted / each
           // handleControl branch): if this arrives before InitResponse, doInit
           // must fail fast with this cause rather than block until
           // initResponseTimeoutMs and report a misleading "timed out" error.
-          completeTerminal(Termination.TransportFailed(new IllegalStateException(
-            s"unexpected response oneof: $other")))
-          initLatch.countDown()
+          Transitions.transportFailed(new IllegalStateException(
+            s"unexpected response oneof: $other"))
+          initValue.signalWithoutValue()
       }
     }
 
     override def onError(t: Throwable): Unit = {
       // Transport-level failure: the stream is dead. No further writes are
       // possible (reaching a terminal state closes the write side). Settle the
-      // terminal BEFORE counting down initLatch: init() blocks on that latch,
-      // and only await/countDown establish a happens-before edge, so a thread
-      // woken by the countDown must already be able to observe the terminal.
-      // That lets init() surface the transport cause instead of timing out
-      // after initResponseTimeoutMs with a misleading "timed out" message --
-      // or, if it saw a transient non-terminal state, the defensive "init latch
-      // fired without an InitResponse or terminal" error.
-      completeTerminal(Termination.TransportFailed(t))
-      initLatch.countDown()
+      // terminal BEFORE releasing initValue: init() blocks on that latch, and
+      // only await/release establish a happens-before edge, so a thread woken by
+      // the release must already be able to observe the terminal. That lets
+      // init() surface the transport cause instead of timing out after
+      // initResponseTimeoutMs with a misleading "timed out" message -- or, if it
+      // saw a transient non-terminal state, the defensive "init latch fired
+      // without an InitResponse or terminal" error.
+      Transitions.transportFailed(t)
+      initValue.signalWithoutValue()
     }
 
     override def onCompleted(): Unit = {
@@ -206,12 +221,12 @@ class GrpcWorkerSession(
       // / CancelResponse). Treat as transport error so the engine sees a
       // failure, not a silent end-of-stream.
       if (!currentState.isTerminal) {
-        completeTerminal(Termination.TransportFailed(new IllegalStateException(
-          "worker response stream closed without a terminator")))
+        Transitions.transportFailed(new IllegalStateException(
+          "worker response stream closed without a terminator"))
       }
       // Defensive: if onCompleted reached us before InitResponse, doInit is
-      // still blocked on initLatch and would otherwise time out.
-      initLatch.countDown()
+      // still blocked on initValue and would otherwise time out.
+      initValue.signalWithoutValue()
     }
   }
 
@@ -228,27 +243,33 @@ class GrpcWorkerSession(
   private def handleControl(ctrl: UdfControlResponse): Unit = ctrl.getControlCase match {
     case UdfControlResponse.ControlCase.INIT =>
       val resp = ctrl.getInit
-      // Capture the InitResponse so init() can return it (or throw on its error).
-      initResponse.set(Some(resp))
       if (resp.hasError) {
-        initLatch.countDown()
-        // Per the protocol the engine follows an init error with Cancel; send it
-        // if the request stream is up. If the Cancel cannot be written -- e.g. a
-        // directExecutor worker delivered InitResponse reentrantly, before
-        // doInit published requestObserver -- settle the terminal here so doInit
-        // does not wait the full terminalTimeoutMs for a CancelResponse that can
-        // never arrive. (When the Cancel is sent, the CancelResponse settles the
-        // terminal instead.)
-        if (!sendCancelInternal(() => cancelWithReason("init failed")) &&
-            !currentState.isTerminal) {
-          completeTerminal(Termination.Failed(resp.getError))
-        }
+        // Attribute a subsequent close()'s terminator to the init error rather
+        // than a bare Cancelled, mirroring the data-phase ERROR branch.
+        executionError.compareAndSet(None, Some(resp.getError))
+        // Settle the terminal as Failed(err) BEFORE attempting Cancel so close()
+        // reports the init error (Termination.Failed) instead of the empty
+        // Cancelled the worker's CancelResponse would otherwise leave. The
+        // terminal is sticky, so the Cancel we send next is purely for worker
+        // cleanup and its CancelResponse is a no-op; if the Cancel cannot be
+        // written (e.g. a directExecutor worker delivered InitResponse
+        // reentrantly, before doInit published requestObserver), the terminal is
+        // already set, so doInit does not wait the full terminalTimeoutMs for a
+        // CancelResponse that can never arrive.
+        Transitions.failed(resp.getError)
+        // Publish the InitResponse + release init() only after the terminal is
+        // settled: init() blocks on this latch and only await/release establish
+        // happens-before, so a woken init() must be able to observe the terminal.
+        initValue.complete(resp)
+        sendCancelInternal(() => cancelWithReason("init failed"))
       } else {
         // InitResponse OK: init succeeded. A terminal that arrived first (e.g. a
         // racing transport error) must win, so only advance from the expected
         // Initializing state; process() then opens the data phase (Streaming).
-        compareAndSetState(SessionState.Initializing, SessionState.Initialized)
-        initLatch.countDown()
+        Transitions.initAccepted()
+        // Publish + release only after the CAS so a woken init() observes
+        // Initialized rather than the transient Initializing state.
+        initValue.complete(resp)
       }
 
     case UdfControlResponse.ControlCase.ERROR =>
@@ -264,38 +285,39 @@ class GrpcWorkerSession(
       // "the stream has not reached Initialized"; completeTerminal is idempotent,
       // so the data-phase ERROR -> Cancel -> CancelResponse path is unaffected.
       if (!initResolved) {
-        completeTerminal(Termination.Failed(err))
+        Transitions.failed(err)
       }
-      // Surface the error to doInit. Count down AFTER settling the terminal
-      // above: init() blocks on this latch and only await/countDown establish
+      // Surface the error to doInit. Release AFTER settling the terminal above:
+      // init() blocks on this latch and only await/release establish
       // happens-before, so a woken doInit must be able to observe the terminal
       // rather than a transient non-terminal state. Idempotent, so the normal
-      // data-phase path (latch already fired during init) is unaffected.
-      initLatch.countDown()
+      // data-phase path (latch already fired during init) is unaffected. No value
+      // to publish -- an ERROR is not an InitResponse.
+      initValue.signalWithoutValue()
       sendCancelInternal(() => cancelWithReason("aborting after ErrorResponse"))
 
     case UdfControlResponse.ControlCase.FINISH =>
       // The FinishResponse carries metrics + the finish-callback data/error.
       // Keep it on the terminal so close() can return it; the iterator inspects
       // its error field to decide whether to throw.
-      completeTerminal(Termination.Finished(ctrl.getFinish))
+      Transitions.finished(ctrl.getFinish)
       // Defensive: FINISH before InitResponse is a worker protocol bug, but
       // we should fail init fast rather than hang the 30s init timeout.
-      initLatch.countDown()
+      initValue.signalWithoutValue()
 
     case UdfControlResponse.ControlCase.CANCEL =>
       // The CancelResponse carries metrics + the cancel-callback error. Keep it
       // on the terminal so close() can return it; any prior ErrorResponse is
       // tracked in executionError and surfaced by the iterator.
-      completeTerminal(Termination.Cancelled(ctrl.getCancel))
+      Transitions.cancelled(ctrl.getCancel)
       // Defensive: CANCEL before InitResponse unblocks doInit so it can
       // surface the cancellation instead of timing out.
-      initLatch.countDown()
+      initValue.signalWithoutValue()
 
     case UdfControlResponse.ControlCase.CONTROL_NOT_SET =>
-      completeTerminal(Termination.TransportFailed(new IllegalStateException(
-        "empty UdfControlResponse oneof")))
-      initLatch.countDown()
+      Transitions.transportFailed(new IllegalStateException(
+        "empty UdfControlResponse oneof"))
+      initValue.signalWithoutValue()
   }
 
   /** True once init has resolved (Initialized or beyond). */
@@ -307,6 +329,48 @@ class GrpcWorkerSession(
   private def cancelWithReason(reason: String): Cancel =
     Cancel.newBuilder().setReason(reason).build()
 
+  /**
+   * The protocol transition graph in one place. Every edge acts on the single
+   * [[WorkerSession.SessionState]] owned by the base via [[compareAndSetState]]
+   * (non-terminal edges) or [[completeTerminal]] (terminals) -- this adds names
+   * for the edges, not a second source of truth or any new synchronization. Each
+   * method is driven by whichever thread reaches that point (the gRPC callback
+   * thread for worker-event edges, the engine/consumer thread for the
+   * `Finish`/`Cancel` edges); atomicity is the base's CAS, and a terminal that
+   * arrived first still wins (the non-terminal CASes fail against it, and
+   * [[completeTerminal]] is first-wins). Reading these five non-terminal edges
+   * and four terminals together is the transition diagram in the class scaladoc.
+   */
+  private object Transitions {
+    /** `InitResponse` OK: `Initializing -> Initialized`. */
+    def initAccepted(): Boolean =
+      compareAndSetState(SessionState.Initializing, SessionState.Initialized)
+
+    /** Input exhausted and `Finish` written: `Streaming -> Finishing` (once). */
+    def finishSent(): Boolean =
+      compareAndSetState(SessionState.Streaming, SessionState.Finishing)
+
+    /** `Cancel` written: `cur -> Cancelling`, from any non-terminal `cur`. */
+    def cancelSentFrom(cur: SessionState): Boolean =
+      !cur.isTerminal && compareAndSetState(cur, SessionState.Cancelling)
+
+    /** Clean terminal carrying the worker's `FinishResponse`. */
+    def finished(response: FinishResponse): Boolean =
+      completeTerminal(Termination.Finished(response))
+
+    /** Clean terminal carrying the worker's `CancelResponse`. */
+    def cancelled(response: CancelResponse): Boolean =
+      completeTerminal(Termination.Cancelled(response))
+
+    /** Failure terminal carrying a structured [[ExecutionError]]. */
+    def failed(error: ExecutionError): Boolean =
+      completeTerminal(Termination.Failed(error))
+
+    /** Failure terminal carrying a transport-level cause. */
+    def transportFailed(cause: Throwable): Boolean =
+      completeTerminal(Termination.TransportFailed(cause))
+  }
+
   // ---- WorkerSession hooks ------------------------------------------------
 
   override protected def doInit(message: Init): InitResponse = {
@@ -316,7 +380,7 @@ class GrpcWorkerSession(
     // timed out" error.
     if (channel.getState(false) == ConnectivityState.SHUTDOWN) {
       val ex = new IllegalStateException("gRPC channel is shut down")
-      completeTerminal(Termination.TransportFailed(ex))
+      Transitions.transportFailed(ex)
       throw new GrpcWorkerSessionException("UDF worker channel is closed", ex)
     }
     // Open the stream as a local first; only publish `requestObserver`
@@ -341,7 +405,7 @@ class GrpcWorkerSession(
         // Expose the stream so a subsequent close() can still attempt a
         // best-effort half-close; the terminal already reflects the failure.
         requestObserver = stream
-        completeTerminal(Termination.TransportFailed(e))
+        Transitions.transportFailed(e)
         // Surface as GrpcWorkerSessionException so the engine integration layer
         // (which catches that type and wraps it) sees a uniform init-failure
         // exception rather than the raw transport error.
@@ -349,15 +413,15 @@ class GrpcWorkerSession(
     }
 
     val responded = try {
-      initLatch.await(initResponseTimeoutMs, TimeUnit.MILLISECONDS)
+      initValue.await(initResponseTimeoutMs)
     } catch {
       case _: InterruptedException =>
         Thread.currentThread().interrupt()
         sendCancelInternal(() => cancelWithReason("interrupted during init"))
         // Make sure close() does not block waiting for a terminator that
         // will never arrive on this thread's behalf.
-        completeTerminal(Termination.TransportFailed(
-          new InterruptedException("interrupted while waiting for InitResponse")))
+        Transitions.transportFailed(
+          new InterruptedException("interrupted while waiting for InitResponse"))
         throw new InterruptedException("interrupted while waiting for InitResponse")
     }
 
@@ -368,14 +432,14 @@ class GrpcWorkerSession(
       // Settle the terminal so a subsequent close() does not stall for a
       // second `terminalTimeoutMs` waiting for a worker that already missed
       // its init deadline.
-      completeTerminal(Termination.TransportFailed(timeout))
+      Transitions.transportFailed(timeout)
       // Surface as GrpcWorkerSessionException (carrying the timeout cause) so
       // the engine integration layer that catches that type can wrap it.
       throw new GrpcWorkerSessionException(
         s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms", timeout)
     }
 
-    initResponse.get() match {
+    initValue.get match {
       case Some(resp) if resp.hasError =>
         // The protocol requires the engine to send Cancel after an init
         // error and the worker to respond with CancelResponse. Drain it
@@ -387,10 +451,10 @@ class GrpcWorkerSession(
         resp
       case None =>
         // No InitResponse arrived but the latch fired. The defensive
-        // initLatch.countDown() in handleControl / onError / onCompleted
-        // means we get here when the worker terminated the stream before
-        // sending InitResponse. Surface that as an init failure rather than
-        // letting the caller proceed as if init succeeded.
+        // initValue.signalWithoutValue() in handleControl / onError /
+        // onCompleted means we get here when the worker terminated the stream
+        // before sending InitResponse. Surface that as an init failure rather
+        // than letting the caller proceed as if init succeeded.
         currentState match {
           case SessionState.Terminal(Termination.TransportFailed(cause)) =>
             throw new GrpcWorkerSessionException(
@@ -426,7 +490,7 @@ class GrpcWorkerSession(
       // init threw before publishing). There is no protocol terminator; treat
       // the session as cancelled-before-start. The base WorkerSession still
       // releases the worker handle, so the worker is torn down.
-      completeTerminal(Termination.Cancelled(CancelResponse.getDefaultInstance))
+      Transitions.cancelled(CancelResponse.getDefaultInstance)
       return Termination.Cancelled(CancelResponse.getDefaultInstance)
     }
     // If the stream has not finished on its own, cancel anything in flight so
@@ -445,8 +509,8 @@ class GrpcWorkerSession(
     // record a terminal so isWorkerSalvageable returns a definite answer
     // and any other thread reading the state sees a stable value.
     if (!currentState.isTerminal) {
-      completeTerminal(Termination.TransportFailed(new TimeoutException(
-        s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms")))
+      Transitions.transportFailed(new TimeoutException(
+        s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
     }
     // Half-close the request side regardless of whether we sent Cancel or
     // Finish earlier -- the worker's onCompleted handler relies on this to
@@ -527,7 +591,7 @@ class GrpcWorkerSession(
           false
         } else {
           // Record that a Cancel is on the wire by advancing to Cancelling.
-          compareAndSetState(cur, SessionState.Cancelling)
+          Transitions.cancelSentFrom(cur)
           requestObserver.onNext(UdfRequest.newBuilder()
             .setControl(UdfControlRequest.newBuilder().setCancel(cancel()).build())
             .build())
@@ -537,7 +601,7 @@ class GrpcWorkerSession(
     } catch {
       case NonFatal(e) =>
         logger.debug(s"Cancel send failed (stream may already be torn down): ${e.getMessage}")
-        completeTerminal(Termination.TransportFailed(e))
+        Transitions.transportFailed(e)
         false
     }
   }
@@ -546,8 +610,8 @@ class GrpcWorkerSession(
     if (currentState.isTerminal) return
     try {
       if (!terminalLatch.await(terminalTimeoutMs, TimeUnit.MILLISECONDS)) {
-        completeTerminal(Termination.TransportFailed(new TimeoutException(
-          s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms")))
+        Transitions.transportFailed(new TimeoutException(
+          s"timed out waiting for stream terminator after ${terminalTimeoutMs}ms"))
       }
     } catch {
       case _: InterruptedException =>
@@ -555,8 +619,8 @@ class GrpcWorkerSession(
         // cut short, it did not exhaust terminalTimeoutMs. Reporting "timed
         // out" here would misdiagnose an interrupted close as a slow worker.
         Thread.currentThread().interrupt()
-        completeTerminal(Termination.TransportFailed(
-          new InterruptedException("interrupted while waiting for stream terminator")))
+        Transitions.transportFailed(
+          new InterruptedException("interrupted while waiting for stream terminator"))
     }
   }
 
@@ -592,8 +656,24 @@ class GrpcWorkerSession(
     // hasNext / next surfaces a cancellation instead of blocking for
     // terminalTimeoutMs in branch 4.
     if (cancelRequested.get() && !currentState.isTerminal) {
-      completeTerminal(Termination.Cancelled(CancelResponse.getDefaultInstance))
+      Transitions.cancelled(CancelResponse.getDefaultInstance)
     }
+
+    /**
+     * Runs a caller-supplied thunk (`input.hasNext`, `input.next()`, or the
+     * `finish` builder) that may throw, and on failure Cancels the in-flight
+     * stream before rethrowing. Without the Cancel a failure would leave the
+     * worker awaiting more input with no terminator owed on the wire; with it the
+     * worker tears down and the exception still propagates to the engine. Setting
+     * `cancelRequested` also suppresses any further Data/Finish this loop might
+     * otherwise attempt (see [[sendRequest]]).
+     */
+    private def cancelOnThrow[T](reason: String)(op: => T): T =
+      try op catch {
+        case NonFatal(e) =>
+          sendCancelInternal(() => cancelWithReason(reason))
+          throw e
+      }
 
     override def hasNext: Boolean = {
       if (prefetched ne null) return true
@@ -642,18 +722,24 @@ class GrpcWorkerSession(
         }
 
         // (2) Send next input batch while the stream is open for data.
-        if (!cancelRequested.get() && currentState == SessionState.Streaming && input.hasNext) {
-          val batch = try input.next() catch {
-            case NonFatal(e) =>
-              sendCancelInternal(() => cancelWithReason("input iterator failed"))
-              throw e
-          }
+        // `input.hasNext` may itself fetch/compute the next element (many Spark
+        // iterators prefetch), so it can throw just like `input.next()`; both go
+        // through cancelOnThrow so a failing upstream Cancels the stream instead
+        // of stranding the worker waiting for input that will never arrive.
+        if (!cancelRequested.get() && currentState == SessionState.Streaming &&
+            cancelOnThrow("input iterator failed")(input.hasNext)) {
+          val batch = cancelOnThrow("input iterator failed")(input.next())
           if (!sendOrEndOnRacedTerminal(UdfRequest.newBuilder().setData(batch).build())) return
-        } else if (!cancelRequested.get() &&
-            compareAndSetState(SessionState.Streaming, SessionState.Finishing)) {
-          // (3) No more input; send Finish exactly once (unless cancelled).
+        } else if (!cancelRequested.get() && Transitions.finishSent()) {
+          // (3) No more input; send Finish exactly once (unless cancelled). The
+          // `finish` thunk is caller-supplied (it may run a finish callback), so
+          // it can throw; cancelOnThrow Cancels the stream before rethrowing. The
+          // Streaming -> Finishing CAS has already run, but we have not written
+          // Finish yet, so the Cancel is the only engine-to-worker message that
+          // reaches the wire -- the proto "nothing after Cancel" invariant holds.
+          val finishMsg = cancelOnThrow("finish callback failed")(finish())
           if (!sendOrEndOnRacedTerminal(UdfRequest.newBuilder()
-              .setControl(UdfControlRequest.newBuilder().setFinish(finish()).build())
+              .setControl(UdfControlRequest.newBuilder().setFinish(finishMsg).build())
               .build())) {
             return
           }
@@ -671,8 +757,8 @@ class GrpcWorkerSession(
           }
           item match {
             case null =>
-              completeTerminal(Termination.TransportFailed(new IllegalStateException(
-                s"timed out waiting for UDF output after ${terminalTimeoutMs}ms")))
+              Transitions.transportFailed(new IllegalStateException(
+                s"timed out waiting for UDF output after ${terminalTimeoutMs}ms"))
               exhausted.set(true)
               throwIfTerminalError()
               return
@@ -708,7 +794,7 @@ class GrpcWorkerSession(
       } catch {
         case NonFatal(e) =>
           if (!currentState.isTerminal) {
-            completeTerminal(Termination.TransportFailed(e))
+            Transitions.transportFailed(e)
           }
           exhausted.set(true)
           throwIfTerminalError()
@@ -766,6 +852,36 @@ object GrpcWorkerSession {
   private object QueueItem {
     final case class Batch(response: DataResponse) extends QueueItem
     case object EndOfStream extends QueueItem
+  }
+
+  /**
+   * A write-once value paired with the latch a waiter blocks on, so the "publish
+   * the value, then release the waiter" ordering lives in one place instead of
+   * every call site having to remember to count the latch down after setting the
+   * reference. The value is set at most once ([[complete]]); the latch can also
+   * be released without a value ([[signalWithoutValue]]) when the waiter must be
+   * woken by a terminal that arrived instead of the value. All reads/writes go
+   * through the latch, so a waiter released by [[await]] has a happens-before
+   * edge to the [[complete]] that set the value.
+   */
+  private final class OneShotValue[A] {
+    private val latch = new CountDownLatch(1)
+    private val ref = new AtomicReference[Option[A]](None)
+
+    /** Publishes the value (first writer wins) and releases any waiter. */
+    def complete(value: A): Unit = {
+      ref.compareAndSet(None, Some(value))
+      latch.countDown()
+    }
+
+    /** Releases the waiter without a value (a terminal arrived, not the value). */
+    def signalWithoutValue(): Unit = latch.countDown()
+
+    /** Blocks up to `timeoutMs` for a release; true iff released in time. */
+    def await(timeoutMs: Long): Boolean = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+
+    /** The published value, or None if none was ever set. */
+    def get: Option[A] = ref.get()
   }
 
   private[grpc] def describeError(err: ExecutionError): String = err.getKindCase match {

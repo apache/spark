@@ -161,6 +161,14 @@ class GrpcWorkerSessionConcurrencySuite
     session
   }
 
+  /**
+   * The [[TestWorkerHandle]] backing a session, for asserting the handle
+   * lifecycle. `workerHandle` is `private[worker]`, and this suite lives under
+   * `org.apache.spark.udf.worker`, so the access is in scope.
+   */
+  private def handleOf(session: GrpcWorkerSession): TestWorkerHandle =
+    session.workerHandle.asInstanceOf[TestWorkerHandle]
+
   // Protocol version carried on Init. The in-process fake workers in this suite
   // do not validate it; any sane value is fine.
   private val SupportedVersion = 1
@@ -680,7 +688,20 @@ class GrpcWorkerSessionConcurrencySuite
     assert(out == List("a", "b", "c"),
       s"echo worker should return inputs in order over cross-thread delivery, got: $out")
     assert(!it.hasNext, "iterator should be exhausted after the FinishResponse terminator")
+    val handle = handleOf(session)
+    val termination = session.close(emptyCancel)
+    // Handle lifecycle on a clean finish: the session is released back to the
+    // dispatcher exactly once and, because a Finished terminal is salvageable,
+    // the worker is NOT marked invalid (it stays eligible for reuse).
+    assert(termination.isInstanceOf[Termination.Finished],
+      s"a fully drained echo session should settle Finished, got: $termination")
+    assert(handle.released.get(), "close() must release the worker handle")
+    assert(!handle.invalidated.get(),
+      "a clean Finished termination is salvageable; the worker must not be marked invalid")
+    // Idempotent close(): still released exactly once, still not invalidated.
     session.close(emptyCancel)
+    assert(handle.released.get() && !handle.invalidated.get(),
+      "a repeat close() must not change the handle lifecycle outcome")
   }
 
   // ---------------------------------------------------------------------------
@@ -735,8 +756,188 @@ class GrpcWorkerSessionConcurrencySuite
     val session = newSession(channel, terminalTimeoutMs = 1000L)
     session.init(basicInit())
 
+    val handle = handleOf(session)
     val termination = session.close(emptyCancel)
     assert(termination.isInstanceOf[Termination.TransportFailed],
       s"a close that times out without a terminator must report TransportFailed, got: $termination")
+    // Handle lifecycle on an unsalvageable termination: the session is released
+    // AND the worker is marked invalid so the dispatcher will not recycle a
+    // worker left in an unknown state by the timed-out stream.
+    assert(handle.released.get(), "close() must release the worker handle")
+    assert(handle.invalidated.get(),
+      "a TransportFailed termination is unsalvageable; the worker must be marked invalid")
+  }
+
+  // ---------------------------------------------------------------------------
+  // Worker sends a DataResponse before InitResponse: a protocol violation that
+  // must fail init fast (fast-fail in responseObserver.onNext DATA branch),
+  // not enqueue the stray batch and let init() hang for initResponseTimeoutMs.
+  // ---------------------------------------------------------------------------
+
+  test("worker emits DataResponse before InitResponse: init fails fast") {
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          // Reply with a DATA response instead of the required InitResponse.
+          resp.onNext(UdfResponse.newBuilder()
+            .setData(DataResponse.newBuilder()
+              .setData(ByteString.copyFromUtf8("premature")).build())
+            .build())
+        }
+      })
+    val (_, channel) = startServer(service)
+    // Huge init timeout: a regression that enqueued the stray batch instead of
+    // fast-failing would park init here until the timeout, so finishing quickly
+    // is the proof the fast path ran -- no wall-clock threshold needed.
+    val session = newSession(channel, initResponseTimeoutMs = NeverReachedTimeoutMs)
+
+    assertFinishesWithin(10000, "init") {
+      val ex = intercept[GrpcWorkerSessionException] { session.init(basicInit()) }
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("init"),
+        s"expected an init-failure message, got: ${ex.getMessage}")
+    }
+    session.close(emptyCancel)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init-error terminal carries the error (Termination.Failed), symmetric with
+  // the data-phase ERROR branch, even when a Cancel reaches the wire and the
+  // worker replies CancelResponse (cross-thread delivery). Without carrying the
+  // error onto the terminal, close() would return a bare Cancelled.
+  // ---------------------------------------------------------------------------
+
+  test("cross-thread InitResponse error: close carries Failed, not a bare Cancelled") {
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        if (req.hasControl && req.getControl.hasInit) {
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setInit(
+              InitResponse.newBuilder().setError(
+                ExecutionError.newBuilder().setUser(
+                  UserError.newBuilder().setMessage("init failure")
+                    .setErrorClass("InitError").build()).build()).build()).build())
+            .build())
+        } else if (req.hasControl && req.getControl.hasCancel) {
+          // Defensive: reply CancelResponse if a Cancel ever arrives. With the
+          // init error settled as Failed BEFORE any Cancel is attempted, the
+          // terminal is already set, so sendCancelInternal suppresses the wire
+          // Cancel and this branch should not fire -- but were a regression to
+          // write the Cancel, this CancelResponse settling the terminal as a bare
+          // Cancelled is exactly what the Failed-before-Cancel ordering prevents.
+          resp.onNext(UdfResponse.newBuilder().setControl(
+            UdfControlResponse.newBuilder().setCancel(
+              CancelResponse.getDefaultInstance).build()).build())
+        }
+      })
+    // Cross-thread delivery: requestObserver is published before the InitResponse
+    // error arrives. Under the older "Cancel then let CancelResponse settle"
+    // design a Cancel would have reached the wire here and its CancelResponse
+    // would have overwritten the outcome with a bare Cancelled; the fix settles
+    // Failed first, so close() reports the init error either way.
+    val (_, channel) = startServer(service, directExecutor = false)
+    val session = newSession(channel,
+      initResponseTimeoutMs = NeverReachedTimeoutMs, terminalTimeoutMs = NeverReachedTimeoutMs)
+    intercept[GrpcWorkerSessionException](session.init(basicInit()))
+
+    val termination = session.close(emptyCancel)
+    termination match {
+      case Termination.Failed(err) =>
+        assert(err.getUser.getErrorClass == "InitError",
+          s"the init error must be carried on the Termination, got: $err")
+      case other =>
+        fail(s"expected Termination.Failed carrying the init error, got: $other")
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // A throwing input iterator (hasNext or next) must Cancel the stream so the
+  // worker is not stranded awaiting input, and rethrow to the engine.
+  // ---------------------------------------------------------------------------
+
+  test("input iterator throwing in hasNext: cancels the stream and surfaces the error") {
+    val cancelSeen = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        req.getRequestCase match {
+          case UdfRequest.RequestCase.CONTROL =>
+            val c = req.getControl
+            if (c.hasInit) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setInit(
+                  InitResponse.getDefaultInstance).build()).build())
+            } else if (c.hasCancel) {
+              cancelSeen.countDown()
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setCancel(
+                  CancelResponse.getDefaultInstance).build()).build())
+            }
+          case _ => ()
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    val session = newSession(channel, terminalTimeoutMs = 5000L)
+    session.init(basicInit())
+
+    // An input iterator whose hasNext throws on first probe (mimics a Spark
+    // upstream that computes the next element eagerly in hasNext).
+    val boom = new Iterator[DataRequest] {
+      override def hasNext: Boolean = throw new RuntimeException("hasNext boom")
+      override def next(): DataRequest = throw new NoSuchElementException()
+    }
+    val it = session.process(boom, emptyFinish)
+    val ex = intercept[RuntimeException] { it.foreach(_ => ()) }
+    assert(ex.getMessage.contains("hasNext boom"),
+      s"the upstream failure must propagate, got: ${ex.getMessage}")
+    assert(cancelSeen.await(5, TimeUnit.SECONDS),
+      "a throwing input iterator must Cancel the stream so the worker is not stranded")
+    session.close(emptyCancel)
+  }
+
+  // ---------------------------------------------------------------------------
+  // A throwing finish() thunk (caller-supplied, may run a finish callback) must
+  // Cancel the stream and rethrow rather than escaping uncaught.
+  // ---------------------------------------------------------------------------
+
+  test("finish thunk throwing: cancels the stream and surfaces the error") {
+    val cancelSeen = new CountDownLatch(1)
+    val service = new CapturingService(
+      onRequest = (req, resp) => {
+        req.getRequestCase match {
+          case UdfRequest.RequestCase.CONTROL =>
+            val c = req.getControl
+            if (c.hasInit) {
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setInit(
+                  InitResponse.getDefaultInstance).build()).build())
+            } else if (c.hasCancel) {
+              cancelSeen.countDown()
+              resp.onNext(UdfResponse.newBuilder().setControl(
+                UdfControlResponse.newBuilder().setCancel(
+                  CancelResponse.getDefaultInstance).build()).build())
+            }
+          case UdfRequest.RequestCase.DATA =>
+            resp.onNext(UdfResponse.newBuilder()
+              .setData(DataResponse.newBuilder().setData(req.getData.getData).build())
+              .build())
+          case _ => ()
+        }
+      })
+    val (_, channel) = startServer(service, directExecutor = false)
+    val session = newSession(channel, terminalTimeoutMs = 5000L)
+    session.init(basicInit())
+
+    // finish() throws when the input is exhausted and the iterator tries to
+    // build the Finish message. Drive the whole iterator inside intercept:
+    // under cross-thread delivery input flows ahead of output, so finish() may
+    // fire before the echo of "only" is read back -- the throw can surface on
+    // any probe, so we must not read a batch outside the intercept.
+    val throwingFinish: () => Finish = () => throw new RuntimeException("finish boom")
+    val it = session.process(echoIn("only"), throwingFinish)
+    val ex = intercept[RuntimeException] { it.foreach(_ => ()) }
+    assert(ex.getMessage.contains("finish boom"),
+      s"the finish-thunk failure must propagate, got: ${ex.getMessage}")
+    assert(cancelSeen.await(5, TimeUnit.SECONDS),
+      "a throwing finish thunk must Cancel the stream so the worker is not stranded")
+    session.close(emptyCancel)
   }
 }
