@@ -21858,7 +21858,8 @@ def variant_set(
     Sets or upserts a value in a variant at the given JSONPath location. An existing object field
     or array element at the target is replaced. A missing field, array index, or intermediate path
     is created, unless `create_if_missing` is false, in which case the variant is left unchanged.
-    Returns NULL if any argument is NULL.
+    Throws an error if a path segment hits a value of an incompatible type. Returns NULL if any
+    argument is NULL.
 
     .. versionadded:: 4.3.0
 

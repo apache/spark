@@ -1131,8 +1131,9 @@ object VariantSet {
   usage = "_FUNC_(v, path, val[, create_if_missing]) - Sets or upserts a value in a variant at " +
     "the given JSONPath location. An existing object field or array element at the target is " +
     "replaced. A missing field, array index, or intermediate path is created, unless " +
-    "`create_if_missing` is false, in which case the variant is left unchanged. Returns NULL if " +
-    "any argument is NULL.",
+    "`create_if_missing` is false, in which case the variant is left unchanged. Throws an error " +
+    "if a path segment hits a value of an incompatible type. Returns NULL if any argument is " +
+    "NULL.",
   arguments = """
     Arguments:
       * v - A variant value to mutate.
