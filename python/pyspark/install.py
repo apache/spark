@@ -147,12 +147,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
 
             print("Installing to %s" % dest)
             tar = tarfile.open(package_local_path, "r:gz")
-            for member in tar.getmembers():
-                if member.name == package_name:
-                    # Skip the root directory.
-                    continue
-                member.name = os.path.relpath(member.name, package_name + os.path.sep)
-                tar.extract(member, dest)
+            _extract_tar(tar, package_name, dest)
             return
         except Exception:
             print("Failed to download %s from %s:" % (pretty_pkg_name, url))
@@ -164,6 +159,36 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
             if os.path.exists(package_local_path):
                 os.remove(package_local_path)
     raise IOError("Unable to download %s." % pretty_pkg_name)
+
+
+def _extract_tar(tar: tarfile.TarFile, package_name: str, dest: str) -> None:
+    """
+    Extract the members of ``tar`` into ``dest``, stripping the top-level
+    ``package_name`` directory from each member path.
+
+    Guards against path traversal ("zip slip"): ``os.path.relpath`` does not
+    strip ``..`` segments, so a crafted member could otherwise resolve outside
+    ``dest``. Any member whose resolved destination escapes ``dest`` is
+    rejected instead of extracted.
+
+    Note: tarfile's ``filter="data"`` (PEP 706) rejects such members natively and
+    would replace this manual check, but it is only generally available from
+    Python 3.12.0 (backported to 3.11.4+), so we keep the explicit check while
+    Spark still supports Python 3.11.
+    """
+    dest_root = os.path.realpath(dest)
+    for member in tar.getmembers():
+        if member.name == package_name:
+            # Skip the root directory.
+            continue
+        member.name = os.path.relpath(member.name, package_name + os.path.sep)
+        resolved = os.path.realpath(os.path.join(dest, member.name))
+        if resolved != dest_root and not resolved.startswith(dest_root + os.sep):
+            raise ValueError(
+                "Archive member '%s' would extract outside of the destination "
+                "directory; refusing to extract." % member.name
+            )
+        tar.extract(member, dest)
 
 
 def get_preferred_mirrors():
