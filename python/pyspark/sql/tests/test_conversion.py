@@ -16,6 +16,7 @@
 #
 import datetime
 import unittest
+import unittest.mock
 from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -852,24 +853,25 @@ class ArrowColumnToPylistTests(unittest.TestCase):
     """
 
     def setUp(self):
-        # Force the bulk paths so they stay covered regardless of the
+        # Force the manual bulk paths so they stay covered regardless of the
         # installed PyArrow version (with a fast native PyArrow the method
         # short-circuits to column.to_pylist()).
-        import pyspark.sql.conversion as conversion_mod
-
-        self._conversion_mod = conversion_mod
-        self._saved_gate = conversion_mod._pyarrow_native_to_pylist_is_fast
-        conversion_mod._pyarrow_native_to_pylist_is_fast = False
+        self._gate_patcher = unittest.mock.patch.object(
+            ArrowTableToRowsConversion, "_should_manual_bulk", lambda: True
+        )
+        self._gate_patcher.start()
 
     def tearDown(self):
-        self._conversion_mod._pyarrow_native_to_pylist_is_fast = self._saved_gate
+        self._gate_patcher.stop()
 
     def test_native_to_pylist_gate(self):
         import pyarrow as pa
 
         column = pa.array([[1, None], None], type=pa.list_(pa.int32()))
-        self._conversion_mod._pyarrow_native_to_pylist_is_fast = True
-        self.assertEqual(ArrowTableToRowsConversion._to_pylist(column), [[1, None], None])
+        with unittest.mock.patch.object(
+            ArrowTableToRowsConversion, "_should_manual_bulk", lambda: False
+        ):
+            self.assertEqual(ArrowTableToRowsConversion._to_pylist(column), [[1, None], None])
 
     def _assert_identical_types(self, actual, expected):
         self.assertIs(type(actual), type(expected))

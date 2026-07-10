@@ -18,6 +18,7 @@
 import array
 import datetime
 import decimal
+import functools
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 import pyspark
@@ -506,47 +507,6 @@ class PandasToArrowConversion:
         return pa.RecordBatch.from_arrays(arrays, schema.names)
 
 
-# The pure-Python bulk conversion in ArrowTableToRowsConversion._to_pylist is
-# a workaround for PyArrow materializing one Scalar per element (see
-# apache/arrow#50326). PyArrow releases containing the fix convert natively
-# without per-element Scalars, in which case the native conversion is used
-# directly. Bump this constant if the fix ships in a different release.
-_MIN_PYARROW_NATIVE_TO_PYLIST_VERSION = "25.0.1"
-
-_pyarrow_native_to_pylist_is_fast: Optional[bool] = None
-
-
-def _has_fast_native_to_pylist() -> bool:
-    global _pyarrow_native_to_pylist_is_fast
-    if _pyarrow_native_to_pylist_is_fast is None:
-        import pyarrow as pa
-        from pyspark.loose_version import LooseVersion
-
-        _pyarrow_native_to_pylist_is_fast = LooseVersion(pa.__version__) >= LooseVersion(
-            _MIN_PYARROW_NATIVE_TO_PYLIST_VERSION
-        )
-    return _pyarrow_native_to_pylist_is_fast
-
-
-# None means not yet checked; True/False after the first _is_numpy_available()
-# call. NumPy is only needed indirectly here (pyarrow's Array.to_numpy in
-# _to_pylist), so unlike stateful_processor_api_client.py no np module
-# reference is cached.
-has_numpy: Optional[bool] = None
-
-
-def _is_numpy_available() -> bool:
-    global has_numpy
-    if has_numpy is None:
-        try:
-            import numpy  # noqa: F401
-
-            has_numpy = True
-        except ImportError:
-            has_numpy = False
-    return has_numpy
-
-
 class LocalDataToArrowConversion:
     """
     Conversion from local data (except pandas DataFrame and numpy ndarray) to Arrow.
@@ -1022,10 +982,40 @@ class ArrowTableToRowsConversion:
     """
 
     @staticmethod
+    @functools.cache
+    def _should_manual_bulk() -> bool:
+        """
+        Whether ``_to_pylist`` should convert nested columns manually in bulk.
+
+        Internal helper for ``_to_pylist`` only; do not use externally. Returns True
+        when the installed PyArrow still materializes one Scalar per element in
+        ``to_pylist`` (apache/arrow#50326, fix expected in PyArrow 25.0.1 — adjust the
+        version below if it ships in a different release) and NumPy (used for the
+        offsets and validity buffers) is available.
+
+        This method and the manual bulk paths in ``_to_pylist`` should be removed once
+        the minimum supported PyArrow version contains the fix.
+        """
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("25.0.1"):
+            # Native to_pylist converts without per-element Scalars.
+            return False
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    @staticmethod
     def _to_pylist(column: Union["pa.Array", "pa.ChunkedArray"]) -> List[Any]:
         """
         Equivalent to ``column.to_pylist()``, but converts (nested) list columns in bulk
         instead of one scalar at a time.
+
+        Internal helper for the worker and ``convert`` call sites; do not use
+        externally.
 
         ``Array.to_pylist()`` materializes one Scalar per element; for list types each row
         additionally allocates a C++ scalar, a Python Scalar wrapper and a Python Array
@@ -1038,15 +1028,13 @@ class ArrowTableToRowsConversion:
         only for the offsets (non-null integers) and the validity bitmap (booleans), so no
         value coercion can occur.
 
-        This can be removed once the minimum supported PyArrow version includes the fix
-        for apache/arrow#50326.
+        This method should be removed (its call sites reverting to plain
+        ``column.to_pylist()``) once the minimum supported PyArrow version includes the
+        fix for apache/arrow#50326.
         """
         import pyarrow as pa
 
-        if _has_fast_native_to_pylist() or not _is_numpy_available():
-            # Recent PyArrow converts without per-element Scalars natively
-            # (apache/arrow#50326); without NumPy the bulk paths below are
-            # unavailable. Either way, use the native conversion.
+        if not ArrowTableToRowsConversion._should_manual_bulk():
             return column.to_pylist()
 
         if isinstance(column, pa.ChunkedArray):
