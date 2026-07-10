@@ -41,7 +41,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   // characters such as '&', '=', '#' and whitespace cannot change the structure of the subsequent
   // /log requests (parameter injection / query truncation).
   private def encodeParam(value: String): String =
-    URLEncoder.encode(String.valueOf(value), UTF_8.name())
+    URLEncoder.encode(Option(value).getOrElse("null"), UTF_8.name())
 
   def renderLog(request: HttpServletRequest): String = {
     val appId = Option(request.getParameter("appId"))
