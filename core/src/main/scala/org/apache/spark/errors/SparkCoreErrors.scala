@@ -380,6 +380,15 @@ private[spark] object SparkCoreErrors {
     )
   }
 
+  def sealedBlockDivergedError(blockId: BlockId): Throwable = {
+    SparkException.internalError(
+      s"Task recomputed block $blockId to a value that does not match the sealed checksum of " +
+      "that block. The block was sealed to one content version, so a divergent recomputation " +
+      "cannot be reconciled - it was materialized non-deterministically and re-run after " +
+      "being sealed.",
+      category = "STORAGE")
+  }
+
   def blockNotFoundError(blockId: BlockId): Throwable = {
     new BlockNotFoundException(blockId.toString)
   }

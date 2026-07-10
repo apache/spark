@@ -1593,14 +1593,17 @@ private[spark] class BlockManager(
           Utils.getIteratorSize(makeIterator())
         }
         val blockResult = getLocalValues(blockId).getOrElse {
-          // Since we held a read lock between the doPut() and get() calls, the block should not
-          // have been evicted, so get() not returning the block indicates some internal error.
-          // The read-side seal self-check in getLocalValues cannot fire here: this path is only
-          // used for local checkpoints, whose seal runs at doCheckpoint finalization (after every
-          // partition is stored, once, before lineage is cut) - never between the doPutIterator
-          // above and this readback of the copy this task just wrote. So a divergent copy is never
-          // recomputed into this spot; the block is genuinely present.
           releaseLock(blockId)
+          // getLocalValues returned None despite the read lock held since doPut(). Normally that
+          // means an internal error (the block should still be present). The one expected cause is
+          // the read-side seal self-check: this task recomputed a block that is already sealed to a
+          // different checksum (only possible if a sealed block is recomputed - not for an eager
+          // local checkpoint, whose lineage is cut before any consumer reads it). Distinguish the
+          // two so the failure is diagnosable rather than a cryptic "failed to get block" error.
+          if (verifySealedChecksum &&
+              blockInfoManager.get(blockId).exists(!localCopyMatchesSealedChecksum(blockId, _))) {
+            throw SparkCoreErrors.sealedBlockDivergedError(blockId)
+          }
           throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
         }
         // We already hold a read lock on the block from the doPut() call and getLocalValues()
