@@ -129,8 +129,6 @@ To control what API docs get built, you can set any combination of the following
 * `SKIP_RDOC=1`: Skip the R API docs.
 * `SKIP_SQLDOC=1`: Skip the SQL API docs.
 
-Note that you can set these variables to any value and they will be considered enabled. To disable them, simply unset them or set them to the empty string.
-
 ## Build docs with docker image (Optional)
 
 As a Spark developer, you can generate all documents locally as follows:
