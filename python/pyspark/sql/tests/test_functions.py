@@ -3569,6 +3569,15 @@ class FunctionsTestsMixin:
             df.select(F.to_json(F.variant_array_append(arr, df.arrpath, F.lit(9)))),
             ["[1,2,9]", "[[3,9],4]"],
         )
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.try_variant_array_append(arr, "$.a", F.lit(9)))), [None, None])
+        check(
+            df.select(F.to_json(F.try_variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
+        )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 

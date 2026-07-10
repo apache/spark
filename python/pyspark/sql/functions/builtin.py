@@ -21917,8 +21917,8 @@ def variant_array_append(
 ) -> Column:
     """
     Appends a value to the array in a variant at the given JSONPath location. Returns the variant
-    unchanged if a path key or index is absent, throws an error if a path segment hits a value of
-    an incompatible type or the target is not an array, and returns NULL if any argument is NULL.
+    unchanged if a path key or index is absent. Throws an error if a path segment hits a value of
+    an incompatible type or the target is not an array. Returns NULL if any argument is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -21963,6 +21963,63 @@ def variant_array_append(
     path_col = path if isinstance(path, Column) else lit(path)
     return _invoke_function(
         "variant_array_append",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+    )
+
+
+@_try_remote_functions
+def try_variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    """
+    Appends a value to the array in a variant at the given JSONPath location. Returns the variant
+    unchanged if a path key or index is absent. Returns NULL if a path segment hits a value of an
+    incompatible type, the target is not an array, or if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath target array. A `str` is a literal path; a :class:`~pyspark.sql.Column`
+        supplies the path at runtime. A valid path should start with `$` and is followed by zero or
+        more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to append. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` appended to the array at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, try_variant_array_append
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''[[1, 2], 5]''',
+    ...     'path': '$[0]'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(try_variant_array_append(v, "$", lit(3))).alias("r")).collect()
+    [Row(r='[[1,2],5,3]')]
+    >>> df.select(to_json(try_variant_array_append(v, "$[5]", lit(3))).alias("r")).collect()
+    [Row(r='[[1,2],5]')]
+    >>> df.select(to_json(try_variant_array_append(v, df.path, lit(9))).alias("r")).collect()
+    [Row(r='[[1,2,9],5]')]
+    >>> df.select(to_json(try_variant_array_append(v, "$[1]", lit(9))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(try_variant_array_append(v, "$", lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_array_append",
         _to_java_column(v),
         _to_java_column(path_col),
         _to_java_column(value),
