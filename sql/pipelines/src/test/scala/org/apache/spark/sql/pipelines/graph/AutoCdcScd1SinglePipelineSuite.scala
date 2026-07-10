@@ -18,6 +18,7 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.autocdc.{
@@ -166,12 +167,14 @@ class AutoCdcScd1SinglePipelineSuite
     assert(spark.catalog.tableExists(auxTableNameFor("t_b")))
   }
 
-  test("an AutoCDC flow targeting a table whose format does not support row-level " +
-    "operations fails with AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE") {
+  test("an AutoCDC flow whose target connector does not support MERGE fails during " +
+    "flow execution with AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE") {
     val session = spark
     import session.implicits._
 
-    // Intentionally use a non-merge-compatible catalog, whose default table format is parquet.
+    // Use the session catalog (default parquet table format), whose tables are not backed by a
+    // MERGE-capable connector - unlike the in-memory row-level-operation catalog the other tests
+    // in this suite run against.
     val catalog = TestGraphRegistrationContext.DEFAULT_CATALOG
     val database = TestGraphRegistrationContext.DEFAULT_DATABASE
 
@@ -202,14 +205,15 @@ class AutoCdcScd1SinglePipelineSuite
       ))
     }
 
+    val targetIdent = TableIdentifier("target_no_merge", Some(database), Some(catalog))
+
     val ex = intercept[RuntimeException] { runPipeline(ctx) }
     checkErrorInPipelineFailure(
       failure = ex,
       condition = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
       sqlState = Some("0A000"),
       parameters = Map(
-        "tableName" -> s"`$catalog`.`$database`.`target_no_merge`",
-        "format" -> "parquet"
+        "tableName" -> targetIdent.quotedString
       )
     )
   }
