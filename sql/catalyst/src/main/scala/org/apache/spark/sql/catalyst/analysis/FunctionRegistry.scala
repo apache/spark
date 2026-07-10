@@ -990,6 +990,7 @@ object FunctionRegistry {
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
     expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
     expressionBuilder("variant_set", VariantSetExpressionBuilder),
+    expressionBuilder("try_variant_set", TryVariantSetExpressionBuilder),
     expressionBuilder("variant_array_append", VariantArrayAppendExpressionBuilder),
     expressionBuilder("try_variant_array_append", TryVariantArrayAppendExpressionBuilder),
 
