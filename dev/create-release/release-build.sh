@@ -103,6 +103,12 @@ if [[ "$1" == "finalize" ]]; then
     error 'The environment variable PYPI_API_TOKEN is not set. Exiting.'
   fi
 
+  # Pass the token to twine via an environment variable to keep it out of
+  # the process command line, which is visible to other users via ps.
+  { set +x; } 2>/dev/null
+  export TWINE_PASSWORD="$PYPI_API_TOKEN"
+  [ "$DEBUG_MODE" = 1 ] && set -x
+
   git config --global user.name "$GIT_NAME"
   git config --global user.email "$GIT_EMAIL"
 
@@ -128,19 +134,19 @@ if [[ "$1" == "finalize" ]]; then
   PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
   svn update "pyspark-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__  -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark-$PYSPARK_VERSION.tar.gz" \
     "pyspark-$PYSPARK_VERSION.tar.gz.asc"
   svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__  -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
   svn update "pyspark_client-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__ -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_client-$PYSPARK_VERSION.tar.gz" \
     "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
