@@ -1043,8 +1043,7 @@ class ArrowTableToRowsConversion:
                 result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
             return result
 
-        column_type = column.type
-        if (pa.types.is_list(column_type) or pa.types.is_large_list(column_type)) and len(
+        if (pa.types.is_list(column.type) or pa.types.is_large_list(column.type)) and len(
             column
         ) > 0:
             n = len(column)
