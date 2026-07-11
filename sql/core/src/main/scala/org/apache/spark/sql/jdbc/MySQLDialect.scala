@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, SQLException, Types}
+import java.sql.{Connection, ResultSetMetaData, SQLException, Types}
 import java.util
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuilder
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
@@ -131,6 +132,42 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     }
   }
 
+  override def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {
+    // MySQL Connector/J Bug #84308: getPrecision()=8 and getScale()=0 for all TIME columns.
+    // Query INFORMATION_SCHEMA for actual DATETIME_PRECISION.
+    if (rsmd.getColumnType(columnIdx) == Types.TIME) {
+      val tableName = rsmd.getTableName(columnIdx)
+      val columnName = rsmd.getColumnName(columnIdx)
+      if (tableName.nonEmpty && columnName.nonEmpty) {
+        val query =
+          s"SELECT DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS " +
+            s"WHERE TABLE_NAME = '$tableName' AND COLUMN_NAME = '$columnName' " +
+            s"AND TABLE_SCHEMA = DATABASE()"
+        try {
+          Using.resource(conn.createStatement()) { stmt =>
+            Using.resource(stmt.executeQuery(query)) { rs =>
+              if (rs.next()) {
+                metadata.putLong("datetimePrecision", rs.getLong(1))
+              } else {
+                metadata.putLong("datetimePrecision", TimeType.DEFAULT_PRECISION)
+              }
+            }
+          }
+        } catch {
+          case NonFatal(_) =>
+            metadata.putLong("datetimePrecision", TimeType.DEFAULT_PRECISION)
+        }
+      } else {
+        // For computed columns or expressions without table context, use default
+        metadata.putLong("datetimePrecision", TimeType.DEFAULT_PRECISION)
+      }
+    }
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     def getCatalystTypeForBitArray: Option[DataType] = {
@@ -185,12 +222,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         Some(getTimestampType(md.build()))
       case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
       case Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
-        // MySQL TIME(p) fractional-second precision is reported via getScale() (DECIMAL_DIGITS).
-        // Use scale >= 0 to accept TIME(0); default to DEFAULT_PRECISION when not reported.
-        val scale = md.build().getLong("scale").toInt
-        val precision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
-          else TimeType.DEFAULT_PRECISION
-        Some(TimeType(precision))
+        // MySQL Connector/J Bug #84308: COLUMN_SIZE=8 and DECIMAL_DIGITS=0 for all TIME columns
+        // regardless of declared precision. The actual precision is injected by
+        // updateExtraColumnMeta via INFORMATION_SCHEMA query.
+        val precision = md.build().getLong("datetimePrecision").toInt
+        Some(TimeType(math.min(precision, TimeType.MAX_PRECISION)))
       case _ => None
     }
   }
