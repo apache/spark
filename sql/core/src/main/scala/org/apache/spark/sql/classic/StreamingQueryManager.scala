@@ -239,6 +239,17 @@ class StreamingQueryManager private[sql] (
               errorClass = "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
             )
           }
+          // Sink evolution persists per-sink metadata via the V3 commit log written in
+          // MicroBatchExecution.markMicroBatchEnd, which AsyncProgressTrackingMicroBatchExecution
+          // overrides with an async write that only emits V1 commit metadata. The sink metadata
+          // would therefore never be persisted, so reject the combination explicitly instead of
+          // silently dropping it. This is checked here, before constructing the execution, so the
+          // error is raised consistently regardless of whether the sink is named.
+          if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
+            throw new SparkIllegalArgumentException(
+              errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED"
+            )
+          }
           new AsyncProgressTrackingMicroBatchExecution(
             sparkSession,
             trigger,
