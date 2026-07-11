@@ -953,6 +953,59 @@ class PlanParserSuite extends AnalysisTest {
         stop = 73))
   }
 
+  test("asof join") {
+    assertEqual(
+      "select * from t asof join u match_condition (t.a >= u.a)",
+      AsOfJoin.fromMatchCondition(
+        table("t"),
+        table("u"),
+        $"t.a",
+        GreaterThanOrEqualOp,
+        $"u.a",
+        None,
+        Inner).select(star()))
+
+    assertEqual(
+      "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
+      AsOfJoin.fromMatchCondition(
+        table("t"),
+        table("u"),
+        $"t.a",
+        GreaterThanOrEqualOp,
+        $"u.a",
+        Some($"t.b" === $"u.b"),
+        LeftOuter).select(star()))
+
+    assertEqual(
+      "select * from t asof join u match_condition (t.a >= u.a) using (b)",
+      AsOfJoin.fromMatchCondition(
+        table("t"),
+        table("u"),
+        $"t.a",
+        GreaterThanOrEqualOp,
+        $"u.a",
+        None,
+        Inner,
+        usingColumns = Some(Seq("b"))).select(star()))
+
+    assertEqual(
+      "select * from t asof join u match_condition (u.a <= t.a)",
+      AsOfJoin.fromMatchCondition(
+        table("t"),
+        table("u"),
+        $"u.a",
+        LessThanOrEqualOp,
+        $"t.a",
+        None,
+        Inner).select(star()))
+  }
+
+  test("asof join - invalid match operator") {
+    val sql =
+      "select * from t asof join u match_condition (t.a = u.a)"
+    assert(parseException(sql).getMessage.contains("mismatched input '='"))
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
     // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
     // non-reserved so they can continue to be used as column or table identifiers.

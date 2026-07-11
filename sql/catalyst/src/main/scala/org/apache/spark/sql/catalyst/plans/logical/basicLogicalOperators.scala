@@ -2533,7 +2533,10 @@ case class AsOfJoin(
     condition: Option[Expression],
     joinType: JoinType,
     orderExpression: Expression,
-    toleranceAssertion: Option[Expression]) extends BinaryNode {
+    toleranceAssertion: Option[Expression],
+    usingColumns: Option[Seq[String]] = None,
+    matchComparison: Option[(Expression, MatchComparisonOperator, Expression)] = None)
+    extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported as-of join type $joinType")
@@ -2553,6 +2556,8 @@ case class AsOfJoin(
 
   override lazy val resolved: Boolean = {
     childrenResolved &&
+      usingColumns.isEmpty &&
+      matchComparison.isEmpty &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
@@ -2586,6 +2591,93 @@ object AsOfJoin {
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
     AsOfJoin(left, right, asOfCond, condition, joinType,
       orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+  }
+
+  /**
+   * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
+   * Operand normalization is deferred until analysis when join inputs are resolved.
+   */
+  def fromMatchCondition(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftExpr: Expression,
+      operator: MatchComparisonOperator,
+      rightExpr: Expression,
+      condition: Option[Expression],
+      joinType: JoinType,
+      usingColumns: Option[Seq[String]] = None): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      asOfCondition = Literal.TrueLiteral,
+      condition = condition,
+      joinType = joinType,
+      orderExpression = Literal(0),
+      toleranceAssertion = None,
+      usingColumns = usingColumns,
+      matchComparison = Some((leftExpr, operator, rightExpr)))
+  }
+
+  def resolveMatchComparison(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftExpr: Expression,
+      operator: MatchComparisonOperator,
+      rightExpr: Expression): (Expression, Expression) = {
+    val (leftOperand, rightOperand, normalizedOp) =
+      normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
+    buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
+  }
+
+  private def normalizeMatchOperands(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      expr1: Expression,
+      operator: MatchComparisonOperator,
+      expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
+    val leftSet = left.outputSet
+    val rightSet = right.outputSet
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
+    (expr1Side, expr2Side) match {
+      case (Some(true), Some(false)) => (expr1, expr2, operator)
+      case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
+      case _ =>
+        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(
+          expr1, expr2, leftSet, rightSet)
+    }
+  }
+
+  private def operandJoinSide(
+      expr: Expression,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet): Option[Boolean] = {
+    val refs = expr.references
+    if (refs.isEmpty) {
+      None
+    } else if (refs.subsetOf(leftSet)) {
+      Some(true)
+    } else if (refs.subsetOf(rightSet)) {
+      Some(false)
+    } else {
+      None
+    }
+  }
+
+  private def buildMatchExpressions(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): (Expression, Expression) = {
+    operator match {
+      case GreaterThanOrEqualOp =>
+        (GreaterThanOrEqual(leftOperand, rightOperand), Subtract(leftOperand, rightOperand))
+      case GreaterThanOp =>
+        (GreaterThan(leftOperand, rightOperand), Subtract(leftOperand, rightOperand))
+      case LessThanOrEqualOp =>
+        (LessThanOrEqual(leftOperand, rightOperand), Subtract(rightOperand, leftOperand))
+      case LessThanOp =>
+        (LessThan(leftOperand, rightOperand), Subtract(rightOperand, leftOperand))
+    }
   }
 
   private def makeAsOfCond(

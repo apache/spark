@@ -2505,7 +2505,9 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      if (ctx.nearestByClause != null) {
+      if (ctx.ASOF != null) {
+        withAsOfJoin(ctx, base)
+      } else if (ctx.nearestByClause != null) {
         withNearestByJoin(ctx, base, baseJoinType)
       } else {
         // Resolve the join type and join condition
@@ -2544,6 +2546,39 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
     }
+  }
+
+  /**
+   * Build an [[AsOfJoin]] from the parsed `ASOF JOIN ... MATCH_CONDITION` clause.
+   */
+  private def withAsOfJoin(ctx: JoinRelationContext, base: LogicalPlan): AsOfJoin = {
+    val joinType = Option(ctx.asofJoinType) match {
+      case None => Inner
+      case Some(jt) if jt.LEFT != null => LeftOuter
+      case _ => Inner
+    }
+    val criteria = ctx.asofJoinCriteria
+    val matchCtx = criteria.matchComparison
+    val operator = (matchCtx.GTE, matchCtx.GT, matchCtx.LTE, matchCtx.LT) match {
+      case (op, null, null, null) if op != null => GreaterThanOrEqualOp
+      case (null, op, null, null) if op != null => GreaterThanOp
+      case (null, null, op, null) if op != null => LessThanOrEqualOp
+      case (null, null, null, op) if op != null => LessThanOp
+      case _ =>
+        throw SparkException.internalError(s"Unimplemented matchComparison operator: $matchCtx")
+    }
+    val leftExpr = expression(matchCtx.left)
+    val rightExpr = expression(matchCtx.right)
+    val (condition, usingColumns) =
+      (Option(criteria.booleanExpression), Option(criteria.identifierList)) match {
+      case (Some(expr), None) => (Some(expression(expr)), None)
+      case (None, Some(ids)) => (None, Some(visitIdentifierList(ids)))
+      case (None, None) => (None, None)
+      case _ =>
+        throw SparkException.internalError(s"Unimplemented asofJoinCriteria: $criteria")
+    }
+    AsOfJoin.fromMatchCondition(
+      base, plan(ctx.right), leftExpr, operator, rightExpr, condition, joinType, usingColumns)
   }
 
   /**
