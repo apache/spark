@@ -21,4 +21,12 @@ private[sql] object ConnectCommon {
   val CONNECT_GRPC_PORT_MAX_RETRIES: Int = 0
   val CONNECT_GRPC_MAX_MESSAGE_SIZE: Int = 128 * 1024 * 1024
   val CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT: Int = 1024
+  // Detects a silently-dead connection (e.g. a NAT gateway/load balancer dropping an idle
+  // connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive PINGs, so a
+  // blocked RPC surfaces as UNAVAILABLE instead of hanging forever. Guarded by
+  // CONNECT_GRPC_KEEPALIVE_ENABLED so it can be turned off entirely as an escape hatch (e.g. if
+  // it interacts badly with a particular network path, or with long GC pauses).
+  val CONNECT_GRPC_KEEPALIVE_ENABLED: Boolean = true
+  val CONNECT_GRPC_KEEPALIVE_TIME_SECONDS: Long = 60
+  val CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS: Long = 20
 }

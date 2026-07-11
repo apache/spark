@@ -87,6 +87,45 @@ object Connect {
       .intConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT)
 
+  val CONNECT_GRPC_KEEPALIVE_ENABLED =
+    buildStaticConf("spark.connect.grpc.keepAlive.enabled")
+      .doc(
+        "Whether the server sends gRPC/HTTP2 keepalive PINGs to detect and terminate " +
+          "silently-dead client connections (see spark.connect.grpc.keepAlive.time / " +
+          ".timeout). Enabled by default; can be turned off as an escape hatch, e.g. if it " +
+          "interacts badly with a particular network path, or a server environment is prone " +
+          "to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_KEEPALIVE_ENABLED)
+
+  val CONNECT_GRPC_KEEPALIVE_TIME =
+    buildStaticConf("spark.connect.grpc.keepAlive.time")
+      .doc(
+        "Sets the time the server waits for the connection to be idle before sending a " +
+          "gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection " +
+          "(e.g. after a NAT gateway or load balancer drops an idle connection mapping " +
+          "without closing the socket). Also used as the minimum interval the server permits " +
+          "for keepalive PINGs sent by clients. Combined with " +
+          "spark.connect.grpc.keepAlive.timeout, this bounds how long a connection can be idle " +
+          "before either side may declare it dead; a stall on either end (e.g. a long JVM GC " +
+          "pause) longer than that combined window can cause an otherwise-healthy connection " +
+          "to be dropped, so raise both values in environments prone to long GC pauses or " +
+          "other event-loop stalls.")
+      .version("4.3.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIME_SECONDS)
+
+  val CONNECT_GRPC_KEEPALIVE_TIMEOUT =
+    buildStaticConf("spark.connect.grpc.keepAlive.timeout")
+      .doc(
+        "Sets how long the server waits for a keepalive PING ack before considering the " +
+          "connection dead. See spark.connect.grpc.keepAlive.time for the combined-window " +
+          "caveat about long GC pauses or other stalls.")
+      .version("4.3.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS)
+
   val CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT =
     buildStaticConf("spark.connect.session.manager.defaultSessionTimeout")
       .internal()

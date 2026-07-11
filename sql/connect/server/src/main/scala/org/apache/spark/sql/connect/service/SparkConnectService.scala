@@ -41,7 +41,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
+import org.apache.spark.sql.connect.config.Connect.{getAuthenticateToken, CONNECT_GRPC_BINDING_ADDRESS, CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_KEEPALIVE_ENABLED, CONNECT_GRPC_KEEPALIVE_TIME, CONNECT_GRPC_KEEPALIVE_TIMEOUT, CONNECT_GRPC_MARSHALLER_RECURSION_LIMIT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_GRPC_PORT_MAX_RETRIES}
 import org.apache.spark.sql.connect.execution.ConnectProgressExecutionListener
 import org.apache.spark.sql.connect.ui.{SparkConnectServerAppStatusStore, SparkConnectServerListener, SparkConnectServerTab}
 import org.apache.spark.sql.connect.utils.ErrorUtils
@@ -408,7 +408,21 @@ object SparkConnectService extends Logging {
         case _ => NettyServerBuilder.forPort(port)
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
-        .addService(sparkConnectService)
+      if (SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_ENABLED)) {
+        val keepAliveTimeSeconds = SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIME)
+        // Detects a silently-dead client connection (e.g. a NAT gateway/load balancer dropping
+        // an idle connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive
+        // PINGs. permitKeepAliveTime must be <= the client's keepAliveTime (matched here),
+        // otherwise the server rejects the client's keepalive PINGs as "too_many_pings" and
+        // tears down every long-lived connection, not just dead ones.
+        sb.keepAliveTime(keepAliveTimeSeconds, TimeUnit.SECONDS)
+        sb.keepAliveTimeout(
+          SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIMEOUT),
+          TimeUnit.SECONDS)
+        sb.permitKeepAliveTime(keepAliveTimeSeconds, TimeUnit.SECONDS)
+        sb.permitKeepAliveWithoutCalls(true)
+      }
+      sb.addService(sparkConnectService)
 
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))

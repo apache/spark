@@ -3562,6 +3562,30 @@ They are typically set via the config file and command-line options with `--conf
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.connect.grpc.keepAlive.enabled</code></td>
+  <td>
+    true
+  </td>
+  <td>Whether the server sends gRPC/HTTP2 keepalive PINGs to detect and terminate silently-dead client connections. Can be turned off as an escape hatch, e.g. if it interacts badly with a particular network path, or a server environment is prone to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.time</code></td>
+  <td>
+    60s
+  </td>
+  <td>Sets the time the server waits for the connection to be idle before sending a gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection (e.g. after a NAT gateway or load balancer drops an idle connection mapping without closing the socket). Also used as the minimum interval the server permits for keepalive PINGs sent by clients.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.keepAlive.timeout</code></td>
+  <td>
+    20s
+  </td>
+  <td>Sets how long the server waits for a keepalive PING ack before considering the connection dead.</td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.extensions.relation.classes</code></td>
   <td>
     (none)
