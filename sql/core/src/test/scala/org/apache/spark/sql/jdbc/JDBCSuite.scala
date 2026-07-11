@@ -1162,6 +1162,40 @@ class JDBCSuite extends SharedSparkSession {
     assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
   }
 
+  test("Aggregated dialects: delegation of compileValue and other methods") {
+    val customDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+      override def compileValue(value: Any): Any = value match {
+        case t: Timestamp => s"{ts '$t'}"
+        case _ => super.compileValue(value)
+      }
+      override def isSupportedFunction(funcName: String): Boolean = funcName == "MY_FUNC"
+      override def supportsLimit: Boolean = true
+      override def supportsOffset: Boolean = true
+      override def getLimitClause(limit: Integer): String = s"FETCH FIRST $limit ROWS ONLY"
+      override def getOffsetClause(offset: Integer): String = s"OFFSET $offset ROWS"
+    }
+    val agg = new AggregatedDialect(List(customDialect, new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+    }))
+
+    // compileValue should delegate to first dialect
+    val ts = Timestamp.valueOf("2024-01-15 10:30:00")
+    assert(agg.compileValue(ts) === "{ts '2024-01-15 10:30:00.0'}")
+
+    // isSupportedFunction should return true if any dialect supports it
+    assert(agg.isSupportedFunction("MY_FUNC"))
+    assert(!agg.isSupportedFunction("OTHER_FUNC"))
+
+    // supportsLimit/Offset should delegate to first dialect
+    assert(agg.supportsLimit)
+    assert(agg.supportsOffset)
+
+    // getLimitClause/getOffsetClause should delegate to first dialect
+    assert(agg.getLimitClause(10) === "FETCH FIRST 10 ROWS ONLY")
+    assert(agg.getOffsetClause(5) === "OFFSET 5 ROWS")
+  }
+
   test("Aggregated dialects: isCascadingTruncateTable") {
     def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
       override def canHandle(url: String): Boolean = true
