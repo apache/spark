@@ -1144,6 +1144,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
+    "message" : [
+      "Cannot run the pipelined stage group: it needs <numTasks> concurrent task slots to run all its stages together, but only <numSlots> are currently free. The stages of a pipelined group must run concurrently, so the cluster must have enough free slots for all of them at once. Provision more executors, or reduce the parallelism of the query."
+    ],
+    "sqlState" : "53000"
+  },
   "CONCURRENT_STREAM_LOG_UPDATE" : {
     "message" : [
       "Concurrent update to the log. Multiple streaming jobs detected for <batchId>.",

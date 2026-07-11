@@ -1426,6 +1426,98 @@ private[spark] class DAGScheduler(
     case _ => false
   }
 
+  /**
+   * The full pipelined group `stage` belongs to: the connected component of the stage graph over
+   * pipelined edges (both the producers `stage` reads through a [[PipelinedShuffleDependency]] and,
+   * transitively, their pipelined producers/consumers). Walks `parents` and the shuffle-map stages
+   * of pipelined dependencies. Returns just `stage` if it has no pipelined edge.
+   */
+  private def pipelinedGroupOf(stage: Stage): Set[Stage] = {
+    val group = new HashSet[Stage]
+    val toVisit = new ListBuffer[Stage]
+    toVisit += stage
+    while (toVisit.nonEmpty) {
+      val s = toVisit.remove(0)
+      if (group.add(s)) {
+        // Pipelined producers this stage reads (direct pipelined parent shuffle-map stages).
+        s.parents.foreach {
+          case m: ShuffleMapStage
+              if m.shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] => toVisit += m
+          case _ =>
+        }
+        // Pipelined consumers/producers reachable the other direction: any known stage co-scheduled
+        // with s via a pipelined edge. We only have parent links, so also pull in stages whose
+        // pipelined parent is s (search the created stages).
+        stageIdToStage.valuesIterator.foreach { other =>
+          if (!group.contains(other) && other.parents.contains(s) &&
+              isPipelinedProducer(s)) {
+            toVisit += other
+          }
+        }
+      }
+    }
+    group.toSet
+  }
+
+  /**
+   * Best-effort admission check for a pipelined group: all its member stages must run concurrently,
+   * so the cluster must have enough task slots for the whole group at once. If the group's total
+   * demand exceeds the cluster's total concurrent-task capacity it can never be co-resident and,
+   * lacking an out-of-band slot reservation, would deadlock -- so we fail fast with a clear error.
+   *
+   * This is deliberately best-effort, not the atomic gang reservation deferred to a later hardening
+   * step: it compares the whole group's demand against TOTAL capacity (not free slots), checked once
+   * when the group is first co-scheduled. That catches the common under-provisioned case (a group
+   * that can never fit) as a clear error rather than a hang; races against other concurrently
+   * admitting work are left to the future atomic version.
+   *
+   * Returns Some((demand, totalSlots)) when the group does not fit, else None.
+   */
+  private def pipelinedGroupExceedsCapacity(stage: Stage): Option[(Int, Int)] = {
+    val group = pipelinedGroupOf(stage)
+    val demand = group.toSeq.map(_.numTasks).sum
+    val totalSlots = maxConcurrentTasksForStage(stage)
+    if (demand > totalSlots) Some((demand, totalSlots)) else None
+  }
+
+  /**
+   * The cluster's total concurrent-task capacity for `stage`'s resource profile. Extracted as a
+   * seam so tests can control it without changing the cluster's core count. Production reads it
+   * from the scheduler backend, exactly as barrier's slot check does.
+   */
+  protected def maxConcurrentTasksForStage(stage: Stage): Int = {
+    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+    sc.maxNumConcurrentTasks(rp)
+  }
+
+  /**
+   * Whether `stage` is a member of a pipelined group -- i.e. it is connected to another stage by a
+   * [[PipelinedShuffleDependency]], either as the producer (it writes such a shuffle) or as a
+   * consumer (one of its direct parent shuffle dependencies is pipelined). Members run
+   * concurrently over a transient shuffle that cannot be re-read in isolation, so a member's task
+   * failure must fail the whole group rather than resubmit one stage; the task scheduler keys its
+   * fail-fast behavior off this (via TaskSet.isPipelined). False for any stage in a job with no
+   * pipelined dependency.
+   */
+  private def isPipelinedGroupMember(stage: Stage): Boolean = {
+    if (isPipelinedProducer(stage)) {
+      return true
+    }
+    // Consumer check: does this stage read through a PipelinedShuffleDependency at one of its
+    // shuffle boundaries? Walk the stage's own RDD graph (descending narrow deps, stopping at every
+    // shuffle boundary) -- the same edges that define the stage -- and look for a pipelined one.
+    !traverseRDDGraphUntil(stage.rdd) { (rdd, enqueue) =>
+      val hasPipelinedBoundary = rdd.dependencies.exists {
+        case _: PipelinedShuffleDependency[_, _, _] => true
+        case _: ShuffleDependency[_, _, _] => false // regular shuffle boundary: do not descend
+        case narrowDep =>
+          enqueue(narrowDep.rdd)
+          false
+      }
+      !hasPipelinedBoundary // keep walking until a pipelined boundary is found
+    }
+  }
+
   /** Finds the earliest-created active job that needs the stage */
   // TODO: Probably should actually find among the active jobs that need this
   // stage the one with the highest priority (highest-priority pool, earliest created).
@@ -1743,6 +1835,18 @@ private[spark] class DAGScheduler(
               submitStage(parent)
             }
 
+            // Submitting a parent can abort the job during this recursion: for a pipelined chain
+            // A->B->C, submitStage(C) recurses into submitStage(B) whose group slot-check covers the
+            // whole component {A,B,C} and may abortStage(B), which cleans up A/B/C (including this
+            // stage) and fails the job. If that happened, `stage` is no longer registered; do not
+            // proceed to co-schedule or re-park it (re-parking would re-insert a job-less stage into
+            // waitingStages -- a scheduler-state leak). Inert for a non-aborting submit.
+            if (!stageIdToStage.contains(stage.id)) {
+              logInfo(log"${MDC(STAGE, stage)} was removed during parent submission (its job was " +
+                log"aborted); not co-scheduling or re-parking it")
+              return
+            }
+
             // A missing parent reached through a PipelinedShuffleDependency ("pipelined parent")
             // is incrementally readable: this stage may run before that parent materializes, so
             // the two are co-scheduled. `missing` already holds the direct parent shuffle-map
@@ -1761,12 +1865,26 @@ private[spark] class DAGScheduler(
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
-              logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running pipelined " +
-                log"producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
-              submitMissingTasks(stage, jobId.get)
-              // This stage is now running; if it is itself the pipelined producer of a waiting
-              // consumer, co-schedule that consumer too.
-              submitWaitingPipelinedChildStages(stage)
+              // Best-effort slot check: the whole pipelined group must run at once, so it must fit
+              // in the cluster's total concurrent-task capacity. If it cannot, fail fast with a
+              // clear error rather than deadlock (there is no out-of-band slot reservation in v1).
+              pipelinedGroupExceedsCapacity(stage) match {
+                case Some((demand, totalSlots)) =>
+                  abortStage(stage, s"Cannot co-schedule pipelined stage group: needs $demand " +
+                    s"concurrent task slots but the cluster has only $totalSlots.",
+                    Some(new SparkException(
+                      errorClass = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
+                      messageParameters = scala.collection.immutable.Map(
+                        "numTasks" -> demand.toString, "numSlots" -> totalSlots.toString),
+                      cause = null)))
+                case None =>
+                  logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
+                    log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
+                  submitMissingTasks(stage, jobId.get)
+                  // This stage is now running; if it is itself the pipelined producer of a waiting
+                  // consumer, co-schedule that consumer too.
+                  submitWaitingPipelinedChildStages(stage)
+              }
             } else {
               waitingStages += stage
             }
