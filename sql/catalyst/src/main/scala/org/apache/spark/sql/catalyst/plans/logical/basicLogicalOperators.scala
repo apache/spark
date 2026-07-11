@@ -2667,15 +2667,68 @@ object AsOfJoin {
       leftOperand: Expression,
       rightOperand: Expression,
       operator: MatchComparisonOperator): (Expression, Expression) = {
+    val (leftForCompare, rightForCompare) =
+      alignOperandsForComparison(leftOperand, rightOperand)
+    val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
     operator match {
       case GreaterThanOrEqualOp =>
-        (GreaterThanOrEqual(leftOperand, rightOperand), Subtract(leftOperand, rightOperand))
+        (GreaterThanOrEqual(leftForCompare, rightForCompare), orderExpression)
       case GreaterThanOp =>
-        (GreaterThan(leftOperand, rightOperand), Subtract(leftOperand, rightOperand))
+        (GreaterThan(leftForCompare, rightForCompare), orderExpression)
       case LessThanOrEqualOp =>
-        (LessThanOrEqual(leftOperand, rightOperand), Subtract(rightOperand, leftOperand))
+        (LessThanOrEqual(leftForCompare, rightForCompare), orderExpression)
       case LessThanOp =>
-        (LessThan(leftOperand, rightOperand), Subtract(rightOperand, leftOperand))
+        (LessThan(leftForCompare, rightForCompare), orderExpression)
+    }
+  }
+
+  private def buildOrderExpression(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): Expression = {
+    def subtract(left: Expression, right: Expression): Expression =
+      Subtract(left, right)
+
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.length == rightStruct.length =>
+        val diffs = leftStruct.zip(rightStruct).zipWithIndex.map {
+          case ((_, _), index) =>
+            val leftField = GetStructField(leftOperand, index)
+            val rightField = GetStructField(rightOperand, index)
+            operator match {
+              case GreaterThanOrEqualOp | GreaterThanOp =>
+                subtract(leftField, rightField)
+              case LessThanOrEqualOp | LessThanOp =>
+                subtract(rightField, leftField)
+            }
+        }
+        if (diffs.length == 1) diffs.head else CreateStruct(diffs)
+      case _ =>
+        operator match {
+          case GreaterThanOrEqualOp | GreaterThanOp =>
+            subtract(leftOperand, rightOperand)
+          case LessThanOrEqualOp | LessThanOp =>
+            subtract(rightOperand, leftOperand)
+        }
+    }
+  }
+
+  /**
+   * Tuple/struct operands may use different field names on each side. Rewrite them to positional
+   * structs with matching schemas so comparison and ordering type-check.
+   */
+  private def alignOperandsForComparison(
+      leftOperand: Expression,
+      rightOperand: Expression): (Expression, Expression) = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.length == rightStruct.length =>
+        val leftFields = leftStruct.indices.map(index => GetStructField(leftOperand, index))
+        val rightFields = rightStruct.indices.map(index => GetStructField(rightOperand, index))
+        (CreateStruct(leftFields), CreateStruct(rightFields))
+      case _ =>
+        (leftOperand, rightOperand)
     }
   }
 

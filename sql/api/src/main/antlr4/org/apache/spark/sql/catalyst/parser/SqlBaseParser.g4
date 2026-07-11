@@ -1120,7 +1120,7 @@ asofJoinCriteria
     ;
 
 matchComparison
-    : left=expression operator=(GTE | GT | LTE | LT) right=expression
+    : left=valueExpression operator=(GTE | GT | LTE | LT) right=valueExpression
     ;
 
 joinType
