@@ -1003,7 +1003,11 @@ class PlanParserSuite extends AnalysisTest {
   test("asof join - invalid match operator") {
     val sql =
       "select * from t asof join u match_condition (t.a = u.a)"
-    assert(parseException(sql).getMessage.contains("mismatched input '='"))
+    checkError(
+      exception = parseException(sql),
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'='", "hint" -> ""))
   }
 
   test("nearest-by keywords are non-reserved (usable as identifiers)") {

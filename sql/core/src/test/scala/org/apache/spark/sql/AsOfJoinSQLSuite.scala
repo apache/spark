@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
@@ -128,9 +129,10 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  MATCH_CONDITION (t.trade_time = q.quote_time)
         |  ON t.symbol = q.symbol
         |""".stripMargin
-    val exception = intercept[Exception] {
-      sql(sqlText)
-    }
-    assert(exception.getMessage.contains("mismatched input '='"))
+    checkError(
+      exception = intercept[ParseException](sql(sqlText)),
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'='", "hint" -> ""))
   }
 }

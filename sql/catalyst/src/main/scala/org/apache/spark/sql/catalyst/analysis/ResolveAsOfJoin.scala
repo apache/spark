@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleId, RuleIdCollection}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.util.RowOrdering
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into `asOfCondition` and
@@ -50,7 +49,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
             j.joinType,
             cols,
             None,
-            (l, r) => conf.resolver(l) == conf.resolver(r))
+            (l, r) => conf.resolver(l, r))
           j.copy(condition = newCondition, usingColumns = None)
         case _ => j
       }
@@ -92,12 +91,12 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
   }
 
   private def findInvalidMatchConditionExpression(expr: Expression): Option[Expression] = {
-    expr.preOrder.collectFirst {
+    expr.collect {
       case e: SubqueryExpression => e
       case e: AggregateExpression => e
       case e: WindowExpression => e
       case e if e.containsPattern(GENERATOR) => e
       case e if !e.deterministic => e
-    }
+    }.headOption
   }
 }
