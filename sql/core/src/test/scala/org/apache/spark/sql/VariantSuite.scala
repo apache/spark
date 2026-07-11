@@ -384,6 +384,61 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("try_variant_insert with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.b', 2))"),
+      rows("""{"a":1,"b":2}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.a', 2))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.a.b', 2))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$[0]', 2))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 5}'), '$.a[0]', 2))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.b', NULL))"),
+      rows(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT try_variant_insert(parse_json('{}'), '$', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("try_variant_insert")))
+  }
+
+  test("try_variant_insert with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1}""", "$.b"),
+          ("""{"a": 1}""", "$.a"),
+          ("""{"a": 1}""", "$.a.b"),
+          (null, "$.b")
+        ).toDF("json", "path")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(try_variant_insert(v, col("path"), lit(2))).alias("r"))
+        checkAnswer(out, rows("""{"a":1,"b":2}""", null, null, null))
+
+        val out2 = df.select(to_json(try_variant_insert(v, "$.b", lit(2))).alias("r"))
+        checkAnswer(
+          out2,
+          rows("""{"a":1,"b":2}""", """{"a":1,"b":2}""", """{"a":1,"b":2}""", null))
+      }
+    }
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)
