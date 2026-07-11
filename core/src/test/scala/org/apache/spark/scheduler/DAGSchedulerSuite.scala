@@ -6239,6 +6239,47 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a consumer is a group member even if a REGULAR dep precedes the " +
+      "pipelined one in its dependency list") {
+    // isPipelinedGroupMember's consumer walk does `rdd.dependencies.exists { case pipelined => true;
+    // case regularShuffle => false; case narrow => descend }`. `exists` must continue PAST the
+    // regular-shuffle `false` to find a pipelined dep later in the same list. Put the regular dep
+    // FIRST to exercise that ordering: the consumer must still be recognized as a group member (its
+    // task set marked isPipelined), and co-schedule with the pipelined producer once the regular
+    // parent is done.
+    val regularProducerRdd = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularProducerRdd, new HashPartitioner(2))
+    val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(pipelinedProducerRdd, new HashPartitioner(2))
+    // Regular dep FIRST, pipelined dep SECOND.
+    val consumerRdd =
+      new MyRDD(sc, 2, List(regularDep, pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    // Consumer waits on the regular parent; complete it so the consumer is reconsidered.
+    val regularStageId = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq regularProducerRdd
+    }.get.stageId
+    completeShuffleMapStageSuccessfully(regularStageId, 0, 2)
+
+    // The consumer is now co-scheduled with the pipelined producer, and its task set must be marked
+    // isPipelined (which requires isPipelinedGroupMember to have found the pipelined dep despite the
+    // regular dep appearing first).
+    val consumerTaskSet = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
+    }.get
+    assert(consumerTaskSet.isPipelined,
+      "a consumer reading a pipelined dep must be a group member even when a regular dep is listed " +
+        "before it")
+    val pipelinedStageId = taskSets.find { ts =>
+      scheduler.stageIdToStage(ts.stageId).rdd eq pipelinedProducerRdd
+    }.get.stageId
+    completeShuffleMapStageSuccessfully(pipelinedStageId, 0, 2)
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: deep chain A->B->C is submitted fully concurrently") {
     // A --pipelined--> B --pipelined--> C : all three co-scheduled (each edge is non-sequencing).
     val rddA = new MyRDD(sc, 2, Nil)
@@ -6857,6 +6898,38 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("pipelined shuffle: both producer and consumer task sets are marked isPipelined") {
+    // The TaskSet.isPipelined flag drives group-atomic failure in the task scheduler; verify the
+    // DAGScheduler sets it for both members of a pipelined group (producer and consumer).
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === 2)
+    val producerTs = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerRdd).get
+    val consumerTs = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+    assert(producerTs.isPipelined, "the pipelined producer's task set must be marked isPipelined")
+    assert(consumerTs.isPipelined, "the pipelined consumer's task set must be marked isPipelined")
+
+    completeShuffleMapStageSuccessfully(producerTs.stageId, 0, 2)
+    complete(consumerTs, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("regular shuffle: task sets are NOT marked isPipelined (inertness)") {
+    // A regular producer/consumer must not be marked isPipelined.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.head.isPipelined === false, "a regular producer must not be marked isPipelined")
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    assert(taskSets(1).isPipelined === false, "a regular consumer must not be marked isPipelined")
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {

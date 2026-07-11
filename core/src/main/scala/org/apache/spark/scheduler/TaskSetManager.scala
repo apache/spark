@@ -69,6 +69,15 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+
+  // A pipelined-group member reads/writes a transient shuffle that cannot be re-read in isolation,
+  // so a single task failure must fail the whole group (which fails the job, triggering a rerun)
+  // rather than be retried per-task. For such a task set we cap attempts at 1 and count every
+  // failure, including reasons that are normally not counted (e.g. executor loss). This is the
+  // native equivalent of the prototype's per-batch "any failure counts" behavior, keyed on the
+  // pipelined dependency (via TaskSet.isPipelined) rather than a job property.
+  private val effectiveMaxTaskFailures = if (taskSet.isPipelined) 1 else maxTaskFailures
+
   private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   // shuffleId is only available when isShuffleMapTasks=true
   private val shuffleId = taskSet.shuffleId
@@ -1105,16 +1114,31 @@ private[spark] class TaskSetManager(
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
       accumUpdates, metricPeaks)
 
-    if (!isZombie && reason.countTowardsTaskFailures) {
+    // A pipelined-group member's transient shuffle cannot be recovered per-task, so a GENUINE task
+    // failure must fail the whole group even when the reason is normally not counted -- most
+    // importantly executor loss not caused by the app (ExecutorLostFailure with
+    // exitCausedByApp=false), which strands the transient output. But we must NOT force-count
+    // reasons that are benign by design: TaskKilled (a losing speculative/duplicate attempt after
+    // another attempt succeeded, or a deliberate kill) and TaskCommitDenied (a speculation commit
+    // race) are not real failures, and counting them would abort the group spuriously. So for a
+    // pipelined set we count everything EXCEPT those two benign reasons. Non-pipelined sets are
+    // unchanged.
+    val forceCountForPipelined = taskSet.isPipelined && (reason match {
+      case _: TaskKilled | _: TaskCommitDenied => false
+      case _ => true
+    })
+    val countTowardsTaskFailures = reason.countTowardsTaskFailures || forceCountForPipelined
+    if (!isZombie && countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
-      if (numFailures(index) >= maxTaskFailures) {
+      if (numFailures(index) >= effectiveMaxTaskFailures) {
         logError(log"Task ${MDC(TASK_INDEX, index)} in stage " + taskSet.logId +
-          log" failed ${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
+          log" failed ${MDC(MAX_ATTEMPTS, effectiveMaxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
+          .format(index, taskSet.id, effectiveMaxTaskFailures, failureReasonString),
+          failureException)
         return
       }
     }
@@ -1190,7 +1214,15 @@ private[spark] class TaskSetManager(
     // could serve the shuffle outputs or the executor lost is caused by decommission (which
     // can destroy the whole host). The reason is the next stage wouldn't be able to fetch the
     // data from this dead executor so we would need to rerun these tasks on other executors.
-    val maybeShuffleMapOutputLoss = isShuffleMapTasks &&
+    // A pipelined-group member must never single-resubmit an already-successful map task: its
+    // transient shuffle output is not addressable and a lone producer rerun hangs the streaming
+    // writer in awaitTerminationAcks (SC-235532). This "Resubmitted" re-enqueue loop bypasses
+    // handleFailedTask, so M1.4's group-atomic abort would never see it; exclude pipelined sets
+    // here. A genuine executor loss still flows through the running-task loop below (iter2 ->
+    // handleFailedTask(ExecutorLostFailure)), which is force-counted for a pipelined set and aborts
+    // the whole group. Note isZombie already skips a fully-complete producer's set; this guard also
+    // covers a PARTIALLY-complete producer losing an executor on decommission (the SC-235532 case).
+    val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
       !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {
