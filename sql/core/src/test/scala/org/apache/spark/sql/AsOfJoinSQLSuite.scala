@@ -118,7 +118,10 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           |  MATCH_CONDITION (a.alert_time <= m.window_start)
           |  ON a.host = m.host
           |""".stripMargin),
-      Row(Timestamp.valueOf("2026-06-29 10:00:00"), "db-01", Timestamp.valueOf("2026-06-29 12:00:00")) :: Nil)
+      Row(
+        Timestamp.valueOf("2026-06-29 10:00:00"),
+        "db-01",
+        Timestamp.valueOf("2026-06-29 12:00:00")) :: Nil)
   }
 
   test("equality operator is rejected in MATCH_CONDITION") {
