@@ -25,9 +25,11 @@ import org.apache.spark.sql.catalyst.expressions.{
   WindowExpression
 }
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.AsOfMatchCondition
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
 
 /**
@@ -40,9 +42,9 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
     _.containsPattern(AS_OF_JOIN), ruleId) {
     case j @ AsOfJoin(left, right, _, condition, _, _, _, usingColumns, matchCmp)
         if left.resolved && right.resolved =>
-      val withUsing = usingColumns match {
+      val (joinBase, usingProjection) = usingColumns match {
         case Some(cols) if condition.isEmpty =>
-          val (_, _, newCondition) =
+          val (projectList, hiddenList, newCondition) =
             NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
               left,
               left.output,
@@ -52,19 +54,29 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
               cols,
               None,
               (l, r) => conf.resolver(l, r))
-          j.copy(condition = newCondition, usingColumns = None)
-        case _ => j
+          (j.copy(condition = newCondition, usingColumns = None), Some((projectList, hiddenList)))
+        case _ => (j, None)
       }
-      matchCmp match {
-        case Some((leftExpr, operator, rightExpr)) if leftExpr.resolved && rightExpr.resolved =>
-          AsOfJoinValidation.validateMatchConditionOperands(withUsing, leftExpr, rightExpr)
+      val resolvedJoin = matchCmp match {
+        case Some(AsOfMatchCondition(leftExpr, operator, rightExpr))
+            if leftExpr.resolved && rightExpr.resolved =>
+          AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
           val (asOfCondition, orderExpression) =
             AsOfJoin.resolveMatchComparison(left, right, leftExpr, operator, rightExpr)
-          withUsing.copy(
+          joinBase.copy(
             asOfCondition = asOfCondition,
             orderExpression = orderExpression,
             matchComparison = None)
-        case _ => withUsing
+        case _ => joinBase
+      }
+      usingProjection match {
+        case Some((projectList, hiddenList)) =>
+          val project = Project(projectList, resolvedJoin)
+          project.setTagValue(
+            Project.hiddenOutputTag,
+            hiddenList.map(_.markAsQualifiedAccessOnly()))
+          project
+        case None => resolvedJoin
       }
   }
 }

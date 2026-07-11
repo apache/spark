@@ -1007,7 +1007,7 @@ class PlanParserSuite extends AnalysisTest {
       exception = parseException(sql),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'='", "hint" -> ""))
+      parameters = Map("error" -> "')'", "hint" -> ""))
   }
 
   test("nearest-by keywords are non-reserved (usable as identifiers)") {

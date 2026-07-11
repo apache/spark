@@ -2535,7 +2535,7 @@ case class AsOfJoin(
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
     usingColumns: Option[Seq[String]] = None,
-    matchComparison: Option[(Expression, MatchComparisonOperator, Expression)] = None)
+    matchComparison: Option[AsOfMatchCondition] = None)
     extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
@@ -2615,7 +2615,7 @@ object AsOfJoin {
       orderExpression = Literal(0),
       toleranceAssertion = None,
       usingColumns = usingColumns,
-      matchComparison = Some((leftExpr, operator, rightExpr)))
+      matchComparison = Some(AsOfMatchCondition(leftExpr, operator, rightExpr)))
   }
 
   def resolveMatchComparison(

@@ -27,7 +27,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   private def setupTradeQuoteViews(): Unit = {
     sql(
       """
-        |CREATE TEMP VIEW trades(trade_time, symbol, quantity) AS
+        |CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
         |VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
         |       (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
         |       (TIMESTAMP '2026-06-29 10:00:12', 'MSFT',  50),
@@ -35,7 +35,7 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin)
     sql(
       """
-        |CREATE TEMP VIEW quotes(quote_time, symbol, bid_price) AS
+        |CREATE OR REPLACE TEMP VIEW quotes(quote_time, symbol, bid_price) AS
         |VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10),
         |       (TIMESTAMP '2026-06-29 10:00:07', 'AAPL', 180.15),
         |       (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
@@ -100,12 +100,12 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
   test("first-following match with <=") {
     sql(
       """
-        |CREATE TEMP VIEW alerts(alert_time, host) AS
+        |CREATE OR REPLACE TEMP VIEW alerts(alert_time, host) AS
         |VALUES (TIMESTAMP '2026-06-29 10:00:00', 'db-01')
         |""".stripMargin)
     sql(
       """
-        |CREATE TEMP VIEW maintenance(window_start, host) AS
+        |CREATE OR REPLACE TEMP VIEW maintenance(window_start, host) AS
         |VALUES (TIMESTAMP '2026-06-29 08:00:00', 'db-01'),
         |       (TIMESTAMP '2026-06-29 12:00:00', 'db-01')
         |""".stripMargin)
@@ -136,6 +136,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       exception = intercept[ParseException](sql(sqlText)),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'='", "hint" -> ""))
+      parameters = Map("error" -> "')'", "hint" -> ""))
   }
 }

@@ -1932,6 +1932,17 @@ class Analyzer(
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
 
+      case j @ AsOfJoin(
+          _, _, _, _, _, _, _, _, Some(mc @ AsOfMatchCondition(left, operator, right)))
+          if !left.resolved || !right.resolved =>
+        val resolvedLeft = resolveExpressionByPlanChildren(left, j, includeLastResort = true)
+        val resolvedRight = resolveExpressionByPlanChildren(right, j, includeLastResort = true)
+        if (resolvedLeft.fastEquals(left) && resolvedRight.fastEquals(right)) {
+          j
+        } else {
+          j.copy(matchComparison = Some(AsOfMatchCondition(resolvedLeft, operator, resolvedRight)))
+        }
+
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
         q.mapExpressions(resolveExpressionByPlanChildren(_, q, includeLastResort = true))

@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 
 object JoinType {
 
@@ -184,6 +184,16 @@ case object LessThanOp extends MatchComparisonOperator {
   override def sql: String = "<"
   override def flip: MatchComparisonOperator = GreaterThanOp
 }
+
+/**
+ * Parsed SQL `MATCH_CONDITION (left op right)` before analysis materializes it into
+ * [[org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.asOfCondition]].
+ * Must be a case class (not a tuple) so expression rewriting does not destroy the shape.
+ */
+case class AsOfMatchCondition(
+    left: Expression,
+    operator: MatchComparisonOperator,
+    right: Expression)
 
 object LateralJoinType {
 
