@@ -1820,6 +1820,42 @@ package object config {
       .intConf
       .createWithDefault(32 << 20) // 32 MB
 
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferSize")
+      .doc("Target byte size for each network buffer sent from a streaming shuffle writer to a " +
+        "reader. Larger values reduce per-message overhead; smaller values reduce latency.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.networkBufferSize must be positive.")
+      .createWithDefault(32768) // 32 KB
+
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferMaxWaitTimeMs")
+      .doc("Maximum time in milliseconds a partially-filled network buffer is held before " +
+        "being flushed to the reader. Lower values reduce latency at the cost of smaller, " +
+        "less efficient messages.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
+    ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
+      .doc("Best-effort memory limit in bytes for in-flight data buffers in a streaming " +
+        "shuffle writer task. Includes TCP send/receive buffers. The writer back-pressures " +
+        "the upstream iterator when this limit is reached. This is a best-effort bound: " +
+        "back-pressure is accounted per network buffer, so an individual serialized row that " +
+        "exceeds the network buffer size can push actual in-flight memory above this limit.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.writerMaxMemory must be positive.")
+      .createWithDefault(32 << 20) // 32 MB
+
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")

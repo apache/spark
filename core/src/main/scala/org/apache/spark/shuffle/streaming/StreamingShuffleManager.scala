@@ -91,9 +91,8 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
       mapId: Long,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
-    // Implementation is added in a follow-up commit that introduces StreamingShuffleWriter.
-    throw new UnsupportedOperationException(
-      "StreamingShuffleManager.getWriter is not yet implemented")
+    val streamingShuffleHandle = handle.asInstanceOf[StreamingShuffleHandle[K, V, _]]
+    new StreamingShuffleWriter[K, V](streamingShuffleHandle, mapId, context)
   }
 
   /**
