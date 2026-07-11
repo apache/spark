@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
-import org.apache.spark.sql.catalyst.rules.{Rule, RuleId, RuleIdCollection}
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.errors.QueryErrorsBase
 
@@ -31,9 +31,6 @@ import org.apache.spark.sql.errors.QueryErrorsBase
  * `orderExpression`, and expands `USING` column lists into equi-join predicates.
  */
 object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
-
-  override val ruleId: RuleId = RuleIdCollection.getRuleId(
-    "org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin")
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(AS_OF_JOIN), ruleId) {
