@@ -3091,6 +3091,31 @@ private[spark] class DAGScheduler(
             log"${MDC(STAGE_ATTEMPT_ID, task.stageAttemptId)} and there is a more recent attempt for " +
             log"that stage (attempt " +
             log"${MDC(NUM_ATTEMPT, failedStage.latestInfo.attemptNumber())}) running")
+        } else if (isPipelinedGroupMember(failedStage) || isPipelinedGroupMember(mapStage)) {
+          // Failure is group-atomic for a pipelined group (spec S6). The base scheduler handles a
+          // FetchFailed by resubmitting just the map stage in isolation and recomputing serially,
+          // but a transient pipelined shuffle cannot be re-read and its members are co-scheduled, so
+          // a lone-stage resubmit is never valid and would deadlock the group (SC-233883). Abort the
+          // whole group instead: aborting the failed stage tears down its running co-scheduled
+          // members and fails the job, and the caller (e.g. the streaming batch loop) reruns the
+          // batch from scratch. This is distinct from the maxTaskFailures=1 lever (which handles
+          // task failures the TaskSetManager counts): a FetchFailed is NOT counted there (the base
+          // TaskSetManager marks the task successful and zombies the set), so the routing to group
+          // failure must be enforced here.
+          logInfo(log"Failing pipelined group containing ${MDC(FAILED_STAGE, failedStage)} " +
+            log"(${MDC(FAILED_STAGE_NAME, failedStage.name)}) atomically due to a fetch failure " +
+            log"from ${MDC(STAGE, mapStage)} (${MDC(STAGE_NAME, mapStage.name)})")
+          failedStage.failedAttemptIds.add(task.stageAttemptId)
+          // Still unregister the failed executor's outputs, exactly as the base FetchFailed path
+          // does -- aborting the group tears down only THIS job's stages, but the FetchFailed is
+          // authoritative evidence that the executor's shuffle data is gone, and other/concurrent
+          // jobs sharing that executor must not keep stale MapOutputTracker entries (with an
+          // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
+          // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
+          // in the tracker (S6), so this can only strip regular/durable outputs.
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
+          abortStage(failedStage,
+            s"A pipelined group member failed with a fetch failure: $failureMessage", None)
         } else {
           val ignoreStageFailure = ignoreDecommissionFetchFailure &&
             isExecutorDecommissioningOrDecommissioned(taskScheduler, bmAddress)
@@ -3207,39 +3232,7 @@ private[spark] class DAGScheduler(
           }
 
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
-          if (bmAddress != null) {
-            val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
-            val isHostDecommissioned = taskScheduler
-              .getExecutorDecommissionState(bmAddress.executorId)
-              .exists(_.workerHost.isDefined)
-
-            // Shuffle output of all executors on host `bmAddress.host` may be lost if:
-            // - External shuffle service is enabled, so we assume that all shuffle data on node is
-            //   bad.
-            // - Host is decommissioned, thus all executors on that host will die.
-            val shuffleOutputOfEntireHostLost = externalShuffleServiceEnabled ||
-              isHostDecommissioned
-            val hostToUnregisterOutputs = if (shuffleOutputOfEntireHostLost
-              && unRegisterOutputOnHostOnFetchFailure) {
-              Some(bmAddress.host)
-            } else {
-              // Unregister shuffle data just for one executor (we don't have any
-              // reason to believe shuffle data has been lost for the entire host).
-              None
-            }
-            removeExecutorAndUnregisterOutputs(
-              execId = bmAddress.executorId,
-              fileLost = true,
-              hostToUnregisterOutputs = hostToUnregisterOutputs,
-              maybeEpoch = Some(task.epoch),
-              // shuffleFileLostEpoch is ignored when a host is decommissioned because some
-              // decommissioned executors on that host might have been removed before this fetch
-              // failure and might have bumped up the shuffleFileLostEpoch. We ignore that, and
-              // proceed with unconditional removal of shuffle outputs from all executors on that
-              // host, including from those that we still haven't confirmed as lost due to heartbeat
-              // delays.
-              ignoreShuffleFileLostEpoch = isHostDecommissioned)
-          }
+          unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
         }
 
       case failure: TaskFailedReason if task.isBarrier =>
@@ -3777,6 +3770,52 @@ private[spark] class DAGScheduler(
       fileLost = fileLost,
       hostToUnregisterOutputs = workerHost,
       maybeEpoch = None)
+  }
+
+  /**
+   * On a FetchFailed, unregister the shuffle outputs of the executor (or its whole host) whose
+   * fetch failed, treating the FetchFailed as authoritative evidence that its shuffle data is gone.
+   * Extracted from the base FetchFailed handler so the pipelined-group-abort branch can also run it:
+   * aborting the group fails only this job's stages, but a dead executor's REGULAR outputs must
+   * still be cleaned up for other/concurrent jobs (with an external shuffle service, an ExecutorLost
+   * does not clean them, so FetchFailed is the only proactive channel). No-op when `bmAddress` is
+   * null. Safe for a pipelined shuffle: it registers no map outputs in the tracker, so this can only
+   * strip regular/durable outputs.
+   */
+  private def unregisterOutputsOnFetchFailedExecutor(
+      bmAddress: BlockManagerId, task: Task[_]): Unit = {
+    // TODO: mark the executor as failed only if there were lots of fetch failures on it
+    if (bmAddress != null) {
+      val externalShuffleServiceEnabled = env.blockManager.externalShuffleServiceEnabled
+      val isHostDecommissioned = taskScheduler
+        .getExecutorDecommissionState(bmAddress.executorId)
+        .exists(_.workerHost.isDefined)
+
+      // Shuffle output of all executors on host `bmAddress.host` may be lost if:
+      // - External shuffle service is enabled, so we assume that all shuffle data on node is bad.
+      // - Host is decommissioned, thus all executors on that host will die.
+      val shuffleOutputOfEntireHostLost = externalShuffleServiceEnabled || isHostDecommissioned
+      val hostToUnregisterOutputs = if (shuffleOutputOfEntireHostLost
+        && unRegisterOutputOnHostOnFetchFailure) {
+        Some(bmAddress.host)
+      } else {
+        // Unregister shuffle data just for one executor (we don't have any
+        // reason to believe shuffle data has been lost for the entire host).
+        None
+      }
+      removeExecutorAndUnregisterOutputs(
+        execId = bmAddress.executorId,
+        fileLost = true,
+        hostToUnregisterOutputs = hostToUnregisterOutputs,
+        maybeEpoch = Some(task.epoch),
+        // shuffleFileLostEpoch is ignored when a host is decommissioned because some
+        // decommissioned executors on that host might have been removed before this fetch
+        // failure and might have bumped up the shuffleFileLostEpoch. We ignore that, and
+        // proceed with unconditional removal of shuffle outputs from all executors on that
+        // host, including from those that we still haven't confirmed as lost due to heartbeat
+        // delays.
+        ignoreShuffleFileLostEpoch = isHostDecommissioned)
+    }
   }
 
   /**
