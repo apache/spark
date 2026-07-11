@@ -1083,7 +1083,7 @@ class ArrowTableToRowsConversion:
                 for i in range(n)
             ]
 
-        if pa.types.is_list(column.type) or pa.types.is_large_list(column.type):
+        elif pa.types.is_list(column.type) or pa.types.is_large_list(column.type):
             n = len(column)
             # List offset buffers never carry a validity bitmap, so this conversion is
             # always zero-copy; zero_copy_only=True asserts that invariant and would
@@ -1101,7 +1101,7 @@ class ArrowTableToRowsConversion:
                 for i in range(n)
             ]
 
-        if pa.types.is_struct(column.type):
+        elif pa.types.is_struct(column.type):
             n = len(column)
             names = [column.type.field(i).name for i in range(column.type.num_fields)]
             if len(set(names)) != len(names):
