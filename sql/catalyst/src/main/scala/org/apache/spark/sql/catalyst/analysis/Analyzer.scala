@@ -1932,16 +1932,28 @@ class Analyzer(
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
 
-      case j @ AsOfJoin(
-          _, _, _, _, _, _, _, _, Some(mc @ AsOfMatchCondition(left, operator, right)))
-          if !left.resolved || !right.resolved =>
-        val resolvedLeft = resolveExpressionByPlanChildren(left, j, includeLastResort = true)
-        val resolvedRight = resolveExpressionByPlanChildren(right, j, includeLastResort = true)
-        if (resolvedLeft.fastEquals(left) && resolvedRight.fastEquals(right)) {
-          j
-        } else {
-          j.copy(matchComparison = Some(AsOfMatchCondition(resolvedLeft, operator, resolvedRight)))
+      case j @ AsOfJoin(left, right, _, condition, _, _, _, _, matchCmp)
+          if left.resolved && right.resolved &&
+            (matchCmp.exists(mc => !mc.left.resolved || !mc.right.resolved) ||
+              condition.exists(!_.resolved)) =>
+        var updated = j
+        matchCmp.foreach { mc =>
+          val resolvedLeft = resolveExpressionByPlanChildren(mc.left, j, includeLastResort = true)
+          val resolvedRight = resolveExpressionByPlanChildren(mc.right, j, includeLastResort = true)
+          if (!resolvedLeft.fastEquals(mc.left) || !resolvedRight.fastEquals(mc.right)) {
+            updated = updated.copy(
+              matchComparison = Some(AsOfMatchCondition(resolvedLeft, mc.operator, resolvedRight)))
+          }
         }
+        condition.foreach { cond =>
+          if (!cond.resolved) {
+            val resolvedCond = resolveExpressionByPlanChildren(cond, j, includeLastResort = true)
+            if (!resolvedCond.fastEquals(cond)) {
+              updated = updated.copy(condition = Some(resolvedCond))
+            }
+          }
+        }
+        if (updated.fastEquals(j)) j else updated
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")

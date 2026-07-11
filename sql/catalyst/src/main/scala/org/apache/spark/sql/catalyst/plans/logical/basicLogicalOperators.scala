@@ -27,7 +27,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, ShufflePartitionIdPassThrough, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.util.BestEffortLazyVal
+import org.apache.spark.util.collection.BitSet
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -2554,6 +2557,18 @@ case class AsOfJoin(
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
+  private val _asOfJoinTreePatternBits = new BestEffortLazyVal[BitSet](() => {
+    val bits = new BitSet(TreePattern.maxId)
+    bits.union(super.treePatternBits)
+    matchComparison.foreach { mc =>
+      bits.union(mc.left.treePatternBits)
+      bits.union(mc.right.treePatternBits)
+    }
+    bits
+  })
+
+  override def treePatternBits: BitSet = _asOfJoinTreePatternBits()
+
   override lazy val resolved: Boolean = {
     childrenResolved &&
       usingColumns.isEmpty &&
@@ -2568,6 +2583,27 @@ case class AsOfJoin(
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
+
+  /**
+   * [[AsOfMatchCondition]] is not an [[Expression]], so the default [[mapExpressions]] path does
+   * not rewrite its operand trees. Analysis rules (reference resolution, type coercion, etc.)
+   * must still reach those operands before [[ResolveAsOfJoin]] materializes them.
+   */
+  override def mapExpressions(f: Expression => Expression): this.type = {
+    val mapped = super.mapExpressions(f)
+    matchComparison match {
+      case Some(mc) =>
+        val newLeft = f(mc.left)
+        val newRight = f(mc.right)
+        if (newLeft.fastEquals(mc.left) && newRight.fastEquals(mc.right)) {
+          mapped
+        } else {
+          mapped.copy(matchComparison = Some(mc.copy(left = newLeft, right = newRight)))
+            .asInstanceOf[this.type]
+        }
+      case None => mapped
+    }
+  }
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): AsOfJoin = {

@@ -135,6 +135,32 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         Timestamp.valueOf("2026-06-29 12:00:00")) :: Nil)
   }
 
+  test("MATCH_CONDITION operand arithmetic with ON") {
+    setupTradeQuoteViews()
+    checkAnswer(
+      sql(
+        """
+          |SELECT count(*) AS cnt
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= date_trunc('hour', q.quote_time))
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Row(3L) :: Nil)
+  }
+
+  test("MATCH_CONDITION interval arithmetic with ON") {
+    setupTradeQuoteViews()
+    checkAnswer(
+      sql(
+        """
+          |SELECT count(*) AS cnt
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time + INTERVAL 1 HOUR)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Row(0L) :: Nil)
+  }
+
   test("equality operator is rejected in MATCH_CONDITION") {
     val sqlText =
       """

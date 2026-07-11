@@ -42,7 +42,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(AS_OF_JOIN), ruleId) {
     case j @ AsOfJoin(left, right, _, condition, _, _, _, usingColumns, matchCmp)
-        if left.resolved && right.resolved =>
+        if left.resolved && right.resolved && condition.forall(_.resolved) =>
       val (joinBase, usingProjection) = usingColumns match {
         case Some(cols) if condition.isEmpty =>
           val (projectList, hiddenList, newCondition) =
