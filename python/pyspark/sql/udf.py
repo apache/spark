@@ -228,58 +228,76 @@ class UserDefinedFunction:
         # Conf values are compared case-insensitively: `SET conf=True` stores
         # the literal "True", which would otherwise silently disable
         # transpilation (or mis-trigger the ANSI warning below).
-        def _conf_is_true(key: str) -> bool:
+        #
+        # Each conf read is a JVM roundtrip, so keep the default construction
+        # path cheap: the experimental gate is only read for deterministic
+        # batched UDFs (the only shape we transpile), and the ANSI conf is only
+        # read once the gate is known to be on. When ``default`` is given it is
+        # passed through to ``RuntimeConfig.get`` so construction never depends
+        # on the JVM having the (experimental) conf registered -- e.g. a newer
+        # Python client against an older driver. No default is passed for
+        # ``spark.sql.ansi.enabled``: its registered default is dynamic
+        # (environment-driven) and must be respected when the key is unset.
+        def _conf_is_true(key: str, default: Optional[str] = None) -> bool:
             if session is None:
                 return False
-            value = session.conf.get(key)
+            if default is None:
+                value = session.conf.get(key)
+            else:
+                value = session.conf.get(key, default)
             return value is not None and value.lower() == "true"
 
-        transpile_enabled = (
-            deterministic
-            and evalType == PythonEvalType.SQL_BATCHED_UDF
-            and _conf_is_true("spark.sql.experimental.optimizer.transpilePyUDFs")
-        )
-        ansi_enabled = _conf_is_true("spark.sql.ansi.enabled")
-        # Transpilation only attempts to reproduce ANSI-mode Spark SQL semantics
-        # (no silent integer overflow, divide-by-zero raises, etc.). Running it
-        # against non-ANSI Spark would balloon the test matrix we'd have to
-        # maintain to verify Python-vs-SQL equivalence, so we gate on ANSI here
-        # and warn the user instead of trying to transpile in a mode we don't
-        # claim to support yet.
-        if transpile_enabled and not ansi_enabled:
-            warnings.warn(
-                "Python UDF transpilation "
-                "(spark.sql.experimental.optimizer.transpilePyUDFs) is only "
-                "supported when ANSI mode is enabled "
-                "(spark.sql.ansi.enabled=true). Skipping transpilation for "
-                f"{func} -- enable ANSI mode or set transpilePyUDFs=false to "
-                "silence this warning.",
-                RuntimeWarning,
+        try:
+            transpile_enabled = (
+                deterministic
+                and evalType == PythonEvalType.SQL_BATCHED_UDF
+                and _conf_is_true("spark.sql.experimental.optimizer.transpilePyUDFs", "false")
             )
-            transpile_enabled = False
-        if transpile_enabled and session:
-            # Import only if needed, also avoid circular import loops.
-            from pyspark.sql.transpile import _transpile_func
+            # Transpilation only attempts to reproduce ANSI-mode Spark SQL
+            # semantics (no silent integer overflow, divide-by-zero raises,
+            # etc.). Running it against non-ANSI Spark would balloon the test
+            # matrix we'd have to maintain to verify Python-vs-SQL equivalence,
+            # so we gate on ANSI here and warn the user instead of trying to
+            # transpile in a mode we don't claim to support yet.
+            if transpile_enabled and not _conf_is_true("spark.sql.ansi.enabled"):
+                warnings.warn(
+                    "Python UDF transpilation "
+                    "(spark.sql.experimental.optimizer.transpilePyUDFs) is only "
+                    "supported when ANSI mode is enabled "
+                    "(spark.sql.ansi.enabled=true). Skipping transpilation for "
+                    f"{func} -- enable ANSI mode or set transpilePyUDFs=false to "
+                    "silence this warning.",
+                    RuntimeWarning,
+                )
+                transpile_enabled = False
+            if transpile_enabled and session:
+                # Import only if needed, also avoid circular import loops.
+                from pyspark.sql.transpile import _transpile_func
 
-            try:
+                # ``self.returnType`` parses (and caches) the declared return
+                # type; the transpiler needs the parsed form to decide whether
+                # the final Cast to it can resolve at all. The parse is reused
+                # later by ``_create_judf``, so this adds no extra JVM work.
                 (
                     self.transpiled,
                     errors,
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
-                ) = _transpile_func(session, func, returnType)
+                ) = _transpile_func(session, func, self.returnType)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
-            except Exception as e:
-                # An inability to transpile must never break a working
-                # UDF -- fall back to interpreted Python execution and
-                # surface the failure as a warning so users can opt to
-                # investigate without losing their query.
-                warnings.warn(f"Exception transpiling UDF {func}: {e}")
-                self.transpiled = []
-                self._transpiled_param_names = []
-                self._transpiled_input_categories = []
+        except Exception as e:
+            # An inability to transpile must never break a working UDF -- fall
+            # back to interpreted Python execution and surface the failure as a
+            # warning so users can opt to investigate without losing their
+            # query. The conf reads above are included: a session whose JVM
+            # cannot answer them should degrade to "no transpilation", not
+            # break UDF definition.
+            warnings.warn(f"Exception transpiling UDF {func}: {e}")
+            self.transpiled = []
+            self._transpiled_param_names = []
+            self._transpiled_input_categories = []
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
