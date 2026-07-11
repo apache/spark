@@ -622,6 +622,21 @@ private[spark] class DAGScheduler(
       firstJobId: Int): ShuffleMapStage = {
     shuffleIdToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) =>
+        // A pipelined shuffle is transient: it is a once-through live stream with no retained,
+        // addressable output, so reusing its producer stage across jobs is unsound (spec S4,
+        // cross-time/cross-job reuse). Reuse must be prevented explicitly -- from the scheduler's
+        // view a shuffle-map stage can be reused unless something forbids it. If a pipelined
+        // dependency's shuffleId is already bound to a stage from a different job, that is the
+        // forbidden cross-job reuse; fail fast (S9). (Within the same job the cached stage is the
+        // one we just created, so returning it is correct and not reuse.)
+        if (shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] &&
+            !stage.jobIds.contains(firstJobId)) {
+          throw new SparkException(
+            errorClass = "PIPELINED_SHUFFLE_CROSS_JOB_REUSE",
+            messageParameters = scala.collection.immutable.Map(
+              "shuffleId" -> shuffleDep.shuffleId.toString),
+            cause = null)
+        }
         stage
 
       case None =>
@@ -2984,7 +2999,31 @@ private[spark] class DAGScheduler(
 
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
-            if (!ignoreOldTaskAttempts) {
+            if (shuffleStage.isPipelined) {
+              // A pipelined shuffle is transient and must NOT be registered with the
+              // MapOutputTracker as a durable, addressable output (spec S4): doing so would let
+              // executor/host loss strip it there, flip isAvailable to false, and resubmit the
+              // producer -- which then hangs its streaming writer (SC-235532). Track the completed
+              // partition locally and monotonically on the stage instead; the incremental shuffle
+              // reader discovers the producer through its own transport, not the MapOutputTracker.
+              // Checksum-mismatch detection does not apply (a pipelined dependency never enables
+              // checksum retry -- see PipelinedShuffleDependency).
+              //
+              // Record the partition and decrement pendingPartitions UNCONDITIONALLY -- outside the
+              // `!ignoreOldTaskAttempts` and bogus-epoch guards that gate a regular shuffle. Both
+              // guards exist only to avoid trusting a MapOutputTracker registration that a later
+              // rollback (ignoreOldTaskAttempts, from an indeterminate/rolled-back stage) or an
+              // executor-loss strip (bogus epoch) could invalidate. A pipelined stage never
+              // registers there, and its completed set is monotonic and never rolled back (a
+              // transient shuffle cannot be recomputed; any real group failure aborts the whole
+              // group, S6). Skipping the record for an "old" or "bogus" straggler would be actively
+              // harmful: with pendingPartitions decremented but the partition unrecorded, a dropped
+              // last partition leaves the stage "done but not available" -> processShuffleMapStage-
+              // Completion resubmits the transient producer, reopening SC-235532. An already-
+              // successful straggler is not a failure, so recording it is always correct.
+              shuffleStage.pendingPartitions -= task.partitionId
+              shuffleStage.addPipelinedCompletedPartition(smt.partitionId)
+            } else if (!ignoreOldTaskAttempts) {
               shuffleStage.pendingPartitions -= task.partitionId
               val status = event.result.asInstanceOf[MapStatus]
               val execId = status.location.executorId
