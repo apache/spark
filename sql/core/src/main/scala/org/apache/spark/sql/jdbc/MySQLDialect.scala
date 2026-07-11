@@ -184,6 +184,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // scalastyle:on line.size.limit
         Some(getTimestampType(md.build()))
       case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
+      case Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
+        // MySQL TIME(p) precision is reported via the scale parameter.
+        val precision = if (size > 0 && size <= TimeType.MAX_PRECISION) size
+          else TimeType.DEFAULT_PRECISION
+        Some(TimeType(precision))
       case _ => None
     }
   }
@@ -282,6 +287,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     // scalastyle:on line.size.limit
     case TimestampNTZType if !conf.legacyMySqlTimestampNTZMappingEnabled =>
       Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case t: TimeType =>
+      Option(JdbcType(s"TIME(${t.precision})", java.sql.Types.TIME))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

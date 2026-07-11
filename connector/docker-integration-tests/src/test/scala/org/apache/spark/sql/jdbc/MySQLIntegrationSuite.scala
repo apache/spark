@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Properties
 
 import scala.util.Using
@@ -363,6 +363,55 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       .format("jdbc")
       .load()
     checkAnswer(df, Row("brown     ", "fox"))
+  }
+
+  test("SPARK-57555: MySQL TIME type read as TimeType") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      val timeCol = df.schema("t")
+      assert(timeCol.dataType === TimeType(6),
+        s"Expected TimeType(6) but got ${timeCol.dataType}")
+      val time3Col = df.schema("t1")
+      assert(time3Col.dataType === TimeType(3),
+        s"Expected TimeType(3) but got ${time3Col.dataType}")
+      checkAnswer(df.select("t", "t1"), Row(
+        LocalTime.of(13, 31, 24, 123000000),
+        LocalTime.of(13, 31, 24, 123000000)))
+    }
+  }
+
+  test("SPARK-57555: MySQL TIME type write round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(
+        Row(LocalTime.of(8, 30, 0), LocalTime.of(17, 22, 31, 123456000))
+      )
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t", TimeType(0))
+        .add("t_micro", TimeType(6))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite")
+        .option("createTableColumnTypes", "t TIME(0), t_micro TIME(6)")
+        .jdbc(jdbcUrl, "time_write_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_write_test", new Properties)
+      assert(result.schema("t").dataType === TimeType(0))
+      assert(result.schema("t_micro").dataType === TimeType(6))
+      checkAnswer(result, Row(
+        LocalTime.of(8, 30, 0),
+        LocalTime.of(17, 22, 31, 123456000)))
+    }
+  }
+
+  test("SPARK-57555: MySQL TIME type legacy mapping with escape hatch") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      // With escape hatch, TIME columns should remain as Timestamp (legacy behavior)
+      val timeCol = df.schema("t")
+      assert(!timeCol.dataType.isInstanceOf[TimeType],
+        s"With legacyJdbcTimeMappingEnabled=true, TIME should NOT be TimeType")
+    }
   }
 }
 
