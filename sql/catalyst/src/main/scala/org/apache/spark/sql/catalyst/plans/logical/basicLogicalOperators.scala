@@ -2643,8 +2643,7 @@ object AsOfJoin {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
       case _ =>
-        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(
-          expr1, expr2, leftSet, rightSet)
+        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(expr1, expr2)
     }
   }
 
