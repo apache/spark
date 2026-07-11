@@ -27,7 +27,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.ShortType
+import org.apache.spark.sql.types.{ShortType, TimeType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -369,13 +369,15 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
       val timeCol = df.schema("t")
-      assert(timeCol.dataType === TimeType(6),
-        s"Expected TimeType(6) but got ${timeCol.dataType}")
+      // MySQL bare TIME (no precision) reports scale=0 via JDBC metadata
+      assert(timeCol.dataType === TimeType(0),
+        s"Expected TimeType(0) for bare TIME but got ${timeCol.dataType}")
       val time3Col = df.schema("t1")
       assert(time3Col.dataType === TimeType(3),
         s"Expected TimeType(3) but got ${time3Col.dataType}")
+      // Bare TIME(0) truncates fractional seconds; TIME(3) preserves milliseconds
       checkAnswer(df.select("t", "t1"), Row(
-        LocalTime.of(13, 31, 24, 123000000),
+        LocalTime.of(13, 31, 24),
         LocalTime.of(13, 31, 24, 123000000)))
     }
   }
@@ -399,6 +401,40 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       checkAnswer(result, Row(
         LocalTime.of(8, 30, 0),
         LocalTime.of(17, 22, 31, 123456000)))
+    }
+  }
+
+  test("SPARK-57555: MySQL TIME precision preservation round-trip") {
+    // Verifies TimeType(3) -> TIME(3) -> read back as TimeType(3)
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(Row(LocalTime.of(10, 15, 30, 500000000)))
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t3", TimeType(3))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite").jdbc(jdbcUrl, "time_precision_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      assert(result.schema("t3").dataType === TimeType(3),
+        "Precision should be preserved on round-trip")
+      checkAnswer(result, Row(LocalTime.of(10, 15, 30, 500000000)))
+    }
+  }
+
+  test("SPARK-57555: MySQL TIME nanosecond write truncates to microseconds") {
+    // MySQL TIME max precision is 6 (microseconds). TimeType(9) writes as bare TIME (= TIME(6)),
+    // and the nanosecond portion is truncated on read-back.
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(Row(LocalTime.of(12, 0, 0, 123456789)))
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t_nanos", TimeType(9))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite").jdbc(jdbcUrl, "time_nanos_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+      // Read back as TimeType(6) since MySQL stores at most microseconds
+      assert(result.schema("t_nanos").dataType === TimeType(6))
+      // Nanoseconds truncated to microseconds: 123456789 -> 123456000
+      checkAnswer(result, Row(LocalTime.of(12, 0, 0, 123456000)))
     }
   }
 

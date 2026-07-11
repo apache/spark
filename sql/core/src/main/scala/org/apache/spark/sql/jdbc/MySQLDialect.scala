@@ -185,8 +185,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         Some(getTimestampType(md.build()))
       case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
       case Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
-        // MySQL TIME(p) precision is reported via the scale parameter.
-        val precision = if (size > 0 && size <= TimeType.MAX_PRECISION) size
+        // MySQL TIME(p) fractional-second precision is reported via getScale() (DECIMAL_DIGITS).
+        // Use scale >= 0 to accept TIME(0); default to DEFAULT_PRECISION when not reported.
+        val scale = md.build().getLong("scale").toInt
+        val precision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
           else TimeType.DEFAULT_PRECISION
         Some(TimeType(precision))
       case _ => None
@@ -288,7 +290,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     case TimestampNTZType if !conf.legacyMySqlTimestampNTZMappingEnabled =>
       Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case t: TimeType =>
-      Option(JdbcType(s"TIME(${t.precision})", java.sql.Types.TIME))
+      // MySQL supports TIME(p) for p in [0,6]. Use the declared precision when valid;
+      // fall back to bare TIME (= TIME(6)) for out-of-range precisions (e.g. nanosecond).
+      val p = t.precision
+      if (p >= 0 && p <= 6) Option(JdbcType(s"TIME($p)", java.sql.Types.TIME))
+      else Option(JdbcType("TIME", java.sql.Types.TIME))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
