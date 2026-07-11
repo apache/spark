@@ -170,3 +170,46 @@ class ArrowListColumnToRowsBenchmark:
 
     def peakmem_array_of_structs_to_rows(self, n_rows, method):
         self.convert(self.array_of_structs)
+
+
+class ArrowStructMapColumnToRowsBenchmark:
+    """
+    Benchmark for converting Arrow struct and map columns to Python rows.
+
+    ``baseline`` measures plain ``column.to_pylist()``; ``bulk`` measures
+    ``ArrowTableToRowsConversion._to_pylist`` with the struct/map bulk paths.
+    """
+
+    params = [
+        [100000, 1000000],
+        ["baseline", "bulk"],
+    ]
+    param_names = ["n_rows", "method"]
+
+    def setup(self, n_rows, method):
+        from pyspark.sql.conversion import ArrowTableToRowsConversion
+
+        self.structs = pa.array(
+            [{"a": i, "b": f"s{i}"} if i % 10 != 0 else None for i in range(n_rows)],
+            type=pa.struct([("a", pa.int64()), ("b", pa.string())]),
+        )
+        self.maps = pa.array(
+            [
+                [(f"k{i % 3}", i), (f"q{i % 5}", i + 1)] if i % 10 != 0 else None
+                for i in range(n_rows)
+            ],
+            type=pa.map_(pa.string(), pa.int64()),
+        )
+        if method == "bulk":
+            self.convert = ArrowTableToRowsConversion._to_pylist
+        else:
+            self.convert = lambda column: column.to_pylist()
+
+    def time_structs_to_rows(self, n_rows, method):
+        self.convert(self.structs)
+
+    def time_maps_to_rows(self, n_rows, method):
+        self.convert(self.maps)
+
+    def peakmem_structs_to_rows(self, n_rows, method):
+        self.convert(self.structs)
