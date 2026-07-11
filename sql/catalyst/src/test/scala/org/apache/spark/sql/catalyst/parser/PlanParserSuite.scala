@@ -1029,16 +1029,15 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
-    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
-    // non-reserved so they can continue to be used as column or table identifiers.
-    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
+    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
     // All five together in a single SELECT list.
-    parsePlan("select approx, distance, exact, nearest, similarity from t")
+    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {
