@@ -329,13 +329,11 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
             },
         )
     if result_length != num_rows:
-        # TODO: change error class to RESULT_ROWS_MISMATCH
         raise PySparkRuntimeError(
-            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+            errorClass="RESULT_ROWS_MISMATCH",
             messageParameters={
-                "udf_type": "arrow_udf",
-                "expected": str(num_rows),
-                "actual": str(result_length),
+                "output_length": str(result_length),
+                "input_length": str(num_rows),
             },
         )
     return result
@@ -3239,11 +3237,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         )
                     if len(result) != num_rows:
                         raise PySparkRuntimeError(
-                            errorClass="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
+                            errorClass="RESULT_ROWS_MISMATCH",
                             messageParameters={
-                                "udf_type": "pandas_udf",
-                                "expected": str(num_rows),
-                                "actual": str(len(result)),
+                                "output_length": str(len(result)),
+                                "input_length": str(num_rows),
                             },
                         )
                     # struct_in_pandas="dict": UDF must return DataFrame for struct types
