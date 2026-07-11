@@ -226,6 +226,7 @@ def plus_four(x):
     if x is not None:
         return x + 4
 
+
 def plus_four_unsafe(x):
     return x + 4
 
