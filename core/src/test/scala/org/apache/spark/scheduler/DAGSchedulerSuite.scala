@@ -380,6 +380,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       shuffleMergeRegister: Boolean = true
   ) extends DAGScheduler(
       sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
+
+    // Capacity reported to the pipelined-group slot check. Defaults high so scheduling-logic tests
+    // are not gated by the real (local[2]) backend capacity; a test can lower it to exercise the
+    // fail-fast path.
+    @volatile var maxConcurrentTasksForTest: Int = 1000
+    override protected def maxConcurrentTasksForStage(stage: Stage): Int = maxConcurrentTasksForTest
+
     /**
      * Schedules shuffle merge finalize.
      */
@@ -6544,6 +6551,82 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     } finally {
       sc.conf.set(config.SPECULATION_ENABLED, false)
     }
+  }
+
+  // ==========================================================================================
+  // Gang admission / slot check (spec S4, S4.1)
+  // ==========================================================================================
+
+  test("pipelined shuffle: a group too large to co-fit fails fast with INSUFFICIENT_SLOT") {
+    // Constrain reported capacity to 3 slots. A pipelined group of producer(2) + consumer(2) = 4
+    // tasks exceeds it and can never be co-resident, so it must fail fast rather than deadlock.
+    val producerRdd = new MyRDD(sc, 2, Nil) // touch sc first so `scheduler` is initialized
+    scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 3
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(consumerRdd, Array(0, 1), listener = failListener)
+
+      assert(failure.get() != null, "an over-large pipelined group must fail the job")
+      assert(failure.get().getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
+        failure.get().getMessage.contains("concurrent task slots"),
+        s"expected an insufficient-slot error, got: ${failure.get().getMessage}")
+      assertDataStructuresEmpty()
+    } finally {
+      scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 1000
+    }
+  }
+
+  test("pipelined shuffle: an over-capacity 3-stage chain aborts without leaking a stage in " +
+      "waitingStages (nested-frame abort)") {
+    // Regression for a nested-frame abort: for a pipelined chain A->B->C, submitStage(C) recurses
+    // into submitStage(B), whose group slot-check covers the whole component {A,B,C} and aborts the
+    // job from that nested frame (cleaning up A/B/C). Control then unwinds to the outer
+    // submitStage(C) frame; without the "was I removed during recursion?" guard, its else branch
+    // would re-park the already-removed C into waitingStages -- a job-less scheduler-state leak. The
+    // 2-stage over-capacity test does not exercise this (there the abort fires in the consumer's own
+    // frame). Assert the abort leaves NO stage behind (assertDataStructuresEmpty checks waitingStages).
+    val rddA = new MyRDD(sc, 2, Nil) // touch sc first so `scheduler` is initialized
+    scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 3
+    try {
+      val depAB = new PipelinedShuffleDependency(rddA, new HashPartitioner(2))
+      val rddB = new MyRDD(sc, 2, List(depAB), tracker = mapOutputTracker)
+      val depBC = new PipelinedShuffleDependency(rddB, new HashPartitioner(2))
+      val rddC = new MyRDD(sc, 2, List(depBC), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(rddC, Array(0, 1), listener = failListener)
+
+      assert(failure.get() != null, "an over-large 3-stage pipelined chain must fail the job")
+      assert(failure.get().getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
+        failure.get().getMessage.contains("concurrent task slots"),
+        s"expected an insufficient-slot error, got: ${failure.get().getMessage}")
+      // The key assertion: no stage (esp. the outer consumer C) is left behind in waitingStages.
+      assertDataStructuresEmpty()
+    } finally {
+      scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 1000
+    }
+  }
+
+  test("pipelined shuffle: a group that fits is co-scheduled (slot check passes)") {
+    // Producer (2) + consumer (2) = 4 tasks <= 16 slots: co-scheduled normally, no abort.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === 2, "group fits, so producer and consumer are co-scheduled")
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
   }
 }
 
