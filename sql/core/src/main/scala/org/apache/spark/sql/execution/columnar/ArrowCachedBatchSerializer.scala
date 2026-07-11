@@ -405,9 +405,14 @@ private object ArrowCachedBatchSerializer {
     val rowCount = root.getRowCount
     val vectors = root.getFieldVectors.asScala.toSeq
 
-    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes
+    // Collect stats for each column: lowerBound, upperBound, nullCount, rowCount, sizeInBytes.
+    // getNullCount reads the validity buffer with word-at-a-time bit counting instead of a
+    // per-row isNull call through the vector interface; NullVector reports all rows null and the
+    // struct-backed lossless types (nanos timestamps, CalendarInterval) count their struct's own
+    // validity buffer, so the semantics match the per-row loop for every shape this cache
+    // produces.
     val stats = schema.zip(vectors).flatMap { case (attr, vector) =>
-      val nullCount = (0 until rowCount).count(i => vector.isNull(i))
+      val nullCount = vector.getNullCount
       val sizeInBytes = vector.getBufferSize.toLong
 
       val (lower, upper) = attr.dataType match {

@@ -326,6 +326,8 @@ If Arrow cache is slower than expected:
 | `spark.sql.execution.arrow.compression.codec` | `none` | Compression codec (none, lz4, zstd) |
 | `spark.sql.execution.arrow.compression.zstd.level` | `3` | Zstd compression level (negative = faster, up to 22) |
 | `spark.sql.execution.arrow.maxRecordsPerBatch` | `10000` | Maximum rows per Arrow batch |
+| `spark.sql.execution.arrow.maxBytesPerBatch` | `64MB` | Maximum bytes per Arrow batch (whichever limit is hit first applies) |
+| `spark.sql.execution.arrow.cache.prefetch.enabled` | `false` | Prefetch the next batch in the background while the current one is consumed |
 | `spark.sql.inMemoryColumnarStorage.enableVectorizedReader` | `true` | Enable vectorized cache reading |
 
 ## Example: Complete Application

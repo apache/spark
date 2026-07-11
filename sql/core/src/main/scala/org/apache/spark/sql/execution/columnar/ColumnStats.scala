@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarMap, ColumnarRow}
 import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
 
 class ColumnStatisticsSchema(a: Attribute) extends Serializable {
@@ -405,27 +404,29 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      // Check if this is a columnar complex type that doesn't support getSizeInBytes
-      val isColumnarComplexType = columnType match {
-        case _: ARRAY =>
-          row.getArray(ordinal).isInstanceOf[ColumnarArray]
-        case _: MAP =>
-          row.getMap(ordinal).isInstanceOf[ColumnarMap]
+      // Read the value once: columnar complex values (ColumnarArray/ColumnarMap/ColumnarRow)
+      // are views into ColumnVectors and do not expose getSizeInBytes, so fall back to the
+      // type's default size estimate instead of recording zero bytes for them (which would
+      // underestimate the relation's sizeInBytes and could make it wrongly eligible for
+      // broadcast). The Unsafe* match also guards other non-Unsafe values such as
+      // GenericArrayData, which columnType.actualSize would reject with a ClassCastException.
+      val size = columnType match {
+        case _: ARRAY => row.getArray(ordinal) match {
+          case unsafe: UnsafeArrayData => 4 + unsafe.getSizeInBytes
+          case _ => columnType.defaultSize
+        }
+        case _: MAP => row.getMap(ordinal) match {
+          case unsafe: UnsafeMapData => 4 + unsafe.getSizeInBytes
+          case _ => columnType.defaultSize
+        }
         case struct: STRUCT =>
-          row.getStruct(ordinal, struct.dataType.fields.length).isInstanceOf[ColumnarRow]
-        case _ =>
-          false
+          row.getStruct(ordinal, struct.dataType.fields.length) match {
+            case unsafe: UnsafeRow => 4 + unsafe.getSizeInBytes
+            case _ => columnType.defaultSize
+          }
+        case _ => columnType.actualSize(row, ordinal)
       }
-
-      if (!isColumnarComplexType) {
-        // Normal path: calculate size for unsafe types
-        // (UnsafeArrayData/UnsafeMapData/UnsafeRow)
-        val size = columnType.actualSize(row, ordinal)
-        sizeInBytes += size
-      }
-      // else: Skip size calculation for columnar complex types
-      // (ColumnarArray/ColumnarMap/ColumnarRow). These are views into ColumnVectors
-      // and don't expose getSizeInBytes()
+      sizeInBytes += size
 
       count += 1
     } else {
