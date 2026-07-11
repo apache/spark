@@ -153,21 +153,28 @@ object ScdType {
 /**
  * Configuration for an AutoCDC flow.
  *
- * @param keys            The column(s) that uniquely identify a row in the source data.
- * @param sequencing      Expression ordering CDC events to correctly resolve out-of-order
- *                        arrivals. Must be a sortable type.
- * @param deleteCondition Expression that marks a source row as a DELETE. When None, all
- *                        rows are treated as upserts.
- * @param storedAsScdType The SCD strategy these args should be applied to.
- * @param columnSelection Which source columns to select in the target table. None means
- *                        all columns.
+ * @param keys                   The column(s) that uniquely identify a row in the source data.
+ * @param sequencing             Expression ordering CDC events to correctly resolve out-of-order
+ *                               arrivals. Must be a sortable type.
+ * @param deleteCondition        Expression that marks a source row as a DELETE. When None, all
+ *                               rows are treated as upserts.
+ * @param storedAsScdType        The SCD strategy these args should be applied to.
+ * @param columnSelection        Which source columns to select in the target table. None means
+ *                               all columns.
+ * @param trackHistorySelection  SCD2 only. Selects the user-data columns whose values define a
+ *                               run: two consecutive upsert events for the same key are
+ *                               coalesced into the same run iff they agree on every selected
+ *                               column. None means every eligible user column (i.e. every
+ *                               source column that is neither a key nor a framework column) is
+ *                               considered tracked. Ignored under SCD1.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],
     sequencing: Column,
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
-    columnSelection: Option[ColumnSelection] = None
+    columnSelection: Option[ColumnSelection] = None,
+    trackHistorySelection: Option[ColumnSelection] = None
 ) {
   ChangeArgs.validateNonEmptyKeys(keys)
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
-import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
+import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -97,14 +97,16 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
    */
   private def processorWithKeys(
       keys: Seq[String],
-      deleteCondition: Option[Column] = None
+      deleteCondition: Option[Column] = None,
+      trackHistorySelection: Option[ColumnSelection] = None
   ): Scd2BatchProcessor =
     Scd2BatchProcessor(
       changeArgs = ChangeArgs(
         keys = keys.map(UnqualifiedColumnName(_)),
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type2,
-        deleteCondition = deleteCondition
+        deleteCondition = deleteCondition,
+        trackHistorySelection = trackHistorySelection
       ),
       resolvedSequencingType = LongType
     )
@@ -1907,6 +1909,560 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         Row(1, "tomb", 10L, 10L, Row(10L))
+      )
+    )
+  }
+
+  // =============== reconcileStartAndEndAt tests ===============
+
+  test("reconcileStartAndEndAt: a fresh-key run head propagates its startAt to its " +
+    "no-op continuation") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts at recordStartAt=5 and recordStartAt=10 with identical tracked
+    // values. The first row begins a fresh run with startAt=5. The second row, sharing the
+    // tracked value, is a continuation of that run and inherits the run head's startAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a continuation that began before the affected window " +
+    "keeps its earlier run start") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The first row is an aux anchor (startAt < recordStartAt), pulled in as left context
+    // for a run that began at startAt=2. Because the row sits at the front of the window,
+    // its existing startAt encodes the true global run start and must be preserved -
+    // and propagated to the in-window continuation.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 2L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 2L, null, Row(5L)),
+        Row(1, "alice", 2L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tracked-history transition opens a new run anchored " +
+    "at the new value's recordStartAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts that disagree on the tracked column. The transition closes the
+    // first run at the second event's effective recordStartAt and starts a new run whose
+    // startAt is the new event's recordStartAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "bob",   10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  10L,  Row(5L)),
+        Row(1, "bob",   10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a chain of no-op continuations all share a single " +
+    "run start") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Three consecutive open upserts all agreeing on the tracked column form one no-op
+    // run. Every row in the run must end up with the run head's startAt.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(1, "alice", 15L, null, Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L)),
+        Row(1, "alice", 5L, null, Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: default tracking treats every non-key user column as tracked") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Default `trackHistorySelection` (None) is documented to treat every eligible user
+    // column as tracked. The two rows agree on `name` but disagree on `status`, which
+    // should therefore start a new run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L,  10L,  Row(5L)),
+        Row(1, "alice", "inactive", 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: ExcludeColumns excludes only the listed columns from " +
+    "the tracked set") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("status")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // `status` is excluded from tracking, so the two rows are tracked-equal on the
+    // remaining columns (`name`). They should collapse into a single no-op run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: an empty effective tracked-history set collapses every " +
+    "consecutive upsert pair into one run") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Seq(UnqualifiedColumnName("name"), UnqualifiedColumnName("status"))
+        )
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Both user data columns are excluded, so the effective tracked set is empty. With
+    // nothing to compare, every consecutive upsert pair collapses into a single run -
+    // even when the user-visible data differs on every column.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "bob",   "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "bob",   "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tombstone's startAt and endAt pass through unchanged") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // An open upsert, then a tombstone at recordStartAt=10, then a new open upsert. The
+    // tombstone is not an upsert and must not participate in any run; its startAt/endAt
+    // pass through identically. The bracketing upserts close (10) and reopen (15) around
+    // the tombstone.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, 10L,  Row(10L)),
+      Row(1, "alice", 15L, null, Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  10L,  Row(5L)),
+        Row(1, "alice", 10L, 10L,  Row(10L)),
+        Row(1, "alice", 15L, null, Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a decomposition tail's startAt stays null and its endAt " +
+    "passes through") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A head + tail pair: the head retains the run start while the tail (recordStartAt
+    // null) is excluded from upsert reconciliation. The tail's startAt must stay null
+    // and its endAt must pass through unchanged.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,   30L, Row(5L)),
+        Row(1, "alice", null, 30L, Row(null))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a closed upsert that already closes before the next event " +
+    "keeps its endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 15] is followed by a fresh-value run head at recordStartAt=20.
+    // The closed upsert already ended at 15 - strictly before the next event - so its
+    // endAt is left intact.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  15L,  Row(5L)),
+      Row(1, "bob",   20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  15L,  Row(5L)),
+        Row(1, "bob",   20L, null, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: an open upsert closes at its successor's effective sequence") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // An open upsert at recordStartAt=5 is followed by a tracked-history-different upsert
+    // at recordStartAt=20. The first run head must be closed at 20 because the run ends
+    // there.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "bob",   20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L,  Row(5L)),
+        Row(1, "bob",   20L, null, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tombstone coincident with a row that already closes at the " +
+    "same sequence is preserved for the next transform to drop") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 20] is followed by a tombstone at recordStartAt=20, both
+    // ending at the same sequence. Reconciliation does not collapse them - it leaves
+    // the now-redundant tombstone for the next transform to drop based on the
+    // shape locked in here.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  20L, Row(5L)),
+      Row(1, "alice", 20L, 20L, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "alice", 20L, 20L, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a decomposition tail keeps its null recordStartAt for " +
+    "downstream promotion") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Downstream transforms identify decomposition tails by recordStartAt = null, so
+    // reconciliation must not synthesize a value into the tail's _cdc_metadata.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    val tailRows = result.collect().filter(r => r.isNullAt(2))
+    assert(tailRows.length == 1)
+    val tailCdcMetadata = tailRows.head.getStruct(4)
+    assert(tailCdcMetadata.isNullAt(0))
+  }
+
+  test("reconcileStartAndEndAt preserves the input schema, column metadata, and row count") {
+    val processor = processorWithKeys(Seq("id"))
+
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+
+    val cdcMetadataInnerSchema = new StructType().add(
+      Scd2BatchProcessor.recordStartAtFieldName,
+      LongType,
+      nullable = true,
+      metadata = commentMetadata("inner __RECORD_START_AT")
+    )
+
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
+      .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
+      .add(
+        Scd2BatchProcessor.startAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __START_AT"))
+      .add(
+        Scd2BatchProcessor.endAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __END_AT"))
+      .add(
+        AutoCdcReservedNames.cdcMetadataColName, cdcMetadataInnerSchema, nullable = false,
+        metadata = commentMetadata("framework _cdc_metadata"))
+
+    // Mix of canonical post-decomposition row shapes so we exercise multiple reconciliation
+    // branches under the schema-preservation contract.
+    val df = microbatchOf(schema)(
+      Row(1, "alice", 5L,   null, Row(5L)),
+      Row(1, "alice", null, 30L,  Row(null)),
+      Row(1, "alice", 30L,  30L,  Row(30L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    schema.fields.zip(result.schema.fields).foreach { case (in, out) =>
+      assert(in.name == out.name)
+      assert(in.dataType == out.dataType)
+      assert(in.nullable == out.nullable)
+      assert(in.metadata == out.metadata)
+    }
+    assert(result.count() == df.count())
+  }
+
+  test("reconcileStartAndEndAt: a single-event-per-key partition reconciles without " +
+    "referring to neighbors") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys, each with exactly one event - so neither partition has a window predecessor
+    // or successor. Reconciliation must handle the missing neighbors cleanly and pass the
+    // single rows through.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(2, "bob",   10L, 20L,  Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(2, "bob",   10L, 20L,  Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: IncludeColumns selects only the listed columns as tracked") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Only `name` is tracked. Two rows agreeing on name but differing on status are
+    // tracked-equal and should collapse into one run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a tracked-history column whose name contains a dot is quoted " +
+    "and matched as a single column, not as a nested field path") {
+    // The backticks make `UnqualifiedColumnName` store the literal field name "user.name".
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`user.name`")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("user.name", StringType)
+      .add("status", StringType)
+
+    // Only the dotted column is tracked. Two rows agreeing on "user.name" but differing on
+    // status are tracked-equal and must collapse into a single run. Without quoting,
+    // `F.col("user.name")` would be parsed as a nested-field access (struct `user`, field
+    // `name`) and fail to resolve.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active", 5L, null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active", 5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: trackHistorySelection referring to an unknown column raises " +
+    "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("does_not_exist")))
+      )
+    )
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, null, Row(5L))
+    )
+
+    val ex = intercept[AnalysisException] {
+      processor.reconcileStartAndEndAt(df)
+    }
+    assert(ex.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
+  }
+
+  test("reconcileStartAndEndAt: null tracked-column values are treated as tracked-equal") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("name", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, null, 5L,  null, Row(5L)),
+      Row(1, null, 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, null, 5L, null, Row(5L)),
+        Row(1, null, 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: a no-op continuation followed by a tombstone is absorbed " +
+    "into its run and closed at the tombstone") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(1, "alice", 15L, 15L,  Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(1, "alice", 5L,  15L,  Row(10L)),
+        Row(1, "alice", 15L, 15L,  Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt isolates per-key reconciliation across multiple key partitions") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two keys, each with a fresh-key run head + tracked-equal continuation. The two
+    // partitions must reconcile independently.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(2, "bob",   20L, null, Row(20L)),
+      Row(2, "bob",   25L, null, Row(25L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  null, Row(5L)),
+        Row(1, "alice", 5L,  null, Row(10L)),
+        Row(2, "bob",   20L, null, Row(20L)),
+        Row(2, "bob",   20L, null, Row(25L))
       )
     )
   }
