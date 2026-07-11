@@ -18,9 +18,13 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.{
+  Expression,
+  RowOrdering,
+  SubqueryExpression,
+  WindowExpression
+}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
@@ -38,15 +42,16 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         if left.resolved && right.resolved =>
       val withUsing = usingColumns match {
         case Some(cols) if condition.isEmpty =>
-          val (_, _, newCondition) = NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
-            left,
-            left.output,
-            right,
-            right.output,
-            j.joinType,
-            cols,
-            None,
-            (l, r) => conf.resolver(l, r))
+          val (_, _, newCondition) =
+            NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
+              left,
+              left.output,
+              right,
+              right.output,
+              j.joinType,
+              cols,
+              None,
+              (l, r) => conf.resolver(l, r))
           j.copy(condition = newCondition, usingColumns = None)
         case _ => j
       }
@@ -77,7 +82,8 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
           messageParameters = Map("expr" -> toSQLExpr(invalidExpr)))
       }
     }
-    if (!RowOrdering.isOrderable(leftExpr.dataType) || !RowOrdering.isOrderable(rightExpr.dataType) ||
+    if (!RowOrdering.isOrderable(leftExpr.dataType) ||
+        !RowOrdering.isOrderable(rightExpr.dataType) ||
         TypeCoercion.findWiderTypeForTwo(leftExpr.dataType, rightExpr.dataType).isEmpty) {
       join.failAnalysis(
         errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
