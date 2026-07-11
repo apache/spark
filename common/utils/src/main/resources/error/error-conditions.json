@@ -7327,6 +7327,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with async progress tracking. Async progress tracking persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable one of the two: set spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or set the option asyncProgressTrackingEnabled to false."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
