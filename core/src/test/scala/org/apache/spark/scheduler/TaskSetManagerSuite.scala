@@ -3134,6 +3134,83 @@ class TaskSetManagerSuite
       "TaskCommitDenied must not abort a pipelined group")
   }
 
+  test("pipelined task set does NOT single-resubmit a completed map task on executor " +
+      "decommission (SC-235532 channel 3)") {
+    // The TaskSetManager.executorLost "Resubmitted" loop re-enqueues an already-successful
+    // ShuffleMapTask when its executor is lost and the map output looks gone -- for a decommission,
+    // it looks gone whenever MapOutputTracker.getMapOutputLocation returns None. A pipelined shuffle
+    // is NEVER registered in the MapOutputTracker (M1.6), so getMapOutputLocation is always None and
+    // this loop would resubmit the lone producer task -- the exact SC-235532 hang. This loop
+    // bypasses handleFailedTask, so M1.4's group-atomic abort would never see it. The guard
+    // (!taskSet.isPipelined on maybeShuffleMapOutputLoss) must keep a pipelined set out of the loop.
+    //
+    // Scenario: a 2-task pipelined producer, one task succeeds on the to-be-lost executor while the
+    // other is still running (so the set is NOT a zombie and the loop is entered for a non-pipelined
+    // set). Decommission that executor. Assert NO Resubmitted is emitted for the completed task.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    sched.initialize(new FakeSchedulerBackend())
+
+    var resubmittedTasks = 0
+    val dagScheduler = new FakeDAGScheduler(sc, sched) {
+      override def taskEnded(
+          task: Task[_],
+          reason: TaskEndReason,
+          result: Any,
+          accumUpdates: Seq[AccumulatorV2[_, _]],
+          metricPeaks: Array[Long],
+          taskInfo: TaskInfo): Unit = {
+        super.taskEnded(task, reason, result, accumUpdates, metricPeaks, taskInfo)
+        reason match {
+          case Resubmitted => resubmittedTasks += 1
+          case _ =>
+        }
+      }
+    }
+    sched.dagScheduler.stop()
+    sched.setDAGScheduler(dagScheduler)
+
+    // Two real ShuffleMapTasks (so isShuffleMapTasks = true), marked as a pipelined-group member.
+    // Give each task a distinct preferred location so one lands on execA and the other on execB.
+    val prefs = Array(
+      Seq[TaskLocation](TaskLocation("host1", "execA")),
+      Seq[TaskLocation](TaskLocation("host2", "execB")))
+    val tasks = Array.tabulate[Task[_]](2) { i =>
+      new ShuffleMapTask(0, 0, null, new Partition { override def index: Int = i }, 1,
+        prefs(i), JobArtifactSet.getActiveOrDefault(sc), new Properties, null)
+    }
+    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, Some(0), isPipelined = true)
+    // A pipelined shuffle is deliberately NOT registered in the MapOutputTracker, so a decommission
+    // lookup of its output returns None (looks lost) -- the trigger for channel 3.
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    // Launch task 0 on execA (PROCESS_LOCAL) and task 1 on execB; complete task 0 so the set is not
+    // yet a zombie (task 1 still running).
+    val t0 = manager.resourceOffer("execA", "host1", TaskLocality.PROCESS_LOCAL)._1.get
+    val t1 = manager.resourceOffer("execB", "host2", TaskLocality.PROCESS_LOCAL)._1.get
+    assert(manager.runningTasks === 2)
+    assert(t0.index === 0 && t1.index === 1, "each task should land on its preferred executor")
+    val result0 = new DirectTaskResult[String]() {
+      override def value(resultSer: SerializerInstance): String = ""
+    }
+    manager.handleSuccessfulTask(t0.taskId, result0)
+    assert(!manager.isZombie, "the set must not be a zombie (task 1 still running)")
+    assert(manager.successful(t0.index))
+    assert(resubmittedTasks === 0)
+
+    // Decommission execA (which ran the completed task 0) and lose it. For a NON-pipelined set this
+    // would re-enqueue task 0 via Resubmitted (its output looks lost); for a pipelined set the guard
+    // must prevent that.
+    manager.executorDecommission("execA")
+    manager.executorLost("execA", "host1", ExecutorDecommission())
+
+    assert(resubmittedTasks === 0,
+      "a pipelined producer's completed task must NOT be single-resubmitted on decommission")
+    assert(manager.successful(t0.index),
+      "the completed task must remain successful (no Resubmitted re-enqueue)")
+  }
+
   test("non-pipelined task set is unaffected: executor loss is not counted, retries still apply") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
