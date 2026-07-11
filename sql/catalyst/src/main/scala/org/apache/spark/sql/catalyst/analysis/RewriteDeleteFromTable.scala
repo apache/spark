@@ -25,7 +25,6 @@ import org.apache.spark.sql.connector.catalog.{SupportsDeleteV2, SupportsRowLeve
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A rule that rewrites DELETE operations using plans that operate on individual or groups of rows.
@@ -45,7 +44,7 @@ object RewriteDeleteFromTable extends RewriteRowLevelCommand {
           d
 
         case r @ ExtractV2Table(t: SupportsRowLevelOperations) =>
-          val table = buildOperationTable(t, DELETE, CaseInsensitiveStringMap.empty())
+          val table = buildOperationTable(t, DELETE, r.options)
           table.operation match {
             case _: SupportsDelta =>
               buildWriteDeltaPlan(r, table, cond)
