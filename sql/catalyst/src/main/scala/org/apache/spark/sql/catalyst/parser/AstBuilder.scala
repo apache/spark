@@ -2552,6 +2552,9 @@ class AstBuilder extends DataTypeAstBuilder
    * Build an [[AsOfJoin]] from the parsed `ASOF JOIN ... MATCH_CONDITION` clause.
    */
   private def withAsOfJoin(ctx: JoinRelationContext, base: LogicalPlan): AsOfJoin = {
+    if (!conf.getConf(SQLConf.SQL_ASOF_JOIN_ENABLED)) {
+      throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
+    }
     val joinType = Option(ctx.asofJoinType) match {
       case None => Inner
       case Some(jt) if jt.LEFT != null => LeftOuter

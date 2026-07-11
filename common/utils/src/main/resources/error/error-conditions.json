@@ -8255,6 +8255,11 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
+      "ASOF_JOIN" : {
+        "message" : [
+          "SQL ASOF JOIN syntax. Set <config> to true to enable it."
+        ]
+      },
       "BIN_BY" : {
         "message" : [
           "The BIN BY relation operator is not yet supported."

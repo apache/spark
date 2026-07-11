@@ -20,9 +20,20 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.SQL_ASOF_JOIN_ENABLED.key, "true")
+  }
+
+  override def afterAll(): Unit = {
+    spark.conf.unset(SQLConf.SQL_ASOF_JOIN_ENABLED.key)
+    super.afterAll()
+  }
 
   private def setupTradeQuoteViews(): Unit = {
     sql(
