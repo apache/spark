@@ -7322,6 +7322,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with async progress tracking. Async progress tracking persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable one of the two: set spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or set the option asyncProgressTrackingEnabled to false."
+        ]
+      },
       "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
         "message" : [
           "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
