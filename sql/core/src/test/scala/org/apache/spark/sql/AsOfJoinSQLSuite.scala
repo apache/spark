@@ -161,6 +161,81 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
       Row(0L) :: Nil)
   }
 
+  test("STRUCT tuple MATCH_CONDITION with min_by rewrite") {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW requests(req_ts, seq, service) AS
+        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 5, 'api'),
+        |       (TIMESTAMP '2026-06-29 10:03:00', 1, 'api')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW deploys(deploy_ts, seq, service, version) AS
+        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 1, 'api', 'v1.0'),
+        |       (TIMESTAMP '2026-06-29 10:00:00', 3, 'api', 'v1.1')
+        |""".stripMargin)
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.req_ts, r.seq, d.version
+          |FROM requests r ASOF JOIN deploys d
+          |  MATCH_CONDITION ((r.req_ts, r.seq) >= (d.deploy_ts, d.seq))
+          |  ON r.service = d.service
+          |ORDER BY r.req_ts, r.seq
+          |""".stripMargin),
+      Seq(
+        Row(Timestamp.valueOf("2026-06-29 10:00:00"), 5, "v1.1"),
+        Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
+  }
+
+  test("nested STRUCT MATCH_CONDITION with min_by rewrite") {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW left_nested(inner_ts, inner_seq, tag) AS
+        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 2, 'a')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW right_nested(inner_ts, inner_seq, tag) AS
+        |VALUES (TIMESTAMP '2026-06-29 09:00:00', 1, 'a'),
+        |       (TIMESTAMP '2026-06-29 10:00:00', 1, 'a')
+        |""".stripMargin)
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.tag, r.inner_seq
+          |FROM left_nested t
+          |ASOF JOIN right_nested r
+          |  MATCH_CONDITION ((t.inner_ts, t.inner_seq, t.tag) >= (r.inner_ts, r.inner_seq, r.tag))
+          |""".stripMargin),
+      Row("a", 1) :: Nil)
+  }
+
+
+  test("ARRAY INT MATCH_CONDITION with min_by rewrite") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(1, 3)) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)
+          |MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(1, 2)) :: Nil)
+  }
+
+  test("ARRAY STRUCT tuple MATCH_CONDITION with min_by rewrite") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT r.c1, r.c2
+          |FROM VALUES (1, 2) AS t(c1, c2)
+          |ASOF JOIN VALUES (1, 1) AS r(c1, c2)
+          |MATCH_CONDITION ((t.c1, t.c2) >= (r.c1, r.c2))
+          |""".stripMargin),
+      Row(1, 1) :: Nil)
+  }
+
   test("equality operator is rejected in MATCH_CONDITION") {
     val sqlText =
       """

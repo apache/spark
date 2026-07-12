@@ -70,7 +70,7 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         val orderExpressionWithOuterReference = orderExpression.transformUp {
             case a: AttributeReference if left.outputSet.contains(a) =>
               OuterReference(a)
-          }
+        }
         val rightStruct = CreateStruct(right.output)
         val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
           .toAggregateExpression()
