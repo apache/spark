@@ -682,16 +682,20 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     } else if (isTimeTypeEnabled && isTime(field)) {
       // TIME is tried ahead of date/timestamp, matching the ordering of the previous cascade.
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 
   private def tryParseTime(field: String): DataType = {
     if (isTimeTypeEnabled && isTime(field)) {
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 

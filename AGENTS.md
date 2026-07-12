@@ -20,6 +20,15 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+Keep source lines within 100 characters — the linters enforce this for Scala, Java, and Python, and LLMs commonly overrun it in comments and long expressions. A quick scan of just the changed files catches most cases in seconds, far cheaper than a CI round trip:
+
+    { git diff --name-only --diff-filter=ACM HEAD; git ls-files --others --exclude-standard; } \
+      | grep -E '\.(scala|java|py)$' | sort -u \
+      | xargs -r awk 'length>100 && $0 !~ /^[[:space:]]*(import|package) / && $0 !~ /https?:\/\// \
+          {print FILENAME":"FNR": "length" chars"}'
+
+This is only a hint: it approximates the linters' exemptions (imports, URLs) rather than matching them exactly, so it can over- or under-report. The linters remain the source of truth.
+
 ## Scala Test Base Classes
 
 When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
@@ -147,22 +156,32 @@ Run a single test case:
 
 ## Investigating PR CI Failures
 
-Do NOT download full job logs to grep for errors — they are very large and slow. Instead, use the test report annotations on the fork.
+Enumerate all failing check runs first, then drill into each by type. Do not assume a single failure: a PR can fail tests, linters, and the build at once, and these surface through different channels.
 
 Step 1 — Get the fork owner and the latest commit SHA of the PR:
 
     gh api repos/apache/spark/pulls/<PR_NUMBER> --jq '{owner: .head.repo.owner.login, sha: .head.sha}'
 
-Step 2 — Find the "Report test results" check run on the fork's commit:
+Step 2 — List every failing check run on the fork's commit. This is the complete failure set:
 
-    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs \
-      --jq '.check_runs[] | select(.name == "Report test results") | {id: .id, annotations: .output.annotations_count}'
+    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs --paginate \
+      --jq '.check_runs[] | select(.conclusion == "failure") | {name, id: .id}'
 
-Step 3 — Fetch failure annotations:
+A passing (or absent) "Report test results" does NOT mean CI is green. That check aggregates only test-case failures; linter, license, dependency, MiMa, compile, and doc-build failures are separate check runs that produce no test annotations. Always work from the list in Step 2, not from any single check.
 
-    gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+Step 3 — Drill into each failure according to its kind:
 
-Each annotation contains the test class, test name, and failure message.
+- **Test jobs** (e.g. "Report test results", "Build modules: ..."): fetch failure annotations. Each annotation contains the test class, test name, and failure message:
+
+      gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+
+- **Non-test jobs** (e.g. "Linters, licenses, and dependencies", "Build"): find the failed step, then read only that job's log:
+
+      gh api repos/<OWNER>/spark/actions/jobs/<JOB_ID> \
+        --jq '{name, steps: [.steps[] | select(.conclusion == "failure") | .name]}'
+      gh api repos/<OWNER>/spark/actions/jobs/<JOB_ID>/logs
+
+Avoid downloading the large per-shard *test* job logs — they are very large and slow; use the annotations for those. Lint, license, dependency, and build job logs are small and fine to read directly when a step fails.
 
 ## Checking PR Merge Status
 
