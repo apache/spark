@@ -320,7 +320,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
             if platform.system() == "Darwin":
-                os.system("rm -rf " + tmp_dir)
+                subprocess.run(["rm", "-rf", tmp_dir])
             else:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
     except BaseException:
