@@ -402,6 +402,93 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  private def checkPushedLimits(df: DataFrame, limits: Option[Int]*): Unit = {
+    val pushedLimits = df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper => v1.pushedDownOperators.limit
+        case other => fail(s"Expected a V1ScanWrapper but got $other")
+      }
+    }
+    assert(pushedLimits === limits)
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL to each data source scan") {
+    // dept = 6 matches a single employee, so the union of the two branches is deterministic
+    val df = sql(
+      """
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |UNION ALL
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |LIMIT 1
+        |""".stripMargin)
+    checkPushedLimits(df, Some(1), Some(1))
+    checkPushedInfo(df, "PushedFilters: [DEPT IS NOT NULL, DEPT = 6]", "PushedLimit: LIMIT 1")
+    checkLimitRemoved(df, removed = false)
+    checkAnswer(df, Seq(Row("jen")))
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL with more than two branches") {
+    val df = sql(
+      """
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |UNION ALL
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |UNION ALL
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |LIMIT 2
+        |""".stripMargin)
+    checkPushedLimits(df, Some(2), Some(2), Some(2))
+    checkAnswer(df, Seq(Row("jen"), Row("jen")))
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL over a sorted branch") {
+    // the sort survives above the scan of the first branch, so the limit reaches it as a top N
+    val df = spark.read.table("h2.test.employee").select($"name").orderBy($"salary")
+      .union(spark.read.table("h2.test.employee").select($"name"))
+      .limit(1)
+    checkPushedLimits(df, Some(1), Some(1))
+    checkSortRemoved(df)
+    checkLimitRemoved(df, removed = false)
+    assert(df.collect().length == 1)
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL together with OFFSET") {
+    // `LIMIT n OFFSET m` skips before it takes, so each branch has to keep `n + m` rows
+    val df1 = sql(
+      """
+        |SELECT name FROM h2.test.employee
+        |UNION ALL
+        |SELECT name FROM h2.test.employee
+        |LIMIT 4 OFFSET 2
+        |""".stripMargin)
+    checkPushedLimits(df1, Some(6), Some(6))
+    checkOffsetRemoved(df1, removed = false)
+    assert(df1.collect().length == 4)
+
+    // `limit(n).offset(m)` takes before it skips, so `n` rows per branch are enough
+    val df2 = spark.read.table("h2.test.employee").select($"name")
+      .union(spark.read.table("h2.test.employee").select($"name"))
+      .limit(4)
+      .offset(2)
+    checkPushedLimits(df2, Some(4), Some(4))
+    checkOffsetRemoved(df2, removed = false)
+    assert(df2.collect().length == 2)
+  }
+
+  test("SPARK-58093: LIMIT with ORDER BY on top of UNION ALL is not pushed down") {
+    // the limit must not be pushed below the sort: a branch capped before the global sort could
+    // drop rows that belong to the overall top N
+    val df = sql(
+      """
+        |SELECT name FROM h2.test.employee
+        |UNION ALL
+        |SELECT name FROM h2.test.employee
+        |ORDER BY name LIMIT 2
+        |""".stripMargin)
+    checkPushedLimits(df, None, None)
+    checkAnswer(df, Seq(Row("alex"), Row("alex")))
+  }
+
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
     val offsets = df.queryExecution.optimizedPlan.collectFirst {
       case offset: Offset => offset
