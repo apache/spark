@@ -365,7 +365,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'>'",
+    "error" : "'>>'",
     "hint" : ""
   }
 }
