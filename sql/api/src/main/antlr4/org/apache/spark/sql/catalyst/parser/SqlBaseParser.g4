@@ -1104,9 +1104,9 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
-    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    : (joinType) JOIN LATERAL? right=relationPrimary asofJoinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
+    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
     ;
 
 asofJoinType
@@ -1114,13 +1114,14 @@ asofJoinType
     | LEFT OUTER?
     ;
 
-asofJoinCriteria
-    : MATCH_CONDITION LEFT_PAREN matchComparison RIGHT_PAREN
-      ( ON booleanExpression | USING identifierList )?
+asofJoinPostfix
+    : joinCriteria
+    | nearestByClause
     ;
 
-matchComparison
-    : left=valueExpression operator=(GTE | GT | LTE | LT) right=valueExpression
+asofJoinCriteria
+    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+      ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
 joinType
