@@ -104,7 +104,7 @@ private[hive] class SparkGetSchemasOperation(
                 }
               }
             case _ =>
-              // Catalog doesn't support namespaces — return empty
+              // Catalog doesn't support namespaces -- return empty
           }
         }
       } else {
