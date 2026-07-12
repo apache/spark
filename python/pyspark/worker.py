@@ -305,7 +305,7 @@ def verify_result_row_count(result_length: int, expected: int) -> None:
                 "input_length": str(expected),
             },
             message=f"The number of output rows ({result_length}) must match the number of input rows ({expected}). "
-                    f"Result vector from pandas_udf was not the required length: expected {expected}, got {result_length}."
+            f"Result vector from pandas_udf was not the required length: expected {expected}, got {result_length}.",
         )
 
 
@@ -338,7 +338,7 @@ def verify_scalar_result(result: Any, num_rows: int) -> Any:
                 "input_length": str(num_rows),
             },
             message=f"The number of output rows ({result_length}) must match the number of input rows ({num_rows}). "
-                    f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {result_length}."
+            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {result_length}.",
         )
     return result
 
@@ -388,7 +388,7 @@ def verify_output_row_count(
                     "input_length": str(expected),
                 },
                 message=f"The number of output rows ({actual_rows}) must match the number of input rows ({expected}). "
-                        f"Result vector from pandas_udf was not the required length: expected {expected}, got {actual_rows}."
+                f"Result vector from pandas_udf was not the required length: expected {expected}, got {actual_rows}.",
             )
         else:
             raise PySparkRuntimeError(
@@ -3258,7 +3258,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                                 "input_length": str(num_rows),
                             },
                             message=f"The number of output rows ({len(result)}) must match the number of input rows ({num_rows}). "
-                                    f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {len(result)}."
+                            f"Result vector from pandas_udf was not the required length: expected {num_rows}, got {len(result)}.",
                         )
                     # struct_in_pandas="dict": UDF must return DataFrame for struct types
                     if isinstance(udf_return_type, StructType) and not isinstance(
