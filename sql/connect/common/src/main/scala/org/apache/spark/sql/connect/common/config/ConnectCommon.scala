@@ -29,4 +29,5 @@ private[sql] object ConnectCommon {
   val CONNECT_GRPC_KEEPALIVE_ENABLED: Boolean = true
   val CONNECT_GRPC_KEEPALIVE_TIME_SECONDS: Long = 60
   val CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS: Long = 20
+  val CONNECT_GRPC_KEEPALIVE_WITHOUT_CALLS: Boolean = true
 }

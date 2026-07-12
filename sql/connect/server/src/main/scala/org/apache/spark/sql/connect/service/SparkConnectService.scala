@@ -314,6 +314,14 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  // Floor for permitKeepAliveTime: the minimum interval the server tolerates between a client's
+  // keepalive PINGs before striking the connection as "too_many_pings" (gRFC A8). This is
+  // independent of the server's own keepAlive.time (its probe interval for detecting dead
+  // clients) and must stay well below any supported client grpc_keepalive_time_ms, not derived
+  // from it -- otherwise a faster client (or an operator raising keepAlive.time) gets its
+  // healthy connection torn down. 10s leaves a wide margin below the 60s client/server default.
+  private[connect] val GRPC_KEEPALIVE_PERMIT_TIME_SECONDS: Long = 10
+
   private[connect] var server: Server = _
   private[connect] var bindingAddress: InetSocketAddress = _
 
@@ -412,14 +420,12 @@ object SparkConnectService extends Logging {
         val keepAliveTimeSeconds = SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIME)
         // Detects a silently-dead client connection (e.g. a NAT gateway/load balancer dropping
         // an idle connection mapping without sending a TCP RST/FIN) via gRPC/HTTP2 keepalive
-        // PINGs. permitKeepAliveTime must be <= the client's keepAliveTime (matched here),
-        // otherwise the server rejects the client's keepalive PINGs as "too_many_pings" and
-        // tears down every long-lived connection, not just dead ones.
+        // PINGs.
         sb.keepAliveTime(keepAliveTimeSeconds, TimeUnit.SECONDS)
         sb.keepAliveTimeout(
           SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIMEOUT),
           TimeUnit.SECONDS)
-        sb.permitKeepAliveTime(keepAliveTimeSeconds, TimeUnit.SECONDS)
+        sb.permitKeepAliveTime(GRPC_KEEPALIVE_PERMIT_TIME_SECONDS, TimeUnit.SECONDS)
         sb.permitKeepAliveWithoutCalls(true)
       }
       sb.addService(sparkConnectService)

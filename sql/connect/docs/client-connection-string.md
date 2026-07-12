@@ -123,7 +123,9 @@ sc://host:port/;param1=value;param2=value
   <tr>
     <td>grpc_keepalive_time_ms</td>
     <td>Numeric</td>
-    <td>Idle time (in milliseconds) before the client sends a keepalive PING.<br/>
+    <td>Idle time (in milliseconds) before the client sends a keepalive PING. A Spark Connect
+    server tolerates client PINGs no more often than every 10s; setting this below that floor
+    will get the connection torn down as "too_many_pings".<br/>
     <i>Default: </i><pre>60000</pre></td>
     <td><pre>grpc_keepalive_time_ms=30000</pre></td>
   </tr>

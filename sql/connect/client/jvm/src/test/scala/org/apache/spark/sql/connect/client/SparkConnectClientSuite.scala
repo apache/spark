@@ -918,9 +918,11 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     server = NettyServerBuilder
       .forPort(0)
       .addService(slowService)
-      // Mirrors the production server wiring in SparkConnectService.scala: the server must
-      // permit client PINGs at least as frequently as the client's own keepAliveTime, or it
-      // will tear down the connection as "too_many_pings" even when healthy.
+      // The server must permit client PINGs at least as frequently as the client's own
+      // keepAliveTime, or it will tear down the connection as "too_many_pings" even when
+      // healthy. In production (SparkConnectService.scala) this floor is a fixed constant
+      // decoupled from any per-connection setting; here it's simply set to match the test
+      // client's cadence.
       .permitKeepAliveTime(keepAliveMs, TimeUnit.MILLISECONDS)
       .permitKeepAliveWithoutCalls(true)
       .build()

@@ -1102,7 +1102,7 @@ object SparkConnectClient {
       grpcKeepAliveEnabled: Boolean = ConnectCommon.CONNECT_GRPC_KEEPALIVE_ENABLED,
       grpcKeepAliveTimeMs: Long = ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIME_SECONDS * 1000,
       grpcKeepAliveTimeoutMs: Long = ConnectCommon.CONNECT_GRPC_KEEPALIVE_TIMEOUT_SECONDS * 1000,
-      grpcKeepAliveWithoutCalls: Boolean = true,
+      grpcKeepAliveWithoutCalls: Boolean = ConnectCommon.CONNECT_GRPC_KEEPALIVE_WITHOUT_CALLS,
       allowArrowBatchChunking: Boolean = true,
       preferredArrowChunkSize: Option[Int] = None) {
 

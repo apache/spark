@@ -3574,7 +3574,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     60s
   </td>
-  <td>Sets the time the server waits for the connection to be idle before sending a gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection (e.g. after a NAT gateway or load balancer drops an idle connection mapping without closing the socket). Also used as the minimum interval the server permits for keepalive PINGs sent by clients.</td>
+  <td>Sets the time the server waits for the connection to be idle before sending a gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection (e.g. after a NAT gateway or load balancer drops an idle connection mapping without closing the socket). The server separately tolerates client-sent keepalive PINGs no more often than every 10s regardless of this setting; a client configured with <code>grpc_keepalive_time_ms</code> below that floor will have its connection torn down as "too_many_pings".</td>
   <td>4.3.0</td>
 </tr>
 <tr>
