@@ -36,6 +36,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -139,6 +140,10 @@ class RandomForestClassifier @Since("1.4.0") (
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
+  /** @group expertSetParam */
+  @Since("5.0.0")
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
+
   override protected def train(
       dataset: Dataset[_]): RandomForestClassificationModel = instrumented { instr =>
     instr.logPipelineStage(this)
@@ -168,10 +173,12 @@ class RandomForestClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, probabilityCol,
       rawPredictionCol, leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins,
       maxMemoryInMB, minInfoGain, pruneTree, minInstancesPerNode, minWeightFractionPerNode, seed,
-      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap)
+      subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap,
+      intermediateStorageLevel)
 
     val trees = RandomForest
-      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr),
+        storageLevel = StorageLevel.fromString($(intermediateStorageLevel)))
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
     trees.foreach(copyValues(_))
 

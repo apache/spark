@@ -2268,6 +2268,13 @@ class RandomForestClassifier(
         """
         return self._set(minWeightFractionPerNode=value)
 
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "RandomForestClassifier":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class RandomForestClassificationModel(  # type: ignore[misc]
     _TreeEnsembleModel,
@@ -2756,6 +2763,13 @@ class GBTClassifier(
         Sets the value of :py:attr:`minWeightFractionPerNode`.
         """
         return self._set(minWeightFractionPerNode=value)
+
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "GBTClassifier":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class GBTClassificationModel(

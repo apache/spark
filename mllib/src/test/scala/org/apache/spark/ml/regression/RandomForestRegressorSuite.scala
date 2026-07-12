@@ -58,6 +58,19 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest {
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
 
+  test("SPARK-57870: intermediateStorageLevel param") {
+    val rf = new RandomForestRegressor()
+    assert(rf.getIntermediateStorageLevel === "MEMORY_AND_DISK")
+    rf.setIntermediateStorageLevel("MEMORY_ONLY")
+    assert(rf.getIntermediateStorageLevel === "MEMORY_ONLY")
+    intercept[IllegalArgumentException] {
+      new RandomForestRegressor().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new RandomForestRegressor().setIntermediateStorageLevel("no_such_a_level")
+    }
+  }
+
   test("RandomForestRegressor validate input dataset") {
     testInvalidRegressionLabels(new RandomForestRegressor().fit(_))
     testInvalidWeights(new RandomForestRegressor().setWeightCol("weight").fit(_))

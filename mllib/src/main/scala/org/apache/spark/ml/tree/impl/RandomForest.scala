@@ -125,7 +125,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       parentUID: Option[String] = None,
-      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
+      earlyStopModelSizeThresholdInBytes: Long = 0,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK): Array[DecisionTreeModel] = {
     lastEarlyStoppedModelSize = 0
     val timer = new TimeTracker()
     timer.start("total")
@@ -173,7 +174,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       // At first, all the rows belong to the root nodes (node Id == 1).
       nodeIds = baggedInput.map { _ => Array.fill(numTrees)(1) }
       nodeIdCheckpointer = new PeriodicRDDCheckpointer[Array[Int]](
-        strategy.getCheckpointInterval(), sc, StorageLevel.MEMORY_AND_DISK)
+        strategy.getCheckpointInterval(), sc, storageLevel)
       nodeIdCheckpointer.update(nodeIds)
     }
 
@@ -307,7 +308,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       featureSubsetStrategy: String,
       seed: Long,
       instr: Option[Instrumentation],
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK): Array[DecisionTreeModel] = {
     val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
     val timer = new TimeTracker()
 
@@ -344,7 +346,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         strategy.bootstrap,
         (tp: TreePoint) => tp.weight,
         seed = seed)
-      .persist(StorageLevel.MEMORY_AND_DISK)
+      .persist(storageLevel)
       .setName("bagged tree points")
 
     val trees = runBagged(
@@ -357,7 +359,8 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed = seed,
       instr = instr,
       parentUID = parentUID,
-      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes,
+      storageLevel = storageLevel)
 
     baggedInput.unpersist()
     bcSplits.destroy()

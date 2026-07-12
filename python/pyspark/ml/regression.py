@@ -1584,6 +1584,13 @@ class RandomForestRegressor(
         """
         return self._set(minWeightFractionPerNode=value)
 
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "RandomForestRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
+
 
 class RandomForestRegressionModel(  # type: ignore[misc]
     _JavaRegressionModel[Vector],
@@ -1961,6 +1968,13 @@ class GBTRegressor(
         Sets the value of :py:attr:`minWeightFractionPerNode`.
         """
         return self._set(minWeightFractionPerNode=value)
+
+    @since("5.0.0")
+    def setIntermediateStorageLevel(self, value: str) -> "GBTRegressor":
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        return self._set(intermediateStorageLevel=value)
 
 
 class GBTRegressionModel(
