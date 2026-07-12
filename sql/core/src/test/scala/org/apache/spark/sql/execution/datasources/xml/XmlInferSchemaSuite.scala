@@ -722,14 +722,15 @@ class XmlInferSchemaSuite
     assert(readData(doubleThenLong).schema.fields.head.dataType === DoubleType)
   }
 
-  test("date is inferred regardless of preferDate") {
+  test("preferDate gates date inference (consistent with CSV)") {
     val xmlDate = Seq("""<ROW><d>2024-01-15</d></ROW>""")
-    // preferDate governs which date formatter is used, not whether date inference is attempted.
-    Seq("true", "false").foreach { preferDate =>
-      val df = readData(xmlDate, Map("preferDate" -> preferDate))
-      assert(df.schema.fields.head.dataType === DateType,
-        s"expected DateType with preferDate=$preferDate")
-    }
+    // preferDate controls whether date inference is attempted, matching CSVInferSchema: when true
+    // a bare date infers as DateType; when false date inference is skipped and the value falls
+    // through to timestamp inference.
+    assert(readData(xmlDate, Map("preferDate" -> "true"))
+      .schema.fields.head.dataType === DateType)
+    assert(readData(xmlDate, Map("preferDate" -> "false"))
+      .schema.fields.head.dataType === TimestampType)
   }
 
   test("incremental type casting yields the same schema as the legacy batch path") {
