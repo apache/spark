@@ -23,6 +23,7 @@ ARRAY	false
 AS	true
 ASC	false
 ASENSITIVE	false
+ASOF	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
@@ -234,6 +235,7 @@ LOOP	false
 MACRO	false
 MAP	false
 MATCHED	false
+MATCH_CONDITION	false
 MATERIALIZED	false
 MAX	false
 MEASURE	false
