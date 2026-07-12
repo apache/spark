@@ -156,6 +156,30 @@
     ],
     "sqlState" : "42713"
   },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION" : {
+    "message" : [
+      "The MATCH_CONDITION operand contains an invalid expression: <expr>. Rewrite the query to avoid subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions in MATCH_CONDITION operands."
+    ],
+    "sqlState" : "42903"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR" : {
+    "message" : [
+      "The MATCH_CONDITION operator must be one of >=, >, <=, <. Got: <operator>."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE" : {
+    "message" : [
+      "The MATCH_CONDITION operands must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
+    "message" : [
+      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+    ],
+    "sqlState" : "42K0E"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -184,30 +208,6 @@
       }
     },
     "sqlState" : "42604"
-  },
-  "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION" : {
-    "message" : [
-      "The MATCH_CONDITION operand contains an invalid expression: <expr>. Rewrite the query to avoid subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions in MATCH_CONDITION operands."
-    ],
-    "sqlState" : "42903"
-  },
-  "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR" : {
-    "message" : [
-      "The MATCH_CONDITION operator must be one of >=, >, <=, <. Got: <operator>."
-    ],
-    "sqlState" : "42K0E"
-  },
-  "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE" : {
-    "message" : [
-      "The MATCH_CONDITION operands must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
-    ],
-    "sqlState" : "42K09"
-  },
-  "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
-    "message" : [
-      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
-    ],
-    "sqlState" : "42K0E"
   },
   "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
     "message" : [
