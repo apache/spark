@@ -1749,6 +1749,10 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       VariantArrayAppend(Literal(parseJson("[]")), Literal("abc"), Literal(1)),
       "INVALID_VARIANT_PATH",
       Map("path" -> "abc", "functionName" -> "`variant_array_append`"))
+    checkErrorInExpression[SparkRuntimeException](
+      VariantArrayAppend(Literal(parseJson("[]")), Literal(""), Literal(1)),
+      "INVALID_VARIANT_PATH",
+      Map("path" -> "", "functionName" -> "`variant_array_append`"))
 
     // Appending a value that overflows the variant size limit surfaces as VARIANT_SIZE_LIMIT.
     val tooBig = "x".repeat(16 * 1024 * 1024)
