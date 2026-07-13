@@ -89,12 +89,6 @@ function codeTabs() {
 
 $(function() {
   codeTabs();
-  // Display anchor links when hovering over headers. For documentation of the
-  // configuration options, see the AnchorJS documentation.
-  anchors.options = {
-    placement: 'right'
-  };
-  anchors.add();
 
   // Make dropdown menus in nav bars show on hover instead of click
   // using solution at https://webdesign.tutsplus.com/tutorials/how-
