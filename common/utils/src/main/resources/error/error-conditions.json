@@ -9378,11 +9378,6 @@
       "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0033" : {
-    "message" : [
-      "Expected either STORED AS or STORED BY, not both."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0034" : {
     "message" : [
       "<operation> is not supported in Hive-style <command><msg>."
