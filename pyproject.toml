@@ -198,3 +198,47 @@ dev = [
     {include-group = "pandas_on_spark_extra"},
     {include-group = "pipelines"},
 ]
+
+_ci_connect = [
+    {include-group = "connect"},
+    "grpcio==1.76.0",
+    "grpcio-status==1.76.0",
+    "googleapis-common-protos==1.71.0",
+    "zstandard==0.25.0",
+    "protobuf==6.33.5",
+]
+
+ci_connect_standard = [
+    {include-group = "_ci_connect"},
+    "graphviz==0.20.3",
+]
+
+ci_connect_minimum = [
+    {include-group = "_ci_connect"},
+    "graphviz==0.20",
+]
+
+ci_classic_standard = [
+    {include-group = "_pyspark_devtool"},
+    {include-group = "sql"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "ml"},
+    {include-group = "ml_extra"},
+    {include-group = "_test"},
+    "pyarrow>=23.0.0",
+    "pandas==2.3.3",
+]
+
+ci_classic_minimum = [
+    {include-group = "sql"},
+    {include-group = "pandas_on_spark"},
+    {include-group = "ml"},
+    "numpy==1.23.2",
+    "pyarrow==18.0.0",
+    "pandas==2.2.0",
+    "scipy",
+    "scikit-learn",
+    "unittest-xml-reporting",
+    # Debug tools
+    "psutil",
+]

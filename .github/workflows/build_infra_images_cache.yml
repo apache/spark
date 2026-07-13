@@ -164,6 +164,8 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
         with:
           context: ./dev/spark-test-image/python-312/
+          build-contexts: |
+            root=./
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-pyspark-python-312-cache:${{ github.ref_name }}
