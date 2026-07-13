@@ -1151,6 +1151,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("hintName" -> hintName))
   }
 
+  def invalidRebalanceBySizeHintParameterError(
+      hintName: String, advisoryPartitionSize: Long): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_3263",
+      messageParameters = Map(
+        "hintName" -> hintName,
+        "advisoryPartitionSize" -> advisoryPartitionSize.toString))
+  }
+
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1050",

@@ -41,7 +41,7 @@ object CoalesceHintUtils {
   }
 
   def getAdvisorySizeOfPartitions(hint: UnresolvedHint): (Option[Long], Seq[Expression]) = {
-    hint.parameters match {
+    val result = hint.parameters match {
       case Seq(ByteLiteral(advisoryPartitionSize), _*) =>
         (Some(advisoryPartitionSize.toLong), hint.parameters.tail)
       case Seq(ShortLiteral(advisoryPartitionSize), _*) =>
@@ -52,6 +52,12 @@ object CoalesceHintUtils {
         (Some(advisoryPartitionSize), hint.parameters.tail)
       case _ => (None, hint.parameters)
     }
+    if (result._1.exists(_ <= 0)) {
+      throw QueryCompilationErrors.invalidRebalanceBySizeHintParameterError(
+        hint.name.toUpperCase(Locale.ROOT),
+        result._1.get)
+    }
+    result
   }
 
   def validateParameters(hint: String, parms: Seq[Expression]): Unit = {

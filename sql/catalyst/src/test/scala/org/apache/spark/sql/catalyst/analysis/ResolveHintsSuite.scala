@@ -377,16 +377,25 @@ class ResolveHintsSuite extends AnalysisTest {
   test("SPARK-57993: Support specify advisory partition size for rebalance") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1024") {
       Seq(
-        Nil -> 1024,
-        Seq(Literal(2048)) -> 2048,
-        Seq(Literal(4096L)) -> 4096,
-        Seq(UnresolvedAttribute("a")) -> 1024,
-        Seq(Literal(2048), UnresolvedAttribute("a")) -> 2048).foreach {
+        Nil -> None,
+        Seq(Literal(2048)) -> Some(2048),
+        Seq(Literal(4096L)) -> Some(4096),
+        Seq(UnresolvedAttribute("a")) -> None,
+        Seq(Literal(2048), UnresolvedAttribute("a")) -> Some(2048)).foreach {
         case (param, advisoryPartitionSize) =>
-          assert(UnresolvedHint("REBALANCE_BY_SIZE", param, testRelation).analyze
-            .asInstanceOf[RebalancePartitions].optAdvisoryPartitionSize.getOrElse(1024)
-            == advisoryPartitionSize.toLong)
+          assert(
+            UnresolvedHint("REBALANCE_BY_SIZE", param, testRelation).analyze
+              .asInstanceOf[RebalancePartitions]
+              .optAdvisoryPartitionSize == advisoryPartitionSize)
       }
+
+      val msg = "The advisory partition size for REBALANCE_BY_SIZE must be positive, but got"
+      assertAnalysisError(
+        UnresolvedHint("REBALANCE_BY_SIZE", Seq(Literal(-1)), testRelation),
+        Seq(msg))
+      assertAnalysisError(
+        UnresolvedHint("REBALANCE_BY_SIZE", Seq(Literal(0)), testRelation),
+        Seq(msg))
     }
   }
 }
