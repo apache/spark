@@ -648,9 +648,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     }
     val source = s.toString()
     val position = i.asInstanceOf[Int] - 1
-    if (position == 0 || position < source.length) {
+    if (position == 0 || position < source.codePointCount(0, source.length)) {
       val m = pattern.matcher(source)
-      m.region(position, source.length)
+      m.region(source.offsetByCodePoints(0, position), source.length)
       result.delete(0, result.length())
       while (m.find) {
         m.appendReplacement(result, lastReplacement)
@@ -695,9 +695,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       }
       String $source = $subject.toString();
       int $position = $pos - 1;
-      if ($position == 0 || $position < $source.length()) {
+      if ($position == 0 || $position < $source.codePointCount(0, $source.length())) {
         $classNameStringBuffer $termResult = new $classNameStringBuffer();
-        $matcher.region($position, $source.length());
+        $matcher.region($source.offsetByCodePoints(0, $position), $source.length());
 
         while ($matcher.find()) {
           $matcher.appendReplacement($termResult, $termLastReplacement);
@@ -1064,9 +1064,10 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
 
   override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
     try {
-      val m = getLastMatcher(s, r)
+      val source = s.toString
+      val m = getLastMatcher(source, r)
       if (m.find) {
-        m.toMatchResult.start() + 1
+        source.codePointCount(0, m.toMatchResult.start()) + 1
       } else {
         0
       }
@@ -1080,6 +1081,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val matcher = ctx.freshName("matcher")
+    val source = ctx.freshName("source")
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -1092,7 +1094,8 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
          |  $setEvNotNull
          |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName)}
          |  if ($matcher.find()) {
-         |    ${ev.value} = $matcher.toMatchResult().start() + 1;
+         |    String $source = $subject.toString();
+         |    ${ev.value} = $source.codePointCount(0, $matcher.toMatchResult().start()) + 1;
          |  } else {
          |    ${ev.value} = 0;
          |  }
