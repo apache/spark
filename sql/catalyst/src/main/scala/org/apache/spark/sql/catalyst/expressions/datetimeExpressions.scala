@@ -477,9 +477,10 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
  * This is the nanosecond counterpart of [[SecondWithFraction]] on the
  * `EXTRACT(SECOND FROM ...)` / `date_part('SECOND', ...)` path. Unlike the integer time-of-day
  * fields, the result depends on the sub-microsecond digits, so the input is not cast down to
- * microseconds. The scale is fixed at the maximum nanosecond precision, like
- * [[SecondsOfTimeWithFraction]] does for TIME values: digits below the type's precision `p` are
- * always zero because values are floored to `p` at the type boundary.
+ * microseconds. The scale is fixed at the maximum nanosecond precision (`DECIMAL(11, 9)`): digits
+ * below the type's precision `p` are always zero because values are floored to `p` at the type
+ * boundary. This differs from `EXTRACT(SECOND)` on the TIME type ([[SecondsOfTimeWithFraction]]),
+ * which uses a per-precision `DECIMAL(2 + p, p)` scale.
  */
 case class SecondWithFractionNanos(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression {
