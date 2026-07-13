@@ -1154,7 +1154,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidRebalanceBySizeHintParameterError(
       hintName: String, advisoryPartitionSize: Long): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_3263",
+      errorClass = "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER",
       messageParameters = Map(
         "hintName" -> hintName,
         "advisoryPartitionSize" -> advisoryPartitionSize.toString))

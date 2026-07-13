@@ -389,13 +389,17 @@ class ResolveHintsSuite extends AnalysisTest {
               .optAdvisoryPartitionSize == advisoryPartitionSize)
       }
 
-      val msg = "The advisory partition size for REBALANCE_BY_SIZE must be positive, but got"
-      assertAnalysisError(
-        UnresolvedHint("REBALANCE_BY_SIZE", Seq(Literal(-1)), testRelation),
-        Seq(msg))
-      assertAnalysisError(
-        UnresolvedHint("REBALANCE_BY_SIZE", Seq(Literal(0)), testRelation),
-        Seq(msg))
+      Seq(-1, 0).foreach { advisoryPartitionSize =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            UnresolvedHint(
+              "REBALANCE_BY_SIZE", Seq(Literal(advisoryPartitionSize)), testRelation).analyze
+          },
+          condition = "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER",
+          parameters = Map(
+            "hintName" -> "REBALANCE_BY_SIZE",
+            "advisoryPartitionSize" -> advisoryPartitionSize.toString))
+      }
     }
   }
 }
