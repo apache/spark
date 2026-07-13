@@ -176,6 +176,10 @@ private[spark] class SerializerManager(
     checked
   }
 
+  /** Wrap `s` for `checksum` when present, otherwise return it unchanged. */
+  def wrapForChecksum(checksum: Option[Checksum], s: OutputStream): OutputStream =
+    checksum.map(wrapForChecksum(_, s)).getOrElse(s)
+
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */

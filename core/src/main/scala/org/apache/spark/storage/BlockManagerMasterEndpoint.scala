@@ -862,10 +862,7 @@ class BlockManagerMasterEndpoint(
       // that remote reads (which do not run the read-side self-check) would trust.
       if (sealedChecksums.containsKey(blockId) &&
           !checksum.contains(sealedChecksums.get(blockId).longValue)) {
-        blockManagerInfo.get(blockManagerId).foreach { bm =>
-          bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
-          () // fire-and-forget; correctness comes from the directory + read-side self-check
-        }
+        evictReplica(blockId, blockManagerId)
         // Return true (report accepted), not false: false means "re-register", which would
         // re-report this same block and hit this reject again, looping. The copy is intentionally
         // left out of the directory and reclaimed above; the read-side self-check keeps reads
@@ -923,6 +920,19 @@ class BlockManagerMasterEndpoint(
   }
 
   /**
+   * Ask an executor to drop its local copy of a block, fire-and-forget: the reply is discarded
+   * because correctness comes from the directory (this block manager is already removed from
+   * `blockLocations`) plus the read-side self-check, not from the eviction landing. Used by the
+   * seal to reclaim divergent replicas (`sealRddChecksums` losers and the reject path).
+   */
+  private def evictReplica(blockId: BlockId, bmId: BlockManagerId): Unit = {
+    blockManagerInfo.get(bmId).foreach { bm =>
+      bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
+      ()
+    }
+  }
+
+  /**
    * Seal an RDD's per-block content checksums: for each of its blocks with recorded per-replica
    * checksums, pick one checksum value as authoritative, evict the replicas that disagree with it
    * (drop them from the directory and ask their executors to remove the local copy), and record the
@@ -950,10 +960,7 @@ class BlockManagerMasterEndpoint(
         losers.foreach { bmId =>
           perReplica.remove(bmId)
           Option(blockLocations.get(blockId)).foreach(_.remove(bmId))
-          blockManagerInfo.get(bmId).foreach { bm =>
-            bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
-            () // fire-and-forget; correctness comes from the directory + read-side self-check
-          }
+          evictReplica(blockId, bmId)
         }
       } else {
         // Present but with no recorded content checksum, so it cannot be sealed. The caller

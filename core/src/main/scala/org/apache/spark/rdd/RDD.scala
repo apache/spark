@@ -1787,23 +1787,19 @@ abstract class RDD[T: ClassTag](
     // the storage level he/she specified to one that is appropriate for local checkpointing
     // (i.e. uses disk) to guarantee correctness.
 
-    val baseLevel = if (storageLevel == StorageLevel.NONE) {
-      LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL
-    } else {
-      LocalRDDCheckpointData.transformStorageLevel(storageLevel)
-    }
     // Content verification only covers serialized blocks. When enabled together with the
     // force-serialized flag, adapt the level to a serialized one so a plain localCheckpoint()
     // (whose default level is deserialized) becomes verifiable.
-    val checkpointLevel =
-      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED) &&
-          conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED) &&
-          baseLevel.deserialized) {
-        StorageLevel(baseLevel.useDisk, baseLevel.useMemory, baseLevel.useOffHeap,
-          deserialized = false, baseLevel.replication)
-      } else {
-        baseLevel
-      }
+    val verifyCheckpointChecksumEnabled = conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED)
+    val forceCheckpointSerialized =
+      verifyCheckpointChecksumEnabled &&
+        conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED)
+    val checkpointLevel = if (storageLevel == StorageLevel.NONE) {
+      LocalRDDCheckpointData.transformStorageLevel(
+        LocalRDDCheckpointData.DEFAULT_STORAGE_LEVEL, forceCheckpointSerialized)
+    } else {
+      LocalRDDCheckpointData.transformStorageLevel(storageLevel, forceCheckpointSerialized)
+    }
     persist(checkpointLevel, allowOverride = true)
 
     // If this RDD is already checkpointed and materialized, its lineage is already truncated.
@@ -1826,7 +1822,7 @@ abstract class RDD[T: ClassTag](
       // nothing to verify and marking would only add cost. (A deserialized default is expected,
       // hence no warning; `...forceSerialized` above opts a default checkpoint into a serialized
       // level so it can be verified.) `getStorageLevel` reflects the level set above.
-      if (conf.get(LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED) && !getStorageLevel.deserialized) {
+      if (verifyCheckpointChecksumEnabled && !getStorageLevel.deserialized) {
         verifyCheckpointChecksums = true
       }
     }

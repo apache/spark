@@ -37,7 +37,7 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("transform storage level") {
-    val transform = LocalRDDCheckpointData.transformStorageLevel _
+    val transform = (level: StorageLevel) => LocalRDDCheckpointData.transformStorageLevel(level)
     assert(transform(StorageLevel.NONE) === StorageLevel.DISK_ONLY)
     assert(transform(StorageLevel.MEMORY_ONLY) === StorageLevel.MEMORY_AND_DISK)
     assert(transform(StorageLevel.MEMORY_ONLY_SER) === StorageLevel.MEMORY_AND_DISK_SER)

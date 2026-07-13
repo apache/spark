@@ -300,6 +300,14 @@ private[spark] class BlockManager(
     info.sealedChecksum.isEmpty || info.sealedChecksum == info.checksum
   }
 
+  /**
+   * Record a freshly-computed block checksum on its `BlockInfo` once the serialized bytes have been
+   * fully written. Pair every store-path `newRddBlockChecksum` + `wrapForChecksum` with this so the
+   * folded value reaches the master; a no-op when no checksum was computed.
+   */
+  private def recordChecksum(info: BlockInfo, checksum: Option[Checksum]): Unit =
+    checksum.foreach(c => info.checksum = Some(c.getValue))
+
   // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager(trackingCacheVisibility)
 
@@ -1848,12 +1856,11 @@ private[spark] class BlockManager(
                 logWarning(log"Persisting block ${MDC(BLOCK_ID, blockId)} to disk instead.")
                 val checksumOpt = newRddBlockChecksum(blockId, verifySealedChecksum)
                 diskStore.put(blockId) { channel =>
-                  val rawOut = Channels.newOutputStream(channel)
-                  val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut))
-                    .getOrElse(rawOut)
+                  val out = serializerManager.wrapForChecksum(
+                    checksumOpt, Channels.newOutputStream(channel))
                   serializerManager.dataSerializeStream(blockId, out, iter)(classTag)
                 }
-                checksumOpt.foreach(c => info.checksum = Some(c.getValue))
+                recordChecksum(info, checksumOpt)
                 size = diskStore.getSize(blockId)
               } else {
                 iteratorFromFailedMemoryStorePut = Some(iter)
@@ -1865,7 +1872,7 @@ private[spark] class BlockManager(
             blockId, iterator(), classTag, level.memoryMode, checksumOpt) match {
             case Right(s) =>
               size = s
-              checksumOpt.foreach(c => info.checksum = Some(c.getValue))
+              recordChecksum(info, checksumOpt)
             case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (level.useDisk) {
@@ -1876,7 +1883,7 @@ private[spark] class BlockManager(
                 }
                 // checksumOpt folds over the whole serialized stream (in-memory portion plus the
                 // values finished to disk here), so its value now covers the full block.
-                checksumOpt.foreach(c => info.checksum = Some(c.getValue))
+                recordChecksum(info, checksumOpt)
                 size = diskStore.getSize(blockId)
               } else {
                 iteratorFromFailedMemoryStorePut = Some(partiallySerializedValues.valuesIterator)
@@ -1887,11 +1894,11 @@ private[spark] class BlockManager(
       } else if (level.useDisk) {
         val checksumOpt = newRddBlockChecksum(blockId, verifySealedChecksum)
         diskStore.put(blockId) { channel =>
-          val rawOut = Channels.newOutputStream(channel)
-          val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut)).getOrElse(rawOut)
+          val out = serializerManager.wrapForChecksum(
+            checksumOpt, Channels.newOutputStream(channel))
           serializerManager.dataSerializeStream(blockId, out, iterator())(classTag)
         }
-        checksumOpt.foreach(c => info.checksum = Some(c.getValue))
+        recordChecksum(info, checksumOpt)
         size = diskStore.getSize(blockId)
       }
 
@@ -2229,15 +2236,14 @@ private[spark] class BlockManager(
       data() match {
         case Left(elements) =>
           diskStore.put(blockId) { channel =>
-            val rawOut = Channels.newOutputStream(channel)
-            val out = checksumOpt.map(serializerManager.wrapForChecksum(_, rawOut))
-              .getOrElse(rawOut)
+            val out = serializerManager.wrapForChecksum(
+              checksumOpt, Channels.newOutputStream(channel))
             serializerManager.dataSerializeStream(
               blockId,
               out,
               elements.iterator)(info.classTag.asInstanceOf[ClassTag[T]])
           }
-          checksumOpt.foreach(c => info.checksum = Some(c.getValue))
+          recordChecksum(info, checksumOpt)
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
