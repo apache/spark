@@ -24,7 +24,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcIntoCommand, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
@@ -551,7 +551,7 @@ class SqlGraphRegistrationContext(
               origin = queryOrigin
             )
           )
-        case a: AutoCdcIntoCommand =>
+        case a: AutoCdcInto =>
           val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
           graphRegistrationContext.registerFlow(
             AutoCdcFlow(

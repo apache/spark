@@ -2541,6 +2541,36 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     )
   }
 
+  test("CREATE STREAMING TABLE without subquery cannot be directly executed") {
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        sql("CREATE STREAMING TABLE table1")
+      },
+      condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+      sqlState = "0A000",
+      parameters = Map("pipelineDatasetType" -> "STREAMING TABLE")
+    )
+  }
+
+  test("CREATE STREAMING TABLE FLOW AUTO CDC cannot be directly executed") {
+    withTable("src") {
+      sql("CREATE TABLE src AS SELECT 1 AS id, 1 AS ts")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(
+            """CREATE STREAMING TABLE table1
+              |FLOW AUTO CDC
+              |FROM STREAM(src)
+              |KEYS (id)
+              |SEQUENCE BY ts""".stripMargin)
+        },
+        condition = "UNSUPPORTED_FEATURE.CREATE_PIPELINE_DATASET_QUERY_EXECUTION",
+        sqlState = "0A000",
+        parameters = Map("pipelineDatasetType" -> "STREAMING TABLE")
+      )
+    }
+  }
+
   test(s"CREATE FLOW statement cannot be directly executed") {
     sql("CREATE TABLE table1 AS SELECT 1")
     sql("CREATE TABLE table2 AS SELECT 2")
@@ -2552,6 +2582,24 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sqlState = "0A000",
       parameters = Map.empty
     )
+  }
+
+  test("CREATE FLOW AS AUTO CDC cannot be directly executed") {
+    withTable("src") {
+      sql("CREATE TABLE src AS SELECT 1 AS id, 1 AS ts")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(
+            """CREATE FLOW f AS AUTO CDC INTO target
+              |FROM STREAM(src)
+              |KEYS (id)
+              |SEQUENCE BY ts""".stripMargin)
+        },
+        condition = "UNSUPPORTED_FEATURE.CREATE_FLOW_QUERY_EXECUTION",
+        sqlState = "0A000",
+        parameters = Map.empty
+      )
+    }
   }
 }
 
