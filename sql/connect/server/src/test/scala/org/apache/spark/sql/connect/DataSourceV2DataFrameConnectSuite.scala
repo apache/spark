@@ -63,11 +63,12 @@ class DataSourceV2DataFrameConnectSuite
   // later test's CREATE TABLE fails with TABLE_OR_VIEW_ALREADY_EXISTS.
   override protected def afterEach(): Unit = {
     val serverSession = getServerSession(spark)
-    serverSession.sessionState.catalogManager
-      .catalog("cachingcat")
-      .asInstanceOf[CachingInMemoryTableCatalog]
-      .clearCache()
-    serverSession.sessionState.catalogManager.reset()
+    if (serverSession.sessionState.catalogManager.isCatalogRegistered("cachingcat")) {
+      serverSession.sessionState.catalogManager
+        .catalog("cachingcat")
+        .asInstanceOf[CachingInMemoryTableCatalog]
+        .clearCache()
+    }
     super.afterEach()
   }
 
