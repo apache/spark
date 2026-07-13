@@ -539,6 +539,23 @@ private[spark] class BlockManager(
         } else {
           null
         }
+        // With verifyOnReplication on, recompute the checksum over the received bytes to verify the
+        // transfer. Do it here, before saveToDiskStore() runs: on the stream-upload path
+        // (TempFileBasedBlockStoreUpdater) that store moves the temp file away, so blockData() is
+        // no longer readable afterward. Recorded on info.checksum only once the store succeeds.
+        val recomputedChecksum =
+          if (blockId.isRDD && rddBlockChecksumVerifyOnReplication &&
+              (sourceChecksum.isDefined || sourceVerifySealedChecksum)) {
+            val recomputed = computeReceivedBlockChecksum(blockData())
+            if (sourceChecksum.exists(_ != recomputed)) {
+              logWarning(log"Replicated block ${MDC(BLOCK_ID, blockId)} arrived with a source " +
+                log"checksum that does not match its received bytes; storing the recomputed " +
+                log"value (possible transmission corruption or non-deterministic serialization).")
+            }
+            Some(recomputed)
+          } else {
+            None
+          }
         if (level.useMemory) {
           // Put it in memory first, even if it also has useDisk set to true;
           // We will drop it to disk later if the memory store can't hold it.
@@ -559,22 +576,12 @@ private[spark] class BlockManager(
         if (blockWasSuccessfullyStored) {
           // Propagate the source replica's verify mark and record its content checksum, so the
           // master can verify this replica and this executor's reads self-check it. By default the
-          // source's checksum is trusted; with verifyOnReplication on, recompute over the received
-          // bytes to also verify the transfer.
+          // source's checksum is trusted; with verifyOnReplication on, the recompute over the
+          // received bytes (done before the store above) also verifies the transfer.
           if (blockId.isRDD) {
             if (sourceVerifySealedChecksum) info.verifySealedChecksum = true
-            if (rddBlockChecksumVerifyOnReplication &&
-                (sourceChecksum.isDefined || sourceVerifySealedChecksum)) {
-              val recomputed = computeReceivedBlockChecksum(blockData())
-              if (sourceChecksum.exists(_ != recomputed)) {
-                logWarning(log"Replicated block ${MDC(BLOCK_ID, blockId)} arrived with a source " +
-                  log"checksum that does not match its received bytes; storing the recomputed " +
-                  log"value (possible transmission corruption or non-deterministic serialization).")
-              }
-              info.checksum = Some(recomputed)
-            } else if (sourceChecksum.isDefined) {
-              info.checksum = sourceChecksum
-            }
+            // Prefer the recompute (verifyOnReplication) over the trusted source checksum.
+            info.checksum = recomputedChecksum.orElse(sourceChecksum)
           }
           // Now that the block is in either the memory or disk store,
           // tell the master about it.

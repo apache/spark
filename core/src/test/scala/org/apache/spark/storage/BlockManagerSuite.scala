@@ -1437,6 +1437,35 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     }
   }
 
+  test("verifyOnReplication recomputes over the received bytes on the stream-upload path") {
+    // The stream-upload path (putBlockDataAsStream -> TempFileBasedBlockStoreUpdater) moves the
+    // temp file into the block store, so the verifyOnReplication recompute must read the received
+    // bytes before that move, not after (else FileNotFoundException). Drive that path directly with
+    // a seal-marked RDD block and the flag on.
+    val verifyConf =
+      new SparkConf(false).set(STORAGE_RDD_BLOCK_CHECKSUM_VERIFY_ON_REPLICATION, true)
+    val store = makeBlockManager(20000, "exec1", testConf = Some(verifyConf))
+    try {
+      val message = "message"
+      val ser = serializer.newInstance().serialize(message).array()
+      val blockId = RDDBlockId(40, 0)
+      // A source checksum + seal mark, as a replicating peer would send.
+      val callback = store.putBlockDataAsStream(
+        blockId, StorageLevel.DISK_ONLY, ClassTag(message.getClass),
+        checksum = Some(123L), verifySealedChecksum = true)
+      callback.onData("0", ByteBuffer.wrap(ser))
+      // Pre-fix this threw FileNotFoundException from the recompute reading the moved temp file.
+      callback.onComplete("0")
+      assert(store.getStatus(blockId).exists(_.diskSize > 0))
+      val info = store.blockInfoManager.get(blockId).get
+      // The recomputed checksum (over the received bytes) was recorded and the mark propagated.
+      assert(info.checksum.isDefined)
+      assert(info.verifySealedChecksum)
+    } finally {
+      store.stop()
+    }
+  }
+
   test("turn off updated block statuses") {
     val conf = new SparkConf()
     conf.set(TASK_METRICS_TRACK_UPDATED_BLOCK_STATUSES, false)
