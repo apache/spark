@@ -1119,7 +1119,15 @@ private[spark] class BlockManager(
   /**
    * Get block from local block manager as an iterator of Java objects.
    */
-  def getLocalValues(blockId: BlockId): Option[BlockResult] = {
+  def getLocalValues(blockId: BlockId): Option[BlockResult] =
+    getLocalValues(blockId, checkChecksumSeal = true)
+
+  /**
+   * `checkChecksumSeal` runs the read-side sealed-checksum self-check. Pass `false` only from the
+   * producing store's own readback in `getOrElseUpdate` (not a consumer read); a divergent store is
+   * rejected at master registration.
+   */
+  private def getLocalValues(blockId: BlockId, checkChecksumSeal: Boolean): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
     blockInfoManager.lockForReading(blockId) match {
       case None =>
@@ -1134,7 +1142,8 @@ private[spark] class BlockManager(
         // This is only used with localCheckpoint, whose lineage is cut once sealed, so a lost block
         // is never recomputed: there is no later, differently-checksummed re-materialization to
         // reconcile here - a skipped local copy means the block is genuinely gone, not superseded.
-        if (info.verifySealedChecksum && !localCopyMatchesSealedChecksum(blockId, info)) {
+        if (checkChecksumSeal && info.verifySealedChecksum &&
+            !localCopyMatchesSealedChecksum(blockId, info)) {
           releaseLock(blockId, Option(TaskContext.get()))
           return None
         }
@@ -1608,18 +1617,13 @@ private[spark] class BlockManager(
           // Force compute to report accumulator updates.
           Utils.getIteratorSize(makeIterator())
         }
-        val blockResult = getLocalValues(blockId).getOrElse {
+        // checkChecksumSeal = false: this is the producing store's own readback, not a consumer
+        // read, so the self-check would only add a master round-trip. A divergent store is instead
+        // rejected at master registration (updateBlockInfo).
+        val blockResult = getLocalValues(blockId, checkChecksumSeal = false).getOrElse {
+          // Since we held a read lock between the doPut() and get() calls, the block should not
+          // have been evicted, so get() not returning the block indicates some internal error.
           releaseLock(blockId)
-          // getLocalValues returned None despite the read lock held since doPut(). Normally that
-          // means an internal error (the block should still be present). The one expected cause is
-          // the read-side seal self-check: this task recomputed a block that is already sealed to a
-          // different checksum (only possible if a sealed block is recomputed - not for an eager
-          // local checkpoint, whose lineage is cut before any consumer reads it). Distinguish the
-          // two so the failure is diagnosable rather than a cryptic "failed to get block" error.
-          if (verifySealedChecksum &&
-              blockInfoManager.get(blockId).exists(!localCopyMatchesSealedChecksum(blockId, _))) {
-            throw SparkCoreErrors.sealedBlockDivergedError(blockId)
-          }
           throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
         }
         // We already hold a read lock on the block from the doPut() call and getLocalValues()
