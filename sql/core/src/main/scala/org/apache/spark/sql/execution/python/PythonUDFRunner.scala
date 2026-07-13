@@ -54,7 +54,11 @@ abstract class BasePythonUDFRunner(
   override def runnerConf: Map[String, String] = {
     super.runnerConf ++ SQLConf.get.pythonUDFProfiler.map(p =>
       Map(SQLConf.PYTHON_UDF_PROFILER.key -> p)
-    ).getOrElse(Map.empty)
+    ).getOrElse(Map.empty) ++
+    Map(
+      SQLConf.PYTHON_UDF_PROFILER_SAMPLING_INTERVAL.key ->
+        SQLConf.get.pythonUDFProfilerSamplingInterval.toString
+    )
   }
 
   override val pythonExec: String =

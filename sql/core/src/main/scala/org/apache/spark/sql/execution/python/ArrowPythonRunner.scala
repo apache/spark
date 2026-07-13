@@ -196,6 +196,7 @@ object ArrowPythonRunner {
       // Optional
       SQLConf.PYTHON_UDF_ARROW_CONCURRENCY_LEVEL,
       SQLConf.PYTHON_UDF_PROFILER,
+      SQLConf.PYTHON_UDF_PROFILER_SAMPLING_INTERVAL,
       SQLConf.PYTHON_DATA_SOURCE_PROFILER
     ).foreach {
       case c: OptionalConfigEntry[_] =>
