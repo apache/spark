@@ -852,8 +852,7 @@ class BlockManagerMasterEndpoint(
     if (storageLevel.isValid) {
       // A sealed block admits only a copy matching its sealed checksum (see
       // `checksumSealRejectsUpdate`). On reject, acknowledge the report but drop the divergent copy
-      // and ask its executor to reclaim the local copy (fire-and-forget, mirroring the seal's
-      // eviction).
+      // and ask its executor to reclaim the local copy.
       if (checksumSealRejectsUpdate(blockId, checksum)) {
         evictReplica(blockId, blockManagerId)
         // Return true (report accepted), not false: false means "re-register", which would

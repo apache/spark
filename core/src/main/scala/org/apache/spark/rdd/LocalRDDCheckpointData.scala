@@ -88,7 +88,9 @@ private[spark] object LocalRDDCheckpointData {
   def transformStorageLevel(
       level: StorageLevel, forceSerialized: Boolean = false): StorageLevel = {
     StorageLevel(
-      useDisk = true, level.useMemory, deserialized = level.deserialized && !forceSerialized,
-      level.replication)
+      useDisk = true,
+      useMemory = level.useMemory,
+      deserialized = level.deserialized && !forceSerialized,
+      replication = level.replication)
   }
 }

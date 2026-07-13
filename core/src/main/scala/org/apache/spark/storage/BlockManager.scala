@@ -1131,8 +1131,10 @@ private[spark] class BlockManager(
 
   /**
    * `checkChecksumSeal` runs the read-side sealed-checksum self-check. Pass `false` only from the
-   * producing store's own readback in `getOrElseUpdate` (not a consumer read); a divergent store is
-   * rejected at master registration.
+   * producing store's own readback in `getOrElseUpdate` (not a consumer read): in most cases the
+   * block is not sealed yet, and if it is a recompute of an already-sealed block the divergent copy
+   * is still caught at master registration (a divergent report is rejected) and at any later local
+   * read (which self-checks).
    */
   private def getLocalValues(blockId: BlockId, checkChecksumSeal: Boolean): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
@@ -1633,8 +1635,9 @@ private[spark] class BlockManager(
           Utils.getIteratorSize(makeIterator())
         }
         // checkChecksumSeal = false: this is the producing store's own readback, not a consumer
-        // read, so the self-check would only add a master round-trip. A divergent store is instead
-        // rejected at master registration (updateBlockInfo).
+        // read, so the self-check would only add a master round-trip - in most cases the block is
+        // not sealed yet here, and a recompute of an already-sealed block is still caught at master
+        // registration (updateBlockInfo rejects the divergent report) and at any later local read.
         val blockResult = getLocalValues(blockId, checkChecksumSeal = false).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
