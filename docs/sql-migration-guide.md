@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.1.3 to 4.1.4
+
+- Since Spark 4.1.4, `GROUP BY GROUPING SETS (())` (and the equivalent empty `GROUP BY CUBE()` / `GROUP BY ROLLUP()`) is treated as a grand total and returns one row over empty input, matching an aggregation with no `GROUP BY` clause; previously it returned no rows. To restore the previous behavior, set `spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled` to `false`.
+
 ## Upgrading from Spark SQL 4.0 to 4.1
 
 - Since Spark 4.1, the Parquet reader no longer assumes all struct values to be null, if all the requested fields are missing in the parquet file. The new default behavior is to read an additional struct field that is present in the file to determine nullness. To restore the previous behavior, set `spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing` to `true`.

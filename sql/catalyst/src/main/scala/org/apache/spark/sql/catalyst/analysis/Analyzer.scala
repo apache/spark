@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils}
@@ -649,6 +650,16 @@ class Analyzer(
   }
 
   object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
+    /**
+     * Marks an [[Aggregate]] that [[constructGrandTotalAggregate]] produced by lowering a
+     * grand-total `GROUP BY GROUPING SETS (())` (or the equivalent empty `CUBE()`/`ROLLUP()`) to a
+     * global aggregate. Such an aggregate has no grouping expressions, so it is otherwise
+     * indistinguishable from a plain no-`GROUP BY` aggregate; the tag lets [[findGroupingExprs]]
+     * tell them apart so a grouping function in HAVING/ORDER BY folds to the constant 0 over the
+     * former but is still rejected over the latter (matching the SELECT-list path).
+     */
+    val GRAND_TOTAL_AGGREGATE_TAG = TreeNodeTag[Unit]("grandTotalAggregate")
+
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
@@ -763,6 +774,10 @@ class Analyzer(
         throw QueryCompilationErrors.generatorOutsideSelectError(operator)
       }
 
+      if (shouldLowerToGrandTotalAggregate(groupByExprs, selectedGroupByExprs)) {
+        return constructGrandTotalAggregate(aggregationExprs, child)
+      }
+
       // Expand works by setting grouping expressions to null as determined by the
       // `selectedGroupByExprs`. To prevent these null values from being used in an aggregate
       // instead of the original value we need to create new aliases for all group by expressions
@@ -779,16 +794,103 @@ class Analyzer(
       Aggregate(groupingAttrs, aggregations, expand)
     }
 
+    /*
+     * Whether a grouping-set spec is the grand-total-only case `GROUP BY GROUPING SETS (())` (and
+     * the equivalent empty `CUBE()`/`ROLLUP()`) that [[constructAggregate]] lowers to a global
+     * [[Aggregate]]: no leading group-by expressions and a single empty grouping set, with
+     * [[SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE]] enabled. This is the pre-lowering
+     * decision; [[isLoweredToGrandTotalAggregate]] detects the same case post-lowering.
+     */
+    private def shouldLowerToGrandTotalAggregate(
+        groupByExprs: Seq[Expression],
+        selectedGroupByExprs: Seq[Seq[Expression]]): Boolean = {
+      conf.getConf(SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE) &&
+        groupByExprs.isEmpty &&
+        selectedGroupByExprs.length == 1 &&
+        selectedGroupByExprs.head.isEmpty
+    }
+
+    /*
+     * Whether a lowered [[Aggregate]] is the grand total produced by
+     * [[shouldLowerToGrandTotalAggregate]]: its resolved grouping expressions (without the
+     * `spark_grouping_id` key, as returned by [[findGroupingExprs]]) are empty, with the flag
+     * enabled. The flag is part of the check because with it off the same grand total is lowered
+     * via [[Expand]], whose `spark_grouping_id` key must still be referenced.
+     *
+     * Only the single-empty-grouping-set grand total reaches here with empty grouping expressions:
+     * [[findGroupingExprs]] returns empty only for the [[GRAND_TOTAL_AGGREGATE_TAG]]-marked global
+     * aggregate. A multi-empty-set spec such as `GROUP BY GROUPING SETS ((), ())` stays on the
+     * [[Expand]] path with a `spark_grouping_id` key (and, being a duplicated grouping set, a
+     * `_gen_grouping_pos` key), so its grouping expressions are non-empty and it is unaffected.
+     */
+    private def isLoweredToGrandTotalAggregate(groupingExprs: Seq[Expression]): Boolean = {
+      conf.getConf(SQLConf.LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE) &&
+        groupingExprs.isEmpty
+    }
+
+    /*
+     * The grouping id to substitute for grouping()/grouping_id() over a lowered grouping-analytics
+     * [[Aggregate]]: the constant 0 for a grand total ([[isLoweredToGrandTotalAggregate]]),
+     * otherwise the unresolved `spark_grouping_id` attribute produced by [[Expand]].
+     */
+    private def groupingIdExpression(groupingExprs: Seq[Expression]): Expression = {
+      if (isLoweredToGrandTotalAggregate(groupingExprs)) {
+        Literal.default(GroupingID.dataType)
+      } else {
+        VirtualColumn.groupingIdAttribute
+      }
+    }
+
+    /*
+     * Build a global [[Aggregate]] (with no grouping expressions) for the grand-total-only case
+     * `GROUP BY GROUPING SETS (())`.
+     *
+     * A single empty grouping set is a grand total, semantically identical to an aggregation with
+     * no GROUP BY clause. Lowering it via [[Expand]] would group by `spark_grouping_id` and so emit
+     * zero rows over empty input instead of one; a global [[Aggregate]] returns one (grand total)
+     * row, matching the GROUP BY-less form and the SQL standard.
+     *
+     * Any [[GroupingID]] in the aggregation expressions evaluates to the constant `0` (the only
+     * active grouping set is the empty one), and [[Grouping]] over a non-grouping column is
+     * rejected, both reusing [[replaceGroupingFunc]] with a literal grouping id in place of the
+     * Expand-produced `spark_grouping_id` attribute.
+     */
+    private def constructGrandTotalAggregate(
+        aggregationExprs: Seq[NamedExpression],
+        child: LogicalPlan): LogicalPlan = {
+      val groupingId = Literal.default(GroupingID.dataType)
+      val aggregations = aggregationExprs
+        .map(replaceGroupingFunc(_, Seq.empty, groupingId))
+        .map(_.asInstanceOf[NamedExpression])
+      val aggregate = Aggregate(Seq.empty, aggregations, child)
+      aggregate.setTagValue(GRAND_TOTAL_AGGREGATE_TAG, ())
+      aggregate
+    }
+
     private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
       plan.collectFirst {
         case a: Aggregate =>
-          // this Aggregate should have grouping id as the last grouping key.
-          val gid = a.groupingExpressions.last
-          if (!gid.isInstanceOf[AttributeReference]
-            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+          // A grand-total `GROUP BY GROUPING SETS (())` is lowered to a global Aggregate with no
+          // grouping expressions (see constructGrandTotalAggregate), so there is no
+          // `spark_grouping_id` key and no grouping columns; return an empty sequence for it. That
+          // case is recognized by the GRAND_TOTAL_AGGREGATE_TAG marker rather than by emptiness
+          // alone, so a plain no-`GROUP BY` aggregate (also empty grouping expressions, but never
+          // lowered from a grouping set) still throws, matching the SELECT-list path where a
+          // leftover grouping function fails UNSUPPORTED_GROUPING_EXPRESSION in CheckAnalysis.
+          if (a.groupingExpressions.isEmpty) {
+            if (a.getTagValue(GRAND_TOTAL_AGGREGATE_TAG).isEmpty) {
+              throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+            }
+            Seq.empty
+          } else {
+            // this Aggregate should have grouping id as the last grouping key.
+            val gid = a.groupingExpressions.last
+            if (!gid.isInstanceOf[AttributeReference]
+              || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
+              throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
+            }
+            a.groupingExpressions.take(a.groupingExpressions.length - 1)
           }
-          a.groupingExpressions.take(a.groupingExpressions.length - 1)
       }.getOrElse {
         throw QueryCompilationErrors.groupingMustWithGroupingSetsOrCubeOrRollupError()
       }
@@ -870,16 +972,18 @@ class Analyzer(
       // We should make sure all expressions in condition have been resolved.
       case f @ Filter(cond, child) if hasGroupingFunction(cond) && cond.resolved =>
         val groupingExprs = findGroupingExprs(child)
-        // The unresolved grouping id will be resolved by ResolveReferences
-        val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
+        val newCond = replaceGroupingFunc(cond, groupingExprs, groupingIdExpression(groupingExprs))
         f.copy(condition = newCond)
 
       // We should make sure all [[SortOrder]]s have been resolved.
       case s @ Sort(order, _, child, _)
         if order.exists(hasGroupingFunction) && order.forall(_.resolved) =>
         val groupingExprs = findGroupingExprs(child)
-        val gid = VirtualColumn.groupingIdAttribute
-        // The unresolved grouping id will be resolved by ResolveReferences
+        val gid = groupingIdExpression(groupingExprs)
+        // For the grand total this is a resolved Literal(0); otherwise the unresolved
+        // spark_grouping_id attribute is resolved by ResolveReferences.
         val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
         s.copy(order = newOrder)
     }

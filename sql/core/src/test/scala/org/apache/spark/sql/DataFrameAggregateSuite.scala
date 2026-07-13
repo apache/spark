@@ -130,6 +130,17 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // With no grouping columns, cube()/rollup() lower to a global aggregate (the grand total),
+    // which returns one row even over empty input -- like an aggregation with no GROUP BY clause.
+    // This is the DataFrame-API surface for the empty CUBE/ROLLUP case (not expressible in SQL).
+    checkAnswer(spark.range(0).cube().count(), Row(0L))
+    checkAnswer(spark.range(0).rollup().count(), Row(0L))
+    // Non-empty input still collapses to the single grand-total row.
+    checkAnswer(spark.range(3).cube().count(), Row(3L))
+    checkAnswer(spark.range(3).rollup().count(), Row(3L))
+  }
+
   test("rollup") {
     checkAnswer(
       courseSales.rollup("course", "year").sum("earnings"),
