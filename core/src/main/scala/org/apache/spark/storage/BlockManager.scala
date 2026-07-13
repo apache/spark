@@ -1231,6 +1231,14 @@ private[spark] class BlockManager(
    *
    * Must be called while holding a read lock on the block.
    * Releases the read lock upon exception; keeps the read lock upon successful return.
+   *
+   * This is the serialized-bytes path, distinct from the value path `getLocalValues`. Its callers
+   * are block replication (`doPutIterator`, `replicateBlock`) and serving a block to a remote peer
+   * (`getLocalBlockData`); none is a local read of an RDD block's values. It therefore does NOT run
+   * the read-side sealed-checksum self-check that `getLocalValues` does: for a sealed RDD block,
+   * correctness is left to the master (`sealRddChecksums` / `checksumSealRejectsUpdate`), and any
+   * other block reached here (broadcast, artifact, shuffle) is never sealed. A read that must
+   * observe the seal must use `getLocalValues`.
    */
   private def doGetLocalBytes(blockId: BlockId, info: BlockInfo): BlockData = {
     val level = info.level
