@@ -197,9 +197,8 @@ private[ops] object TimestampNanosParquetOps {
  * No datetime rebase is applied (TIMESTAMP(NANOS) postdates the proleptic Gregorian switch).
  * No timezone conversion is applied at the storage level.
  *
- * Replaces the former `ParquetVectorUpdaterFactory` nanos updater, now owned by the type's ops
- * ([[TimestampNanosParquetOps]]) and routed through the types framework's `getVectorUpdater`
- * hook.
+ * Owned by the type's ops ([[TimestampNanosParquetOps]]) and routed through the types
+ * framework's `getVectorUpdater` hook (no factory-level branch).
  */
 private[ops] class TimestampNanosVectorUpdater(precision: Int) extends ParquetVectorUpdater {
 
