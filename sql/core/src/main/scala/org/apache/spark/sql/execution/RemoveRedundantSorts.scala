@@ -19,14 +19,21 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Remove redundant SortExec node from the spark plan. A sort node is redundant when
- * its child satisfies both its sort orders and its required child distribution. Note
- * this rule differs from the Optimizer rule EliminateSorts in that this rule also checks
- * if the child satisfies the required distribution so that it is safe to remove not only a
- * local sort but also a global sort when its child already satisfies required sort orders.
+ * Remove redundant SortExec node from the spark plan. A sort node is redundant when either:
+ *  - its child satisfies both its sort orders and its required child distribution. Note this
+ *    rule differs from the Optimizer rule EliminateSorts in that this rule also checks if the
+ *    child satisfies the required distribution so that it is safe to remove not only a local
+ *    sort but also a global sort when its child already satisfies required sort orders; or
+ *  - it is a local sort that is the direct child of a shuffle which does not require its child
+ *    to be ordered. A shuffle does not preserve the child ordering, so such a local sort has no
+ *    effect on the query result and is dead. This commonly happens in AQE after
+ *    `OptimizeSkewedJoin` inserts an extra shuffle between two joins: the local sort that used
+ *    to feed the upper join is left dangling right below the newly added shuffle and ends up
+ *    being computed in the wrong stage for nothing.
  */
 object RemoveRedundantSorts extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
@@ -42,5 +49,12 @@ object RemoveRedundantSorts extends Rule[SparkPlan] {
         if SortOrder.orderingSatisfies(child.outputOrdering, orders) &&
           child.outputPartitioning.satisfies(s.requiredChildDistribution.head) =>
       child
+
+    case shuffle: ShuffleExchangeLike
+        if shuffle.requiredChildOrdering.head.isEmpty && shuffle.outputOrdering.isEmpty =>
+      shuffle.child match {
+        case SortExec(_, false, sortChild, _) => shuffle.withNewChildren(Seq(sortChild))
+        case _ => shuffle
+      }
   }
 }

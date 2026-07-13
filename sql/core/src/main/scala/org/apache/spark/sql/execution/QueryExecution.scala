@@ -770,9 +770,9 @@ object QueryExecution {
       // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
       // `EnsureRequirements` to guarantee the same number of partitions when instantiating
       // PartitioningCollection.
-      RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
+      RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++

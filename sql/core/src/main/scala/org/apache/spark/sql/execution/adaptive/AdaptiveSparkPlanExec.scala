@@ -126,10 +126,13 @@ case class AdaptiveSparkPlanExec(
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,
-      RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      // `RemoveRedundantSorts` runs after `OptimizeSkewedJoin` so that it can also clean up the
+      // local sort left dangling right below the extra shuffle that skew join optimization may
+      // insert between two joins.
+      RemoveRedundantSorts
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 
