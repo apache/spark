@@ -1545,9 +1545,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // create_if_missing = false.
     checkSet("""{"a": 1, "b": 2}""", "$.a", Literal(99), """{"a":99,"b":2}""", false)
+    checkSet("""["a","b"]""", "$[1]", Literal("z"), """["a","z"]""", false)
+    checkSet("""{"a": {"b": 1}}""", "$.a.b", Literal(9), """{"a":{"b":9}}""", false)
+    checkSet("""{"a": [1, 2]}""", "$.a[1]", Literal(9), """{"a":[1,9]}""", false)
+    checkSet("""[{"a": 1}]""", "$[0].a", Literal(9), """[{"a":9}]""", false)
+    checkSet("""{"a": {"b": [1, 2]}}""", "$.a.b[0]", Literal(9), """{"a":{"b":[9,2]}}""", false)
     checkSet("""{"a": 1}""", "$.b", Literal(2), """{"a":1}""", false)
     checkSet("""{"a": {"b": 1}}""", "$.a.c", Literal(2), """{"a":{"b":1}}""", false)
-    checkSet("""["a","b"]""", "$[1]", Literal("z"), """["a","z"]""", false)
     checkSet("""{"a": [1, 2]}""", "$.a[5]", Literal(9), """{"a":[1,2]}""", false)
 
     // Set a variant null vs. a verbatim string vs. structured JSON.
@@ -1622,6 +1626,18 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         VariantSet(Literal(parseJson("{}")), Literal("$.a"), v, Literal(true))
           .checkInputDataTypes().isFailure)
     }
+
+    val structVal = ToVariantObject(Literal.create(create_row(1, "x"),
+      StructType(Array(StructField("a", IntegerType), StructField("b", StringType)))))
+    val mapVal = ToVariantObject(Literal.create(Map("z" -> 1, "y" -> 2, "x" -> 3)))
+    Seq(structVal, mapVal).foreach { v =>
+      assert(
+        VariantSet(Literal(parseJson("{}")), Literal("$.k"), v, Literal(true))
+          .checkInputDataTypes().isSuccess)
+    }
+    checkSet("""{"k": 1}""", "$.k", structVal, """{"k":{"a":1,"b":"x"}}""")
+    checkSet("""{"k": 1}""", "$.k", mapVal, """{"k":{"x":3,"y":2,"z":1}}""")
+    checkSet("""{"a": {"b": 1}}""", "$.a.b", structVal, """{"a":{"b":{"a":1,"b":"x"}}}""")
 
     checkErrorInExpression[SparkRuntimeException](
       VariantSet(Literal(parseJson("{}")), Literal("$"), Literal(1), Literal(true)),
