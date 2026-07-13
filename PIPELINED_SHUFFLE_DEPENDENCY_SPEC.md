@@ -7,10 +7,12 @@ consumer reads incrementally.
 
 ## 1. Motivation
 
-Today a multi-stage job runs one stage at a time: each shuffle is fully materialized before the next
-stage starts. Some workloads need the stages of a single job to run **concurrently**, connected by a
-shuffle whose consumer reads the producer's output **as it is produced** rather than after the
-producer finishes. This spec introduces the scheduler primitives to express and run that.
+Today, when two stages of a job are connected by a shuffle, they run one after another: the consumer
+stage does not start until the producer's shuffle output is fully materialized. (Independent stages —
+ones not connected by a shuffle — already run concurrently.) Some workloads need even
+shuffle-connected stages to run **concurrently**, with the consumer reading the producer's output
+**as it is produced** rather than after the producer finishes. This spec introduces the scheduler
+primitives to express and run that.
 
 "Run these stages concurrently" and "the connecting shuffle is incremental" are the same decision
 seen from two sides: co-scheduling a producer and consumer is only useful if the edge is readable
@@ -26,7 +28,9 @@ A shuffle dependency declared **incrementally readable**: a consumer stage may b
 output while the producer stage is still running.
 
 - It is a shuffle dependency (has a `shuffleId`, partitioner, map/reduce sides); the *pipelined*
-  property is a binding part of the scheduler contract, not an advisory hint.
+  property is a binding part of the scheduler contract, not an advisory hint. ("Pipelined",
+  "incremental", and "transient" all describe this same edge in this doc — read as its output being
+  streamed to the consumer as produced, not stored.)
 - The property is set during **physical planning** (an execution concern, not a logical-plan one)
   and carried into the `ShuffleDependency` the `DAGScheduler` reads at stage-creation time.
 - It is also the **per-dependency selector** for the shuffle implementation: the shuffle layer maps a
@@ -42,8 +46,8 @@ materialized before any consumer reads it.
 
 Note: the name *pipelined* is deliberately chosen over *streaming*. The property is that a consumer
 reads producer output as it is produced — software-pipelining of dependent stages — a general
-execution capability. Streaming / real-time mode is the first caller, but nothing about the primitive
-is streaming-specific.
+execution capability. Streaming / real-time mode (RTM) is the first caller, but nothing about the
+primitive is streaming-specific.
 
 ### 2.2 Pipelined group (PG)
 
@@ -114,9 +118,9 @@ materialize-before-read sequencing.
   admission fails fast, since the group could never become fully co-resident. (Free rather than
   total is essential once more than one group can be admitted; §4.1 explains why.)
   - *How capacity is measured:* the total concurrent-task capacity is the value barrier's slot check
-    uses (`sc.maxNumConcurrentTasks` — task slots summed over active executors), not
-    `spark.default.parallelism` (a default partition count, unrelated to how many tasks can run
-    concurrently).
+    uses (`sc.maxNumConcurrentTasks` — for the group's resource profile, the number of task slots
+    across active executors, i.e. cores divided by cores-per-task), not `spark.default.parallelism`
+    (a default partition count, unrelated to how many tasks can run concurrently).
 - **Single resource profile per group (v1).** A resource profile is the executor/task resource
   requirement (cores, memory, GPUs, ...) a stage runs under; the number of concurrent slots is
   defined *per profile* (a cluster may run many concurrent CPU tasks but few GPU tasks). Comparing
@@ -126,21 +130,24 @@ materialize-before-read sequencing.
   follow-up, not needed for the streaming shapes whose members share the default profile.
 - **Co-residency.** Once admitted, all member stages of a group are simultaneously running.
 - **Single ownership and 1:1 (v1).** In v1 a pipelined producer feeds exactly one consumer and
-  belongs to exactly one job. These are two separate restrictions, and they are stated at the level
-  of the construct itself, not any particular caller (the pipelined dependency and PG are generic
-  `DAGScheduler` constructs that may be depended on directly, not only from SQL/RTM):
+  belongs to exactly one job. These are two separate restrictions. They follow from what a pipelined
+  shuffle *is* (a transient edge), not from how any particular caller builds its DAG — the pipelined
+  dependency and PG are generic `DAGScheduler` constructs that code can depend on directly, not only
+  through SQL / real-time mode:
   - *No cross-job / cross-time reuse — intrinsic.* A pipelined shuffle is transient: a once-through
-    live stream with no retained, addressable output. Unlike a regular shuffle, there is nothing for
-    a second job to reuse, so reuse across jobs is unsound for it. This must be enforced explicitly —
-    from the scheduler's perspective a shuffle-map stage *can* be reused unless something forbids it —
-    and at **both** layers by which the scheduler would otherwise reuse a shuffle: the
-    `shuffleIdToMapStage` stage-object reuse is bypassed (each pipelined dependency gets a fresh
-    producer stage), and the `MapOutputTracker`-availability reuse is prevented (a pipelined shuffle's
-    tracker registration does not outlive its group, so `getMissingParentStages` cannot skip a
-    re-created producer as already-available). Bypassing only the former is insufficient. A pipelined
-    producer whose stage carries more than one jobId is rejected (fail-fast, §9). (A producer may
-    separately emit a durable *materialized* output edge — a distinct regular `ShuffleDependency` that
-    reuses normally; run-once binds only the transient edge.)
+    live stream with no retained, addressable output. So, unlike a regular shuffle, there is nothing
+    for a second job to reuse — reuse across jobs is unsound for it.
+    - This must be enforced, not assumed: from the scheduler's perspective a shuffle-map stage *can*
+      be reused unless something forbids it. Spark would otherwise reuse a shuffle in two ways, and
+      **both** must be blocked. (1) Stage-object reuse via `shuffleIdToMapStage`: bypass it, so each
+      pipelined dependency gets a fresh producer stage. (2) Output-availability reuse: a re-created
+      producer would be skipped as already-done because its outputs are still registered in
+      `MapOutputTracker` (`getMissingParentStages` treats a registered stage as available), so a
+      pipelined shuffle's tracker registration must not outlive its group. Blocking only (1) is not
+      enough.
+    - A pipelined producer whose stage carries more than one jobId is rejected (fail-fast, §9).
+    - (A producer may separately write a durable *materialized* output edge — a distinct regular
+      `ShuffleDependency` that reuses normally. Run-once binds only the transient edge.)
   - *1:1 within the group (v1) — deferred, not intrinsic.* v1 rejects a pipelined producer with more
     than one consuming stage, but 1:N fan-out is a supported model that v1 defers rather than an
     incompatibility (§9): co-scheduled consumers would read the live stream via multicast, and
@@ -167,10 +174,10 @@ slots.
   scheduler does not retry a failed admission — it fails the job, and retry is the caller's decision
   (for a streaming query, the batch-execution loop restarting the batch with its own backoff). This
   is adequate only for a simple `prefix* -> PG -> suffix*` shape run by a caller that has its own
-  restart loop: caller-retry's unit is the whole job, so with concurrent work (sibling stages, other
-  PGs) or an already-committed prefix it discards work it cannot selectively preserve, and a
-  directly-depended-on PG may have no retrying caller at all — so a transient slot shortfall either
-  kills the job or forces over-provisioning.
+  restart loop. Its unit is the whole job, so it has two weaknesses: with concurrent work (sibling
+  stages, other PGs) or an already-committed prefix, restarting the job discards work it cannot
+  selectively preserve; and a directly-depended-on PG may have no retrying caller at all. The result
+  is that a transient slot shortfall either kills the job or forces over-provisioning.
   - *(Refinement, post-v1.)* The scheduler retries **admission of the PG specifically** — hold the
     group, re-run the gang slot-check on a timer, admit when it fits, fail after a bounded number of
     attempts — leaving any completed prefix and concurrent stages untouched. This mirrors barrier's
@@ -343,8 +350,8 @@ than mis-scheduling it; it is expected to be supported later.
 | Speculative execution | incompatible | A speculative producer copy races a consumer already reading partial output; no commit barrier protects the read. |
 | Push-based shuffle merge as a pipelined (incremental) shuffle | incompatible | Push-based merge exposes output only after a post-completion "finalize" step — the opposite of incremental reads — so it cannot serve as the incremental shuffle within a PG. (A PG's regular input/output edges may still use push-based merge, like any regular shuffle — §7.) |
 | Pipelined producer shared across jobs (cross-time reuse) | incompatible | A transient incremental edge is a live, once-through stream with no retained, addressable output, so a consumer running at a different time has nothing to fetch — cross-time / cross-job reuse is intrinsically undefined for it. Enforced by never binding a pipelined producer's stage to more than one job, at both the `shuffleIdToMapStage` and `MapOutputTracker` reuse layers (§4). |
-| Pipelined producer with more than one co-scheduled consumer (fan-out / branching) | deferred | 1:N is a supported model, deferred in v1. A consumer's transport is picked by group membership: an in-group consumer reads the incremental edge (needs multicast — one producer pushing each record to N live reader channels — plus per-consumer backpressure, not yet built); an out-of-group consumer reads a materialized edge the producer also writes (a tee), sequenced after group commit like any regular shuffle out (§7). v1 rejects a pipelined producer with more than one consuming stage fail-fast until multicast lands. |
-| Reliable RDD checkpoint in a member's within-stage chain | incompatible | Reliable `RDD.checkpoint()` writes a durable, lineage-truncated snapshot, which both reintroduces cross-time reuse of a transient edge (§4) and requires a post-success recompute of the member's now-vanished transient input. Rejected at group creation by walking the within-stage chain and failing on any RDD whose `checkpointData` is a `ReliableRDDCheckpointData` (keyed on `checkpointData`, not `isCheckpointed`, since the write has not happened yet). Cache / `.persist()` / local checkpoint are whole-partition and ephemeral, and are not rejected. |
+| Pipelined producer with more than one co-scheduled consumer (fan-out / branching) | deferred | 1:N (one producer, many consumers) is a supported model, just not built in v1. How each consumer reads depends on whether it is in the group: an in-group consumer would read the live stream, which requires the producer to *multicast* — send each record to all N live readers at once — and to slow down for a reader that falls behind (backpressure); neither is built yet. An out-of-group consumer instead reads a normal materialized copy the producer also writes, which it consumes after the group finishes like any regular shuffle output (§7). Until multicast exists, v1 rejects a pipelined producer with more than one consuming stage. |
+| Reliable RDD checkpoint in a member's within-stage chain | incompatible | Reliable `RDD.checkpoint()` writes the RDD to durable storage and cuts its lineage. Two problems: (1) that durable snapshot can be read by a later job, reintroducing the cross-time reuse a transient edge forbids (§4); and (2) the checkpoint is written by a *separate job that runs after the main one succeeds and recomputes the RDD from scratch* — but a member's input is the transient pipelined shuffle, which is already gone by then, so the recompute cannot read it. Rejected at group creation by walking the within-stage chain and failing on any RDD whose `checkpointData` is a `ReliableRDDCheckpointData` (checked via `checkpointData`, not `isCheckpointed`, since the write has not happened yet). Cache / `.persist()` / local checkpoint keep whole partitions in ephemeral storage and are safe — not rejected. |
 | Members with differing resource profiles | incompatible | The gang slot check compares one demand against one capacity (§4); v1 requires a group to be single-profile. Per-profile accounting is a follow-up. |
 | Adaptive Query Execution over a pipelined exchange | incompatible | AQE reshapes exchanges from complete map-output statistics, which are unavailable while the shuffle is read incrementally. Enforced where exchanges are marked pipelined. |
 | Regular shuffle internal to a group (should not occur) | invariant | Split by construction into separate groups (§3); checked and rejected as an inconsistency if it ever arises (§7). |
