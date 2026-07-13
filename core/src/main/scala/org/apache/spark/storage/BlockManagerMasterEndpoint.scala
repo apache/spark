@@ -850,18 +850,11 @@ class BlockManagerMasterEndpoint(
     }
 
     if (storageLevel.isValid) {
-      // Once a block is sealed, admit a copy only if its checksum equals the sealed
-      // (authoritative) value - otherwise acknowledge the report but drop the divergent copy, and
-      // ask its executor to reclaim the local copy (fire-and-forget, mirroring the seal's
-      // eviction). A `None` (checksum-less) report of a sealed block is also rejected: every path
-      // that stores or re-reports a block which could be sealed carries its checksum (store,
-      // eviction/spill, replica receive, and heartbeat re-report all set/forward `info.checksum`),
-      // and a block that was never checksummed anywhere is never sealed (`sealRddChecksums` only
-      // seals partitions with a recorded checksum), so it never reaches this branch. A `None` here
-      // is therefore anomalous, and admitting it would put an unverifiable copy into the directory
-      // that remote reads (which do not run the read-side self-check) would trust.
-      if (sealedChecksums.containsKey(blockId) &&
-          !checksum.contains(sealedChecksums.get(blockId).longValue)) {
+      // A sealed block admits only a copy matching its sealed checksum (see
+      // `checksumSealRejectsUpdate`). On reject, acknowledge the report but drop the divergent copy
+      // and ask its executor to reclaim the local copy (fire-and-forget, mirroring the seal's
+      // eviction).
+      if (checksumSealRejectsUpdate(blockId, checksum)) {
         evictReplica(blockId, blockManagerId)
         // Return true (report accepted), not false: false means "re-register", which would
         // re-report this same block and hit this reject again, looping. The copy is intentionally
@@ -918,6 +911,16 @@ class BlockManagerMasterEndpoint(
     }
     true
   }
+
+  /**
+   * Whether a report of `blockId` carrying content checksum `checksum` must be kept out of the
+   * directory: the block is sealed and this copy does not match the sealed value. A `None` report
+   * of a sealed block also fails (a sealable block always carries a checksum, so `None` is
+   * anomalous and must not enter the directory unverified).
+   */
+  private def checksumSealRejectsUpdate(blockId: BlockId, checksum: Option[Long]): Boolean =
+    sealedChecksums.containsKey(blockId) &&
+      !checksum.contains(sealedChecksums.get(blockId).longValue)
 
   /**
    * Ask an executor to drop its local copy of a block, fire-and-forget: the reply is discarded
