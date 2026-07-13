@@ -187,15 +187,17 @@ public class CredentialProviderLoaderSuite {
   @Test
   public void testInitConfIsInvokedOnSelectedProvider() {
     Map<String, String> conf = new HashMap<>();
-    conf.put("spark.app.name", "test-app");
-    conf.put("custom.key", "custom-value");
+    conf.put("spark.security.credentials.endpoint", "https://sts.example.com");
+    conf.put("spark.security.credentials.roleArn", "arn:aws:iam::123456:role/test");
 
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
     assertTrue(result.isPresent());
     FakeCredentialProvider fake = (FakeCredentialProvider) result.get();
     assertNotNull(fake.getInitConf(), "init() should have been called");
-    assertEquals("test-app", fake.getInitConf().get("spark.app.name"));
-    assertEquals("custom-value", fake.getInitConf().get("custom.key"));
+    assertEquals("https://sts.example.com",
+        fake.getInitConf().get("spark.security.credentials.endpoint"));
+    assertEquals("arn:aws:iam::123456:role/test",
+        fake.getInitConf().get("spark.security.credentials.roleArn"));
   }
 
   @Test
@@ -204,9 +206,9 @@ public class CredentialProviderLoaderSuite {
     // (a) the SAME provider instance is returned
     // (b) init was invoked EXACTLY ONCE
     Map<String, String> conf1 = new HashMap<>();
-    conf1.put("spark.app.name", "first-call");
+    conf1.put("spark.security.credentials.tag", "first-call");
     Map<String, String> conf2 = new HashMap<>();
-    conf2.put("spark.app.name", "second-call");
+    conf2.put("spark.security.credentials.tag", "second-call");
 
     Optional<CredentialProvider> result1 = CredentialProviderLoader.providerFor("fake", conf1);
     Optional<CredentialProvider> result2 = CredentialProviderLoader.providerFor("fake", conf2);
@@ -219,7 +221,7 @@ public class CredentialProviderLoaderSuite {
     FakeCredentialProvider fake = (FakeCredentialProvider) result1.get();
     assertEquals(1, fake.getInitCount(),
         "init() should be called exactly once (first-conf-wins)");
-    assertEquals("first-call", fake.getInitConf().get("spark.app.name"),
+    assertEquals("first-call", fake.getInitConf().get("spark.security.credentials.tag"),
         "First call's conf should win");
   }
 
@@ -323,5 +325,99 @@ public class CredentialProviderLoaderSuite {
     Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
     assertTrue(result.isPresent());
     assertEquals(Duration.ofMinutes(15), result.get().suggestedTtl());
+  }
+
+  @Test
+  public void testInitConfScopedToCredentialsKeysOnly() {
+    // Verify that init() receives only spark.security.credentials.* keys,
+    // and foreign secrets from other subsystems are NOT leaked to providers.
+    Map<String, String> conf = new HashMap<>();
+    conf.put("spark.security.credentials.provider.fake",
+        FakeCredentialProvider.class.getName());
+    conf.put("spark.security.credentials.endpoint", "https://sts.example.com");
+    conf.put("spark.authenticate.secret", "TOPSECRET");
+    conf.put("spark.ssl.keyPassword", "keypass");
+
+    Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
+    assertTrue(result.isPresent());
+    FakeCredentialProvider fake = (FakeCredentialProvider) result.get();
+    Map<String, String> initConf = fake.getInitConf();
+    assertNotNull(initConf, "init() should have been called");
+
+    // Credentials keys should be present
+    assertEquals("https://sts.example.com",
+        initConf.get("spark.security.credentials.endpoint"));
+    assertTrue(initConf.containsKey("spark.security.credentials.provider.fake"),
+        "Provider selection key should be included (it starts with the prefix)");
+
+    // Foreign secrets must NOT be present
+    assertFalse(initConf.containsKey("spark.authenticate.secret"),
+        "Foreign secret should not leak to provider init()");
+    assertFalse(initConf.containsKey("spark.ssl.keyPassword"),
+        "Foreign secret should not leak to provider init()");
+    assertFalse(initConf.values().contains("TOPSECRET"),
+        "Foreign secret value should not leak to provider init()");
+  }
+
+  @Test
+  public void testEmptySchemeThrowsIllegalArgument() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> CredentialProviderLoader.providerFor("", Map.of()));
+    assertEquals("scheme must not be empty", e.getMessage());
+  }
+
+  @Test
+  public void testInitRetryAfterFailure() {
+    // A provider whose init() throws on the first call then succeeds on the second.
+    // First providerFor should propagate the failure; second providerFor should retry
+    // init() and succeed.
+    CredentialProvider failOnceThenSucceed = new CredentialProvider() {
+      private int initAttempts = 0;
+      private boolean initialized = false;
+
+      @Override
+      public void init(Map<String, String> conf) {
+        initAttempts++;
+        if (initAttempts == 1) {
+          throw new RuntimeException("Simulated transient init failure");
+        }
+        initialized = true;
+      }
+
+      @Override
+      public Set<String> supportedSchemes() {
+        return Set.of("retryscheme");
+      }
+
+      @Override
+      public ServiceCredential resolve(UserContext user, URI target) {
+        return new ServiceCredential(Map.of("ok", "true"), Instant.now().plusSeconds(60));
+      }
+
+      @Override
+      public String toString() {
+        return "initAttempts=" + initAttempts + ",initialized=" + initialized;
+      }
+    };
+
+    CredentialProviderLoader.setProvidersForTesting(List.of(failOnceThenSucceed));
+
+    // First call: init() throws, providerFor should propagate
+    Map<String, String> conf = Map.of();
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> CredentialProviderLoader.providerFor("retryscheme", conf));
+    assertTrue(e.getMessage().contains("Simulated transient init failure"));
+
+    // Second call: init() should be retried and succeed
+    Optional<CredentialProvider> result =
+        CredentialProviderLoader.providerFor("retryscheme", conf);
+    assertTrue(result.isPresent(), "Second providerFor should succeed after init retry");
+
+    // Verify init was called exactly twice (proving the retry)
+    String state = result.get().toString();
+    assertTrue(state.contains("initAttempts=2"),
+        "init() should have been invoked twice: " + state);
+    assertTrue(state.contains("initialized=true"),
+        "Provider should be initialized after retry: " + state);
   }
 }

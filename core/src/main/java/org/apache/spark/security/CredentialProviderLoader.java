@@ -19,6 +19,7 @@ package org.apache.spark.security;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -66,6 +67,13 @@ public final class CredentialProviderLoader {
    */
   private static final String CONF_PREFIX = "spark.security.credentials.provider.";
 
+  /**
+   * Configuration key prefix used to scope the configuration passed to
+   * {@link CredentialProvider#init(Map)}. Only keys starting with this prefix are forwarded,
+   * preventing unrelated secrets from leaking to third-party provider implementations.
+   */
+  private static final String CREDENTIALS_CONF_PREFIX = "spark.security.credentials.";
+
   private static volatile List<CredentialProvider> cachedProviders;
 
   /**
@@ -94,7 +102,9 @@ public final class CredentialProviderLoader {
    * </ol>
    * The selected provider is initialized exactly once per provider instance via
    * {@link CredentialProvider#init(Map)} (first-conf-wins semantics); later resolutions reuse
-   * the initialized instance without re-calling {@code init}.
+   * the initialized instance without re-calling {@code init}. The configuration passed to
+   * {@code init()} is scoped to {@code spark.security.credentials.*} keys only; keys from
+   * other subsystems are filtered out to prevent secret leakage to third-party providers.
    * <p>
    * Spark-internal callers pass their configuration as a {@code Map<String, String>} for
    * testability and to match the signature of {@link CredentialProvider#init(Map)}.
@@ -109,6 +119,9 @@ public final class CredentialProviderLoader {
   public static Optional<CredentialProvider> providerFor(String scheme, Map<String, String> conf) {
     Objects.requireNonNull(scheme, "scheme must not be null");
     Objects.requireNonNull(conf, "conf must not be null");
+    if (scheme.isEmpty()) {
+      throw new IllegalArgumentException("scheme must not be empty");
+    }
     String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
     List<CredentialProvider> providers = getProviders();
 
@@ -157,9 +170,20 @@ public final class CredentialProviderLoader {
     }
 
     // Initialize exactly once under the lock (first-conf-wins).
+    // Only pass spark.security.credentials.* keys to init() to avoid leaking secrets
+    // from other subsystems to third-party ServiceLoader providers. This follows the
+    // precedent of DataSourceV2Utils.extractSessionConfigs() which scopes configuration
+    // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
+    // strips the prefix) so providers can distinguish sub-keys unambiguously.
     synchronized (CredentialProviderLoader.class) {
       if (!initializedProviders.contains(selected)) {
-        selected.init(conf);
+        Map<String, String> filteredConf = new HashMap<>();
+        for (Map.Entry<String, String> entry : conf.entrySet()) {
+          if (entry.getKey().startsWith(CREDENTIALS_CONF_PREFIX)) {
+            filteredConf.put(entry.getKey(), entry.getValue());
+          }
+        }
+        selected.init(Collections.unmodifiableMap(filteredConf));
         initializedProviders.add(selected);
       }
     }

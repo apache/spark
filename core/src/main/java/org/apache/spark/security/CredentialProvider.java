@@ -32,6 +32,9 @@ import org.apache.spark.annotation.DeveloperApi;
  * Implementations exchange a user's identity (represented by {@link UserContext}) for a
  * short-lived {@link ServiceCredential} scoped to a target URI. Providers are discovered
  * via {@link java.util.ServiceLoader} and selected based on the URI scheme.
+ * <p>
+ * Implementations must be thread-safe: {@code resolve()} may be called concurrently from
+ * multiple threads after {@code init()} completes.
  *
  * @since 4.3.0
  */
@@ -45,8 +48,16 @@ public interface CredentialProvider {
    * (first-conf-wins semantics). Subsequent resolutions reuse the already-initialized
    * instance without re-calling this method. Implementations should capture any configuration
    * they need (e.g., endpoint URLs, role ARNs) from the provided map.
+   * <p>
+   * The configuration map passed to this method is scoped to keys starting with
+   * {@code spark.security.credentials.} only. Keys from other subsystems are not included,
+   * preventing accidental leakage of unrelated secrets to third-party providers.
+   * <p>
+   * If init() throws, it may be retried on the next resolution attempt. Implementations
+   * should be safe to call again after a prior failure.
    *
-   * @param conf Spark configuration properties as a string map (must not be null)
+   * @param conf Spark configuration properties scoped to {@code spark.security.credentials.*}
+   *     keys (must not be null)
    * @since 4.3.0
    */
   void init(Map<String, String> conf);
