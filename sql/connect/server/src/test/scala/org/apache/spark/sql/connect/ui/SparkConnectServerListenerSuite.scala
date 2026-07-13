@@ -51,7 +51,7 @@ class SparkConnectServerListenerSuite
       val (statusStore: SparkConnectServerAppStatusStore, listener: SparkConnectServerListener) =
         createAppStatusStore(live)
       listener.onOtherEvent(
-        SparkListenerConnectSessionStarted("sessionId", "user", System.currentTimeMillis()))
+        SparkListenerConnectSessionStarted("sessionId", "userId", System.currentTimeMillis()))
       listener.onOtherEvent(
         SparkListenerConnectOperationStarted(
           jobTag,
@@ -113,16 +113,16 @@ class SparkConnectServerListenerSuite
         createAppStatusStore(live)
       var time = 0
       listener.onOtherEvent(
-        SparkListenerConnectSessionStarted("sessionId1", "user", System.currentTimeMillis()))
+        SparkListenerConnectSessionStarted("sessionId1", "userId", System.currentTimeMillis()))
       time += 1
       listener.onOtherEvent(
-        SparkListenerConnectSessionStarted("sessionId2", "user", System.currentTimeMillis()))
+        SparkListenerConnectSessionStarted("sessionId2", "userId", System.currentTimeMillis()))
       time += 1
       listener.onOtherEvent(SparkListenerConnectSessionClosed("sessionId1", "userId", time))
       time += 1
       listener.onOtherEvent(SparkListenerConnectSessionClosed("sessionId2", "userId", time))
       listener.onOtherEvent(
-        SparkListenerConnectSessionStarted("sessionId3", "user", System.currentTimeMillis()))
+        SparkListenerConnectSessionStarted("sessionId3", "userId", System.currentTimeMillis()))
       time += 1
       listener.onOtherEvent(SparkListenerConnectSessionClosed("sessionId3", "userId", time))
 
@@ -131,8 +131,56 @@ class SparkConnectServerListenerSuite
       }
       assert(statusStore.getOnlineSessionNum === 0)
       assert(statusStore.getSessionCount === 1)
-      assert(statusStore.getSession("sessionId1") === None)
+      assert(statusStore.getSession("userId", "sessionId1") === None)
       assert(listener.noLiveData())
+    }
+  }
+
+  Seq(true, false).foreach { live =>
+    test(s"SPARK-58097: sessions sharing a UUID across users stay distinct (live = $live)") {
+      val (statusStore: SparkConnectServerAppStatusStore, listener: SparkConnectServerListener) =
+        createAppStatusStore(live, sessionLimit = 10)
+      val sessionId = "shared-session-uuid"
+      // Two different users open a session with the same UUID; Spark Connect keeps them distinct.
+      listener.onOtherEvent(
+        SparkListenerConnectSessionStarted(sessionId, "userA", System.currentTimeMillis()))
+      listener.onOtherEvent(
+        SparkListenerConnectSessionStarted(sessionId, "userB", System.currentTimeMillis()))
+      // Register one operation against userA's session only.
+      listener.onOtherEvent(
+        SparkListenerConnectOperationStarted(
+          ExecuteJobTag("userA", sessionId, "operationId"),
+          "operationId",
+          System.currentTimeMillis(),
+          sessionId,
+          "userA",
+          "userName",
+          "dummy query",
+          Set()))
+      // Close userA's session; userB's must remain open (only observable in the live store).
+      listener.onOtherEvent(SparkListenerConnectSessionClosed(sessionId, "userA", 1000L))
+      if (live) {
+        assert(statusStore.getOnlineSessionNum === 1)
+        assert(statusStore.getSession("userB", sessionId).exists(_.finishTimestamp === 0))
+      }
+      // Close userB's session at a different time so the history store also has both records.
+      listener.onOtherEvent(SparkListenerConnectSessionClosed(sessionId, "userB", 2000L))
+
+      if (!live) {
+        kvstore.close(false)
+      }
+
+      // The two sessions are stored as separate records and did not collapse.
+      assert(statusStore.getSessionCount === 2)
+      val sessionA = statusStore.getSession("userA", sessionId)
+      val sessionB = statusStore.getSession("userB", sessionId)
+      assert(sessionA.isDefined && sessionB.isDefined)
+      // The operation count did not leak from userA's session into userB's.
+      assert(sessionA.get.totalExecution === 1)
+      assert(sessionB.get.totalExecution === 0)
+      // Each session kept its own close time, i.e. closing one did not finish the other.
+      assert(sessionA.get.finishTimestamp === 1000L)
+      assert(sessionB.get.finishTimestamp === 2000L)
     }
   }
 
@@ -240,12 +288,12 @@ class SparkConnectServerListenerSuite
     properties
   }
 
-  private def createAppStatusStore(live: Boolean) = {
+  private def createAppStatusStore(live: Boolean, sessionLimit: Int = 1) = {
     val sparkConf = new SparkConf()
     sparkConf
       .set(ASYNC_TRACKING_ENABLED, false)
       .set(LIVE_ENTITY_UPDATE_PERIOD, 0L)
-      .set(CONNECT_UI_SESSION_LIMIT, 1)
+      .set(CONNECT_UI_SESSION_LIMIT, sessionLimit)
       .set(CONNECT_UI_STATEMENT_LIMIT, 10)
     kvstore = new ElementTrackingStore(new InMemoryStore, sparkConf)
     if (live) {

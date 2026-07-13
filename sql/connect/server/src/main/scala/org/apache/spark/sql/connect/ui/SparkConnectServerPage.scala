@@ -276,10 +276,11 @@ private[ui] class SqlStatsPagedTable(
         <a href={sqlURL(request, sqlExecId)}>[{sqlExecId}]</a>
       }
     }
-    val sessionLink = "%s/%s/session/?id=%s".format(
+    val sessionLink = "%s/%s/session/?id=%s&userId=%s".format(
       UIUtils.prependBaseUri(request, parent.basePath),
       parent.prefix,
-      info.sessionId)
+      URLEncoder.encode(info.sessionId, UTF_8.name()),
+      URLEncoder.encode(info.userId, UTF_8.name()))
 
     <tr>
       <td>
@@ -406,10 +407,11 @@ private[ui] class SessionStatsPagedTable(
   }
 
   override def row(session: SessionInfo): Seq[Node] = {
-    val sessionLink = "%s/%s/session/?id=%s".format(
+    val sessionLink = "%s/%s/session/?id=%s&userId=%s".format(
       UIUtils.prependBaseUri(request, parent.basePath),
       parent.prefix,
-      session.sessionId)
+      URLEncoder.encode(session.sessionId, UTF_8.name()),
+      URLEncoder.encode(session.userId, UTF_8.name()))
     <tr>
       <td> {session.userId} </td>
       <td> <a href={sessionLink}> {session.sessionId} </a> </td>
