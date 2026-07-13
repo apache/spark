@@ -54,6 +54,26 @@ public class JsonExpressionUtils {
     }
   }
 
+  public static Boolean isJsonValid(UTF8String json) {
+    if (json == null) {
+      return null;
+    }
+    try (JsonParser jsonParser =
+        CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
+      // An empty or whitespace-only input is not valid JSON.
+      if (jsonParser.nextToken() == null) {
+        return false;
+      }
+      // Consume the whole first value (including all nested children).
+      jsonParser.skipChildren();
+      // The input is valid only if the first value is also the last, i.e. there is no
+      // trailing content after the root JSON value.
+      return jsonParser.nextToken() == null;
+    } catch (IOException e) {
+      return false;
+    }
+  }
+
   public static GenericArrayData jsonObjectKeys(UTF8String json) {
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {

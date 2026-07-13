@@ -1951,6 +1951,16 @@ class JsonFunctionsSuite extends SharedSparkSession {
     checkAnswer(df.select(json_object_keys($"a")), expected)
   }
 
+  test("json_valid function") {
+    val df = Seq(null, "{\"a\": 1}", "[1, 2, 3]", "invalid", "{\"a\":1} garbage", "")
+      .toDF("a")
+
+    val expected = Seq(Row(null), Row(true), Row(true), Row(false), Row(false), Row(false))
+
+    checkAnswer(df.selectExpr("json_valid(a)"), expected)
+    checkAnswer(df.select(json_valid($"a")), expected)
+  }
+
   test("function get_json_object - Codegen Support") {
     withTempView("GetJsonObjectTable") {
       val data = Seq(("1", """{"f1": "value1", "f5": 5.23}""")).toDF("key", "jstring")

@@ -10011,6 +10011,15 @@ object functions {
    */
   def json_object_keys(e: Column): Column = Column.fn("json_object_keys", e)
 
+  /**
+   * Returns true if the input is a valid JSON string, false otherwise. Returns null if the input
+   * is null.
+   *
+   * @group json_funcs
+   * @since 4.3.0
+   */
+  def json_valid(e: Column): Column = Column.fn("json_valid", e)
+
   // scalastyle:off line.size.limit
   /**
    * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` or a `MapType` into

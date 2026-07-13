@@ -909,6 +909,34 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("json_valid") {
+    Seq(
+      // null input returns null
+      (null, null),
+      // valid JSON values
+      ("""{"a":1}""", true),
+      ("""{"a": "b", "c": [1, 2, 3]}""", true),
+      ("[1, 2, 3]", true),
+      ("[]", true),
+      ("{}", true),
+      ("\"a string\"", true),
+      ("123", true),
+      ("true", true),
+      ("null", true),
+      // invalid JSON values
+      ("", false),
+      ("   ", false),
+      ("invalid", false),
+      ("""{"a":1} garbage""", false),
+      ("[1, 2, 3", false),
+      ("""{"a": }""", false)
+    ).foreach {
+      case (input, expected) =>
+        val literal = if (input == null) Literal.create(null, StringType) else Literal(input)
+        checkEvaluation(JsonValid(literal), expected)
+    }
+  }
+
   test("SPARK-35320: from_json should fail with a key type different of StringType") {
     Seq(
       (MapType(IntegerType, StringType), """{"1": "test"}"""),

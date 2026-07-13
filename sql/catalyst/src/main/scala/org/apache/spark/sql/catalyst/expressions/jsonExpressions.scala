@@ -693,3 +693,52 @@ case class JsonObjectKeys(child: Expression)
   override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
     copy(child = newChild)
 }
+
+/**
+ * A function that returns true if the input is a valid JSON string, false otherwise.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(jsonString) - Returns true if `jsonString` is a valid JSON string, " +
+    "false otherwise. Returns null if the input is null.",
+  arguments = """
+    Arguments:
+      * jsonString - A string to be validated as JSON.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('{"a":1}');
+        true
+      > SELECT _FUNC_('[1, 2, 3]');
+        true
+      > SELECT _FUNC_('invalid');
+        false
+      > SELECT _FUNC_('{"a":1} garbage');
+        false
+      > SELECT _FUNC_('');
+        false
+  """,
+  group = "json_funcs",
+  since = "4.3.0"
+)
+case class JsonValid(child: Expression)
+  extends UnaryExpression
+  with ExpectsInputTypes
+  with RuntimeReplaceable {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+  override def dataType: DataType = BooleanType
+  override def nullable: Boolean = true
+  override def prettyName: String = "json_valid"
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[JsonExpressionUtils],
+    dataType,
+    "isJsonValid",
+    Seq(child),
+    inputTypes
+  )
+
+  override protected def withNewChildInternal(newChild: Expression): JsonValid =
+    copy(child = newChild)
+}

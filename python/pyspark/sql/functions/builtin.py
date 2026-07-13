@@ -22168,6 +22168,34 @@ def json_object_keys(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("json_object_keys", col)
 
 
+@_try_remote_functions
+def json_valid(col: "ColumnOrName") -> Column:
+    """
+    Returns true if the input is a valid JSON string, false otherwise. Returns null if the
+    input is null.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col: :class:`~pyspark.sql.Column` or str
+        target column to compute on.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean indicating whether the input is a valid JSON string.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame(
+    ...     [(None,), ('{"a": 1}',), ('[1, 2, 3]',), ('invalid',), ('{"a":1} x',)], ['data'])
+    >>> df.select(json_valid(df.data).alias('r')).collect()
+    [Row(r=None), Row(r=True), Row(r=True), Row(r=False), Row(r=False)]
+    """
+    return _invoke_function_over_columns("json_valid", col)
+
+
 # TODO: Fix and add an example for StructType with Spark Connect
 #   e.g., StructType([StructField("a", IntegerType())])
 @_try_remote_functions

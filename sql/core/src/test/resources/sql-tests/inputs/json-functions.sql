@@ -108,6 +108,22 @@ select json_object_keys('{[1,2]}');
 select json_object_keys('{"key": 45, "random_string"}');
 select json_object_keys('[1, 2, 3]');
 
+-- json_valid
+select json_valid(null);
+select json_valid();
+select json_valid('');
+select json_valid('   ');
+select json_valid('{"a": 1}');
+select json_valid('[1, 2, 3]');
+select json_valid('"a string"');
+select json_valid('123');
+select json_valid('true');
+select json_valid('null');
+select json_valid('invalid');
+select json_valid('{"a":1} garbage');
+select json_valid('[1, 2, 3');
+select json_valid('{"a": }');
+
 -- Clean up
 DROP VIEW IF EXISTS jsonTable;
 

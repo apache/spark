@@ -743,6 +743,120 @@ Project [json_object_keys([1, 2, 3]) AS json_object_keys([1, 2, 3])#x]
 
 
 -- !query
+select json_valid(null)
+-- !query analysis
+Project [json_valid(null) AS json_valid(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "1",
+    "functionName" : "`json_valid`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "json_valid()"
+  } ]
+}
+
+
+-- !query
+select json_valid('')
+-- !query analysis
+Project [json_valid() AS json_valid()#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('   ')
+-- !query analysis
+Project [json_valid(   ) AS json_valid(   )#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('{"a": 1}')
+-- !query analysis
+Project [json_valid({"a": 1}) AS json_valid({"a": 1})#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('[1, 2, 3]')
+-- !query analysis
+Project [json_valid([1, 2, 3]) AS json_valid([1, 2, 3])#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('"a string"')
+-- !query analysis
+Project [json_valid("a string") AS json_valid("a string")#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('123')
+-- !query analysis
+Project [json_valid(123) AS json_valid(123)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('true')
+-- !query analysis
+Project [json_valid(true) AS json_valid(true)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('null')
+-- !query analysis
+Project [json_valid(null) AS json_valid(null)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('invalid')
+-- !query analysis
+Project [json_valid(invalid) AS json_valid(invalid)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('{"a":1} garbage')
+-- !query analysis
+Project [json_valid({"a":1} garbage) AS json_valid({"a":1} garbage)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('[1, 2, 3')
+-- !query analysis
+Project [json_valid([1, 2, 3) AS json_valid([1, 2, 3)#x]
++- OneRowRelation
+
+
+-- !query
+select json_valid('{"a": }')
+-- !query analysis
+Project [json_valid({"a": }) AS json_valid({"a": })#x]
++- OneRowRelation
+
+
+-- !query
 DROP VIEW IF EXISTS jsonTable
 -- !query analysis
 DropTempViewCommand jsonTable, true

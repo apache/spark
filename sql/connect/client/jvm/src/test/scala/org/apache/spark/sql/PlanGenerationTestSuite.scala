@@ -3101,6 +3101,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     fn.json_object_keys(fn.col("g"))
   }
 
+  functionTest("json_valid") {
+    fn.json_valid(fn.col("g"))
+  }
+
   functionTest("mask with specific upperChar lowerChar digitChar otherChar") {
     fn.mask(fn.col("g"), fn.lit('X'), fn.lit('x'), fn.lit('n'), fn.lit('*'))
   }
