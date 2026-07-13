@@ -128,6 +128,8 @@ public class CredentialProviderLoaderSuite {
         "Should mention the configured class: " + e.getMessage());
     assertTrue(e.getMessage().contains("fake"),
         "Should mention the scheme: " + e.getMessage());
+    assertTrue(e.getMessage().contains(FakeCredentialProvider.class.getName()),
+        "Should list available candidate(s): " + e.getMessage());
   }
 
   @Test
@@ -142,6 +144,36 @@ public class CredentialProviderLoaderSuite {
         "Should mention the configured class: " + e.getMessage());
     assertTrue(e.getMessage().contains("fake"),
         "Should mention the scheme: " + e.getMessage());
+    assertTrue(e.getMessage().contains(FakeCredentialProvider.class.getName()),
+        "Should list available candidate(s): " + e.getMessage());
+  }
+
+  @Test
+  public void testSingleCandidateWithCorrectExplicitConfSelectsIt() {
+    // "fake" is supported only by FakeCredentialProvider; conf names the correct class.
+    Map<String, String> conf = Map.of(
+        "spark.security.credentials.provider.fake",
+        FakeCredentialProvider.class.getName());
+    Optional<CredentialProvider> result = CredentialProviderLoader.providerFor("fake", conf);
+    assertTrue(result.isPresent());
+    assertInstanceOf(FakeCredentialProvider.class, result.get());
+  }
+
+  @Test
+  public void testSingleCandidateWithWrongExplicitConfThrowsClearError() {
+    // "fake" is supported only by FakeCredentialProvider but conf names a different class.
+    // This validates that explicit conf is enforced even for single-candidate schemes.
+    Map<String, String> conf = Map.of(
+        "spark.security.credentials.provider.fake",
+        "org.apache.spark.security.SomeOtherProvider");
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> CredentialProviderLoader.providerFor("fake", conf));
+    assertTrue(e.getMessage().contains("fake"),
+        "Should mention the scheme: " + e.getMessage());
+    assertTrue(e.getMessage().contains("org.apache.spark.security.SomeOtherProvider"),
+        "Should mention the configured class: " + e.getMessage());
+    assertTrue(e.getMessage().contains(FakeCredentialProvider.class.getName()),
+        "Should list the available candidate: " + e.getMessage());
   }
 
   @Test

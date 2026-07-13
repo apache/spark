@@ -41,8 +41,8 @@ public interface CredentialProvider {
   /**
    * Initializes this provider with configuration properties.
    * <p>
-   * Called exactly once by {@link CredentialProviderLoader} on first selection of this
-   * provider (first-conf-wins semantics). Subsequent resolutions reuse the already-initialized
+   * Called exactly once per provider instance by {@link CredentialProviderLoader}
+   * (first-conf-wins semantics). Subsequent resolutions reuse the already-initialized
    * instance without re-calling this method. Implementations should capture any configuration
    * they need (e.g., endpoint URLs, role ARNs) from the provided map.
    *

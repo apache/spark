@@ -37,9 +37,17 @@ import org.apache.spark.annotation.Private;
  * the appropriate provider for a given URI scheme using Binding Policy A (explicit selection).
  * <p>
  * Provider discovery happens once (lazily on first call) and the list is cached. Each provider
- * is initialized exactly once (on first selection) via {@link CredentialProvider#init(Map)} with
- * the configuration from that first call; subsequent resolutions reuse the already-initialized
- * instance without re-calling {@code init}.
+ * is initialized exactly once per provider instance via {@link CredentialProvider#init(Map)}
+ * with the configuration from the first call that selects it (first-conf-wins semantics);
+ * subsequent resolutions reuse the already-initialized instance without re-calling {@code init}.
+ * <p>
+ * When the configuration key {@code spark.security.credentials.provider.<scheme>} is set
+ * (non-empty), the loader validates the configured fully-qualified class name against the
+ * discovered candidates for that scheme regardless of candidate count. If the configured class
+ * does not match any candidate, an {@link IllegalArgumentException} is thrown listing the
+ * scheme, the configured class, and the available candidates. Only when the configuration key
+ * is unset (or empty) do the count-based rules apply: a single candidate is auto-selected;
+ * multiple candidates produce an ambiguity error; no candidates produce {@code Optional.empty()}.
  * <p>
  * <b>Thread-safety:</b> This class uses synchronized access to the cached provider list and
  * initialization tracking. Callers may invoke {@link #providerFor(String, Map)} from multiple
@@ -51,7 +59,11 @@ import org.apache.spark.annotation.Private;
 @Private
 public final class CredentialProviderLoader {
 
-  /** Configuration key prefix for explicit provider selection per scheme. */
+  /**
+   * Configuration key prefix for explicit provider selection per scheme.
+   * When set (non-empty), the configured fully-qualified class name must match a discovered
+   * provider that supports the scheme; a mismatch results in an {@link IllegalArgumentException}.
+   */
   private static final String CONF_PREFIX = "spark.security.credentials.provider.";
 
   private static volatile List<CredentialProvider> cachedProviders;
@@ -70,16 +82,19 @@ public final class CredentialProviderLoader {
   /**
    * Returns the {@link CredentialProvider} for the given URI scheme, applying Binding Policy A:
    * <ol>
-   *   <li>If {@code spark.security.credentials.provider.<scheme>} is set in {@code conf},
-   *       the provider whose fully-qualified class name matches is selected.</li>
+   *   <li>If no candidate supports the scheme, {@link Optional#empty()} is returned.</li>
+   *   <li>If {@code spark.security.credentials.provider.<scheme>} is set (non-empty) in
+   *       {@code conf}, the provider whose fully-qualified class name matches is selected
+   *       regardless of candidate count. If the configured class does not match any candidate,
+   *       an {@link IllegalArgumentException} is thrown naming the scheme, the configured class,
+   *       and the available candidates.</li>
    *   <li>If unset and exactly one candidate supports the scheme, that candidate is selected.</li>
    *   <li>If unset and multiple candidates support the scheme, an
    *       {@link IllegalArgumentException} is thrown listing the candidates.</li>
-   *   <li>If no candidate supports the scheme, {@link Optional#empty()} is returned.</li>
    * </ol>
-   * The selected provider is initialized exactly once via {@link CredentialProvider#init(Map)}
-   * on first selection (first-conf-wins semantics); later resolutions reuse the initialized
-   * instance without re-calling {@code init}.
+   * The selected provider is initialized exactly once per provider instance via
+   * {@link CredentialProvider#init(Map)} (first-conf-wins semantics); later resolutions reuse
+   * the initialized instance without re-calling {@code init}.
    * <p>
    * Spark-internal callers pass their configuration as a {@code Map<String, String>} for
    * testability and to match the signature of {@link CredentialProvider#init(Map)}.
