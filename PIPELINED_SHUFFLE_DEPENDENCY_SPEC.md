@@ -142,9 +142,10 @@ materialize-before-read sequencing.
       **both** must be blocked. (1) Stage-object reuse via `shuffleIdToMapStage`: bypass it, so each
       pipelined dependency gets a fresh producer stage. (2) Output-availability reuse: a re-created
       producer would be skipped as already-done because its outputs are still registered in
-      `MapOutputTracker` (`getMissingParentStages` treats a registered stage as available), so a
-      pipelined shuffle's tracker registration must not outlive its group. Blocking only (1) is not
-      enough.
+      `MapOutputTracker` (`getMissingParentStages` treats a registered stage as available). Blocking
+      only (1) is not enough. The fix for (2) is the same one §6 requires for executor loss: a
+      pipelined shuffle is not tracked in `MapOutputTracker` at all — its availability is owned
+      elsewhere — so neither cross-job reuse nor executor-loss removal can act on it.
     - A pipelined producer whose stage carries more than one jobId is rejected (fail-fast, §9).
     - (A producer may separately write a durable *materialized* output edge — a distinct regular
       `ShuffleDependency` that reuses normally. Run-once binds only the transient edge.)
@@ -265,6 +266,26 @@ how Spark treats task events from a stage attempt that is later discarded.
     - *Note this differs from the base scheduler,* which handles a task failure by resubmitting just
       that one stage — the `FetchFailed` -> resubmit path, and retry paths generally — recomputing
       the failed stage in isolation and resuming.
+  - *A pipelined shuffle's availability is not tracked in `MapOutputTracker`.* This is the mechanism
+    that makes "no single-stage resubmit" robust, and it also closes an executor-loss resubmit path.
+    A regular shuffle records its map outputs in `MapOutputTracker`, and `ShuffleMapStage.isAvailable`
+    is derived from them (`getNumAvailableOutputs`); on executor or host loss the scheduler strips
+    those outputs (`removeOutputsOnExecutor` / `removeOutputsOnHost`), which flips `isAvailable` to
+    false and resubmits the producer. For a transient pipelined shuffle, resubmitting the producer is
+    both wrong (its output was never durably stored, so there is nothing to recompute into) and
+    dangerous (the resubmitted producer has no live consumers left to serve and can hang — for
+    example, an incremental-shuffle writer that blocks waiting for end-of-stream acknowledgements from
+    reducers that have already finished). So a pipelined shuffle is *not* registered with
+    `MapOutputTracker`; its map-stage availability is
+    tracked separately — on the `ShuffleMapStage` itself (a monotonic completed-partition set) or a
+    streaming-specific tracker (`StreamingShuffleOutputTracker`) — and `MapOutputTracker` stays
+    streaming-agnostic. Executor/host-loss removal then never touches a pipelined shuffle and never
+    flips its availability, so the producer is never resubmitted from that path; genuine losses that
+    happen while the group is still running are handled by group-atomic teardown above. This is also
+    what makes the "no single-stage resubmit" rule above robust: with no tracked availability to flip,
+    the availability-driven resubmit cannot fire in the first place. (Same
+    `MapOutputTracker`-must-not-govern-a-transient-shuffle point as the reuse layer in §4, seen from
+    the executor-loss side rather than the cross-job-reuse side.)
   - *Teardown is by group membership, not producer availability.* At the end of a batch the producer
     finishes and registers all its map outputs — becoming "available" — while the consumer is still
     draining the remainder, so it is normal, not rare, for the producer to be available while the
