@@ -2461,7 +2461,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: Replace sort merge join to shuffled hash join through operators") {
+  test("SPARK-58084: Convert sort merge join to shuffled hash join through operators") {
     withTempView("t1", "t2", "t3") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10)
@@ -2512,7 +2512,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: do not convert when an operator adds a variable-width column") {
+  test("SPARK-58084: Do not convert when an operator adds a variable-width column") {
     withTempView("t1", "t2") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10)
@@ -2546,7 +2546,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: convert through size-bounded (non-widening) operators") {
+  test("SPARK-58084: Convert through size-bounded (non-widening) operators") {
     withTempView("t1", "t2") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10)
@@ -2580,7 +2580,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: minWideningFactor makes the size bound more conservative") {
+  test("SPARK-58084: MinWideningFactor makes the size bound more conservative") {
     withTempView("t1", "t2") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10)
@@ -2615,12 +2615,13 @@ class AdaptiveQueryExecSuite
 
       // Default factor: the build side fits, so the join converts.
       assert(convertsWith("1.0"), "the join should convert at the default widening factor")
-      // A large factor scales the estimated build size past the threshold, rejecting the conversion.
+      // A large factor scales the estimated build size past the threshold, rejecting the
+      // conversion.
       assert(!convertsWith("1000.0"), "a large minWideningFactor should reject the conversion")
     }
   }
 
-  test("SPARK-58084: Replace sort merge join keeps required ordering valid") {
+  test("SPARK-58084: Convert sort merge join keeps required ordering valid") {
     withTempView("small1", "small2", "big") {
       spark.sparkContext.parallelize(
         (1 to 20).map(i => TestData(i, i.toString)), 4)
@@ -2700,7 +2701,7 @@ class AdaptiveQueryExecSuite
     assert(withSkewJoin.compare(withoutSkewJoin) < 0)
   }
 
-  test("SPARK-58084: do not convert sort merge join when it adds local sorts") {
+  test("SPARK-58084: Do not convert sort merge join when it adds local sorts") {
     withTempView("big", "small") {
       spark.sparkContext.parallelize(
         (1 to 2000).map(i => TestData(i % 20 + 1, i.toString)), 4)
@@ -2753,7 +2754,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: do not convert sort merge join with non-binary-stable (collated) keys") {
+  test("SPARK-58084: Do not convert sort merge join with non-binary-stable (collated) keys") {
     withTempView("t1", "t2") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, s"v$i")), 10)
@@ -2786,7 +2787,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-58084: do not convert sort merge join requested with an explicit MERGE hint") {
+  test("SPARK-58084: Do not convert sort merge join requested with an explicit MERGE hint") {
     withTempView("t1", "t2") {
       spark.sparkContext.parallelize(
         (1 to 100).map(i => TestData(i, i.toString)), 10)
