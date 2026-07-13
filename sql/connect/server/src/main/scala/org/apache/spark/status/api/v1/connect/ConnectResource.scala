@@ -37,12 +37,19 @@ private[v1] class ConnectResource extends BaseAppResource {
     sessions.map(prepareSessionData)
   }
 
+  // A session is identified by the composite (userId, sessionId): two users may share the same
+  // session UUID, so userId is required to resolve exactly one session.
   @GET
   @Path("sessions/{sessionId}")
-  def session(@PathParam("sessionId") sessionId: String): SessionData = withUI { ui =>
+  def session(
+      @PathParam("sessionId") sessionId: String,
+      @QueryParam("userId") userId: String): SessionData = withUI { ui =>
+    if (userId == null || userId.isEmpty) {
+      throw new BadParameterException("userId is required.")
+    }
     val store = new SparkConnectServerAppStatusStore(ui.store.store)
     store
-      .getSession(sessionId)
+      .getSession(userId, sessionId)
       .map(prepareSessionData)
       .getOrElse(throw new NotFoundException("unknown session id: " + sessionId))
   }

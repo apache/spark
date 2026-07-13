@@ -38,10 +38,12 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   def render(request: HttpServletRequest): Seq[Node] = {
     val sessionId = request.getParameter("id")
     require(sessionId != null && sessionId.nonEmpty, "Missing id parameter")
+    val userId = request.getParameter("userId")
+    require(userId != null, "Missing userId parameter")
 
     val content = store.synchronized { // make sure all parts in this page are consistent
       store
-        .getSession(sessionId)
+        .getSession(userId, sessionId)
         .map { sessionStat =>
           generateBasicStats(sessionId) ++
             <br/> ++
@@ -56,7 +58,7 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
             {sessionStat.totalExecution}
             Request(s)
           </h4> ++
-            generateSQLStatsTable(request, sessionStat.sessionId)
+            generateSQLStatsTable(request, sessionStat.userId, sessionStat.sessionId)
         }
         .getOrElse(<div>No information to display for session {sessionId}</div>)
     }
@@ -80,9 +82,12 @@ private[ui] class SparkConnectServerSessionPage(parent: SparkConnectServerTab)
   }
 
   /** Generate stats of batch statements of the Spark Connect server */
-  private def generateSQLStatsTable(request: HttpServletRequest, sessionID: String): Seq[Node] = {
+  private def generateSQLStatsTable(
+      request: HttpServletRequest,
+      userId: String,
+      sessionId: String): Seq[Node] = {
     val executionList = store.getExecutionList
-      .filter(_.sessionId == sessionID)
+      .filter(exec => exec.userId == userId && exec.sessionId == sessionId)
     val numStatement = executionList.size
     val table = if (numStatement > 0) {
 

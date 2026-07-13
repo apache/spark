@@ -95,8 +95,11 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
       assert(op.get.userId === defaultUserId)
       assert(ExecutionState.values.map(_.toString).contains(op.get.state))
 
-      val one = JsonMethods.parse(getOk(s"/sessions/$defaultSessionId")).extract[TestSessionData]
+      val one = JsonMethods
+        .parse(getOk(s"/sessions/$defaultSessionId?userId=${enc(defaultUserId)}"))
+        .extract[TestSessionData]
       assert(one.sessionId === defaultSessionId)
+      assert(one.userId === defaultUserId)
 
       val oneOp = JsonMethods
         .parse(getOk(s"/operations/detail?jobTag=${enc(op.get.jobTag)}"))
@@ -130,7 +133,7 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
   }
 
   test("Connect REST API returns 404 for unknown ids") {
-    assert(get(new URI(s"$baseUrl/sessions/does-not-exist").toURL)._1 === 404)
+    assert(get(new URI(s"$baseUrl/sessions/does-not-exist?userId=nobody").toURL)._1 === 404)
     assert(get(new URI(s"$baseUrl/operations/detail?jobTag=does-not-exist").toURL)._1 === 404)
   }
 

@@ -110,6 +110,7 @@ class SparkConnectServerPageSuite
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionId")
+    when(request.getParameter("userId")).thenReturn("userId")
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
     when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
     when(tab.store).thenReturn(store)
@@ -130,5 +131,44 @@ class SparkConnectServerPageSuite
     assert(
       html.contains("collapse-table\" data-bs-toggle=\"collapse\"" +
         " data-bs-target=\"#aggregated-sqlsessionstat\""))
+  }
+
+  test("SPARK-58097: session page only shows the requested user's operations") {
+    // Two users share the same session UUID, each running a distinct query.
+    kvstore = new ElementTrackingStore(new InMemoryStore, new SparkConf())
+    val listener = new SparkConnectServerListener(kvstore, new SparkConf)
+    val store = new SparkConnectServerAppStatusStore(kvstore)
+    Seq(("userA", "query from A"), ("userB", "query from B")).foreach { case (user, query) =>
+      val jobTag = s"jobTag-$user"
+      listener.onOtherEvent(
+        SparkListenerConnectSessionStarted("sharedSession", user, System.currentTimeMillis()))
+      listener.onOtherEvent(
+        SparkListenerConnectOperationStarted(
+          jobTag,
+          "operationId",
+          System.currentTimeMillis(),
+          "sharedSession",
+          user,
+          "userName",
+          query,
+          Set()))
+      listener.onOtherEvent(
+        SparkListenerConnectOperationClosed(jobTag, "operationId", System.currentTimeMillis()))
+    }
+
+    val request = mock(classOf[HttpServletRequest])
+    when(request.getParameter("id")).thenReturn("sharedSession")
+    when(request.getParameter("userId")).thenReturn("userA")
+    val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
+    when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
+    when(tab.store).thenReturn(store)
+    when(tab.appName).thenReturn("testing")
+    when(tab.headerTabs).thenReturn(Seq.empty)
+    val page = new SparkConnectServerSessionPage(tab)
+    val html = page.render(request).toString().toLowerCase(Locale.ROOT)
+
+    // Only userA's operation is listed; userB's must not leak into userA's session page.
+    assert(html.contains("query from a"))
+    assert(!html.contains("query from b"))
   }
 }
