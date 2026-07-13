@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SubqueryExpression,
   WindowExpression
 }
+import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.AsOfMatchCondition
 import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
@@ -59,17 +60,22 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         case _ => (j, None)
       }
       val resolvedJoin = matchCmp match {
-        case Some(AsOfMatchCondition(leftExpr, operator, rightExpr))
-            if leftExpr.resolved && rightExpr.resolved =>
-          AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
-          val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
-            AsOfJoin.resolveMatchComparison(left, right, leftExpr, operator, rightExpr)
-          joinBase.copy(
-            asOfCondition = asOfCondition,
-            orderExpression = orderExpression,
-            leftSortExprs = leftSortExprs,
-            rightSortExprs = rightSortExprs,
-            matchComparison = None)
+        case Some(AsOfMatchCondition(leftExpr, operator, rightExpr)) =>
+          AsOfJoinValidation.validateMatchConditionTableReferences(
+            joinBase, left, right, leftExpr, rightExpr)
+          if (leftExpr.resolved && rightExpr.resolved) {
+            AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
+            val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
+              AsOfJoin.resolveMatchComparison(left, right, leftExpr, operator, rightExpr)
+            joinBase.copy(
+              asOfCondition = asOfCondition,
+              orderExpression = orderExpression,
+              leftSortExprs = leftSortExprs,
+              rightSortExprs = rightSortExprs,
+              matchComparison = None)
+          } else {
+            joinBase
+          }
         case _ => joinBase
       }
       usingProjection match {
@@ -85,6 +91,32 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 }
 
 private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
+
+  def validateMatchConditionTableReferences(
+      join: AsOfJoin,
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftExpr: Expression,
+      rightExpr: Expression): Unit = {
+    val leftSet = left.outputSet
+    val rightSet = right.outputSet
+
+    def referencesBothJoinSides(refs: AttributeSet): Boolean = {
+      refs.nonEmpty &&
+        refs.intersect(leftSet).nonEmpty &&
+        refs.intersect(rightSet).nonEmpty
+    }
+
+    val leftRefs = leftExpr.references
+    val rightRefs = rightExpr.references
+    if (referencesBothJoinSides(leftRefs) || referencesBothJoinSides(rightRefs)) {
+      join.failAnalysis(
+        errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+        messageParameters = Map(
+          "refs1" -> toSQLExpr(leftExpr),
+          "refs2" -> toSQLExpr(rightExpr)))
+    }
+  }
 
   def validateMatchConditionOperands(
       join: AsOfJoin,

@@ -449,6 +449,31 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       Row(3L) :: Nil)
   }
 
+  test("MATCH_CONDITION rejects cross-side operand references") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.trade_time + q.quote_time >= q.quote_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "refs1" -> "\"(trade_time + quote_time)\"",
+        "refs2" -> "\"quote_time\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN quotes q
+                       |  MATCH_CONDITION (t.trade_time + q.quote_time >= q.quote_time)
+                       |  ON t.symbol = q.symbol""".stripMargin,
+          start = 31,
+          stop = 137)))
+  }
+
   test("MATCH_CONDITION rejects invalid table references") {
     setupTradeQuoteViews()
     val sqlText =
