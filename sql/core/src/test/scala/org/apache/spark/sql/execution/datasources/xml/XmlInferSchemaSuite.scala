@@ -641,12 +641,13 @@ class XmlInferSchemaSuite
   }
 
   test("value tag - equals to null value") {
-    // we don't consider options.nullValue during schema inference
+    // A value tag equal to the nullValue option is treated as null during inference (matching
+    // CSVInferSchema and the parser, which reads it as null), so it carries no type and the
+    // all-null field canonicalizes to StringType rather than being inferred as LongType.
     val xmlDF = readData(valueTagIsNullValue, Map("nullValue" -> "1"))
     val expectedSchema = new StructType()
-      .add(valueTagName, LongType)
+      .add(valueTagName, StringType)
     val expectedAns = Seq(Row(null))
-    // nullValue option is used during parsing
     assert(xmlDF.schema === expectedSchema)
     checkAnswer(xmlDF, expectedAns)
   }
