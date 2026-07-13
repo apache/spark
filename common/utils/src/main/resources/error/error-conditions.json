@@ -191,6 +191,11 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "SORT_MERGE_REQUIRED" : {
+        "message" : [
+          "SQL ASOF JOIN requires the sort-merge physical operator. Set <config> to true."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."

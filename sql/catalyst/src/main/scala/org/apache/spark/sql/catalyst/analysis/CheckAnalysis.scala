@@ -676,7 +676,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _)
+          case j @ AsOfJoin(_, _, _, _, _, _, _, _, _, _, _, true)
+              if !SQLConf.get.sortMergeAsOfJoinEnabled =>
+            j.failAnalysis(
+              errorClass = "AS_OF_JOIN.SORT_MERGE_REQUIRED",
+              messageParameters = Map(
+                "config" -> SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key))
+
+          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
             throw SparkException.internalError(
               msg = s"join condition '${toSQLExpr(condition)}' " +
@@ -684,7 +691,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               context = j.origin.getQueryContext,
               summary = j.origin.context.summary)
 
-          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _) =>
+          case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
               j.failAnalysis(
                 errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",

@@ -1932,7 +1932,7 @@ class Analyzer(
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
 
-      case j @ AsOfJoin(left, right, _, condition, _, _, _, _, matchCmp)
+      case j @ AsOfJoin(left, right, _, condition, _, _, _, _, matchCmp, _, _, _)
           if left.resolved && right.resolved &&
             (matchCmp.exists(mc => !mc.left.resolved || !mc.right.resolved) ||
               condition.exists(!_.resolved)) =>

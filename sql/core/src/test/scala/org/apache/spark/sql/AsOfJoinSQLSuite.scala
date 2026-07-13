@@ -17,226 +17,40 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * SQL ASOF JOIN surface tests (parser and feature gating).
+ * Execution semantics and complex MATCH_CONDITION types are covered by
+ * [[AsOfJoinSortMergeSQLSuite]], which requires sort-merge ASOF join.
+ */
 class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.SQL_ASOF_JOIN_ENABLED.key, "true")
+    spark.conf.set(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key, "true")
   }
 
   override def afterAll(): Unit = {
+    spark.conf.unset(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key)
     spark.conf.unset(SQLConf.SQL_ASOF_JOIN_ENABLED.key)
     super.afterAll()
   }
 
-  private def setupTradeQuoteViews(): Unit = {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
-        |       (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
-        |       (TIMESTAMP '2026-06-29 10:00:12', 'MSFT',  50),
-        |       (TIMESTAMP '2026-06-29 09:59:59', 'GOOG',  30)
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW quotes(quote_time, symbol, bid_price) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10),
-        |       (TIMESTAMP '2026-06-29 10:00:07', 'AAPL', 180.15),
-        |       (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
-        |       (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50)
-        |""".stripMargin)
-  }
-
-  test("INNER ASOF JOIN with ON") {
-    setupTradeQuoteViews()
-    checkAnswer(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, t.quantity, q.bid_price
-          |FROM trades t
-          |ASOF JOIN quotes q
-          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
-      Seq(
-        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 100, 180.10),
-        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 200, 180.20),
-        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 50, 420.50)))
-  }
-
-  test("LEFT ASOF JOIN preserves unmatched left rows") {
-    setupTradeQuoteViews()
-    checkAnswer(
-      sql(
-        """
-          |SELECT t.trade_time, t.symbol, q.bid_price
-          |FROM trades t
-          |LEFT ASOF JOIN quotes q
-          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-          |  ON t.symbol = q.symbol
-          |ORDER BY t.trade_time
-          |""".stripMargin),
-      Seq(
-        Row(Timestamp.valueOf("2026-06-29 09:59:59"), "GOOG", null),
-        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
-        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
-        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50)))
-  }
-
-  test("USING is equivalent to ON symbol equality") {
-    setupTradeQuoteViews()
-    checkAnswer(
-      sql(
-        """
-          |SELECT trade_time, symbol, bid_price
-          |FROM trades
-          |ASOF JOIN quotes
-          |  MATCH_CONDITION (trades.trade_time >= quotes.quote_time)
-          |  USING (symbol)
-          |ORDER BY trade_time
-          |""".stripMargin),
-      Seq(
-        Row(Timestamp.valueOf("2026-06-29 10:00:05"), "AAPL", 180.10),
-        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20),
-        Row(Timestamp.valueOf("2026-06-29 10:00:12"), "MSFT", 420.50)))
-  }
-
-  test("first-following match with <=") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW alerts(alert_time, host) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 'db-01')
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW maintenance(window_start, host) AS
-        |VALUES (TIMESTAMP '2026-06-29 08:00:00', 'db-01'),
-        |       (TIMESTAMP '2026-06-29 12:00:00', 'db-01')
-        |""".stripMargin)
-    checkAnswer(
-      sql(
-        """
-          |SELECT a.alert_time, a.host, m.window_start
-          |FROM alerts a
-          |ASOF JOIN maintenance m
-          |  MATCH_CONDITION (a.alert_time <= m.window_start)
-          |  ON a.host = m.host
-          |""".stripMargin),
-      Row(
-        Timestamp.valueOf("2026-06-29 10:00:00"),
-        "db-01",
-        Timestamp.valueOf("2026-06-29 12:00:00")) :: Nil)
-  }
-
-  test("MATCH_CONDITION operand arithmetic with ON") {
-    setupTradeQuoteViews()
-    checkAnswer(
-      sql(
-        """
-          |SELECT count(*) AS cnt
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (t.trade_time >= date_trunc('hour', q.quote_time))
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
-      Row(3L) :: Nil)
-  }
-
-  test("MATCH_CONDITION interval arithmetic with ON") {
-    setupTradeQuoteViews()
-    checkAnswer(
-      sql(
-        """
-          |SELECT count(*) AS cnt
-          |FROM trades t ASOF JOIN quotes q
-          |  MATCH_CONDITION (t.trade_time >= q.quote_time + INTERVAL 1 HOUR)
-          |  ON t.symbol = q.symbol
-          |""".stripMargin),
-      Row(0L) :: Nil)
-  }
-
-  test("STRUCT tuple MATCH_CONDITION with min_by rewrite") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW requests(req_ts, seq, service) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 5, 'api'),
-        |       (TIMESTAMP '2026-06-29 10:03:00', 1, 'api')
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW deploys(deploy_ts, seq, service, version) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 1, 'api', 'v1.0'),
-        |       (TIMESTAMP '2026-06-29 10:00:00', 3, 'api', 'v1.1')
-        |""".stripMargin)
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.req_ts, r.seq, d.version
-          |FROM requests r ASOF JOIN deploys d
-          |  MATCH_CONDITION ((r.req_ts, r.seq) >= (d.deploy_ts, d.seq))
-          |  ON r.service = d.service
-          |ORDER BY r.req_ts, r.seq
-          |""".stripMargin),
-      Seq(
-        Row(Timestamp.valueOf("2026-06-29 10:00:00"), 5, "v1.1"),
-        Row(Timestamp.valueOf("2026-06-29 10:03:00"), 1, "v1.1")))
-  }
-
-  test("nested STRUCT MATCH_CONDITION with min_by rewrite") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW left_nested(inner_ts, inner_seq, tag) AS
-        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 2, 'a')
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW right_nested(inner_ts, inner_seq, tag) AS
-        |VALUES (TIMESTAMP '2026-06-29 09:00:00', 1, 'a'),
-        |       (TIMESTAMP '2026-06-29 10:00:00', 1, 'a')
-        |""".stripMargin)
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.tag, r.inner_seq
-          |FROM left_nested t
-          |ASOF JOIN right_nested r
-          |  MATCH_CONDITION ((t.inner_ts, t.inner_seq, t.tag) >= (r.inner_ts, r.inner_seq, r.tag))
-          |""".stripMargin),
-      Row("a", 1) :: Nil)
-  }
-
-
-  test("ARRAY INT MATCH_CONDITION with min_by rewrite") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.a
-          |FROM VALUES (ARRAY(1, 3)) AS t(a)
-          |ASOF JOIN VALUES (ARRAY(1, 2)), (ARRAY(1, 4)) AS r(a)
-          |MATCH_CONDITION (t.a >= r.a)
-          |""".stripMargin),
-      Row(Seq(1, 2)) :: Nil)
-  }
-
-  test("ARRAY STRUCT tuple MATCH_CONDITION with min_by rewrite") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT r.c1, r.c2
-          |FROM VALUES (1, 2) AS t(c1, c2)
-          |ASOF JOIN VALUES (1, 1) AS r(c1, c2)
-          |MATCH_CONDITION ((t.c1, t.c2) >= (r.c1, r.c2))
-          |""".stripMargin),
-      Row(1, 1) :: Nil)
-  }
-
   test("equality operator is rejected in MATCH_CONDITION") {
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol) AS
+        |VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL')
+        |""".stripMargin)
+    sql(
+      """
+        |CREATE OR REPLACE TEMP VIEW quotes(quote_time, symbol) AS
+        |VALUES (TIMESTAMP '2026-06-29 09:00:00', 'AAPL')
+        |""".stripMargin)
     val sqlText =
       """
         |SELECT * FROM trades t

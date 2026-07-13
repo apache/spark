@@ -2538,7 +2538,10 @@ case class AsOfJoin(
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
     usingColumns: Option[Seq[String]] = None,
-    matchComparison: Option[AsOfMatchCondition] = None)
+    matchComparison: Option[AsOfMatchCondition] = None,
+    leftSortExprs: Seq[Expression] = Nil,
+    rightSortExprs: Seq[Expression] = Nil,
+    requiresSortMergeAsOfJoin: Boolean = false)
     extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
@@ -2574,6 +2577,8 @@ case class AsOfJoin(
       usingColumns.isEmpty &&
       matchComparison.isEmpty &&
       expressions.forall(_.resolved) &&
+      leftSortExprs.forall(_.resolved) &&
+      rightSortExprs.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
       condition.forall(_.dataType == BooleanType) &&
@@ -2591,7 +2596,9 @@ case class AsOfJoin(
    */
   override def mapExpressions(f: Expression => Expression): this.type = {
     val mapped = super.mapExpressions(f)
-    matchComparison match {
+    val newLeftSortExprs = leftSortExprs.map(f)
+    val newRightSortExprs = rightSortExprs.map(f)
+    val withMatchComparison = matchComparison match {
       case Some(mc) =>
         val newLeft = f(mc.left)
         val newRight = f(mc.right)
@@ -2599,9 +2606,20 @@ case class AsOfJoin(
           mapped
         } else {
           mapped.copy(matchComparison = Some(mc.copy(left = newLeft, right = newRight)))
-            .asInstanceOf[this.type]
         }
       case None => mapped
+    }
+    val sortExprsChanged = !newLeftSortExprs.zip(leftSortExprs).forall {
+      case (l, r) => l.fastEquals(r)
+    } || !newRightSortExprs.zip(rightSortExprs).forall {
+      case (l, r) => l.fastEquals(r)
+    }
+    if (sortExprsChanged) {
+      withMatchComparison.copy(
+        leftSortExprs = newLeftSortExprs,
+        rightSortExprs = newRightSortExprs).asInstanceOf[this.type]
+    } else {
+      withMatchComparison.asInstanceOf[this.type]
     }
   }
 
@@ -2625,8 +2643,10 @@ object AsOfJoin {
       direction: AsOfJoinDirection): AsOfJoin = {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftAsOf, rightAsOf)
     AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))),
+      leftSortExprs = leftSortExprs, rightSortExprs = rightSortExprs)
   }
 
   /**
@@ -2651,7 +2671,8 @@ object AsOfJoin {
       orderExpression = Literal(0),
       toleranceAssertion = None,
       usingColumns = usingColumns,
-      matchComparison = Some(AsOfMatchCondition(leftExpr, operator, rightExpr)))
+      matchComparison = Some(AsOfMatchCondition(leftExpr, operator, rightExpr)),
+      requiresSortMergeAsOfJoin = true)
   }
 
   def resolveMatchComparison(
@@ -2659,11 +2680,41 @@ object AsOfJoin {
       right: LogicalPlan,
       leftExpr: Expression,
       operator: MatchComparisonOperator,
-      rightExpr: Expression): (Expression, Expression) = {
+      rightExpr: Expression): (Expression, Expression, Seq[Expression], Seq[Expression]) = {
     val (leftOperand, rightOperand, normalizedOp) =
       normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
-    buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
+    val (asOfCondition, orderExpression) =
+      buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
+    (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
   }
+
+  /**
+   * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
+   * right-side buffer is ordered consistently with MATCH_CONDITION lexicographic comparison.
+   *
+   * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
+   * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   */
+  def matchSortExpressions(
+      leftOperand: Expression,
+      rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.sameType(rightStruct) && leftStruct.nonEmpty =>
+        if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
+          val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
+          (pairs.map(_._1), pairs.map(_._2))
+        } else {
+          (Seq(leftOperand), Seq(rightOperand))
+        }
+      case _ =>
+        (Seq(leftOperand), Seq(rightOperand))
+    }
+  }
+
+  /** True for SQL `(col1, col2, ...)` tuple operands, which become [[CreateNamedStruct]]. */
+  private def isSqlTupleStructOperand(operand: Expression): Boolean = operand.isInstanceOf[CreateNamedStruct]
 
   private def normalizeMatchOperands(
       left: LogicalPlan,

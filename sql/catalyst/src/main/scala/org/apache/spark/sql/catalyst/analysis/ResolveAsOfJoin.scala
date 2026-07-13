@@ -41,7 +41,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(AS_OF_JOIN), ruleId) {
-    case j @ AsOfJoin(left, right, _, condition, _, _, _, usingColumns, matchCmp)
+    case j @ AsOfJoin(left, right, _, condition, _, _, _, usingColumns, matchCmp, _, _, _)
         if left.resolved && right.resolved && condition.forall(_.resolved) =>
       val (joinBase, usingProjection) = usingColumns match {
         case Some(cols) if condition.isEmpty =>
@@ -62,11 +62,13 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         case Some(AsOfMatchCondition(leftExpr, operator, rightExpr))
             if leftExpr.resolved && rightExpr.resolved =>
           AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
-          val (asOfCondition, orderExpression) =
+          val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
             AsOfJoin.resolveMatchComparison(left, right, leftExpr, operator, rightExpr)
           joinBase.copy(
             asOfCondition = asOfCondition,
             orderExpression = orderExpression,
+            leftSortExprs = leftSortExprs,
+            rightSortExprs = rightSortExprs,
             matchComparison = None)
         case _ => joinBase
       }
