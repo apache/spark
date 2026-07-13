@@ -11609,11 +11609,6 @@
       "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3170" : {
-    "message" : [
-      "SortAggregate code-gen does not support grouping keys"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3173" : {
     "message" : [
       "Cannot specify 'USING index_type' in 'CREATE INDEX'"

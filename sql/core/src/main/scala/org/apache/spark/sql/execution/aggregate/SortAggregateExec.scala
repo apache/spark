@@ -242,9 +242,12 @@ case class SortAggregateExec(
     outputFuncName = generateResultFunctionForKeys(ctx)
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
+    // Pass `partitionIndex` as a parameter so bare references in the child's
+    // produce resolve to the local, not the protected superclass field.
+    // Required when `addNewFunction` spills this helper to a nested class.
     val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
-         |private void $doAgg() throws java.io.IOException {
+         |private void $doAgg(int partitionIndex) throws java.io.IOException {
          |  ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          |}
        """.stripMargin)
@@ -263,7 +266,7 @@ case class SortAggregateExec(
     //    loop produces nothing, `shouldStop()` is then false, and the last group is flushed.
     s"""
        |if (!$noMoreInputTerm) {
-       |  $doAggFuncName();
+       |  $doAggFuncName(partitionIndex);
        |  if (!shouldStop()) {
        |    $noMoreInputTerm = true;
        |    if ($initGroupTerm) {
