@@ -127,8 +127,11 @@ case class AdaptiveSparkPlanExec(
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
+      // Must run before `ReplaceHashWithSortAgg`: converting a sort merge join to a shuffled hash
+      // join drops its child ordering, which `ReplaceHashWithSortAgg` would otherwise rely on to
+      // turn a hash aggregate into a sort aggregate.
+      ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements),
       ReplaceHashWithSortAgg,
-      ReplaceSortMergeJoinToShuffledHashJoin(ensureRequirements),
       RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,

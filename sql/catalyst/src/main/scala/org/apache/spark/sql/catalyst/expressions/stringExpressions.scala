@@ -1288,7 +1288,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
-  protected def srcStr: Expression
+  private[sql] def srcStr: Expression
   protected def trimStr: Option[Expression]
   protected def direction: String
 

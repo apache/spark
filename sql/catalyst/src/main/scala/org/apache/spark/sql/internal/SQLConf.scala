@@ -1365,12 +1365,27 @@ object SQLConf {
     buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled")
       .doc("When true, Spark converts a sort merge join to a shuffled hash join during adaptive " +
         "execution when the build side's materialized per-partition sizes are all within " +
-        s"${ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key}, even when non-shuffle " +
-        "operators sit between the join and its input shuffle.")
+        s"${ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key} (which additionally requires " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} to not be larger than it), even when " +
+        "non-shuffle operators sit between the join and its input shuffle.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.minWideningFactor")
+      .doc("The lower bound applied to the row-widening factor used by " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} when bounding a " +
+        "build side's shuffled hash map size. The factor scales the input shuffle bytes by the " +
+        "estimated per-row size growth of the operators between the join and its shuffle; a " +
+        "larger lower bound is more conservative and makes the conversion less likely when " +
+        "statistics may under-estimate the build size. Must be positive.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(_ > 0, "The minimum widening factor must be positive.")
+      .createWithDefault(1.0)
 
   val ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED =
     buildConf("spark.sql.adaptive.costEvaluator.countLocalSort.enabled")
@@ -1379,11 +1394,12 @@ object SQLConf {
         "prefer a plan with fewer local sorts among plans with the same number of shuffles, for " +
         s"example a shuffled hash join produced by " +
         s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} over a " +
-        "sort merge join when the conversion does not push extra sorts elsewhere.")
+        "sort merge join when the conversion does not push extra sorts elsewhere. Defaults to " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} so that it is " +
+        "enabled together with that conversion.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
-      .booleanConf
-      .createWithDefault(false)
+      .fallbackConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED)
 
   val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
@@ -8264,6 +8280,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def convertSortMergeJoinToShuffledHashJoinEnabled: Boolean =
     getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED)
+
+  def convertSortMergeJoinToShuffledHashJoinMinWideningFactor: Double =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR)
 
   def costEvaluatorCountLocalSortEnabled: Boolean =
     getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)

@@ -291,12 +291,15 @@ case object BuildLeft extends BuildSide
 
 trait JoinSelectionHelper extends SQLConfHelper with Logging {
 
-  def preferShuffledHashJoin(mapStats: MapOutputStatistics): Boolean = {
+  def preferShuffledHashJoin(
+      mapStats: MapOutputStatistics,
+      sizeInBytesFactor: Double = 1.0): Boolean = {
     val maxShuffledHashJoinLocalMapThreshold =
       conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
     val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
-      mapStats.bytesByPartitionId.forall(_ <= maxShuffledHashJoinLocalMapThreshold)
+      mapStats.bytesByPartitionId.forall(
+        _ * sizeInBytesFactor <= maxShuffledHashJoinLocalMapThreshold)
   }
 
   def getBroadcastBuildSide(
