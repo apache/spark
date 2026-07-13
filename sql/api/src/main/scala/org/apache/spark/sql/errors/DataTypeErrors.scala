@@ -79,8 +79,8 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2228",
-      messageParameters = Map("name" -> name, "userClass" -> userClass),
+      errorClass = "UDT_CLASS_NOT_FOUND.FOR_USER_CLASS",
+      messageParameters = Map("udtClass" -> name, "userClass" -> userClass),
       cause = null)
   }
 

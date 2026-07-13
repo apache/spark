@@ -7712,6 +7712,25 @@
     ],
     "sqlState" : "2203G"
   },
+  "UDT_CLASS_NOT_FOUND" : {
+    "message" : [
+      "Could not load UserDefinedType class <udtClass>.",
+      "Ensure the JAR containing this class is on the classpath."
+    ],
+    "subClass" : {
+      "FOR_USER_CLASS" : {
+        "message" : [
+          "The class was registered as the UserDefinedType for user class <userClass>."
+        ]
+      },
+      "WITHOUT_USER_CLASS" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "38000"
+  },
   "UDT_CLASS_NOT_USER_DEFINED_TYPE" : {
     "message" : [
       "The class <udtClass> cannot be loaded as a user-defined type because it is not a subtype of UserDefinedType."
@@ -10880,11 +10899,6 @@
   "_LEGACY_ERROR_TEMP_2227" : {
     "message" : [
       "<name> is not an UserDefinedType. Please make sure registering an UserDefinedType for <userClass>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2228" : {
-    "message" : [
-      "Can not load in UserDefinedType <name> for user class <userClass>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2229" : {
