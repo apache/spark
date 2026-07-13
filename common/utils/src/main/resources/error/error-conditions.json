@@ -7270,6 +7270,13 @@
     ],
     "sqlState" : "42K09"
   },
+  "STORED_AS_AND_STORED_BY_BOTH_SPECIFIED" : {
+    "message" : [
+      "Internal error: both STORED AS and STORED BY were specified.",
+      "This should have been blocked at the grammar level. Report this as a bug."
+    ],
+    "sqlState" : "XX000"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -9376,11 +9383,6 @@
   "_LEGACY_ERROR_TEMP_0032" : {
     "message" : [
       "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0033" : {
-    "message" : [
-      "Expected either STORED AS or STORED BY, not both."
     ]
   },
   "_LEGACY_ERROR_TEMP_0034" : {

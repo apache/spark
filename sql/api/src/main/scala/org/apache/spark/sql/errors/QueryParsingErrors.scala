@@ -550,8 +550,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  /**
+   * Throws an internal error when both STORED AS and STORED BY are specified. This should be
+   * unreachable in normal operation because the grammar rule `createFileFormat` accepts either
+   * STORED AS or STORED BY, but not both.
+   */
   def storedAsAndStoredByBothSpecifiedError(ctx: CreateFileFormatContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0033", ctx)
+    new ParseException(errorClass = "STORED_AS_AND_STORED_BY_BOTH_SPECIFIED", ctx)
   }
 
   def operationInHiveStyleCommandUnsupportedError(
