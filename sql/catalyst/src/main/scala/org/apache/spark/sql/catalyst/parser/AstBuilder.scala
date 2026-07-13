@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.time.{DateTimeException, LocalDateTime}
 import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -45,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
@@ -2705,7 +2706,7 @@ class AstBuilder extends DataTypeAstBuilder
       relation: LogicalPlan,
       ttCtx: TemporalTableIdentifierReferenceContext,
       clause: TemporalClauseContext): LogicalPlan = {
-    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.version)
+    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.timestamp, ttCtx.version)
     val hasAtSpec = atTimestamp.isDefined || atVersion.isDefined
     if (hasAtSpec && clause != null) {
       withOrigin(clause) {
@@ -2719,24 +2720,57 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitTemporalTableIdentifier(
       ctx: TemporalTableIdentifierContext): TemporalIdentifier = withOrigin(ctx) {
-    val (_, version) = temporalSpec(ctx, ctx.version)
-    TemporalIdentifier(visitMultipartIdentifier(ctx.id), version)
+    val (timestamp, version) = temporalSpec(ctx, ctx.timestamp, ctx.version)
+    TemporalIdentifier(visitMultipartIdentifier(ctx.id), timestamp, version)
   }
 
   /**
-   * Extract the optional '@v<version>' time travel suffix of a table identifier.
+   * Parse the digits of an '@' time travel timestamp (format yyyyMMddHHmmssSSS) to
+   * microseconds since epoch in the session time zone.
+   */
+  private def parseAtSyntaxTimestamp(text: String, ctx: ParserRuleContext): Long = {
+    val format = TemporalIdentifier.TimestampFormat
+    if (text.length != format.length) {
+      throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
+    }
+    try {
+      val localDateTime = LocalDateTime.of(
+        text.substring(0, 4).toInt,
+        text.substring(4, 6).toInt,
+        text.substring(6, 8).toInt,
+        text.substring(8, 10).toInt,
+        text.substring(10, 12).toInt,
+        text.substring(12, 14).toInt,
+        text.substring(14, 17).toInt * DateTimeConstants.NANOS_PER_MILLIS.toInt)
+      DateTimeUtils.instantToMicros(
+        localDateTime.atZone(getZoneId(conf.sessionLocalTimeZone)).toInstant)
+    } catch {
+      case _: DateTimeException =>
+        throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
+    }
+  }
+
+  /**
+   * Extract the optional '@' time travel suffix of a table identifier: '@<timestamp>'
+   * (format yyyyMMddHHmmssSSS) or '@v<version>'.
    */
   private def temporalSpec(
       ctx: ParserRuleContext,
+      timestampToken: Token,
       versionCtx: VersionContext): (Option[Expression], Option[String]) = {
-    if (versionCtx == null) {
+    if (timestampToken == null && versionCtx == null) {
       (None, None)
     } else {
       if (!conf.getConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED)) {
         throw QueryParsingErrors.timeTravelAtSyntaxDisabled(
           SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key, ctx)
       }
-      (None, visitVersion(versionCtx))
+      if (timestampToken != null) {
+        val micros = parseAtSyntaxTimestamp(timestampToken.getText, ctx)
+        (Some(Literal(micros, TimestampType)), None)
+      } else {
+        (None, visitVersion(versionCtx))
+      }
     }
   }
 

@@ -21731,7 +21731,8 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     """
     Inserts a value into a variant at the given JSONPath location. An object path adds a new field
     (error if it already exists); an array path inserts at the index, shifting later elements
-    right. Missing intermediate keys are created. Returns NULL if any argument is NULL.
+    right. Missing intermediate keys are created. Throws an error if a path segment hits a value
+    of an incompatible type. Returns NULL if any argument is NULL.
 
     .. versionadded:: 4.3.0
 
@@ -21780,6 +21781,66 @@ def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOr
     path_col = path if isinstance(path, Column) else lit(path)
     return _invoke_function(
         "variant_insert",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+    )
+
+
+@_try_remote_functions
+def try_variant_insert(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    """
+    Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
+    an array path inserts at the index, shifting later elements right. Missing intermediate keys
+    are created. Returns NULL if the field already exists or a path segment hits a value of an
+    incompatible type, or if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath insertion target. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to insert. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` inserted at `path`, or NULL if the insertion fails
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, try_variant_insert
+    >>> df = spark.createDataFrame([{'json': '''{ "a": 1, "arr": ["x", "y"] }'''}])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(try_variant_insert(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.a", lit(2))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(to_json(try_variant_insert(v, "$.a.b", lit(2))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(to_json(try_variant_insert(v, "$.b", lit(None))).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_insert",
         _to_java_column(v),
         _to_java_column(path_col),
         _to_java_column(value),

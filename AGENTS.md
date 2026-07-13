@@ -20,6 +20,15 @@ Spark Connect protocol is defined in proto files under `sql/connect/common/src/m
 
 Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
 
+Keep source lines within 100 characters — the linters enforce this for Scala, Java, and Python, and LLMs commonly overrun it in comments and long expressions. A quick scan of just the changed files catches most cases in seconds, far cheaper than a CI round trip:
+
+    { git diff --name-only --diff-filter=ACM HEAD; git ls-files --others --exclude-standard; } \
+      | grep -E '\.(scala|java|py)$' | sort -u \
+      | xargs -r awk 'length>100 && $0 !~ /^[[:space:]]*(import|package) / && $0 !~ /https?:\/\// \
+          {print FILENAME":"FNR": "length" chars"}'
+
+This is only a hint: it approximates the linters' exemptions (imports, URLs) rather than matching them exactly, so it can over- or under-report. The linters remain the source of truth.
+
 ## Scala Test Base Classes
 
 When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
@@ -46,6 +55,47 @@ When writing a new Scala test suite, pick the lowest base class that provides wh
 |---|---|---|
 | `SharedSparkSession` | `sql/core` | Already extends `QueryTest` for historical reasons, but still mix in `QueryTest` explicitly, e.g. `class X extends QueryTest with SharedSparkSession`. Default for tests under `sql/core`. |
 | `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
+
+## Python Test Base Classes
+
+PySpark tests use the stdlib `unittest` framework: every suite subclasses `unittest.TestCase` (run via `python/run-tests`, see below). As with Scala, pick the lowest base that provides what the test actually needs. The bases live under `python/pyspark/testing/` and each adds capability on top of the previous:
+
+    unittest.TestCase                                     (stdlib)
+      <- PySparkBaseTestCase                              (pyspark.testing.utils)
+        <- ReusedPySparkTestCase                          (pyspark.testing.utils)
+          <- ReusedSQLTestCase                            (pyspark.testing.sqlutils)
+            <- PandasOnSparkTestCase                      (pyspark.testing.pandasutils)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plain Python — no Spark | `unittest.TestCase` | Use the stdlib base directly. `PySparkBaseTestCase` is the same thing plus a SIGTERM fault-handler dump enabled when `PYSPARK_TEST_TIMEOUT` is set; subclass it only when you want that. |
+| RDD / `SparkContext` — no `SparkSession` | `PySparkTestCase` (fresh) or `ReusedPySparkTestCase` (shared) | Both create a `SparkContext("local[4]")`. `PySparkTestCase` makes a new one per test (isolation); `ReusedPySparkTestCase` shares one per class (faster, the usual choice) and adds `quiet()` and an overridable `conf()` / `master()`. |
+| SQL / DataFrame — needs a `SparkSession` | `ReusedSQLTestCase` | The workhorse for classic tests under `python/pyspark/sql`. Adds a shared `cls.spark`, sample `cls.df` / `cls.testData`, and mixes in `SQLTestUtils` + `PySparkErrorTestUtils`. Classic (non-Connect) mode. |
+| pandas API on Spark | `PandasOnSparkTestCase` | Extends `ReusedSQLTestCase` with Arrow enabled and pandas-on-Spark assertions (`PandasOnSparkTestUtils`); `ComparisonTestBase` builds on it. |
+
+### Spark Connect test bases
+
+Spark Connect suites live in `pyspark.testing.connectutils` and are auto-skipped (via `should_test_connect`) when Connect dependencies are missing:
+
+    PySparkBaseTestCase                                   (pyspark.testing.utils)
+      <- PlanOnlyTestFixture                              (pyspark.testing.connectutils)
+      <- ReusedConnectTestCase                            (pyspark.testing.connectutils)
+           <- ReusedMixedTestCase                         (pyspark.testing.connectutils)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plan / proto construction — no server | `PlanOnlyTestFixture` | Uses a `MockRemoteSession`; builds and inspects plans without a running Connect server. For proto / plan-shape assertions. |
+| Connect DataFrame — real session | `ReusedConnectTestCase` | The Connect analog of `ReusedSQLTestCase`; starts a session via `.remote(...)` (honoring `SPARK_CONNECT_TESTING_REMOTE`, default `local[4]`). Mixes in `SQLTestUtils` + `PySparkErrorTestUtils`. |
+| Classic + Connect side by side | `ReusedMixedTestCase` | Extends `ReusedConnectTestCase`. For directly comparing classic vs Connect: it exposes a classic `self.spark` and a Connect `self.connect` so a test can run the same operation on each and assert they agree (`compare_by_show`, `both_conf`). Requires JVM access. |
+
+### Mixins and helpers
+
+These are combined with a base above rather than used on their own:
+
+- `SQLTestUtils` — context managers `sql_conf`, `table`, `temp_view`, `view`, `database`, `function`, `temp_func`, `temp_env`; assumes `self.spark`. Already mixed into `ReusedSQLTestCase` and `ReusedConnectTestCase`.
+- `PySparkErrorTestUtils` — `check_error(...)` to assert on a `PySparkException`'s error class and message parameters. The Python counterpart of Scala's `checkError`.
+- `assertDataFrameEqual` / `assertSchemaEqual` (public API, from `pyspark.testing`) — standalone assertion functions that work in any test, no particular base class required.
+- Domain bases outside the main ladder: `SparkSessionTestCase` (`pyspark.testing.mlutils`, for `ml`), `MLlibTestCase` (`pyspark.testing.mllibutils`), and `PySparkStreamingTestCase` (`pyspark.testing.streamingutils`, DStreams).
 
 ## Build and Test
 
@@ -106,22 +156,32 @@ Run a single test case:
 
 ## Investigating PR CI Failures
 
-Do NOT download full job logs to grep for errors — they are very large and slow. Instead, use the test report annotations on the fork.
+Enumerate all failing check runs first, then drill into each by type. Do not assume a single failure: a PR can fail tests, linters, and the build at once, and these surface through different channels.
 
 Step 1 — Get the fork owner and the latest commit SHA of the PR:
 
     gh api repos/apache/spark/pulls/<PR_NUMBER> --jq '{owner: .head.repo.owner.login, sha: .head.sha}'
 
-Step 2 — Find the "Report test results" check run on the fork's commit:
+Step 2 — List every failing check run on the fork's commit. This is the complete failure set:
 
-    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs \
-      --jq '.check_runs[] | select(.name == "Report test results") | {id: .id, annotations: .output.annotations_count}'
+    gh api repos/<OWNER>/spark/commits/<SHA>/check-runs --paginate \
+      --jq '.check_runs[] | select(.conclusion == "failure") | {name, id: .id}'
 
-Step 3 — Fetch failure annotations:
+A passing (or absent) "Report test results" does NOT mean CI is green. That check aggregates only test-case failures; linter, license, dependency, MiMa, compile, and doc-build failures are separate check runs that produce no test annotations. Always work from the list in Step 2, not from any single check.
 
-    gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+Step 3 — Drill into each failure according to its kind:
 
-Each annotation contains the test class, test name, and failure message.
+- **Test jobs** (e.g. "Report test results", "Build modules: ..."): fetch failure annotations. Each annotation contains the test class, test name, and failure message:
+
+      gh api repos/<OWNER>/spark/check-runs/<CHECK_RUN_ID>/annotations
+
+- **Non-test jobs** (e.g. "Linters, licenses, and dependencies", "Build"): find the failed step, then read only that job's log:
+
+      gh api repos/<OWNER>/spark/actions/jobs/<JOB_ID> \
+        --jq '{name, steps: [.steps[] | select(.conclusion == "failure") | .name]}'
+      gh api repos/<OWNER>/spark/actions/jobs/<JOB_ID>/logs
+
+Avoid downloading the large per-shard *test* job logs — they are very large and slow; use the annotations for those. Lint, license, dependency, and build job logs are small and fine to read directly when a step fails.
 
 ## Checking PR Merge Status
 

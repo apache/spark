@@ -54,10 +54,16 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
  * serialized map statuses in order to speed up tasks' requests for map output statuses.
  *
  * All public methods of this class are thread-safe.
+ *
+ * @param bufferRacingMigrations if true, a migration relocation ([[updateMapOutput]]) that
+ *   arrives before this map id's output is registered is buffered and replayed on registration
+ *   instead of being dropped. See [[pendingMigratedOutputs]]. Read once at construction time so
+ *   the behavior is stable for the lifetime of this shuffle.
  */
 private class ShuffleStatus(
     numPartitions: Int,
-    numReducers: Int = -1) extends Logging {
+    numReducers: Int = -1,
+    bufferRacingMigrations: Boolean = false) extends Logging {
 
   private val (readLock, writeLock) = {
     val lock = new ReentrantReadWriteLock()
@@ -190,6 +196,25 @@ private class ShuffleStatus(
   private[spark] val mapIdToMapIndex = new HashMap[Long, Int]()
 
   /**
+   * Migration relocation reports (from executor decommission) that arrived before the map output
+   * was registered on the driver, buffered here to be applied once registration happens.
+   *
+   * The relocation report and the task-completion registration for the same map file race on
+   * separate threads: a migrated block is uploaded to a peer and reported back, routing to
+   * [[updateMapOutput]], while the task-completion event that registers the map output travels
+   * through the DAG scheduler independently. When the report wins the race the map output is not
+   * tracked yet, so there is no map status to relocate. Rather than drop the relocation, it is
+   * recorded here (keyed by mapId, the specific task attempt) and replayed by [[addMapOutput]]
+   * right after registration, so the migrated (peer) location wins over the just-registered
+   * origin location, which would otherwise be nulled when the decommissioned executor is removed.
+   *
+   * A buffered entry that never gets a matching registration (e.g. a superseded task attempt)
+   * simply never replays and is freed when the shuffle is unregistered. Guarded by the write
+   * lock, same as the canonical map-status state.
+   */
+  private[this] val pendingMigratedOutputs = new HashMap[Long, BlockManagerId]
+
+  /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location. Returns true if the checksum in the new MapStatus is
    * different from a previous registered MapStatus. Otherwise, returns false.
@@ -215,6 +240,19 @@ private class ShuffleStatus(
     }
     mapStatuses(mapIndex) = status
     mapIdToMapIndex(status.mapId) = mapIndex
+
+    // If a migration relocation for this map output arrived before this registration (see
+    // updateMapOutput), apply it now so the migrated (peer) location wins over the origin
+    // location that was just registered and would otherwise be nulled when the decommissioned
+    // executor is removed.
+    if (pendingMigratedOutputs.nonEmpty) {
+      pendingMigratedOutputs.remove(status.mapId).foreach { bmAddress =>
+        status.updateLocation(bmAddress)
+        invalidateSerializedMapOutputStatusCache()
+        logInfo(log"Applied buffered migrated location ${MDC(BLOCK_MANAGER_ID, bmAddress)} " +
+          log"for ${MDC(MAP_ID, status.mapId)} on registration.")
+      }
+    }
     isChecksumMismatch
   }
 
@@ -229,7 +267,13 @@ private class ShuffleStatus(
   }
 
   /**
-   * Update the map output location (e.g. during migration).
+   * Update the map output location following a shuffle-data migration (e.g. during executor
+   * decommission).
+   *
+   * If the relocation report arrives before this map id's output has been registered by the
+   * task-completion event in the DAG scheduler, the relocation is buffered in
+   * [[pendingMigratedOutputs]] keyed by mapId and replayed by [[addMapOutput]] once registration
+   * happens, so the migrated location is not lost. See [[pendingMigratedOutputs]].
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
@@ -252,6 +296,15 @@ private class ShuffleStatus(
             mapStatusesDeleted(index) = null
             logInfo(log"Recover ${MDC(MAP_ID, mapStatus.mapId)}" +
               log" ${MDC(BLOCK_MANAGER_ID, mapStatus.location)}")
+          } else if (bufferRacingMigrations) {
+            // This map id's output is not committed/registered yet (e.g. the task-completion
+            // event has not landed on the driver). Buffer the relocation so it is applied once
+            // the map output is registered, instead of dropping it (which would leave the map
+            // pointing at the dead origin executor). A later relocation for the same untracked
+            // mapId overwrites the pending entry (latest migration wins).
+            logInfo(log"Map output ${MDC(MAP_ID, mapId)} is not registered yet; buffering the " +
+              log"migrated location ${MDC(BLOCK_MANAGER_ID, bmAddress)} to apply on registration.")
+            pendingMigratedOutputs(mapId) = bmAddress
           } else {
             logWarning(log"Asked to update map output ${MDC(MAP_ID, mapId)} " +
               log"for untracked map status.")
@@ -757,6 +810,12 @@ private[spark] class MapOutputTrackerMaster(
   private val shuffleMigrationEnabled = conf.get(DECOMMISSION_ENABLED) &&
     conf.get(STORAGE_DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
+  // Whether to buffer a migration relocation that races map output registration and replay it on
+  // registration, instead of dropping it (see ShuffleStatus.pendingMigratedOutputs). Read once
+  // and passed to each ShuffleStatus at construction time.
+  private val bufferRacingMigrations =
+    conf.get(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS)
+
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
   // top locations by size becomes expensive.
@@ -872,11 +931,13 @@ private[spark] class MapOutputTrackerMaster(
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
     if (pushBasedShuffleEnabled) {
-      if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps, numReduces)).isDefined) {
+      if (shuffleStatuses.put(shuffleId,
+        new ShuffleStatus(numMaps, numReduces, bufferRacingMigrations)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     } else {
-      if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps)).isDefined) {
+      if (shuffleStatuses.put(shuffleId,
+        new ShuffleStatus(numMaps, bufferRacingMigrations = bufferRacingMigrations)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
       }
     }

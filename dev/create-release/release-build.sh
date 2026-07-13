@@ -103,6 +103,12 @@ if [[ "$1" == "finalize" ]]; then
     error 'The environment variable PYPI_API_TOKEN is not set. Exiting.'
   fi
 
+  # Pass the token to twine via an environment variable to keep it out of
+  # the process command line, which is visible to other users via ps.
+  { set +x; } 2>/dev/null
+  export TWINE_PASSWORD="$PYPI_API_TOKEN"
+  [ "$DEBUG_MODE" = 1 ] && set -x
+
   git config --global user.name "$GIT_NAME"
   git config --global user.email "$GIT_EMAIL"
 
@@ -128,19 +134,19 @@ if [[ "$1" == "finalize" ]]; then
   PYSPARK_VERSION=`echo "$RELEASE_VERSION" |  sed -e "s/-/./" -e "s/preview/dev/"`
   svn update "pyspark-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__  -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark-$PYSPARK_VERSION.tar.gz" \
     "pyspark-$PYSPARK_VERSION.tar.gz.asc"
   svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__  -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz" \
     "pyspark_connect-$PYSPARK_VERSION.tar.gz.asc"
   svn update "pyspark_client-$PYSPARK_VERSION.tar.gz"
   svn update "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
-  twine upload -u __token__ -p $PYPI_API_TOKEN \
+  twine upload -u __token__ \
     --repository-url https://upload.pypi.org/legacy/ \
     "pyspark_client-$PYSPARK_VERSION.tar.gz" \
     "pyspark_client-$PYSPARK_VERSION.tar.gz.asc"
@@ -490,7 +496,7 @@ EOF
   echo "Sync'ing KEYS"
   svn co --depth=files "$RELEASE_LOCATION" svn-spark
   curl "$RELEASE_STAGING_LOCATION/KEYS" > svn-spark/KEYS
-  (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS")
+  (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS" --no-auth-cache)
   echo "KEYS sync'ed"
   rm -rf svn-spark
 
@@ -565,7 +571,7 @@ EOF
   
   if [[ -n "$OLD_VERSION" ]]; then
     echo "Removing old version: spark-$OLD_VERSION"
-    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" --username "$ASF_USERNAME" --password "$ASF_PASSWORD" --non-interactive -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
+    svn rm "https://dist.apache.org/repos/dist/release/spark/spark-$OLD_VERSION" --username "$ASF_USERNAME" --password "$ASF_PASSWORD" --non-interactive --no-auth-cache -m "Remove older $RELEASE_SERIES release after $RELEASE_VERSION"
   else
     echo "No previous $RELEASE_SERIES version found to remove. Manually remove it if there is."
   fi
@@ -877,6 +883,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Coerce the requested version
   $MVN versions:set -DnewVersion=$SPARK_VERSION
   tmp_settings="tmp-settings.xml"
+  fcreate_secure $tmp_settings
   echo "<settings><servers><server>" > $tmp_settings
   echo "<id>apache.snapshots.https</id><username>$ASF_USERNAME</username>" >> $tmp_settings
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
@@ -912,7 +919,7 @@ if [[ "$1" == "publish-release" ]]; then
     echo "Creating Nexus staging repository"
     repo_request="<promoteRequest><data><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
     out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-      -H "Content-Type:application/xml" -v \
+      -H "Content-Type:application/xml" \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/start)
     staged_repo_id=$(echo $out | sed -e "s/.*\(orgapachespark-[0-9]\{4\}\).*/\1/")
     echo "Created Nexus staging repository: $staged_repo_id"
@@ -990,7 +997,7 @@ if [[ "$1" == "publish-release" ]]; then
     echo "Closing nexus staging repository"
     repo_request="<promoteRequest><data><stagedRepositoryId>$staged_repo_id</stagedRepositoryId><description>Apache Spark $SPARK_VERSION (commit $git_hash)</description></data></promoteRequest>"
     out=$(curl --retry 10 --retry-all-errors -X POST -d "$repo_request" -u $ASF_USERNAME:$ASF_PASSWORD \
-      -H "Content-Type:application/xml" -v \
+      -H "Content-Type:application/xml" \
       $NEXUS_ROOT/profiles/$NEXUS_PROFILE/finish)
     echo "Closed Nexus staging repository: $staged_repo_id"
 
@@ -1016,6 +1023,7 @@ if [[ "$1" == "publish-release" ]]; then
       head -1)
 
     # Configure msmtp
+    fcreate_secure ~/.msmtprc
     cat > ~/.msmtprc <<EOF
 defaults
 auth           on
@@ -1032,8 +1040,6 @@ password       $ASF_PASSWORD
 
 account default : apache
 EOF
-
-    chmod 600 ~/.msmtprc
 
     # Compose and send the email
     {
@@ -1086,6 +1092,7 @@ EOF
       echo "with the RC (make sure to clean up the artifact cache before/after so"
       echo "you don't end up building with an out of date RC going forward)."
     } | msmtp -t
+    rm -f ~/.msmtprc
   fi
 
   popd

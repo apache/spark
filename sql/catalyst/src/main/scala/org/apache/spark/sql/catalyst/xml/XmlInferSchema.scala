@@ -390,7 +390,8 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
       // would make the inferred type differ from the legacy path and depend on row order.
       // Re-entering at the top yields the same representative as from-scratch inference (which
       // reaches the temporal parsers through `tryParseDouble`), so the merged type matches.
-      case _: TimeType | DateType | TimestampNTZType | _: TimestampNTZNanosType | TimestampType =>
+      case _: TimeType | DateType | TimestampNTZType | _: TimestampNTZNanosType |
+          TimestampType | _: TimestampLTZNanosType =>
         tryParseTime(value)
       case StringType => StringType
       case other: DataType =>
@@ -682,16 +683,20 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     } else if (isTimeTypeEnabled && isTime(field)) {
       // TIME is tried ahead of date/timestamp, matching the ordering of the previous cascade.
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 
   private def tryParseTime(field: String): DataType = {
     if (isTimeTypeEnabled && isTime(field)) {
       TimeType(TimeType.DEFAULT_PRECISION)
-    } else {
+    } else if (options.preferDate) {
       tryParseDate(field)
+    } else {
+      tryParseTimestampNTZ(field)
     }
   }
 
@@ -736,7 +741,16 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
         case _: IllegalArgumentException => false
       }
     if (isTimestamp) {
-      TimestampType
+      // Prefer nanosecond type when there is a nonzero sub-microsecond component
+      // (nanosWithinMicro != 0) that TimestampType cannot represent.
+      val hasSubMicro = SQLConf.get.timestampNanosTypesEnabled &&
+        timestampFormatter.parseNanosOptional(field, 9)
+          .exists(_.nanosWithinMicro != 0)
+      if (hasSubMicro) {
+        TimestampLTZNanosType(9)
+      } else {
+        TimestampType
+      }
     } else {
       tryParseBoolean(field)
     }
