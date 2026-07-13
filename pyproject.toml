@@ -60,15 +60,6 @@ ignore = [
     # Examples contain some unused variables.
     "examples/src/main/python/sql/datasource.py" = ["F841"]
 
-[tool.black]
-# When changing the version, we have to update
-# GitHub workflow version and dev/reformat-python
-required-version = "26.3.1"
-line-length = 100
-target-version = ['py39']
-include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'
-
 [dependency-groups]
 _py4j = ["py4j>=0.10.9.9"]
 
