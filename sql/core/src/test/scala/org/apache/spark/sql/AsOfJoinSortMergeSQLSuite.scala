@@ -448,4 +448,140 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |""".stripMargin),
       Row(3L) :: Nil)
   }
+
+  test("MATCH_CONDITION rejects invalid table references") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT count(*)
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.symbol >= t.symbol)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      sqlState = Some("42K0E"),
+      parameters = Map(
+        "refs1" -> "\"symbol\"",
+        "refs2" -> "\"symbol\""))
+  }
+
+  test("MATCH_CONDITION rejects non-deterministic expressions") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT t.trade_time
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (rand() >= q.quote_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION",
+      sqlState = Some("42903"),
+      parameters = Map("expr" -> "\"rand()\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN quotes q
+                       |  MATCH_CONDITION (rand() >= q.quote_time)
+                       |  ON t.symbol = q.symbol""".stripMargin,
+          start = 35,
+          stop = 120)))
+  }
+
+  test("MATCH_CONDITION rejects incompatible operand types") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT t.trade_time
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.trade_time >= q.symbol)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    checkError(
+      exception = intercept[AnalysisException](sql(sqlText)),
+      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+      sqlState = Some("42K09"),
+      parameters = Map(
+        "type1" -> "\"TIMESTAMP\"",
+        "type2" -> "\"STRING\""),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN quotes q
+                       |  MATCH_CONDITION (t.trade_time >= q.symbol)
+                       |  ON t.symbol = q.symbol""".stripMargin,
+          start = 35,
+          stop = 122)))
+  }
+
+  test("LEFT ASOF JOIN null-pads NOT NULL right catalog columns") {
+    withTable("right_nn", "left_nn") {
+      sql("CREATE TABLE right_nn (k INT NOT NULL, v STRING NOT NULL) USING parquet")
+      sql("INSERT INTO right_nn VALUES (3, 'a')")
+      sql("CREATE TABLE left_nn (k INT, label STRING) USING parquet")
+      sql("INSERT INTO left_nn VALUES (2, 'unmatched')")
+      checkSortMergeAsOf(
+        sql(
+          """
+            |SELECT l.k, l.label, r.v
+            |FROM left_nn l LEFT ASOF JOIN right_nn r
+            |  MATCH_CONDITION (l.k >= r.k)
+            |""".stripMargin),
+        Row(2, "unmatched", null) :: Nil)
+    }
+  }
+
+  test("strict > MATCH_CONDITION excludes equal right rows") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT q.quote_time
+          |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol)
+          |ASOF JOIN VALUES
+          |  (TIMESTAMP '2026-06-29 10:00:00', 'X'),
+          |  (TIMESTAMP '2026-06-29 09:00:00', 'X') AS q(quote_time, symbol)
+          |  MATCH_CONDITION (t.trade_time > q.quote_time)
+          |  ON t.symbol = q.symbol
+          |""".stripMargin),
+      Row(Timestamp.valueOf("2026-06-29 09:00:00")) :: Nil)
+  }
+
+  test("strict < forward MATCH_CONDITION") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.ts
+          |FROM VALUES (TIMESTAMP '2026-06-29 10:00:00') AS t(ts)
+          |ASOF JOIN VALUES
+          |  (TIMESTAMP '2026-06-29 10:00:00'),
+          |  (TIMESTAMP '2026-06-29 11:00:00') AS r(ts)
+          |  MATCH_CONDITION (t.ts < r.ts)
+          |""".stripMargin),
+      Row(Timestamp.valueOf("2026-06-29 11:00:00")) :: Nil)
+  }
+
+  test("forward ARRAY<INT> <= MATCH_CONDITION") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(1, 5)) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(1, 6)), (ARRAY(1, 8)) AS r(a)
+          |  MATCH_CONDITION (t.a <= r.a)
+          |""".stripMargin),
+      Row(Seq(1, 6)) :: Nil)
+  }
+
+  test("ARRAY<STRUCT> operands with different field names") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT r.a
+          |FROM VALUES (ARRAY(named_struct('x', 1, 'y', 3))) AS t(a)
+          |ASOF JOIN VALUES (ARRAY(named_struct('p', 1, 'q', 2))) AS r(a)
+          |  MATCH_CONDITION (t.a >= r.a)
+          |""".stripMargin),
+      Row(Seq(Row(1, 2))) :: Nil)
+  }
 }

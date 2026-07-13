@@ -909,6 +909,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def sqlAsOfJoinMatchConditionInvalidOperator(
+      operator: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+      messageParameters = Map("operator" -> operator),
+      ctx)
+  }
+
   def invalidNameForDropTempFunc(name: Seq[String], ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",

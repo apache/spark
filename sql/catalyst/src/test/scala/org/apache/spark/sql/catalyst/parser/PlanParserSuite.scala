@@ -1008,9 +1008,20 @@ class PlanParserSuite extends AnalysisTest {
         "select * from t asof join u match_condition (t.a = u.a)"
       checkError(
         exception = parseException(sql),
-        condition = "PARSE_SYNTAX_ERROR",
-        sqlState = "42601",
-        parameters = Map("error" -> "')'", "hint" -> ""))
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = "42K0E",
+        parameters = Map("operator" -> "="))
+    }
+  }
+
+  test("asof join - compound match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a and t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = "42K0E",
+        parameters = Map("operator" -> "AND"))
     }
   }
 

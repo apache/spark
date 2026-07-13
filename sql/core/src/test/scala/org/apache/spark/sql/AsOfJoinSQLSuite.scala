@@ -60,8 +60,15 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
-      condition = "PARSE_SYNTAX_ERROR",
-      sqlState = "42601",
-      parameters = Map("error" -> "')'", "hint" -> ""))
+      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+      sqlState = Some("42K0E"),
+      parameters = Map("operator" -> "="),
+      queryContext = Array(
+        ExpectedContext(
+          fragment = """ASOF JOIN quotes q
+                       |  MATCH_CONDITION (t.trade_time = q.quote_time)
+                       |  ON t.symbol = q.symbol""".stripMargin,
+          start = 24,
+          stop = 114)))
   }
 }

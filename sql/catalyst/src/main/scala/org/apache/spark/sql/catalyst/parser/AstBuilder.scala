@@ -2553,20 +2553,24 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   private def asOfMatchConditionFromExpression(
-      expr: Expression): (Expression, MatchComparisonOperator, Expression) = {
+      expr: Expression,
+      ctx: ParserRuleContext): (Expression, MatchComparisonOperator, Expression) = {
     expr match {
       case GreaterThanOrEqual(left, right) => (left, GreaterThanOrEqualOp, right)
       case GreaterThan(left, right) => (left, GreaterThanOp, right)
       case LessThanOrEqual(left, right) => (left, LessThanOrEqualOp, right)
       case LessThan(left, right) => (left, LessThanOp, right)
       case _ =>
-        throw new ParseException(
-          command = None,
-          start = Origin(),
-          errorClass = "PARSE_SYNTAX_ERROR",
-          messageParameters = Map("error" -> "')'", "hint" -> ""),
-          queryContext = Array.empty)
+        throw QueryParsingErrors.sqlAsOfJoinMatchConditionInvalidOperator(
+          asOfMatchConditionInvalidOperatorText(expr), ctx)
     }
+  }
+
+  private def asOfMatchConditionInvalidOperatorText(expr: Expression): String = expr match {
+    case EqualTo(_, _) => "="
+    case And(_, _) => "AND"
+    case Or(_, _) => "OR"
+    case _ => expr.prettyName
   }
 
   /**
@@ -2585,7 +2589,7 @@ class AstBuilder extends DataTypeAstBuilder
       case _ => Inner
     }
     val (leftExpr, operator, rightExpr) =
-      asOfMatchConditionFromExpression(expression(criteria.matchExpr))
+      asOfMatchConditionFromExpression(expression(criteria.matchExpr), criteria.matchExpr)
     val (condition, usingColumns) =
       (Option(criteria.onExpr), Option(criteria.identifierList)) match {
       case (Some(expr), None) => (Some(expression(expr)), None)

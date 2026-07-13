@@ -2774,7 +2774,8 @@ object AsOfJoin {
       rightOperand: Expression,
       operator: MatchComparisonOperator): Expression = {
     (leftOperand.dataType, rightOperand.dataType) match {
-      case (ArrayType(leftElem, _), ArrayType(rightElem, _)) if leftElem == rightElem =>
+      case (ArrayType(leftElem, _), ArrayType(rightElem, _))
+          if DataTypeUtils.sameType(leftElem, rightElem) =>
         buildArrayOrderExpression(leftOperand, rightOperand, leftElem, operator)
       case (leftStruct: StructType, rightStruct: StructType)
           if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
