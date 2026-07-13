@@ -222,6 +222,7 @@ ci_classic_standard = [
     {include-group = "_pyspark_devtool"},
     {include-group = "sql"},
     {include-group = "pandas_on_spark"},
+    {include-group = "pandas_on_spark_extra"},
     {include-group = "ml"},
     {include-group = "ml_extra"},
     {include-group = "_test"},
