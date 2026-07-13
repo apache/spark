@@ -45,7 +45,7 @@ import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListene
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{RDD, RDDCheckpointData}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData, ReliableRDDCheckpointData}
 import org.apache.spark.resource.{ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
@@ -686,6 +686,7 @@ private[spark] class DAGScheduler(
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd, resourceProfile)
     checkBarrierStageWithRDDChainPattern(rdd, rdd.getNumPartitions)
+    checkPipelinedProducerSupported(shuffleDep)
     val numTasks = rdd.partitions.length
     val parents = getOrCreateParentStages(shuffleDeps, jobId)
     val id = nextStageId.getAndIncrement()
@@ -707,6 +708,70 @@ private[spark] class DAGScheduler(
         shuffleDep.partitioner.numPartitions)
     }
     stage
+  }
+
+  private def pipelinedUnsupportedError(reason: String): SparkException = new SparkException(
+    errorClass = "PIPELINED_SHUFFLE_UNSUPPORTED",
+    messageParameters = scala.collection.immutable.Map("reason" -> reason),
+    cause = null)
+
+  /**
+   * Fail-fast on producer-side idioms a pipelined shuffle cannot support in v1 (spec S9), checked
+   * when the producer stage is created. A pipelined shuffle runs its producer and consumer stages
+   * concurrently over a transient, once-through stream that a group never recomputes in isolation
+   * (any failure aborts the whole group, S6), so mechanisms that recompute/roll back a single stage
+   * are moot, and features that expose output only after a global barrier are incompatible with
+   * incremental reads. Rejecting here (before the stage is used) keeps a misuse from silently
+   * mis-scheduling. Inert for a regular ShuffleDependency.
+   *
+   * Group-level idioms (fan-out to more than one consumer, mixed resource profiles, a regular
+   * shuffle internal to a group) are checked separately where the group is co-scheduled, since they
+   * are properties of the group rather than a single producer stage.
+   */
+  private def checkPipelinedProducerSupported(shuffleDep: ShuffleDependency[_, _, _]): Unit = {
+    if (!shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
+      return
+    }
+    val rdd: RDD[_] = shuffleDep.rdd
+    // Barrier: exposes output only after a global sync, contradicting concurrent partial reads.
+    if (rdd.isBarrier()) {
+      throw pipelinedUnsupportedError("barrier execution in a pipelined-group member stage")
+    }
+    // Dynamic resource allocation: gang admission needs a stable slot set; reclaiming executors
+    // from a pinned-open group can deadlock it.
+    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+      throw pipelinedUnsupportedError("dynamic resource allocation with a pipelined shuffle")
+    }
+    // Statically-indeterminate producer: its recovery is stage rollback-and-recompute, which a
+    // group never performs (moot under S6); reject rather than carry dead machinery.
+    if (rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+      throw pipelinedUnsupportedError("a statically-indeterminate pipelined producer")
+    }
+    // Checksum-mismatch full retry: the runtime counterpart to static indeterminism; it rolls back
+    // and re-runs succeeding stages on a cross-attempt mismatch, which a group never keeps (moot).
+    // A PipelinedShuffleDependency does not enable it (see its definition), so this is defensive.
+    if (shuffleDep.checksumMismatchFullRetryEnabled) {
+      throw pipelinedUnsupportedError("checksum-mismatch full retry with a pipelined shuffle")
+    }
+    // Push-based shuffle merge as the pipelined shuffle: exposes output only after a post-completion
+    // finalize step, the opposite of incremental reads. A PipelinedShuffleDependency disables merge
+    // in its constructor (M1.6), so this is a defensive backstop against that being bypassed.
+    if (shuffleDep.shuffleMergeEnabled) {
+      throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
+    }
+    // Reliable RDD checkpoint in the member's within-stage chain: writes a durable, lineage-
+    // truncated snapshot, which both reintroduces cross-time reuse of a transient edge (S4) and
+    // requires a post-success recompute of the member's now-vanished transient input. Keyed on
+    // checkpointData being a ReliableRDDCheckpointData (not isCheckpointed, since the write has not
+    // happened yet). Cache/.persist()/local checkpoint are whole-partition and ephemeral: not
+    // rejected. traverseParentRDDsWithinStage stops at shuffle boundaries, so only this stage's own
+    // chain is inspected.
+    val noReliableCheckpoint = traverseParentRDDsWithinStage(rdd, (r: RDD[_]) =>
+      !r.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+    if (!noReliableCheckpoint) {
+      throw pipelinedUnsupportedError(
+        "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
+    }
   }
 
   /**
@@ -1073,6 +1138,43 @@ private[spark] class DAGScheduler(
       return true
     }
     false
+  }
+
+  /**
+   * Reject group-level idioms a pipelined group cannot support in v1 (spec S9), checked against the
+   * RDD graph BEFORE any stage is created -- so a rejection fails the job up front (via
+   * handleJobSubmitted's listener.jobFailed) without leaving partial scheduler state behind, exactly
+   * like the speculation check. Currently enforces fan-out (deferred in v1):
+   *
+   *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model
+   *    deferred to a later version (it needs multicast to N live readers); v1 rejects it. A
+   *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
+   *    dependency. More than one distinct consumer RDD for the same pipelined shuffle is fan-out.
+   *
+   * Inert for a job with no pipelined dependency. Throws PIPELINED_SHUFFLE_UNSUPPORTED on violation.
+   *
+   * (The other S9 group-level rows -- mixed resource profiles and a regular shuffle internal to a
+   * group -- are structural invariants that do not arise for the single-profile, prefix*->PG->suffix*
+   * shapes v1 targets: a group is single-profile by construction here, and groups are split at
+   * regular-shuffle boundaries (S3). Producer-side idioms -- barrier, DRA, indeterminate, checksum,
+   * reliable checkpoint -- are rejected in checkPipelinedProducerSupported at stage creation.)
+   */
+  private def checkPipelinedGroupsSupportedInRDDGraph(finalRDD: RDD[_]): Unit = {
+    // Count distinct consumer RDDs per pipelined shuffleId across the whole RDD graph.
+    val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] =>
+          consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
+          enqueue(pd.rdd)
+        case dep =>
+          enqueue(dep.rdd)
+      }
+    }
+    if (consumersByShuffleId.values.exists(_.size > 1)) {
+      throw pipelinedUnsupportedError(
+        "a pipelined producer with more than one consumer (fan-out / branching)")
+    }
   }
 
   /** Invoke `.partitions` on the given RDD and all of its ancestors  */
@@ -2065,7 +2167,9 @@ private[spark] class DAGScheduler(
               // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
               // known to fit; just co-schedule this consumer with its running producer(s). No slot
               // check here -- that would re-measure capacity against a mid-flight snapshot and is
-              // unnecessary once admission is decided up front (gang admission).
+              // unnecessary once admission is decided up front (v1 gang admission). Group-level
+              // idiom rejection (fan-out, internal regular shuffle) already happened at job
+              // submission (checkPipelinedGroupsSupportedInRDDGraph + the all-PG check).
               logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
                 log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
               // Record that this stage is co-scheduled with still-running pipelined producers,
