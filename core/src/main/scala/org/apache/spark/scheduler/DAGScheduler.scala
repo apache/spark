@@ -753,25 +753,16 @@ private[spark] class DAGScheduler(
     if (shuffleDep.checksumMismatchFullRetryEnabled) {
       throw pipelinedUnsupportedError("checksum-mismatch full retry with a pipelined shuffle")
     }
-    // Push-based shuffle merge as the pipelined shuffle: exposes output only after a post-completion
-    // finalize step, the opposite of incremental reads. A PipelinedShuffleDependency disables merge
-    // in its constructor (M1.6), so this is a defensive backstop against that being bypassed.
+    // Push-based shuffle merge as the pipelined shuffle: exposes output only after a
+    // post-completion finalize step, the opposite of incremental reads. A
+    // PipelinedShuffleDependency disables merge in its constructor (M1.6), so this is a defensive
+    // backstop against that being bypassed.
     if (shuffleDep.shuffleMergeEnabled) {
       throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
     }
-    // Reliable RDD checkpoint in the member's within-stage chain: writes a durable, lineage-
-    // truncated snapshot, which both reintroduces cross-time reuse of a transient edge (S4) and
-    // requires a post-success recompute of the member's now-vanished transient input. Keyed on
-    // checkpointData being a ReliableRDDCheckpointData (not isCheckpointed, since the write has not
-    // happened yet). Cache/.persist()/local checkpoint are whole-partition and ephemeral: not
-    // rejected. traverseParentRDDsWithinStage stops at shuffle boundaries, so only this stage's own
-    // chain is inspected.
-    val noReliableCheckpoint = traverseParentRDDsWithinStage(rdd, (r: RDD[_]) =>
-      !r.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
-    if (!noReliableCheckpoint) {
-      throw pipelinedUnsupportedError(
-        "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
-    }
+    // A reliable RDD checkpoint in a member's within-stage chain (producer OR consumer side) is
+    // rejected in checkPipelinedGroupsSupportedInRDDGraph, at job submission before any stage is
+    // created -- so a reject leaves no partial stage state and both chain sides are covered.
   }
 
   /**
@@ -1143,29 +1134,46 @@ private[spark] class DAGScheduler(
   /**
    * Reject group-level idioms a pipelined group cannot support in v1 (spec S9), checked against the
    * RDD graph BEFORE any stage is created -- so a rejection fails the job up front (via
-   * handleJobSubmitted's listener.jobFailed) without leaving partial scheduler state behind, exactly
-   * like the speculation check. Currently enforces fan-out (deferred in v1):
+   * handleJobSubmitted's listener.jobFailed) without leaving partial scheduler state behind,
+   * exactly like the speculation check.
    *
+   * Inert for a job with no pipelined dependency. Throws PIPELINED_SHUFFLE_UNSUPPORTED on
+   * violation. Enforces:
    *  - Fan-out: a pipelined producer feeding more than one consumer. 1:N is a supported model
    *    deferred to a later version (it needs multicast to N live readers); v1 rejects it. A
    *    PipelinedShuffleDependency's producer is `dep.rdd`; a "consumer" is any RDD that lists that
    *    dependency. More than one distinct consumer RDD for the same pipelined shuffle is fan-out.
-   *
-   * Inert for a job with no pipelined dependency. Throws PIPELINED_SHUFFLE_UNSUPPORTED on violation.
+   *  - Reliable RDD checkpoint in a group member's within-stage chain (producer OR consumer side):
+   *    a reliable `checkpoint()` writes a durable, lineage-truncated snapshot, which both
+   *    reintroduces cross-time reuse of a transient edge (S4) and requires a post-success recompute
+   *    of the member's transient input -- for a consumer, that input is the vanished pipelined
+   *    shuffle. Checked here (not at stage creation) so a reject leaves no partial stage state, and
+   *    so BOTH the producer chain (rooted at pd.rdd) and each consumer chain (rooted at a consuming
+   *    RDD) are covered from the whole-graph view.
    *
    * (The other S9 group-level rows -- mixed resource profiles and a regular shuffle internal to a
-   * group -- are structural invariants that do not arise for the single-profile, prefix*->PG->suffix*
-   * shapes v1 targets: a group is single-profile by construction here, and groups are split at
-   * regular-shuffle boundaries (S3). Producer-side idioms -- barrier, DRA, indeterminate, checksum,
-   * reliable checkpoint -- are rejected in checkPipelinedProducerSupported at stage creation.)
+   * group -- are structural invariants that do not arise for the single-profile,
+   * prefix*->PG->suffix* shapes v1 targets: a group is single-profile by construction here, and
+   * groups are split at
+   * regular-shuffle boundaries (S3). The remaining producer-side idioms -- barrier, DRA,
+   * indeterminate, checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage
+   * creation, where a producer-only throw leaves no partial state.)
    */
   private def checkPipelinedGroupsSupportedInRDDGraph(finalRDD: RDD[_]): Unit = {
-    // Count distinct consumer RDDs per pipelined shuffleId across the whole RDD graph.
+    // Walk the whole RDD graph once, collecting for each pipelined shuffleId the distinct consumer
+    // RDDs that read it (for the fan-out check), the producer RDDs that write it (roots of producer
+    // member stages), and every reliably-checkpointed RDD (to locate ones inside a member stage).
     val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
+    val producerRoots = new HashSet[RDD[_]]           // RDDs that WRITE a pipelined shuffle
+    val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      if (rdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
+        reliablyCheckpointed += rdd
+      }
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
           consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
+          producerRoots += pd.rdd
           enqueue(pd.rdd)
         case dep =>
           enqueue(dep.rdd)
@@ -1174,6 +1182,47 @@ private[spark] class DAGScheduler(
     if (consumersByShuffleId.values.exists(_.size > 1)) {
       throw pipelinedUnsupportedError(
         "a pipelined producer with more than one consumer (fan-out / branching)")
+    }
+    // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain (spec
+    // S9). Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
+    // write has not happened yet. Cache / .persist() / local checkpoint are whole-partition and
+    // ephemeral and are not rejected. A reliably-checkpointed RDD `cp` is inside a member stage
+    // iff:
+    //  - PRODUCER side: cp is within some producer root's own within-stage chain (walk parents from
+    //    the producer root, stopping at shuffle boundaries), OR
+    //  - CONSUMER side: cp's OWN within-stage chain reads a pipelined shuffle (walk parents from
+    //    cp, stopping at shuffle boundaries, and check whether any stopped-at boundary is
+    //    pipelined).
+    // Rooting the consumer check at each checkpointed RDD (rather than at the PSD-reading RDD) is
+    // what makes it cover a checkpoint anywhere DOWNSTREAM in the consumer stage, not just on the
+    // reading RDD itself.
+    def chainHasReliableCheckpoint(root: RDD[_]): Boolean =
+      !traverseParentRDDsWithinStage(root, (r: RDD[_]) =>
+        !r.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
+    val offending =
+      // CONSUMER side: a checkpointed RDD whose own within-stage chain reads a pipelined shuffle is
+      // inside a consumer member stage (covers a checkpoint anywhere in that stage, not just on the
+      // reading RDD). PRODUCER side: a producer root's within-stage chain carries a checkpoint.
+      reliablyCheckpointed.exists(rddChainReadsPipelinedShuffle) ||
+        producerRoots.exists(chainHasReliableCheckpoint)
+    if (offending) {
+      throw pipelinedUnsupportedError(
+        "a reliable RDD checkpoint in a pipelined-group member's within-stage chain")
+    }
+  }
+
+  /** Whether `rdd`'s within-stage chain (parents, stopping at shuffle boundaries) reads through a
+   *  [[PipelinedShuffleDependency]] -- i.e. `rdd` is inside a pipelined CONSUMER member stage. */
+  private def rddChainReadsPipelinedShuffle(rdd: RDD[_]): Boolean = {
+    !traverseRDDGraphUntil(rdd) { (r, enqueue) =>
+      val readsPipelined = r.dependencies.exists {
+        case _: PipelinedShuffleDependency[_, _, _] => true
+        case _: ShuffleDependency[_, _, _] => false // regular boundary: not within this stage
+        case narrowDep =>
+          enqueue(narrowDep.rdd)
+          false
+      }
+      !readsPipelined
     }
   }
 
@@ -1962,9 +2011,13 @@ private[spark] class DAGScheduler(
     if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
       return
     }
-
     var finalStage: ResultStage = null
     try {
+      // Reject group-level unsupported pipelined idioms (fan-out; spec S9) from the RDD graph, up
+      // front -- before any stage is created, so a rejection leaves no partial scheduler state.
+      // Inert for a job with no pipelined dependency. Inside this try so any incidental exception
+      // from the graph walk is handled by the same listener.jobFailed path as stage creation.
+      checkPipelinedGroupsSupportedInRDDGraph(finalRDD)
       // New stage creation may throw an exception if, for example, jobs are run on a
       // HadoopRDD whose underlying HDFS files have been deleted.
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
@@ -1996,6 +2049,14 @@ private[spark] class DAGScheduler(
           listener.jobFailed(e)
           return
         }
+
+      case e: Exception with SparkThrowable if e.getCondition == "PIPELINED_SHUFFLE_UNSUPPORTED" =>
+        // An up-front idiom rejection (checkPipelinedGroupsSupportedInRDDGraph / a producer-side
+        // check in createResultStage), not a stage-creation failure. Log it as such (the generic
+        // "Creating new stage failed" message below would be misleading).
+        logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: unsupported pipelined-shuffle idiom", e)
+        listener.jobFailed(e)
+        return
 
       case e: Exception =>
         logWarning(log"Creating new stage failed due to exception - job: ${MDC(JOB_ID, jobId)}", e)

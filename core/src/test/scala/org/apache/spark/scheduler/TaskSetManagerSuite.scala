@@ -3139,18 +3139,16 @@ class TaskSetManagerSuite
     // The TaskSetManager.executorLost "Resubmitted" loop re-enqueues an already-successful
     // ShuffleMapTask when its executor is lost and the map output looks gone -- for a decommission,
     // it looks gone whenever MapOutputTracker.getMapOutputLocation returns None. A pipelined
-    // shuffle
-    // is NEVER registered in the MapOutputTracker, so getMapOutputLocation is always None
-    // and
-    // this loop would resubmit the lone producer task -- the exact streaming-writer hang. This loop
-    // bypasses handleFailedTask, so the group-atomic abort would never see it. The guard
+    // shuffle is NEVER registered in the MapOutputTracker, so getMapOutputLocation is always None
+    // and this loop would resubmit the lone producer task -- the exact streaming-writer hang. This
+    // loop bypasses handleFailedTask, so the group-atomic abort would never see it. The guard
     // (!taskSet.isPipelined on maybeShuffleMapOutputLoss) must keep a pipelined set out of the
     // loop.
     //
     // Scenario: a 2-task pipelined producer, one task succeeds on the to-be-lost executor while the
     // other is still running (so the set is NOT a zombie and the loop is entered for a
-    // non-pipelined
-    // set). Decommission that executor. Assert NO Resubmitted is emitted for the completed task.
+    // non-pipelined set). Decommission that executor. Assert NO Resubmitted is emitted for the
+    // completed task.
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
     sched.initialize(new FakeSchedulerBackend())
@@ -3205,8 +3203,7 @@ class TaskSetManagerSuite
 
     // Decommission execA (which ran the completed task 0) and lose it. For a NON-pipelined set this
     // would re-enqueue task 0 via Resubmitted (its output looks lost); for a pipelined set the
-    // guard
-    // must prevent that.
+    // guard must prevent that.
     manager.executorDecommission("execA")
     manager.executorLost("execA", "host1", ExecutorDecommission())
 
