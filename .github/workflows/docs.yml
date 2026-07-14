@@ -115,7 +115,10 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install Python requirements
-        run: python3 -m pip install --upgrade --group dev
+        run: |
+          python3 -m pip --version
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --group dev
 
       - name: Register javadoc problem matcher
         run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
