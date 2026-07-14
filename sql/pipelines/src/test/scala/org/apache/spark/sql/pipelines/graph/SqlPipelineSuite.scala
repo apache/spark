@@ -1215,6 +1215,21 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     }
   }
 
+  test("Explicit column list is rejected for CREATE STREAMING TABLE FLOW AUTO CDC") {
+    val ex = intercept[SqlGraphElementRegistrationException] {
+      unresolvedDataflowGraphFromSql(
+        sqlText = s"""
+                     |CREATE STREAMING TABLE st (id INT, name STRING)
+                     |FLOW AUTO CDC
+                     |FROM STREAM $externalTable1Ident
+                     |KEYS (id)
+                     |SEQUENCE BY id
+                     |""".stripMargin
+      )
+    }
+    assert(ex.getMessage.contains("Explicit column lists are not supported for AUTO CDC"))
+  }
+
   test("Multipart AUTO CDC flow name is not supported") {
     Seq("a.b", "a.b.c").foreach { flowIdentifier =>
       val ex = intercept[AnalysisException] {

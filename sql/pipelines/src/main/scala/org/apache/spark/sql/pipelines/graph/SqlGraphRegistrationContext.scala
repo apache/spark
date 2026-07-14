@@ -322,6 +322,13 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      if (cst.columns.nonEmpty) {
+        throw SqlGraphElementRegistrationException(
+          msg = "Explicit column lists are not supported for AUTO CDC streaming tables; " +
+            "omit the column list and let schema be inferred from the flow.",
+          queryOrigin = queryOrigin)
+      }
+
       val (partitionCols, clusterCols) =
         PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
 
@@ -331,8 +338,7 @@ class SqlGraphRegistrationContext(
         Table(
           identifier = stIdentifier,
           comment = cst.tableSpec.comment,
-          specifiedSchema =
-            Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
+          specifiedSchema = None,
           partitionCols = Option(partitionCols),
           clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
