@@ -58,7 +58,16 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
     if (conf.sortMergeAsOfJoinEnabled) return plan
 
     plan.transformUpWithNewOutput {
-      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _, _, _) =>
+      case j @ AsOfJoin(
+          left,
+          right,
+          asOfCondition,
+          condition,
+          joinType,
+          orderExpression,
+          _,
+          _,
+          _) =>
         val conditionWithOuterReference =
           condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
             case a: AttributeReference if left.outputSet.contains(a) =>
