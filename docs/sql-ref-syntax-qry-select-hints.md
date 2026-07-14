@@ -59,7 +59,7 @@ is picked by the optimizer.
 
 * **REBALANCE_BY_SIZE**
 
-  The `REBALANCE_BY_SIZE` hint works like `REBALANCE`, but can take an advisory partition size in bytes as its first parameter. This hint is ignored if AQE is not enabled.
+  The `REBALANCE_BY_SIZE` hint works like `REBALANCE`, but requires an advisory partition size as its first parameter. This hint is ignored if AQE is not enabled.
 
 #### Examples
 
@@ -84,9 +84,9 @@ SELECT /*+ REBALANCE(c) */ * FROM t;
 
 SELECT /*+ REBALANCE(3, c) */ * FROM t;
 
-SELECT /*+ REBALANCE_BY_SIZE(134217728) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m') */ * FROM t;
 
-SELECT /*+ REBALANCE_BY_SIZE(134217728, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m', c) */ * FROM t;
 
 -- multiple partitioning hints
 EXPLAIN EXTENDED SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c) */ * FROM t;

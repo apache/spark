@@ -2543,7 +2543,7 @@ class AdaptiveQueryExecSuite
           .toDF("c1", "c2").createOrReplaceTempView("v")
 
         val (_, adaptive) =
-          runAdaptiveAndVerifyResult("SELECT /*+ REBALANCE_BY_SIZE(150, c1) */ * FROM v")
+          runAdaptiveAndVerifyResult("SELECT /*+ REBALANCE_BY_SIZE('150b', c1) */ * FROM v")
         val read = collect(adaptive) {
           case read: AQEShuffleReadExec => read
         }

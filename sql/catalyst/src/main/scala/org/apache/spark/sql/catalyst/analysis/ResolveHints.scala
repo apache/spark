@@ -200,7 +200,7 @@ object ResolveHints {
           case "REBALANCE" if conf.adaptiveExecutionEnabled =>
             createRebalance(transformStringToAttribute(hint))
           case "REBALANCE_BY_SIZE" if conf.adaptiveExecutionEnabled =>
-            createRebalanceBySize(transformStringToAttribute(hint))
+            createRebalanceBySize(transformStringToAttribute(hint, skipFirstParameter = true))
           case _ => hint
         }
     }

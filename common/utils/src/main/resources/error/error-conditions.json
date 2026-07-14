@@ -4677,7 +4677,7 @@
   },
   "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER" : {
     "message" : [
-      "The advisory partition size for <hintName> must be positive, but got <advisoryPartitionSize>."
+      "The first parameter for <hintName> must be a positive byte-size literal, but got <advisoryPartitionSize>."
     ],
     "sqlState" : "22023"
   },

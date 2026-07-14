@@ -1152,12 +1152,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def invalidRebalanceBySizeHintParameterError(
-      hintName: String, advisoryPartitionSize: Long): Throwable = {
+      hintName: String, advisoryPartitionSize: String): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER",
       messageParameters = Map(
         "hintName" -> hintName,
-        "advisoryPartitionSize" -> advisoryPartitionSize.toString))
+        "advisoryPartitionSize" -> advisoryPartitionSize))
   }
 
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {

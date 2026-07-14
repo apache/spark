@@ -377,11 +377,11 @@ class ResolveHintsSuite extends AnalysisTest {
   test("SPARK-57993: Support specify advisory partition size for rebalance") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1024") {
       Seq(
-        Nil -> None,
-        Seq(Literal(2048)) -> Some(2048),
-        Seq(Literal(4096L)) -> Some(4096),
-        Seq(UnresolvedAttribute("a")) -> None,
-        Seq(Literal(2048), UnresolvedAttribute("a")) -> Some(2048)).foreach {
+        Seq(Literal(2048)) -> Some(2048L),
+        Seq(Literal(4096L)) -> Some(4096L),
+        Seq(Literal("2k")) -> Some(2048L),
+        Seq(Literal("4k")) -> Some(4096L),
+        Seq(Literal("2k"), Literal("a")) -> Some(2048L)).foreach {
         case (param, advisoryPartitionSize) =>
           assert(
             UnresolvedHint("REBALANCE_BY_SIZE", param, testRelation).analyze
@@ -389,16 +389,21 @@ class ResolveHintsSuite extends AnalysisTest {
               .optAdvisoryPartitionSize == advisoryPartitionSize)
       }
 
-      Seq(-1, 0).foreach { advisoryPartitionSize =>
+      // invalid parameters for REBALANCE_BY_SIZE hint
+      Seq(
+        Seq(Literal(-1)) -> "-1",
+        Seq(Literal(0)) -> "0",
+        Nil -> "empty",
+        Seq(Literal("a")) -> "a",
+        Seq(UnresolvedAttribute("a")) -> "a").foreach { case (params, advisoryPartitionSize) =>
         checkError(
           exception = intercept[AnalysisException] {
-            UnresolvedHint(
-              "REBALANCE_BY_SIZE", Seq(Literal(advisoryPartitionSize)), testRelation).analyze
+            UnresolvedHint("REBALANCE_BY_SIZE", params, testRelation).analyze
           },
           condition = "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER",
           parameters = Map(
             "hintName" -> "REBALANCE_BY_SIZE",
-            "advisoryPartitionSize" -> advisoryPartitionSize.toString))
+            "advisoryPartitionSize" -> advisoryPartitionSize))
       }
     }
   }
