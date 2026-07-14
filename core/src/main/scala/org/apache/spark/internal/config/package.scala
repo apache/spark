@@ -2901,6 +2901,7 @@ package object config {
         "of every serialized RDD cache block at store time and reports it to the driver. Only " +
         "serialized blocks are covered; deserialized in-memory blocks are not checksummed.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -2910,6 +2911,7 @@ package object config {
       .doc("The checksum algorithm used for RDD block content checksums (e.g. local-checkpoint " +
         "verification). Only built-in JDK algorithms are supported.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
@@ -2923,6 +2925,7 @@ package object config {
         "source. Off by default: the source's checksum is recorded directly, since the transport " +
         "layer already provides integrity.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -2943,6 +2946,7 @@ package object config {
         "materializes it (so reads within that job, before finalization, may still see an " +
         "unsealed copy).")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -2955,6 +2959,7 @@ package object config {
         "not silently changed; enable it to verify checkpoints that would otherwise use the " +
         "deserialized default.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
