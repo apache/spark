@@ -399,15 +399,9 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
             overrides.update(
                 {
-                    ("string:standard", "pandas series"): (
-                        "['hello', 'world', '']@Series[str]"
-                    ),
-                    ("string:nullable", "pandas series"): (
-                        "['hello', nan, 'world']@Series[str]"
-                    ),
-                    ("large_string:standard", "pandas series"): (
-                        "['hello', 'world']@Series[str]"
-                    ),
+                    ("string:standard", "pandas series"): ("['hello', 'world', '']@Series[str]"),
+                    ("string:nullable", "pandas series"): ("['hello', nan, 'world']@Series[str]"),
+                    ("large_string:standard", "pandas series"): ("['hello', 'world']@Series[str]"),
                     ("large_string:nullable", "pandas series"): "['hello', nan]@Series[str]",
                 }
             )
