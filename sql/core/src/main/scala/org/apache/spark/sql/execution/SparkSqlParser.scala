@@ -1633,7 +1633,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val flowHeaderCtx = ctx.createPipelineFlowHeader()
     val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
     val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
-    val autoCdcInto = buildAutoCdcIntoCommand(ctx.autoCdcCommand())
+    val autoCdcInto = buildAutoCdcInto(ctx.autoCdcCommand())
     CreateFlowCommand(
       name = ident,
       flowOperation = autoCdcInto,

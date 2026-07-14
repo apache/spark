@@ -1001,7 +1001,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case cmv: CreateMaterializedViewAsSelect =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "MATERIALIZED VIEW")
-      case cst: CreateStreamingTableAsSelect =>
+      case _: CreateStreamingTableAsSelect | _: CreateStreamingTable |
+          _: CreateStreamingTableAutoCdc =>
         throw QueryCompilationErrors.unsupportedCreatePipelineDatasetQueryExecutionError(
             pipelineDatasetType = "STREAMING TABLE")
       case _ => Nil
