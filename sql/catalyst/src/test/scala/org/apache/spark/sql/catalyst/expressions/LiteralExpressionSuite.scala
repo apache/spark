@@ -872,8 +872,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Variable-length string / binary report their real byte length, not the default size.
     assert(Literal(UTF8String.fromString(""), StringType).valueSizeInBytes === Some(0))
     assert(Literal(UTF8String.fromString("abc"), StringType).valueSizeInBytes === Some(3))
-    // A multi-byte UTF-8 character counts its encoded bytes.
-    assert(Literal(UTF8String.fromString("é"), StringType).valueSizeInBytes === Some(2))
+    // A multi-byte UTF-8 character counts its encoded bytes (U+00E9 encodes to 2 bytes).
+    assert(Literal(UTF8String.fromString("\u00e9"), StringType).valueSizeInBytes === Some(2))
     assert(Literal(Array[Byte](1, 2, 3, 4), BinaryType).valueSizeInBytes === Some(4))
 
     // Array sums element sizes.
