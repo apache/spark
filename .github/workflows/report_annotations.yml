@@ -101,7 +101,7 @@ jobs:
             [ -f "$log" ] || continue
             echo "--- Replaying $log ---"
             if [ -n "$ws_root" ]; then
-              sed "s|${ws_root}/||g" "$log"
+              sed "s|${ws_root}/| |g" "$log"
             else
               cat "$log"
             fi
