@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   AttributeReference, Expression => CatalystExpression, GreaterThan => CatalystGreaterThan,
   Literal => CatalystLiteral, ScalarSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -1366,6 +1366,14 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
     assert(referencedCols.contains("i"),
       "pushedFilters should contain the pushed filter on column i")
+
+    // The non-deterministic filter is not pushed, so it must be retained as a post-scan
+    // Filter above the scan to still be evaluated.
+    val postScanConditions = q.queryExecution.optimizedPlan.collect {
+      case f: LogicalFilter => f.condition
+    }
+    assert(postScanConditions.exists(cond => cond.exists(!_.deterministic)),
+      "non-deterministic filter should be retained as a post-scan Filter")
   }
 
   test("pushedFilters drops filters referencing pruned columns") {
