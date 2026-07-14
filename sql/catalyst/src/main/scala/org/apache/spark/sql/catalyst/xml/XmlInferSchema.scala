@@ -366,7 +366,12 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     if (!options.inferSchema) {
       return StringType
     }
-    if (value == null || value.isEmpty) {
+    // A value matching the `nullValue` option carries no type information, so it preserves the
+    // type inferred so far -- matching `CSVInferSchema.inferField`. The XML parser already reads
+    // such values as null (see `StaxXmlParser`), so inference must skip them too; otherwise a
+    // column that is entirely `nullValue`s (or mixes them with a typed value) would infer the
+    // string content of the token instead of ignoring it.
+    if (value == null || value.isEmpty || value == options.nullValue) {
       return typeSoFar
     }
 
