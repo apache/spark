@@ -269,6 +269,37 @@ class SqlPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
+  test("Cluster cols correctly registered for all pipeline dataset SQL forms") {
+    val autoCdcSuffix =
+      s"""
+         |FLOW AUTO CDC
+         |FROM STREAM $externalTable1Ident
+         |KEYS (id1)
+         |SEQUENCE BY id1""".stripMargin
+
+    // (statement, table name) for each of the four SQL forms that accept CLUSTER BY.
+    val cases = Seq(
+      // CREATE STREAMING TABLE (no query)
+      ("CREATE STREAMING TABLE st_plain CLUSTER BY (id1, id2);", "st_plain"),
+      // CREATE STREAMING TABLE ... AS SELECT
+      ("CREATE STREAMING TABLE st_as CLUSTER BY (id1, id2) " +
+        s"AS SELECT * FROM STREAM $externalTable1Ident;", "st_as"),
+      // CREATE STREAMING TABLE ... FLOW AUTO CDC
+      (s"CREATE STREAMING TABLE st_cdc CLUSTER BY (id1, id2) $autoCdcSuffix;", "st_cdc"),
+      // CREATE MATERIALIZED VIEW ... AS SELECT
+      ("CREATE MATERIALIZED VIEW mv CLUSTER BY (id1, id2) " +
+        "AS SELECT id AS id1, id AS id2 FROM range(1, 2);", "mv"))
+
+    cases.foreach { case (sqlText, tableName) =>
+      val graph = unresolvedDataflowGraphFromSql(sqlText = sqlText)
+      val table = graph.tables.find(_.identifier == fullyQualifiedIdentifier(tableName)).get
+      assert(table.clusterCols.contains(Seq("id1", "id2")),
+        s"Expected clusterCols Seq(id1, id2) for '$tableName', got ${table.clusterCols}")
+      assert(table.partitionCols.forall(_.isEmpty),
+        s"Expected no partitionCols for '$tableName', got ${table.partitionCols}")
+    }
+  }
+
   test("MV/ST with partition columns works") {
     withTable("mv", "st") {
       val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(

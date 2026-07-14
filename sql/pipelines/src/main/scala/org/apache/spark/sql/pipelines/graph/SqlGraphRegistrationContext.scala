@@ -191,6 +191,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
       // Register streaming table as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -198,8 +201,8 @@ class SqlGraphRegistrationContext(
           comment = cst.tableSpec.comment,
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -223,6 +226,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
       // Register streaming table as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -230,8 +236,8 @@ class SqlGraphRegistrationContext(
           comment = cst.tableSpec.comment,
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -316,6 +322,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cst.partitioning, queryOrigin)
+
       // Register the streaming table as a table. The streaming table is itself the target of the
       // CDC operation.
       graphRegistrationContext.registerTable(
@@ -324,8 +333,8 @@ class SqlGraphRegistrationContext(
           comment = cst.tableSpec.comment,
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -376,6 +385,9 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
+      val (partitionCols, clusterCols) =
+        PartitionHelper.splitPartitionAndClusterColumns(cmv.partitioning, queryOrigin)
+
       // Register materialized view as a table.
       graphRegistrationContext.registerTable(
         Table(
@@ -383,8 +395,8 @@ class SqlGraphRegistrationContext(
           comment = cmv.tableSpec.comment,
           specifiedSchema =
             Option.when(cmv.columns.nonEmpty)(StructType(cmv.columns.map(_.toV1Column))),
-          partitionCols = Option(PartitionHelper.applyPartitioning(cmv.partitioning, queryOrigin)),
-          clusterCols = None,
+          partitionCols = Option(partitionCols),
+          clusterCols = Option.when(clusterCols.nonEmpty)(clusterCols),
           properties = cmv.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),
@@ -684,25 +696,24 @@ class SqlGraphRegistrationContext(
 }
 
 object PartitionHelper {
-  import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
+  import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform, Transform}
 
-  def applyPartitioning(partitioning: Seq[Transform], queryOrigin: QueryOrigin): Seq[String] = {
-    partitioning.foreach {
-      case _: IdentityTransform =>
-      case other =>
-        throw SqlGraphElementRegistrationException(
-          msg = s"Invalid partitioning transform ($other)",
-          queryOrigin = queryOrigin
-        )
-    }
-    partitioning.collect {
+  /**
+   * Splits the parsed transforms of a `CREATE STREAMING TABLE`/`CREATE MATERIALIZED VIEW` statement
+   * into partition columns (`PARTITIONED BY`) and cluster columns (`CLUSTER BY`).
+   *
+   * The parser folds both clauses into a single `partitioning` sequence -- `PARTITIONED BY` as
+   * [[IdentityTransform]]s and `CLUSTER BY` as a single [[ClusterByTransform]] -- and guarantees
+   * the two clauses are mutually exclusive. This mirrors how the Connect/Python path populates
+   * `partitionCols` and `clusterCols` from its proto fields.
+   *
+   * @return a pair of (partition columns, cluster columns).
+   */
+  def splitPartitionAndClusterColumns(
+      partitioning: Seq[Transform],
+      queryOrigin: QueryOrigin): (Seq[String], Seq[String]) = {
+    val partitionCols = partitioning.collect {
       case t: IdentityTransform =>
-        if (t.references.length != 1) {
-          throw SqlGraphElementRegistrationException(
-            msg = "Only single column based partitioning is supported.",
-            queryOrigin = queryOrigin
-          )
-        }
         if (t.ref.fieldNames().length != 1) {
           throw SqlGraphElementRegistrationException(
             msg = "Multipart partition identifier not allowed.",
@@ -711,6 +722,30 @@ object PartitionHelper {
         }
         t.ref.fieldNames().head
     }
+    val clusterCols = partitioning.collect {
+      case ClusterByTransform(columnNames) =>
+        columnNames.map { ref =>
+          if (ref.fieldNames().length != 1) {
+            throw SqlGraphElementRegistrationException(
+              msg = "Multipart cluster identifier not allowed.",
+              queryOrigin = queryOrigin
+            )
+          }
+          ref.fieldNames().head
+        }
+    }.flatten
+    // Reject any transform that is neither an identity partition nor a clustering transform (e.g.
+    // a non-identity partition transform like `year(col)`).
+    partitioning.foreach {
+      case _: IdentityTransform =>
+      case ClusterByTransform(_) =>
+      case other =>
+        throw SqlGraphElementRegistrationException(
+          msg = s"Invalid partitioning transform ($other)",
+          queryOrigin = queryOrigin
+        )
+    }
+    (partitionCols, clusterCols)
   }
 }
 
