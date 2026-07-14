@@ -3018,3 +3018,53 @@ DROP TABLE time_narrow_tbl
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE)
+-- !query schema
+struct<sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE):array<time(6)>>
+-- !query output
+[08:00:00,08:30:00,09:00:00,09:30:00,10:00:00]
+
+
+-- !query
+SELECT sequence(TIME '10:00:00', TIME '08:00:00', INTERVAL '-30' MINUTE)
+-- !query schema
+struct<sequence(TIME '10:00:00', TIME '08:00:00', INTERVAL '-30' MINUTE):array<time(6)>>
+-- !query output
+[10:00:00,09:30:00,09:00:00,08:30:00,08:00:00]
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '08:00:03')
+-- !query schema
+struct<sequence(TIME '08:00:00', TIME '08:00:03'):array<time(6)>>
+-- !query output
+[08:00:00,08:00:01,08:00:02,08:00:03]
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.SEQUENCE_WRONG_INPUT_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`sequence`",
+    "otherStartType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)\"",
+    "startType" : "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\" or \"TIME\")",
+    "stepType" : "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 69,
+    "fragment" : "sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)"
+  } ]
+}

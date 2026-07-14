@@ -3243,12 +3243,14 @@ case class Flatten(child: Expression) extends UnaryExpression
       incrementing by step. The type of the returned elements is the same as the type of argument
       expressions.
 
-      Supported types are: byte, short, integer, long, date, timestamp.
+      Supported types are: byte, short, integer, long, date, timestamp, time.
 
       The start and stop expressions must resolve to the same type.
       If start and stop expressions resolve to the 'date' or 'timestamp' type
       then the step expression must resolve to the 'interval' or 'year-month interval' or
-      'day-time interval' type, otherwise to the same type as the start and stop expressions.
+      'day-time interval' type. If they resolve to the 'time' type then the step expression
+      must resolve to the 'day-time interval' type. Otherwise the step expression must
+      resolve to the same type as the start and stop expressions.
   """,
   arguments = """
     Arguments:
@@ -3256,7 +3258,8 @@ case class Flatten(child: Expression) extends UnaryExpression
       * stop - an expression. The end the range (inclusive).
       * step - an optional expression. The step of the range.
           By default step is 1 if start is less than or equal to stop, otherwise -1.
-          For the temporal sequences it's 1 day and -1 day respectively.
+          For the date and timestamp sequences it's 1 day and -1 day respectively,
+          and for the time sequences it's 1 second and -1 second respectively.
           If start is greater than stop then the step must be negative, and vice versa.
   """,
   examples = """
@@ -3269,6 +3272,8 @@ case class Flatten(child: Expression) extends UnaryExpression
        [2018-01-01,2018-02-01,2018-03-01]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval '0-1' year to month);
        [2018-01-01,2018-02-01,2018-03-01]
+      > SELECT _FUNC_(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE);
+       [08:00:00,08:30:00,09:00:00,09:30:00,10:00:00]
   """,
   group = "array_funcs",
   since = "2.4.0"

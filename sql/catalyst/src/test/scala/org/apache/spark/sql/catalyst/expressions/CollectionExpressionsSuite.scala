@@ -1352,11 +1352,33 @@ class CollectionExpressionsSuite
       Literal(Duration.ofMillis(100))),
       Seq(tm(8, 0, 0, 0), tm(8, 0, 0, 100000), tm(8, 0, 0, 200000), tm(8, 0, 0, 300000)))
 
-    // A non day-time interval step (year-month) is rejected at analysis time.
+    // A non-day-time interval step (year-month) is rejected at analysis time.
     assert(new Sequence(
       Literal(tm(8, 0, 0), timeType),
       Literal(tm(10, 0, 0), timeType),
       Literal(Period.ofMonths(1))).checkInputDataTypes().isFailure)
+
+    // Only a day-time interval step is accepted: a calendar interval step (here 30 minutes as
+    // microseconds) is rejected at analysis time, just like the year-month interval above.
+    assert(new Sequence(
+      Literal(tm(8, 0, 0), timeType),
+      Literal(tm(10, 0, 0), timeType),
+      Literal(new org.apache.spark.unsafe.types.CalendarInterval(0, 0, 1800000000L)))
+      .checkInputDataTypes().isFailure)
+
+    // No step, descending range: the default step flips to -1 second.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 3), timeType),
+      Literal(tm(8, 0, 0), timeType)),
+      Seq(tm(8, 0, 3), tm(8, 0, 2), tm(8, 0, 1), tm(8, 0, 0)))
+
+    // A step finer than the endpoint precision truncates every element to that precision, so
+    // TIME(3) with a 1-microsecond step yields repeated values rather than distinct sub-ms points.
+    checkEvaluation(new Sequence(
+      Literal(tm(8, 0, 0, 0), TimeType(3)),
+      Literal(tm(8, 0, 0, 3), TimeType(3)),
+      Literal(Duration.ofNanos(1000))), // 1 microsecond step, finer than TIME(3)
+      Seq(tm(8, 0, 0, 0), tm(8, 0, 0, 0), tm(8, 0, 0, 0), tm(8, 0, 0, 0)))
 
     // TIME sequences do not wrap around midnight: a positive step from a later start to an
     // earlier stop is an illegal boundary, not a wrap. (Relevant once SPARK-57853 lands.)

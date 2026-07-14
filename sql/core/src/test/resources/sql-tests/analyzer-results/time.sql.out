@@ -2513,3 +2513,48 @@ DROP TABLE time_narrow_tbl
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.time_narrow_tbl
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE)
+-- !query analysis
+Project [sequence(08:00:00, 10:00:00, Some(INTERVAL '30' MINUTE), Some(America/Los_Angeles)) AS sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT sequence(TIME '10:00:00', TIME '08:00:00', INTERVAL '-30' MINUTE)
+-- !query analysis
+Project [sequence(10:00:00, 08:00:00, Some(INTERVAL '-30' MINUTE), Some(America/Los_Angeles)) AS sequence(TIME '10:00:00', TIME '08:00:00', INTERVAL '-30' MINUTE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '08:00:03')
+-- !query analysis
+Project [sequence(08:00:00, 08:00:03, None, Some(America/Los_Angeles)) AS sequence(TIME '08:00:00', TIME '08:00:03')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.SEQUENCE_WRONG_INPUT_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`sequence`",
+    "otherStartType" : "\"INTEGRAL\"",
+    "sqlExpr" : "\"sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)\"",
+    "startType" : "(\"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"DATE\" or \"TIME\")",
+    "stepType" : "(\"INTERVAL\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 69,
+    "fragment" : "sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH)"
+  } ]
+}

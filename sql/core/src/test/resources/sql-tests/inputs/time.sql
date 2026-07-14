@@ -426,3 +426,11 @@ INSERT INTO time_narrow_tbl SELECT '01:02:03.456789' :: TIME(6);
 INSERT INTO time_narrow_tbl SELECT CAST('01:02:03.456789' :: TIME(6) AS TIME(3));
 SELECT typeof(t3), t3 FROM time_narrow_tbl;
 DROP TABLE time_narrow_tbl;
+
+-- sequence() over TIME endpoints with a day-time interval step.
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '30' MINUTE);
+SELECT sequence(TIME '10:00:00', TIME '08:00:00', INTERVAL '-30' MINUTE);
+-- The step defaults to 1 second when omitted.
+SELECT sequence(TIME '08:00:00', TIME '08:00:03');
+-- A year-month interval step is not accepted for TIME endpoints.
+SELECT sequence(TIME '08:00:00', TIME '10:00:00', INTERVAL '1' MONTH);
