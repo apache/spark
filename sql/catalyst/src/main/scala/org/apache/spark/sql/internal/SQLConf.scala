@@ -258,6 +258,19 @@ object SQLConf {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE =
+    buildConf("spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled")
+      .internal()
+      .version("3.5.10")
+      .doc(
+        "When true, a grand-total GROUP BY GROUPING SETS (()) (and the equivalent empty " +
+        "CUBE() / ROLLUP()) is lowered to a global aggregate during analysis, so it returns " +
+        "one row over empty input, matching an aggregation with no GROUP BY clause. When false, " +
+        "falls back to the legacy Expand-based lowering that returns no rows over empty input.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ANALYZER_MAX_ITERATIONS = buildConf("spark.sql.analyzer.maxIterations")
     .internal()
     .doc("The max number of iterations the analyzer runs.")

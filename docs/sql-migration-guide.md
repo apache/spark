@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.5.9 to 3.5.10
+
+- Since Spark 3.5.10, `GROUP BY GROUPING SETS (())` (and the equivalent empty `GROUP BY CUBE()` / `GROUP BY ROLLUP()`) is treated as a grand total and returns one row over empty input, matching an aggregation with no `GROUP BY` clause; previously it returned no rows. To restore the previous behavior, set `spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled` to `false`.
+
 ## Upgrading from Spark SQL 3.5.3 to 3.5.4
 
 - Since Spark 3.5.4, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.

@@ -181,6 +181,17 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     assert(result(2) == 2)
   }
 
+  test("cube()/rollup() with no grouping columns return one grand-total row over empty input") {
+    // Exercises the Connect analyzed-plan path for the empty CUBE()/ROLLUP() grand total: with no
+    // grouping columns it lowers to a global aggregate, returning one row even over empty input,
+    // like an aggregation with no GROUP BY clause. Not SQL-expressible, so DataFrame-API only.
+    assert(spark.range(0).cube().count().collect() === Array(Row(0L)))
+    assert(spark.range(0).rollup().count().collect() === Array(Row(0L)))
+    // Non-empty input still collapses to the single grand-total row.
+    assert(spark.range(3).cube().count().collect() === Array(Row(3L)))
+    assert(spark.range(3).rollup().count().collect() === Array(Row(3L)))
+  }
+
   test("read and write") {
     assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     val testDataPath = java.nio.file.Paths
