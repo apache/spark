@@ -30,6 +30,16 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
+ * Common trait for all sort implementations to facilitate pattern matching, so that user-defined
+ * sort operators can also be recognized and optimized by physical optimization rules such as
+ * [[RemoveRedundantSorts]].
+ */
+trait SortLike extends UnaryExecNode {
+  def sortOrder: Seq[SortOrder]
+  def global: Boolean
+}
+
+/**
  * Performs (external) sorting.
  *
  * @param global when true performs a global sort of all partitions by shuffling the data first
@@ -42,7 +52,7 @@ case class SortExec(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryExecNode with BlockingOperatorWithCodegen {
+  extends SortLike with BlockingOperatorWithCodegen {
 
   override def output: Seq[Attribute] = child.output
 

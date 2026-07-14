@@ -309,7 +309,7 @@ case class EnsureRequirements(
   // have sorted-merge enabled (every possible combination). Returns a LazyList so the caller can
   // stop evaluating once a satisfying alternative is found.
   //
-  // Pruning: traversal stops at SortExec (which reorders data, making sorted merge below it
+  // Pruning: traversal stops at SortLike (which reorders data, making sorted merge below it
   // pointless) and at any node whose outputPartitioning no longer carries a KeyedPartitioning.
   // This is a good heuristic, though not strictly equivalent to "ordering no longer propagates":
   // partition-key expressions are constant within each coalesced partition and therefore usually
@@ -323,7 +323,7 @@ case class EnsureRequirements(
   // product across all GPEs in the subtree, giving every combination.
   private[exchange] def tryEnableSortedMerge(plan: SparkPlan): LazyList[SparkPlan] =
     plan.multiTransformDownWithPruning(
-      p => !p.isInstanceOf[SortExec] &&
+      p => !p.isInstanceOf[SortLike] &&
         hasKeyedPartitioning(p.asInstanceOf[SparkPlan].outputPartitioning)) {
       case gpe: GroupPartitionsExec =>
         // Include the original so that peer GPEs are still independently considered.
