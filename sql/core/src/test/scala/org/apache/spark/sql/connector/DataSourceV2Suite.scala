@@ -28,8 +28,10 @@ import test.org.apache.spark.sql.connector._
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan => CatalystGreaterThan, Literal => CatalystLiteral, ScalarSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.catalyst.expressions.{
+  AttributeReference, Expression => CatalystExpression, GreaterThan => CatalystGreaterThan,
+  Literal => CatalystLiteral, ScalarSubquery}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter => LogicalFilter, Project}
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
@@ -46,6 +48,7 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -1351,6 +1354,28 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "pushedFilters should contain the pushed filter on column i")
   }
 
+  test("catalyst filter pushdown skips non-deterministic filters") {
+    val df = spark.read.format(classOf[CatalystFilterDataSourceV2].getName).load()
+    val q = df.filter($"i" > 3 && rand() > 0.5)
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should contain the deterministic pushed filter")
+    assert(scanRelation.pushedFilters.forall(_.deterministic),
+      "pushedFilters should not contain non-deterministic filters")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the pushed filter on column i")
+
+    // The non-deterministic filter is not pushed, so it must be retained as a post-scan
+    // Filter above the scan to still be evaluated.
+    val postScanConditions = q.queryExecution.optimizedPlan.collect {
+      case f: LogicalFilter => f.condition
+    }
+    assert(postScanConditions.exists(cond => cond.exists(!_.deterministic)),
+      "non-deterministic filter should be retained as a post-scan Filter")
+  }
+
   test("pushedFilters drops filters referencing pruned columns") {
     // Disable constraint propagation so IsNotNull(i) is not added (it would keep
     // column i in the scan output). This simulates a connector that pushes IsNotNull.
@@ -1500,6 +1525,33 @@ class AdvancedDataSourceV2 extends TestingV2Source {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new AdvancedScanBuilder()
     }
+  }
+}
+
+class CatalystFilterDataSourceV2 extends TestingV2Source {
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new CatalystFilterScanBuilder()
+    }
+  }
+}
+
+class CatalystFilterScanBuilder extends SimpleScanBuilder
+  with SupportsPushDownCatalystFilters {
+
+  override def pushFilters(filters: Seq[CatalystExpression]): Seq[CatalystExpression] = {
+    if (filters.exists(!_.deterministic)) {
+      throw new IllegalArgumentException(
+        s"Non-deterministic filters should not be pushed: ${filters.mkString(", ")}")
+    }
+    Nil
+  }
+
+  override def pushedFilters: Array[Predicate] = Array.empty
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    throw new IllegalArgumentException("planInputPartitions must not be called")
   }
 }
 
