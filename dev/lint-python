@@ -16,8 +16,6 @@
 # limitations under the License.
 #
 # define test binaries + versions
-FLAKE8_BUILD="flake8"
-MINIMUM_FLAKE8="3.9.0"
 RUFF_BUILD="ruff"
 MINIMUM_RUFF="0.14.0"
 MINIMUM_MYPY="1.19.1"
@@ -51,9 +49,6 @@ while (( "$#" )); do
     --custom-pyspark-error)
       PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
       ;;
-    --flake8)
-      FLAKE8_TEST=true
-      ;;
     --ruff)
       RUFF_TEST=true
       ;;
@@ -74,7 +69,7 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
   RUFF_TEST=true
@@ -239,44 +234,6 @@ function mypy_test {
 }
 
 
-function flake8_test {
-    local FLAKE8_VERSION=
-    local EXPECTED_FLAKE8=
-    local FLAKE8_REPORT=
-    local FLAKE8_STATUS=
-
-    if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
-        echo "The flake8 command was not found. Skipping for now."
-        return
-    fi
-
-    _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
-    FLAKE8_VERSION="${_FLAKE8_VERSION[0]}"
-    EXPECTED_FLAKE8="$(satisfies_min_version $FLAKE8_VERSION $MINIMUM_FLAKE8)"
-
-    if [[ "$EXPECTED_FLAKE8" == "False" ]]; then
-        echo "\
-The minimum flake8 version needs to be $MINIMUM_FLAKE8. Your current version is $FLAKE8_VERSION
-
-flake8 checks failed."
-        exit 1
-    fi
-
-    echo "starting $FLAKE8_BUILD test..."
-    FLAKE8_REPORT=$( ($FLAKE8_BUILD --append-config dev/tox.ini --count --show-source --statistics .) 2>&1)
-    FLAKE8_STATUS=$?
-
-    if [ "$FLAKE8_STATUS" -ne 0 ]; then
-        echo "flake8 checks failed:"
-        echo "$FLAKE8_REPORT"
-        echo "$FLAKE8_STATUS"
-        exit "$FLAKE8_STATUS"
-    else
-        echo "flake8 checks passed."
-        echo
-    fi
-}
-
 function ruff_test {
     local RUFF_VERSION=
     local EXPECTED_RUFF=
@@ -390,9 +347,6 @@ if [[ "$BLACK_TEST" == "true" ]]; then
 fi
 if [[ "$PYSPARK_CUSTOM_ERRORS_CHECK_TEST" == "true" ]]; then
     pyspark_custom_errors_check_test
-fi
-if [[ "$FLAKE8_TEST" == "true" ]]; then
-    flake8_test
 fi
 if [[ "$RUFF_TEST" == "true" ]]; then
     ruff_test
