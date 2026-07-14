@@ -225,7 +225,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
         // MySQL Connector/J Bug #84308: COLUMN_SIZE=8 and DECIMAL_DIGITS=0 for all TIME columns
         // regardless of declared precision. The actual precision is injected by
         // updateExtraColumnMeta via INFORMATION_SCHEMA query.
-        val precision = md.build().getLong("datetimePrecision").toInt
+        val md0 = md.build()
+        val precision = if (md0.contains("datetimePrecision")) {
+          md0.getLong("datetimePrecision").toInt
+        } else {
+          TimeType.DEFAULT_PRECISION
+        }
         Some(TimeType(math.min(precision, TimeType.MAX_PRECISION)))
       case _ => None
     }
@@ -327,10 +332,12 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case t: TimeType =>
       // MySQL supports TIME(p) for p in [0,6]. Use the declared precision when valid;
-      // fall back to bare TIME (= TIME(6)) for out-of-range precisions (e.g. nanosecond).
+      // fall back to TIME(6) (MySQL's max fractional precision) for out-of-range
+      // precisions (e.g. nanosecond), which truncates to microseconds rather than
+      // to whole seconds (bare TIME = TIME(0) in MySQL).
       val p = t.precision
       if (p >= 0 && p <= 6) Option(JdbcType(s"TIME($p)", java.sql.Types.TIME))
-      else Option(JdbcType("TIME", java.sql.Types.TIME))
+      else Option(JdbcType("TIME(6)", java.sql.Types.TIME))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

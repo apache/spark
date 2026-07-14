@@ -421,8 +421,8 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("SPARK-57555: MySQL TIME nanosecond write truncates to microseconds") {
-    // MySQL TIME max precision is 6 (microseconds). TimeType(9) writes as bare TIME (= TIME(6)),
-    // and the nanosecond portion is truncated on read-back.
+    // MySQL TIME max precision is 6 (microseconds). TimeType(9) writes as TIME(6),
+    // and the sub-microsecond portion is truncated on read-back.
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       val data = Seq(Row(LocalTime.of(12, 0, 0, 123456789)))
       val schema = new org.apache.spark.sql.types.StructType()
