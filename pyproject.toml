@@ -125,13 +125,24 @@ mllib = [
     {include-group = "_numpy"},
 ]
 
-ml_extra = [
+ml_extra_base = [
     "scipy>=1.8.0",
     "scikit-learn",
-    "torch",
-    "torchvision",
     "torcheval",
     "deepspeed; sys_platform != 'darwin'",
+]
+
+ml_torch = [
+    # We often need to install torch related packages from index-url like
+    # https://download.pytorch.org/whl/cpu. This group is designed for that and
+    # it should only have packages that are available from that index-url.
+    "torch",
+    "torchvision",
+]
+
+ml_extra = [
+    {include-group = "ml_extra_base"},
+    {include-group = "ml_torch"},
 ]
 
 pipelines = [
@@ -154,9 +165,12 @@ _lint = [
 _test = [
     # Dependency for running tests
     "unittest-xml-reporting",
+    # Coverage tool
+    "coverage",
     # 3rd party libraries that unittests use.
     "openpyxl",
     "tabulate",
+    "lxml",
     "testcontainers[kafka]>=3.7.0",
     "kafka-python-ng>=2.0.2",
 ]
@@ -224,7 +238,8 @@ ci_classic_standard = [
     {include-group = "pandas_on_spark"},
     {include-group = "pandas_on_spark_extra"},
     {include-group = "ml"},
-    {include-group = "ml_extra"},
+    # torch should be installed with ml_torch group
+    {include-group = "ml_extra_base"},
     {include-group = "_test"},
     "pyarrow>=23.0.0",
     "pandas==2.3.3",

@@ -63,5 +63,6 @@ COPY --from=root pyproject.toml ./pyproject.toml
 
 RUN python3.12 -m pip install -U pip
 
-RUN python3.12 -m pip install --group ci_classic_standard --group ci_connect_standard && \
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_classic_standard --group ci_connect_standard && \
     python3.12 -m pip cache purge
