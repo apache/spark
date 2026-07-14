@@ -123,6 +123,7 @@ jobs:
 
       - name: Build docs
         run: |
+          set -o pipefail
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build 2>&1 | tee "$RUNNER_TEMP/docs-build.log"
 
