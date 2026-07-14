@@ -20,14 +20,16 @@
 name: Documentation
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize]
+  push:
+    branches:
+      - '**'
+      - '!branch-*.*'
 
 permissions:
   contents: read
 
 concurrency:
-  group: docs-${{ github.event.pull_request.number }}
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -39,8 +41,30 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     steps:
-      - name: Checkout pull request merge commit
+      - name: Checkout Spark repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check branch freshness
+        if: github.repository != 'apache/spark'
+        run: |
+          git fetch https://github.com/apache/spark.git master --quiet
+          echo "APACHE_SPARK_REF=$(git rev-parse FETCH_HEAD)" >> $GITHUB_ENV
+          commits_behind=$(git rev-list --count HEAD..FETCH_HEAD)
+          echo "Branch is ${commits_behind} commits behind upstream master."
+          # Spark has averaged around 10 commits per day for the past few years.
+          if [ "$commits_behind" -gt 30 ]; then
+            echo "::error::Branch is ${commits_behind} commits behind upstream master. Please update your branch."
+            exit 1
+          fi
+
+      - name: Demonstrate is-changed.py compatibility
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$APACHE_SPARK_REF"
+          docs_changed=$(./dev/is-changed.py -m docs)
+          echo "docs module changed: $docs_changed"
 
       - name: Install Java
         uses: actions/setup-java@v5
