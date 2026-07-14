@@ -96,6 +96,7 @@ private[spark] object Config extends Logging {
         "When enabled, the driver pod readiness wait before executor allocation " +
         "is skipped as well.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
