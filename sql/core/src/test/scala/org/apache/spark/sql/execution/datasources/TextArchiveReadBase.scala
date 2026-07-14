@@ -28,9 +28,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 /**
- * Reads of text files packed in archives, streamed through the [[ArchiveReader]] path. Entries are
- * streamed (never unpacked to disk), and the central contract verified throughout is parity with
- * reading the same files from a directory.
+ * Reads of text files packed in archives, streamed through the [[SupportsArchiveFormat]] path.
+ * Entries are streamed (never unpacked to disk), and the central contract verified throughout is
+ * parity with reading the same files from a directory.
  *
  * Unlike CSV/JSON this does not extend [[ArchiveReadSuiteBase]]: the text data source has a single
  * fixed `value` column (one row per line, or per entry with `wholetext`) and no schema inference,
