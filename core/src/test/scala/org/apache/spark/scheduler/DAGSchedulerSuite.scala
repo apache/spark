@@ -6379,44 +6379,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: one producer feeding two pipelined consumers reconsiders both") {
-    // R --regular--> P --pipelined--> C1 and C2 ; C1,C2 --regular--> D.
-    // When P starts (R done), reconsideration must resubmit BOTH parked consumers C1 and C2.
-    // (Guards the `.filter` in submitWaitingPipelinedChildStages against a `.find` regression.)
-    val rddR = new MyRDD(sc, 2, Nil)
-    val rddP = new MyRDD(sc, 2, List(new ShuffleDependency(rddR, new HashPartitioner(2))),
-      tracker = mapOutputTracker)
-    val rddC1 = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddP, new HashPartitioner(2))),
-      tracker = mapOutputTracker)
-    val rddC2 = new MyRDD(sc, 2, List(new PipelinedShuffleDependency(rddP, new HashPartitioner(2))),
-      tracker = mapOutputTracker)
-    val rddD = new MyRDD(sc, 2,
-      List(new ShuffleDependency(rddC1, new HashPartitioner(2)),
-        new ShuffleDependency(rddC2, new HashPartitioner(2))),
-      tracker = mapOutputTracker)
-    submit(rddD, Array(0, 1))
-
-    // Only R runs initially; P, C1, C2 wait (D waits on its regular parents C1, C2).
-    assert(taskSets.size === 1, s"expected only R submitted, got ${taskSets.size}")
-
-    // R completes -> P runs and reconsiders BOTH C1 and C2.
-    val idR = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR).get.stageId
-    completeShuffleMapStageSuccessfully(idR, 0, 2)
-    assert(scheduler.runningStages.exists(_.rdd eq rddC1), "C1 should be co-scheduled with P")
-    assert(scheduler.runningStages.exists(_.rdd eq rddC2), "C2 should be co-scheduled with P")
-
-    // Drain P, then C1, C2, then D.
-    val idP = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP).get.stageId
-    completeShuffleMapStageSuccessfully(idP, 0, 2)
-    val idC1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC1).get.stageId
-    completeShuffleMapStageSuccessfully(idC1, 0, 2)
-    val idC2 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC2).get.stageId
-    completeShuffleMapStageSuccessfully(idC2, 0, 2)
-    val tsD = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddD).get
-    complete(tsD, Seq((Success, 42), (Success, 43)))
-    assert(results === Map(0 -> 42, 1 -> 43))
-    assertDataStructuresEmpty()
-  }
+  // Note: there is deliberately no "one producer feeding two pipelined consumers" test. That shape
+  // (a single producer stage with two pipelined consumers) is pipelined *fan-out*, which requires a
+  // shared PipelinedShuffleDependency and is forbidden by the spec (S9); its admission-time
+  // rejection is a later milestone. Two distinct PipelinedShuffleDependency objects over one RDD do
+  // NOT create it -- they create two separate producer stages, each with one consumer. So for every
+  // supported (non-fan-out) shape a running pipelined producer has at most one waiting pipelined
+  // consumer, and submitWaitingPipelinedChildStages reconsiders it via the single-child path
+  // covered by the transitive-cascade and producer-behind-regular-shuffle tests.
 
   test("pipelined shuffle: reconsideration cascades transitively (B->C->D behind a regular root)") {
     // Z --regular--> B --pipelined--> C --pipelined--> D. When Z completes, B runs and reconsiders
@@ -6728,6 +6698,169 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
     }
   }
+
+  // ==========================================================================================
+  // Group-observable (coarse deferred) completion (spec S5)
+  // ==========================================================================================
+
+  test("pipelined shuffle: a consumer that finishes early does not end the job or cancel its " +
+      "still-running producer") {
+    // producer (shuffle map) --[pipelined]--> consumer (result). Consumer is co-scheduled; if its
+    // result tasks finish before the producer, its completion MUST be deferred -- otherwise the job
+    // would end and cancelRunningIndependentStages would cancel the still-running producer.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    assert(taskSets.size === 2)
+    val producerStageId = taskSets.head.stageId
+    val consumerTaskSet = taskSets(1)
+
+    // Consumer finishes FIRST (both result tasks succeed) while the producer is still running.
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    // The job must NOT be finished yet, and the producer must still be running (not cancelled).
+    assert(results.isEmpty, "consumer completion must be deferred until the producer finishes")
+    assert(scheduler.runningStages.exists(_.rdd eq producerRdd),
+      "the still-running producer must not be cancelled by the early-finishing consumer")
+    assert(cancelledStages.isEmpty)
+
+    // Now the producer finishes -> the deferred consumer completions replay -> the job completes.
+    completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+    assert(results === Map(0 -> 42, 1 -> 43),
+      "deferred consumer completions should replay once the producer finishes")
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: producer-then-consumer ordering completes normally (no deferral " +
+      "needed)") {
+    // Sanity: when the producer finishes before the consumer's tasks complete, there is nothing to
+    // defer and the job completes as usual.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerStageId = taskSets.head.stageId
+    val consumerTaskSet = taskSets(1)
+
+    completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: deferred consumer completions are dropped when the producer fails") {
+    // If a producer fails while a co-scheduled consumer's completions are buffered, those buffered
+    // successes must be DROPPED (not applied): the group is torn down / the job fails, and applying
+    // a partial consumer success would be incorrect (S6).
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    val producerTaskSet = taskSets.head
+    val consumerTaskSet = taskSets(1)
+
+    // Consumer finishes early -> its completions are buffered (deferred).
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while the producer runs")
+
+    // The producer now FAILS its whole task set. The job fails; the buffered consumer successes
+    // must NOT have been applied as results.
+    failed(producerTaskSet, "producer blew up")
+    assert(failure.get() != null, "job should fail when the producer fails")
+    assert(results.isEmpty,
+      "buffered consumer successes must be dropped when the producer fails, not applied")
+    assertDataStructuresEmpty()
+  }
+
+
+  test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once (at replay)") {
+    // A deferred CompletionEvent must have its side effects (task-end listener event, accumulator
+    // update) applied exactly once -- at replay -- not once when buffered and again when replayed.
+    // The producer (2 tasks) and consumer (2 tasks) yield exactly 4 TaskEnd events total; a
+    // buffer+replay double-post would inflate that count.
+    val taskEndCount = new java.util.concurrent.atomic.AtomicInteger(0)
+    val countingListener = new SparkListener {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = taskEndCount.incrementAndGet()
+    }
+    sc.addSparkListener(countingListener)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      submit(consumerRdd, Array(0, 1))
+      val producerStageId = taskSets.head.stageId
+      val consumerTaskSet = taskSets(1)
+
+      // Consumer finishes first -> its two completions are buffered (deferred, no TaskEnd yet).
+      complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+      // Producer finishes -> the two deferred consumer completions replay.
+      completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+      assert(results === Map(0 -> 42, 1 -> 43))
+      sc.listenerBus.waitUntilEmpty(10000)
+
+      // Exactly 4 TaskEnd events (2 producer + 2 consumer). A double-post from buffer+replay would
+      // make it 6 (the 2 consumer tasks counted twice).
+      assert(taskEndCount.get() === 4,
+        s"expected 4 TaskEnd events (no buffer+replay duplication), got ${taskEndCount.get()}")
+      assertDataStructuresEmpty()
+    } finally {
+      sc.removeSparkListener(countingListener)
+    }
+  }
+
+  test("pipelined shuffle: releasing a deferral is gated on the producer being genuinely done") {
+    // Regression for the "producer finished but not available -> resubmitted" hazard: a
+    // ShuffleMapStage producer that reaches markStageAsFinished with no error but is NOT available
+    // (some output missing, so it will be resubmitted) must NOT release/replay its deferred
+    // consumers -- doing so would apply the consumer's results against soon-to-be-recomputed
+    // output.
+    // This drives BOTH branches of the gate: (1) the RETAINED branch -- markStageAsFinished on a
+    // not-yet-available pipelined producer must leave the deferral in place; and (2) the RELEASED
+    // branch -- once the producer is genuinely available, the deferral is released and results
+    // applied.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+    val producerStageId = taskSets.head.stageId
+    val consumerTaskSet = taskSets(1)
+
+    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
+    // Deferred while the producer runs.
+    assert(scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd))
+    assert(results.isEmpty)
+
+    val producerStage =
+      scheduler.stageIdToStage(producerStageId).asInstanceOf[ShuffleMapStage]
+
+    // (1) RETAINED branch: the producer has completed NO partitions yet, so it is not available.
+    // markStageAsFinished with no error and willRetry=false hits the producerAboutToResubmit guard
+    // (ShuffleMapStage && !producerFailed && !isAvailable) and must NOT release the consumer.
+    assert(!producerStage.isAvailable, "precondition: producer not yet available")
+    scheduler.markStageAsFinished(producerStage, errorMessage = None, willRetry = false)
+    assert(scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd),
+      "a not-yet-available pipelined producer must NOT release its deferred consumers (it is " +
+        "about to resubmit; releasing would apply results against soon-to-be-recomputed output)")
+    assert(results.isEmpty,
+      "consumer results must not be applied while the producer is not available")
+
+    // (2) RELEASED branch: producer completes for real and IS available -> deferral released,
+    // consumer results applied. (Re-add it to runningStages since (1) removed it, so the normal
+    // completion path proceeds as in production.)
+    scheduler.runningStages += producerStage
+    completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
+    assert(producerStage.isAvailable)
+    assert(!scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd),
+      "deferral released once the producer is genuinely done (available)")
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
 }
 
 class DAGSchedulerAbortStageOffSuite extends DAGSchedulerSuite {

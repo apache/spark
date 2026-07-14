@@ -169,6 +169,24 @@ private[spark] class DAGScheduler(
   // Stages that must be resubmitted due to fetch failures
   private[scheduler] val failedStages = new HashSet[Stage]
 
+  /**
+   * Deferred completion for pipelined groups. When a stage is co-scheduled with a pipelined
+   * producer that is still running (a "pipelined consumer"), its successful task-completion events
+   * must not be processed yet: doing so could finish the consumer's job and cancel the
+   * still-running producer, or make the consumer's output observable before the producer's (spec
+   * S5, group-observable completion). We buffer such events here and replay them once every
+   * pipelined producer the consumer was waiting on has finished.
+   *
+   * Keyed by the consumer stage. `pendingProducers` is the set of its pipelined producer stages not
+   * yet finished; `bufferedEvents` are its Success CompletionEvents held until then. Entries exist
+   * only for stages that were co-scheduled with a not-yet-finished pipelined producer, so this is
+   * empty for any job without a pipelined dependency.
+   */
+  private[scheduler] case class DeferredCompletion(
+      pendingProducers: HashSet[Stage] = new HashSet[Stage],
+      bufferedEvents: ListBuffer[CompletionEvent] = new ListBuffer[CompletionEvent])
+  private[scheduler] val pipelinedConsumerDeferrals = new HashMap[Stage, DeferredCompletion]
+
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
   // Track all the jobs submitted by the same query execution, will clean up after
@@ -1062,6 +1080,11 @@ private[spark] class DAGScheduler(
                   logDebug("Removing stage %d from failed set.".format(stageId))
                   failedStages -= stage
                 }
+                // Drop any pipelined-completion deferral keyed on this stage (as consumer), and
+                // remove it from other consumers' pending-producer sets (as producer), so no
+                // deferral outlives its job (e.g. on job abort before the producers finished).
+                pipelinedConsumerDeferrals -= stage
+                pipelinedConsumerDeferrals.values.foreach(_.pendingProducers -= stage)
               }
               // data structures based on StageId
               stageIdToStage -= stageId
@@ -1921,6 +1944,11 @@ private[spark] class DAGScheduler(
                 case None =>
                   logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
                     log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
+                  // Record that this stage is co-scheduled with still-running pipelined producers,
+                  // so its successful completions are deferred until those producers finish (S5).
+                  val deferral =
+                    pipelinedConsumerDeferrals.getOrElseUpdate(stage, DeferredCompletion())
+                  deferral.pendingProducers ++= pipelinedMissing
                   submitMissingTasks(stage, jobId.get)
                   // This stage is now running; if it is itself the pipelined producer of a waiting
                   // consumer, co-schedule that consumer too.
@@ -2718,6 +2746,29 @@ private[spark] class DAGScheduler(
     }
 
     val stage = stageIdToStage(task.stageId)
+
+    // Group-observable completion (S5): if this stage is a pipelined consumer co-scheduled with a
+    // still-running pipelined producer, defer its *successful* completion in full until the
+    // producer(s) finish. Buffer the whole CompletionEvent and return before ANY of its side
+    // effects run (accumulator update, task-end listener event, stage/job completion) -- otherwise
+    // a consumer finishing ahead of its producer would advance job completion and cancel the
+    // still-running producer, or expose its output early. Deferring the entire event (not just the
+    // completion bookkeeping) is the coarse model, and crucially it makes the side effects run
+    // exactly ONCE, at replay: markStageAsFinished re-posts the buffered event once the last
+    // producer completes (or drops it if a producer fails, S6), and it then re-enters here and runs
+    // the side effects normally. This deferral check must therefore precede updateAccumulators and
+    // postTaskEnd. Inert for jobs with no pipelined dependency (the map is empty).
+    if (event.reason == Success) {
+      pipelinedConsumerDeferrals.get(stage) match {
+        case Some(deferral) if deferral.pendingProducers.nonEmpty =>
+          logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
+            log"pipelined consumer ${MDC(STAGE, stage)} until its producer(s) " +
+            log"${MDC(MISSING_PARENT_STAGES, deferral.pendingProducers.toSeq)} finish")
+          deferral.bufferedEvents += event
+          return
+        case _ =>
+      }
+    }
 
     // Make sure the task's accumulators are updated before any other processing happens, so that
     // we can post a task end event before any jobs or stages are updated. The accumulators are
@@ -3744,8 +3795,12 @@ private[spark] class DAGScheduler(
 
   /**
    * Marks a stage as finished and removes it from the list of running stages.
+   *
+   * `private[scheduler]` (not `private`) so tests can drive the pipelined-consumer release/retain
+   * decision below directly, including the retained branch (a not-yet-available pipelined producer
+   * about to resubmit), which is otherwise brittle to reach through the mock backend.
    */
-  private def markStageAsFinished(
+  private[scheduler] def markStageAsFinished(
       stage: Stage,
       errorMessage: Option[String] = None,
       willRetry: Boolean = false): Unit = {
@@ -3774,6 +3829,67 @@ private[spark] class DAGScheduler(
     }
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
     runningStages -= stage
+
+    // Release any pipelined consumers whose completion was deferred while this stage (a pipelined
+    // producer) was running. Only act when the producer's outcome is final:
+    //  - willRetry: the stage is being retried, not finished -- leave consumers deferred.
+    //  - a ShuffleMapStage that finished "successfully" (no errorMessage) but is NOT yet available
+    //    (e.g. a bogus-epoch task left an output missing) is about to be resubmitted by
+    //    processShuffleMapStageCompletion -- it is not truly done, so do NOT replay its consumers
+    //    against soon-to-be-recomputed output; the release happens when its reattempt completes and
+    //    it becomes available.
+    // Otherwise: producerFailed = the stage failed (errorMessage set) -> drop the consumers'
+    // buffered successes; producer succeeded -> replay them.
+    if (!willRetry) {
+      val producerFailed = errorMessage.isDefined
+      val producerAboutToResubmit = stage match {
+        case m: ShuffleMapStage => !producerFailed && !m.isAvailable
+        case _ => false
+      }
+      if (!producerAboutToResubmit) {
+        releaseDeferredPipelinedConsumers(stage, producerFailed = producerFailed)
+      }
+    }
+  }
+
+  /**
+   * Called when a stage finishes. If `finishedStage` is a pipelined producer that some co-scheduled
+   * consumer was deferred on, remove it from that consumer's pending-producer set. When a consumer
+   * has no pending producers left, either replay its buffered completion events (producer succeeded)
+   * or drop them (a producer failed -- the group will be torn down and rerun, so the consumer's
+   * buffered successes must not be applied; S6). Inert unless `finishedStage` is a tracked producer.
+   */
+  private def releaseDeferredPipelinedConsumers(
+      finishedStage: Stage, producerFailed: Boolean): Unit = {
+    if (pipelinedConsumerDeferrals.isEmpty) {
+      return
+    }
+    // Consumers waiting on this producer.
+    val released = pipelinedConsumerDeferrals.filter {
+      case (_, d) => d.pendingProducers.contains(finishedStage)
+    }.keys.toArray
+    for (consumer <- released) {
+      val deferral = pipelinedConsumerDeferrals(consumer)
+      deferral.pendingProducers -= finishedStage
+      if (deferral.pendingProducers.isEmpty) {
+        pipelinedConsumerDeferrals -= consumer
+        val events = deferral.bufferedEvents.toList
+        if (producerFailed) {
+          logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
+            log"pipelined consumer ${MDC(STAGE, consumer)} because its producer " +
+            log"${MDC(STAGE, finishedStage)} failed; the group will be rerun")
+          // The buffered tasks genuinely succeeded, so still emit their TaskEnd events -- otherwise
+          // listeners that track active tasks (e.g. AppStatusListener) would believe these tasks
+          // are still running. We deliberately do NOT run the stage/job completion bookkeeping:
+          // the group failed and will be rerun, so the consumer's results must not be applied.
+          events.foreach(postTaskEnd)
+        } else {
+          logInfo(log"Replaying ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
+            log"pipelined consumer ${MDC(STAGE, consumer)} now that its producers have finished")
+          events.foreach(eventProcessLoop.post)
+        }
+      }
+    }
   }
 
   /**
