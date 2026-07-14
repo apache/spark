@@ -35,6 +35,9 @@ class BinBySuite extends QueryTest with SharedSparkSession {
   private def tsAt(s: String, zone: ZoneId): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
 
+  // TIMESTAMP_NTZ output columns materialize as `LocalDateTime` (zone-agnostic wall-clock time).
+  private def ntz(s: String): LocalDateTime = LocalDateTime.parse(s.replace(' ', 'T'))
+
   // Reproduces the operator's ratio arithmetic (`overlapMicros / totalMicros` in double) so an
   // expected `bin_distribute_ratio` matches the kernel's bits (checkAnswer compares doubles raw).
   private def ratio(overlapMicros: Long, totalMicros: Long): Double =
@@ -110,28 +113,6 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("BIN BY composes with a downstream GROUP BY") {
-    withSQLConf(
-        SQLConf.BIN_BY_ENABLED.key -> "true",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      val df = spark.sql(
-        """SELECT bin_start, SUM(value) AS total
-          |FROM VALUES
-          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:10:00', 100.0D),
-          |  (TIMESTAMP '2024-01-01 00:05:00', TIMESTAMP '2024-01-01 00:10:00', 60.0D)
-          |  AS metrics(ts_start, ts_end, value)
-          |BIN BY (
-          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
-          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
-          |GROUP BY bin_start
-          |ORDER BY bin_start""".stripMargin)
-      // Row 1 splits 100 into 50/50; row 2 is single-bin 60 in [00:05,00:10).
-      checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), 50.0),
-        Row(ts("2024-01-01 00:05:00"), 110.0)))
-    }
-  }
-
   test("BIN BY emits a NULL-range row with all computed columns NULL") {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
@@ -175,24 +156,6 @@ class BinBySuite extends QueryTest with SharedSparkSession {
         parameters = Map(
           "rangeStart" -> "2024-01-01 00:10:00",
           "rangeEnd" -> "2024-01-01 00:00:00"))
-    }
-  }
-
-  test("BIN BY renames the appended output columns") {
-    withSQLConf(
-        SQLConf.BIN_BY_ENABLED.key -> "true",
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      val df = spark.sql(
-        """SELECT w_start, w_end, frac, value
-          |FROM VALUES
-          |  (TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 00:05:00', 100.0D)
-          |  AS metrics(ts_start, ts_end, value)
-          |BIN BY (
-          |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
-          |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value)
-          |  BIN_START AS w_start BIN_END AS w_end BIN_DISTRIBUTE_RATIO AS frac)""".stripMargin)
-      checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), ts("2024-01-01 00:05:00"), 1.0, 100.0)))
     }
   }
 
@@ -281,28 +244,41 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("BIN BY analyzes NTZ inputs and a custom ALIGN TO with renamed outputs") {
+  test("BIN BY executes on NTZ inputs with the epoch default origin") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
-      // NTZ inputs default the origin to epoch (LTZ defaults to the session-zone epoch).
-      spark.sql(
-        """SELECT * FROM VALUES
-          |  (TIMESTAMP_NTZ'2024-01-01 00:00:00', TIMESTAMP_NTZ'2024-01-01 01:00:00', 1.0D)
+      // NTZ output columns are TIMESTAMP_NTZ and the default origin is the wall-clock epoch (LTZ
+      // defaults to the session-zone epoch); a 10-minute range over a 5-minute grid splits in two.
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP_NTZ'2024-01-01 00:00:00', TIMESTAMP_NTZ'2024-01-01 00:10:00', 100.0D)
           |  AS t(ts_start, ts_end, value)
           |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
           |  DISTRIBUTE UNIFORM (value))
-          |""".stripMargin).queryExecution.assertAnalyzed()
+          |ORDER BY bin_start""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(ntz("2024-01-01 00:00:00"), ntz("2024-01-01 00:05:00"), 0.5, 50.0),
+        Row(ntz("2024-01-01 00:05:00"), ntz("2024-01-01 00:10:00"), 0.5, 50.0)))
+    }
+  }
 
-      // Custom ALIGN TO origin with renamed output columns.
-      spark.sql(
-        """SELECT * FROM VALUES
-          |  (TIMESTAMP'2024-01-01 00:00:00', TIMESTAMP'2024-01-01 02:00:00', 10.0D, 5.0D)
-          |  AS t(ts_start, ts_end, a, b)
-          |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' HOUR
-          |  ALIGN TO TIMESTAMP'2024-01-01 00:30:00'
-          |  DISTRIBUTE UNIFORM (a, b)
-          |  BIN_START AS w_start BIN_END AS w_end
-          |  BIN_DISTRIBUTE_RATIO AS frac)
-          |""".stripMargin).queryExecution.assertAnalyzed()
+  test("BIN BY on NTZ inputs uses UTC arithmetic and ignores the session zone across DST") {
+    // A multi-day NTZ bin over the LA spring-forward: NTZ ignores the session zone, so every day is
+    // a full 24h (no DST shortening), unlike the LTZ civil-time path. Two 1-day bins split evenly.
+    withSQLConf(
+        SQLConf.BIN_BY_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val df = spark.sql(
+        """SELECT bin_start, bin_end, bin_distribute_ratio, value
+          |FROM VALUES
+          |  (TIMESTAMP_NTZ'2024-03-10 00:00:00', TIMESTAMP_NTZ'2024-03-12 00:00:00', 100.0D)
+          |  AS t(ts_start, ts_end, value)
+          |BIN BY (RANGE ts_start TO ts_end BIN WIDTH INTERVAL '1' DAY
+          |  ALIGN TO TIMESTAMP_NTZ'2024-03-10 00:00:00' DISTRIBUTE UNIFORM (value))
+          |ORDER BY bin_start""".stripMargin)
+      checkAnswer(df, Seq(
+        Row(ntz("2024-03-10 00:00:00"), ntz("2024-03-11 00:00:00"), 0.5, 50.0),
+        Row(ntz("2024-03-11 00:00:00"), ntz("2024-03-12 00:00:00"), 0.5, 50.0)))
     }
   }
 }

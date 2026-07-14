@@ -30,24 +30,17 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * Physical node for the `BIN BY` relation operator. For each input row it emits one output row per
- * bin overlapping `[rangeStart, rangeEnd)`.
+ * bin overlapping `[rangeStart, rangeEnd)`, scaling the DISTRIBUTE UNIFORM columns by the overlap
+ * fraction and appending `bin_start`, `bin_end`, `bin_distribute_ratio`.
  *
- * Per output sub-row: the DISTRIBUTE UNIFORM columns are scaled by the overlap fraction (the bin's
- * half-open intersection with `[rangeStart, rangeEnd)`); the other forwarded columns, including the
- * range columns, are replicated unchanged; `bin_start`, `bin_end`, `bin_distribute_ratio` are
- * appended. Bin boundaries reuse [[DateTimeUtils.timeBucketDTInterval]] /
- * [[DateTimeUtils.timestampAddDayTime]], so they match `time_bucket`: sub-day widths use UTC
- * microsecond arithmetic, multi-day widths use civil-time arithmetic in the session zone (UTC for
- * TIMESTAMP_NTZ).
+ * Bin boundaries reuse [[DateTimeUtils.timeBucketDTInterval]] /
+ * [[DateTimeUtils.timestampAddDayTime]], matching `time_bucket`: sub-day widths use UTC microsecond
+ * arithmetic, multi-day widths use civil-time arithmetic in the session zone (UTC for
+ * TIMESTAMP_NTZ). DISTRIBUTE UNIFORM columns are FLOAT or DOUBLE only (enforced by `ResolveBinBy`)
+ * and scale by plain IEEE multiplication.
  *
- * DISTRIBUTE UNIFORM columns are FLOAT or DOUBLE only (enforced by `ResolveBinBy`); scaling is IEEE
- * multiplication by the ratio, no rounding. Per-row edge cases: a NULL in either range column emits
- * one row with all computed columns NULL (scaled DISTRIBUTE values and all three appended columns);
- * a zero-length range emits one row with ratio 1.0; an inverted range raises
- * `BIN_BY_INVALID_RANGE`.
- *
- * Output shape mirrors the logical `BinBy`: the child columns with each DISTRIBUTE slot swapped to
- * its scaled produced attribute, then the three appended columns.
+ * Output mirrors the logical `BinBy`: child columns with each DISTRIBUTE slot swapped to its scaled
+ * produced attribute, then the three appended columns.
  */
 case class BinByExec(
     binWidthMicros: Long,
@@ -67,7 +60,6 @@ case class BinByExec(
   private val distributeReplacements: AttributeMap[Attribute] =
     AttributeMap(distributeColumns.zip(scaledDistributeColumns))
 
-  // Appended columns are [bin_start, bin_end, bin_distribute_ratio]; the ratio is the last one.
   private val numAppended: Int = appendedAttributes.length
   assert(numAppended == 3,
     s"BinBy appends exactly 3 columns (bin_start, bin_end, bin_distribute_ratio), got $numAppended")
@@ -91,14 +83,9 @@ case class BinByExec(
     val reIdx = bindOrdinal(rangeEnd)
     val childLen = child.output.length
 
-    // Main projection: runs over JoinedRow(childRow, appendedRow) where appendedRow holds
-    // [bin_start, bin_end, bin_distribute_ratio]. DISTRIBUTE columns are scaled;
-    // all other forwarded columns are passed through by reference.
+    // Bound over JoinedRow(childRow, appendedRow); reused for every sub-row.
     val projExprs = buildOutputExpressions(childLen)
-
-    // Null-range projection: runs directly over the child row (no appended row needed).
-    // Non-DISTRIBUTE forwarded columns pass through; DISTRIBUTE columns and the three appended
-    // columns are literal NULL.
+    // Bound over the child row alone, for the null-range path.
     val nullProjExprs = buildNullRangeExpressions()
 
     child.execute().mapPartitionsInternal { rows =>
@@ -172,14 +159,11 @@ case class BinByExec(
     // bin_distribute_ratio is the last appended column.
     val ratioRef = BoundReference(childLen + numAppended - 1, DoubleType, nullable = false)
 
-    val forwarded = child.output.map { attr =>
-      val ordinal = bindOrdinal(attr)
+    val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
       val ref = BoundReference(ordinal, attr.dataType, attr.nullable)
       if (distSet.contains(ordinal)) {
-        // Multiply in double then narrow back to the column's type. A FLOAT column would
-        // otherwise form a mismatched Multiply(FloatType, DoubleType): these expressions are
-        // bound at execution time, so the analyzer's operand coercion never runs. For DOUBLE the
-        // inner cast is a no-op; for FLOAT this is exactly `(value * ratio).toFloat`.
+        // Cast to double, multiply, narrow back. These expressions bind at execution time, so the
+        // analyzer's operand coercion never runs; a bare Multiply(FloatType, DoubleType) fails.
         Cast(Multiply(Cast(ref, DoubleType), ratioRef), attr.dataType)
       } else {
         ref
@@ -200,10 +184,12 @@ case class BinByExec(
    */
   private def buildNullRangeExpressions(): Seq[Expression] = {
     val distSet = distributeColumns.map(bindOrdinal).toSet
-    val forwarded = child.output.map { attr =>
-      val ordinal = bindOrdinal(attr)
-      if (distSet.contains(ordinal)) Literal.create(null, attr.dataType)
-      else BoundReference(ordinal, attr.dataType, attr.nullable)
+    val forwarded = child.output.zipWithIndex.map { case (attr, ordinal) =>
+      if (distSet.contains(ordinal)) {
+        Literal.create(null, attr.dataType)
+      } else {
+        BoundReference(ordinal, attr.dataType, attr.nullable)
+      }
     }
     val nullAppended = appendedAttributes.map { attr =>
       Literal.create(null, attr.dataType)
