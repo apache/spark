@@ -2377,6 +2377,12 @@
     ],
     "sqlState" : "KD009"
   },
+  "EMPTY_REQUIRED_DATA_ATTRIBUTES" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but returned an empty array from `requiredDataAttributes()`. Connectors that opt into column-level updates must declare at least one required data attribute."
+    ],
+    "sqlState" : "42000"
+  },
   "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE" : {
     "message" : [
       "The <format> datasource does not support writing empty or nested empty schemas. Please make sure the data schema has at least one or more column(s)."
@@ -6533,6 +6539,12 @@
       "Cannot invoke routine <routineName> because the parameter named <parameterName> is required, but the routine call did not supply a value. Please update the routine call to supply an argument value (either positionally at index <index> or by name) and retry the query again."
     ],
     "sqlState" : "4274K"
+  },
+  "REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS" : {
+    "message" : [
+      "Connector <connector> mixes in `SupportsColumnUpdates` but its `requiredDataAttributes()` does not cover every column being updated. Missing columns: <missingColumns>. Connectors must include every column reported by `RowLevelOperationInfo.updatedColumns()` in `requiredDataAttributes()`."
+    ],
+    "sqlState" : "42000"
   },
   "REQUIRES_EXPLICIT_NAME_IN_WATERMARK_CLAUSE" : {
     "message" : [
