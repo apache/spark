@@ -62,6 +62,7 @@ RUN apt-get update && apt-get install -y \
 ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.11 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 COPY --from=root pyproject.toml ./pyproject.toml
 
 RUN python3.11 -m pip install -U pip
