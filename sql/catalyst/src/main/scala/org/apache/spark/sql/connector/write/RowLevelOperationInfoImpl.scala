@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.connector.write
 
+import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] case class RowLevelOperationInfoImpl(
     command: Command,
-    options: CaseInsensitiveStringMap) extends RowLevelOperationInfo
+    options: CaseInsensitiveStringMap,
+    private val updatedCols: Seq[NamedReference])
+    extends RowLevelOperationInfo {
+
+  override def updatedColumns(): Array[NamedReference] = updatedCols.toArray
+}
