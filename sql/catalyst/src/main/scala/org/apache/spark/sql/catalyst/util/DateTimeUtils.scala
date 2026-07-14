@@ -652,7 +652,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
    * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
    */
-  def truncTimestampNanos(value: TimestampNanosVal, level: Int, zoneId: ZoneId): TimestampNanosVal = {
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
     val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
     TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
   }
