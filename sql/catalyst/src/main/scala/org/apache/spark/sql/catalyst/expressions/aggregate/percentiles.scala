@@ -224,7 +224,8 @@ abstract class PercentileBase
       toDoubleValue(lowerKey)
     } else {
       // Linear interpolation to get the exact percentile
-      toDoubleValue(lowerKey) + (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
   }
 
