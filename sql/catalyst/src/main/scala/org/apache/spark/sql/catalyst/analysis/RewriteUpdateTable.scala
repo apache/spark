@@ -91,7 +91,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     }
 
     // build a plan with updated and copied over records
-    val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
+    val query = if (supportsColumnUpdate) {
+      buildNarrowReplaceDataUpdateProjection(readRelation, assignments, cond)
+    } else {
+      buildReplaceDataUpdateProjection(readRelation, assignments, cond)
+    }
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
@@ -131,7 +135,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val updatedRowsPlan = buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
+    val updatedRowsPlan = if (supportsColumnUpdate) {
+      buildNarrowReplaceDataUpdateProjection(matchedRowsPlan, assignments)
+    } else {
+      buildReplaceDataUpdateProjection(matchedRowsPlan, assignments)
+    }
 
     // build a plan that contains unmatched rows in matched groups that must be copied over
     val remainingRowFilter = Not(EqualNullSafe(cond, Literal.TrueLiteral))
@@ -149,10 +157,44 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     ReplaceData(writeRelation, cond, query, relation, projections, groupFilterCond)
   }
 
-  /**
-   * Builds the update projection for ReplaceData plans. Assumes assignments are already aligned.
-   */
+  // this method assumes the assignments have been already aligned before
   private def buildReplaceDataUpdateProjection(
+      plan: LogicalPlan,
+      assignments: Seq[Assignment],
+      cond: Expression = TrueLiteral): LogicalPlan = {
+
+    // the plan output may include metadata columns at the end
+    // that's why the number of assignments may not match the number of plan output columns
+    val assignedValues = assignments.map(_.value)
+    val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
+      if (index < assignments.size) {
+        val assignedExpr = assignedValues(index)
+        val updatedValue = If(cond, assignedExpr, attr)
+        Alias(updatedValue, attr.name)()
+      } else {
+        assert(MetadataAttribute.isValid(attr.metadata))
+        if (MetadataAttribute.isPreservedOnUpdate(attr)) {
+          attr
+        } else {
+          val updatedValue = If(cond, Literal(null, attr.dataType), attr)
+          Alias(updatedValue, attr.name)(explicitMetadata = Some(attr.metadata))
+        }
+      }
+    }
+
+    val writeOp = If(cond, Literal(UPDATE_OPERATION), Literal(COPY_OPERATION))
+    val operationCol = Alias(writeOp, OPERATION_COLUMN)()
+    Project(operationCol +: updatedValues, plan)
+  }
+
+  /**
+   * Variant of `buildReplaceDataUpdateProjection` for the `SupportsColumnUpdates` narrow-scan
+   * path.
+   * For narrow attributes, looks up assignments by `ExprId` via `AttributeMap`and passes through
+   * carry-along data columns (partition refs, cond refs, non-identity RHS refs) that landed in the
+   * narrow scan but weren't user-assigned.
+   */
+  private def buildNarrowReplaceDataUpdateProjection(
       plan: LogicalPlan,
       assignments: Seq[Assignment],
       cond: Expression = TrueLiteral): LogicalPlan = {
@@ -174,8 +216,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
           case Some(assignedExpr) =>
             Alias(If(cond, assignedExpr, attr), attr.name)()
           case None =>
-            // Column present in the narrow read relation but not assigned -- pass through so
-            // COPY-tagged rows keep their current value.
+            // Column present in the narrow read relation but not assigned (partition ref,
+            // condition ref, or RHS ref carried in by `computeNarrowReadAttrs`) -- pass
+            // through so COPY-tagged rows keep their current value.
             attr
         }
       }
