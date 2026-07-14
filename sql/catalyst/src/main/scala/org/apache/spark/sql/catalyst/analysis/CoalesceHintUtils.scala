@@ -25,7 +25,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Helper functions used to build the logical plans for the "COALESCE", "REPARTITION",
- * "REPARTITION_BY_RANGE" and "REBALANCE" hints.
+ * "REPARTITION_BY_RANGE", "REBALANCE" and "REBALANCE_BY_SIZE" hints.
  */
 object CoalesceHintUtils {
 

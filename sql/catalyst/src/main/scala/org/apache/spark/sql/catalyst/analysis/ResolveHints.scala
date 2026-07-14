@@ -182,7 +182,8 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts names "COALESCE", "REPARTITION", "REPARTITION_BY_RANGE" and "REBALANCE".
+   * COALESCE Hint accepts names "COALESCE", "REPARTITION", "REPARTITION_BY_RANGE", "REBALANCE"
+   * and "REBALANCE_BY_SIZE".
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     import CoalesceHintUtils._
