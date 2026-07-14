@@ -151,20 +151,28 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
+    val conf = SQLConf.get
     sqlType match {
       case _ if typeName.contains("datetimeoffset") =>
-        if (SQLConf.get.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
+        if (conf.legacyMsSqlServerDatetimeOffsetMappingEnabled) {
           Some(StringType)
         } else {
           Some(TimestampType)
         }
       case java.sql.Types.SMALLINT | java.sql.Types.TINYINT
-          if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+          if !conf.legacyMsSqlServerNumericMappingEnabled =>
         // Data range of TINYINT is 0-255 so it needs to be stored in ShortType.
         // Reference doc: https://learn.microsoft.com/en-us/sql/t-sql/data-types
         Some(ShortType)
-      case java.sql.Types.REAL if !SQLConf.get.legacyMsSqlServerNumericMappingEnabled =>
+      case java.sql.Types.REAL if !conf.legacyMsSqlServerNumericMappingEnabled =>
         Some(FloatType)
+      case java.sql.Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
+        // SQL Server TIME(n) supports precision 0-7 (100ns). The Microsoft JDBC driver
+        // correctly reports fractional-second precision via getScale() (DECIMAL_DIGITS).
+        val md0 = md.build()
+        val scale = if (md0.contains("scale")) md0.getLong("scale").toInt else 7
+        val precision = math.min(scale, TimeType.MAX_PRECISION)
+        Some(TimeType(precision))
       case GEOMETRY | GEOGRAPHY => Some(BinaryType)
       case _ => None
     }
@@ -173,6 +181,14 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case TimestampType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case TimestampNTZType => Some(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case t: TimeType =>
+      // SQL Server supports TIME(n) for n in [0,7]. Use declared precision when valid;
+      // fall back to TIME(7) (SQL Server's max/default) for out-of-range precisions
+      // (e.g. nanosecond TimeType(9)), which truncates to 100ns rather than losing
+      // all fractional seconds.
+      val p = t.precision
+      if (p >= 0 && p <= 7) Some(JdbcType(s"TIME($p)", java.sql.Types.TIME))
+      else Some(JdbcType("TIME(7)", java.sql.Types.TIME))
     case StringType => Some(JdbcType("NVARCHAR(MAX)", java.sql.Types.NVARCHAR))
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))

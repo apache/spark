@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Properties
 
 import org.apache.spark.SparkSQLException
@@ -27,7 +27,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DecimalType}
+import org.apache.spark.sql.types.{BinaryType, DecimalType, TimeType}
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -261,6 +261,87 @@ class MsSqlServerIntegrationSuite extends SharedJDBCIntegrationSuite {
           }
         }
       }
+    }
+  }
+
+
+  test("SPARK-57555: SQL Server TIME type read as TimeType") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      val timeCol = df.schema("f")
+      // SQL Server bare TIME defaults to TIME(7) - 100ns precision
+      assert(timeCol.dataType === TimeType(7),
+        s"Expected TimeType(7) for bare TIME but got ${timeCol.dataType}")
+      checkAnswer(df.select("f"), Row(LocalTime.of(13, 31, 24)))
+    }
+  }
+
+  test("SPARK-57555: SQL Server TIME type write round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(
+        Row(LocalTime.of(8, 30, 0), LocalTime.of(17, 22, 31, 123456700))
+      )
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t", TimeType(0))
+        .add("t_sub", TimeType(7))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite")
+        .option("createTableColumnTypes", "t TIME(0), t_sub TIME(7)")
+        .jdbc(jdbcUrl, "time_write_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_write_test", new Properties)
+      assert(result.schema("t").dataType === TimeType(0))
+      assert(result.schema("t_sub").dataType === TimeType(7))
+      checkAnswer(result, Row(
+        LocalTime.of(8, 30, 0),
+        LocalTime.of(17, 22, 31, 123456700)))
+    }
+  }
+
+  test("SPARK-57555: SQL Server TIME precision preservation round-trip") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(Row(LocalTime.of(10, 15, 30, 123000000)))
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t", TimeType(3))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite")
+        .option("createTableColumnTypes", "t TIME(3)")
+        .jdbc(jdbcUrl, "time_precision_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_precision_test", new Properties)
+      assert(result.schema("t").dataType === TimeType(3),
+        "Precision should be preserved on round-trip")
+      checkAnswer(result, Row(LocalTime.of(10, 15, 30, 123000000)))
+    }
+  }
+
+  test("SPARK-57555: SQL Server TIME nanosecond write truncates to 100ns") {
+    // SQL Server TIME max precision is 7 (100ns). TimeType(9) writes as TIME(7),
+    // and the sub-100ns portion is truncated on read-back.
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val data = Seq(Row(LocalTime.of(12, 0, 0, 123456789)))
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("t_nanos", TimeType(9))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      df.write.mode("overwrite")
+        .option("createTableColumnTypes", "t_nanos TIME(7)")
+        .jdbc(jdbcUrl, "time_nanos_test", new Properties)
+
+      val result = spark.read.jdbc(jdbcUrl, "time_nanos_test", new Properties)
+      assert(result.schema("t_nanos").dataType === TimeType(7))
+      // 123456789 nanos truncated to 100ns precision: 123456700 nanos
+      checkAnswer(result, Row(LocalTime.of(12, 0, 0, 123456700)))
+    }
+  }
+
+  test("SPARK-57555: SQL Server TIME legacy escape hatch") {
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      val timeCol = df.schema("f")
+      assert(!timeCol.dataType.isInstanceOf[TimeType],
+        "TIME should not map to TimeType when legacy mode is enabled")
     }
   }
 
