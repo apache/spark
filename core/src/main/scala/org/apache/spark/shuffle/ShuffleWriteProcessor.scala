@@ -49,7 +49,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
       context: TaskContext): MapStatus = {
     var writer: ShuffleWriter[Any, Any] = null
     try {
-      val manager = SparkEnv.get.shuffleManager
+      val manager = SparkEnv.get.shuffleManagerFor(dep)
       writer = manager.getWriter[Any, Any](
         dep.shuffleHandle,
         mapId,

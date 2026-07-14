@@ -80,11 +80,73 @@ class SparkEnv (
   // user jars to define custom ShuffleManagers.
   @volatile private var _shuffleManager: ShuffleManager = _
 
+  // The manager for pipelined (incrementally-readable) shuffle dependencies, configured by
+  // spark.shuffle.manager.incremental. Present only when that config is set. It is a peer of
+  // _shuffleManager, not a wrapper around it: a shuffle is routed to one or the other by its
+  // dependency type via `shuffleManagerFor`, so neither is ever installed "behind" the other.
+  @volatile private var _incrementalShuffleManager: Option[ShuffleManager] = None
+
   // Latch to signal when the ShuffleManager has been initialized.
   // Used to allow callers to wait for initialization.
   private val shuffleManagerInitLatch = new CountDownLatch(1)
 
+  /**
+   * The default [[ShuffleManager]] (configured by spark.shuffle.manager), which serves all regular
+   * shuffle dependencies. Use this only when the intent is specifically the default manager -- e.g.
+   * inspecting its concrete type, or resolving a shuffle block by id (a pipelined shuffle is served
+   * out-of-band by the incremental manager and produces no block-manager blocks). To serve a
+   * specific shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type.
+   */
+  def defaultShuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * Retained for binary compatibility; returns the default manager. Prefer `shuffleManagerFor`
+   * (route a shuffle by its dependency) or `defaultShuffleManager` (the default explicitly), so the
+   * routing decision is explicit at the call site.
+   */
+  @deprecated("use shuffleManagerFor(dependency) to route a shuffle by type, or " +
+    "defaultShuffleManager for the default manager explicitly", "4.3.0")
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * The [[ShuffleManager]] that serves the given shuffle, chosen by dependency type: a
+   * [[PipelinedShuffleDependency]] is served by the incremental manager
+   * (spark.shuffle.manager.incremental) when one is configured, every other [[ShuffleDependency]]
+   * by the default manager (spark.shuffle.manager). This is the single routing point for shuffle
+   * I/O; the decision is a pure function of the dependency, so the driver (at `registerShuffle`)
+   * and every executor (at `getWriter` / `getReader`) agree without any shared routing state or
+   * config re-read -- the dependency (a serialized field, deterministic on driver and executors)
+   * is always in hand at these sites, so no shuffleId -> manager tracking is needed.
+   *
+   * When no incremental manager is configured, a pipelined dependency falls back to the default
+   * manager (served as an ordinary materialized shuffle) -- the same behavior as before an
+   * incremental manager is opted into. Whether a job may use a pipelined dependency at all is a
+   * separate, scheduler-level decision (see the fail-fast checks in `DAGScheduler`); this method
+   * only picks the implementation.
+   */
+  def shuffleManagerFor(dependency: ShuffleDependency[_, _, _]): ShuffleManager =
+    dependency match {
+      case _: PipelinedShuffleDependency[_, _, _] =>
+        _incrementalShuffleManager.getOrElse(_shuffleManager)
+      case _ => _shuffleManager
+    }
+
+  /**
+   * Unregisters the shuffle from every configured manager (default and, if present, incremental).
+   * Used by the `RemoveShuffle` cleanup path, which holds only a shuffleId and cannot know which
+   * manager owns it -- and must reach the owning manager on every node, including one that never
+   * performed this shuffle's I/O. Notifying all managers is safe: `unregisterShuffle` for an
+   * unknown id is a no-op. Returns true if any manager reports it removed metadata; false if no
+   * manager is initialized yet (a RemoveShuffle can arrive before the deferred init runs).
+   */
+  private[spark] def unregisterShuffleFromAllManagers(shuffleId: Int): Boolean = {
+    // `_shuffleManager` is null until initializeShuffleManager runs (deferred to allow user jars),
+    // so guard it; a RemoveShuffle received before init is a no-op, as it was before this routing.
+    val defaultResult = _shuffleManager != null && _shuffleManager.unregisterShuffle(shuffleId)
+    // OR the incremental result in without short-circuiting, so both are always notified.
+    val incrementalResult = _incrementalShuffleManager.exists(_.unregisterShuffle(shuffleId))
+    defaultResult || incrementalResult
+  }
 
   /**
    * Wait for the ShuffleManager to be initialized within the specified timeout.
@@ -185,9 +247,10 @@ class SparkEnv (
       udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       _streamingShuffleOutputTracker.foreach(_.stop())
-      if (shuffleManager != null) {
-        shuffleManager.stop()
+      if (_shuffleManager != null) {
+        _shuffleManager.stop()
       }
+      _incrementalShuffleManager.foreach(_.stop())
       broadcastManager.stop()
       blockManager.stop()
       blockManager.master.stop()
@@ -298,7 +361,18 @@ class SparkEnv (
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
     try {
-      _shuffleManager = ShuffleManager.create(conf, SparkContext.isDriver(executorId))
+      val isDriver = SparkContext.isDriver(executorId)
+      // The default manager (spark.shuffle.manager) serves all regular shuffle dependencies.
+      _shuffleManager = ShuffleManager.create(conf, isDriver)
+      // The incremental manager (spark.shuffle.manager.incremental), when configured, serves
+      // pipelined shuffle dependencies. It is a peer of the default manager -- see
+      // `shuffleManagerFor` -- not a wrapper installed as the top-level manager.
+      _incrementalShuffleManager = conf.get(config.SHUFFLE_MANAGER_INCREMENTAL).map { className =>
+        // Resolve short aliases ("sort", "tungsten-sort") the same way the default manager does, so
+        // spark.shuffle.manager.incremental accepts the same values as spark.shuffle.manager.
+        Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
+          ShuffleManager.resolveShortName(className), conf, isDriver)
+      }
     } finally {
       // Signal that the ShuffleManager has been initialized
       shuffleManagerInitLatch.countDown()
@@ -323,9 +397,14 @@ class SparkEnv (
       return
     }
 
+    // The tracker is also needed when a StreamingShuffleManager is configured as the incremental
+    // manager (spark.shuffle.manager.incremental) to serve pipelined shuffle dependencies.
     val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
+    val incrementalManagerName =
+      conf.get(config.SHUFFLE_MANAGER_INCREMENTAL).map(ShuffleManager.resolveShortName)
     if (shuffleManagerName == classOf[StreamingShuffleManager].getName
-        || shuffleManagerName == classOf[MultiShuffleManager].getName) {
+        || shuffleManagerName == classOf[MultiShuffleManager].getName
+        || incrementalManagerName.contains(classOf[StreamingShuffleManager].getName)) {
       val tracker = if (SparkContext.isDriver(executorId)) {
         new StreamingShuffleOutputTrackerMaster(conf)
       } else {

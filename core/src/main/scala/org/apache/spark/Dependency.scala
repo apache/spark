@@ -134,7 +134,10 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   // is enabled
   private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
 
-  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
+  // Route to the manager for this dependency's type (the incremental manager for a
+  // PipelinedShuffleDependency, the default manager otherwise). The handle is minted once here on
+  // the driver, so executors that later read it are served by the same manager.
+  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManagerFor(this).registerShuffle(
     shuffleId, this)
 
   private[spark] def setShuffleMergeAllowed(shuffleMergeAllowed: Boolean): Unit = {
@@ -310,7 +313,17 @@ class PipelinedShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     aggregator,
     mapSideCombine,
     shuffleWriterProcessor,
-    rowBasedChecksums)
+    rowBasedChecksums) {
+
+  // Push-based shuffle merge is incompatible with a pipelined (incrementally-readable) shuffle: it
+  // exposes output only after a post-completion "finalize" step, the opposite of incremental reads,
+  // and would register merge results in the MapOutputTracker for a transient shuffle that must not
+  // outlive its group. ShuffleDependency enables merge by default whenever push-based shuffle is on
+  // cluster-wide; disable it here so a pipelined producer never acquires merger locations. Without
+  // this, ShuffleWriteProcessor.write would reach the push path and dereference the incremental
+  // manager's shuffleBlockResolver, which the streaming manager does not support.
+  setShuffleMergeAllowed(false)
+}
 
 
 /**

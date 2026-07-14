@@ -2091,7 +2091,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // Retry initialization should succeed once ShuffleManager is initialized
     when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
     when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
-    when(mockEnv.shuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.defaultShuffleManager).thenReturn(sortShuffleMgr)
     assert(bm.migratableResolver != null)
   }
 

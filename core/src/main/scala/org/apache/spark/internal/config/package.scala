@@ -1774,6 +1774,19 @@ package object config {
       .stringConf
       .createWithDefault("sort")
 
+  private[spark] val SHUFFLE_MANAGER_INCREMENTAL =
+    ConfigBuilder("spark.shuffle.manager.incremental")
+      .doc("The ShuffleManager implementation used for pipelined (incrementally-readable) " +
+        "shuffle dependencies, whose consumer stage may begin reading output while the producer " +
+        "stage is still running. Regular shuffle dependencies continue to use " +
+        "spark.shuffle.manager. When this is set, both managers coexist in the same JVM and each " +
+        "shuffle is routed by its dependency type, so a cluster can run both regular and " +
+        "pipelined (e.g. real-time mode) queries. When unset, no incremental manager is created " +
+        "and behavior is unchanged.")
+      .version("4.3.0")
+      .stringConf
+      .createOptional
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")

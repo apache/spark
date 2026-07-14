@@ -63,7 +63,12 @@ class BlockManagerMasterEndpoint(
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
-  private lazy val shuffleManager = Option(_shuffleManager).getOrElse(SparkEnv.get.shuffleManager)
+  // The default shuffle manager, used only for block-by-id resolution during
+  // external-shuffle-service cleanup. Pipelined shuffles are served out-of-band (no block-manager
+  // blocks, and not tracked in the MapOutputTracker this loop iterates), so this path only
+  // resolves regular shuffles.
+  private lazy val shuffleManager =
+    Option(_shuffleManager).getOrElse(SparkEnv.get.defaultShuffleManager)
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =

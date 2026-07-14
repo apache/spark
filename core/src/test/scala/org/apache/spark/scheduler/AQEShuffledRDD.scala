@@ -105,7 +105,7 @@ class AQEShuffledRDD[K, V, C](
   override def compute(p: Partition, context: TaskContext): Iterator[(K, C)] = {
     val part = p.asInstanceOf[AQEShuffledRDDPartition]
     val metrics = context.taskMetrics().createTempShuffleReadMetrics()
-    SparkEnv.get.shuffleManager.getReader(
+    SparkEnv.get.shuffleManagerFor(dependency).getReader(
       dependency.shuffleHandle, part.startIndexInParent, part.endIndexInParent, context, metrics)
       .read()
       .asInstanceOf[Iterator[(K, C)]]

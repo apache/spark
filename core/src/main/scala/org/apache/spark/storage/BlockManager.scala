@@ -197,12 +197,16 @@ private[spark] class BlockManager(
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the instance from the SparkEnv.
+  // The default shuffle manager, used here only for block-by-id resolution
+  // (`shuffleBlockResolver`). A pipelined shuffle is served out-of-band by the incremental manager
+  // and produces no block-manager-addressed blocks, so these paths only ever resolve regular
+  // shuffles and correctly use the default manager (SparkEnv.defaultShuffleManager).
   private lazy val shuffleManager = {
     Option(_shuffleManager).getOrElse {
       // Wait for ShuffleManager to be initialized before handling shuffle operations.
       // Exception will be thrown if it is not initialized within the configured timeout.
       waitForShuffleManagerInit()
-      SparkEnv.get.shuffleManager
+      SparkEnv.get.defaultShuffleManager
     }
   }
 

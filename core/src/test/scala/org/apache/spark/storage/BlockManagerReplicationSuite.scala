@@ -106,7 +106,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker, sc.env.shuffleManager,
+        new LiveListenerBus(conf), None, blockManagerInfo, mapOutputTracker,
+        sc.env.defaultShuffleManager,
         isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true)
@@ -310,7 +311,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     master = new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager-2",
       new BlockManagerMasterEndpoint(rpcEnv, true, newConf,
         new LiveListenerBus(newConf), shuffleClient, blockManagerInfo, mapOutputTracker,
-        sc.env.shuffleManager, isDriver = true)),
+        sc.env.defaultShuffleManager, isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat-2",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), newConf, true)
 
