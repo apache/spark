@@ -1164,4 +1164,69 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 4)
   }
 
+  test("nanos filter estimation is safe when min/max collapse to same double" +
+    " (within one ULP)") {
+    // At epoch-nanos ~1.7e18 (2024 timestamps), the double ULP is ~256 ns.
+    // Two nanos bounds separated by less than one ULP collapse to the same double value
+    // when converted via toDouble, yet min != max.  This test locks the guard against future
+    // edits that might cause an AssertionError when the double range is zero.
+    val epochMicros = 1704067200000000L // 2024-01-01T00:00:00Z
+    // min and max differ by only 100 ns (< 256 ns ULP), so they collapse to the same double.
+    val ulpMin = TimestampNanosVal.fromParts(epochMicros, 0.toShort)
+    val ulpMax = TimestampNanosVal.fromParts(epochMicros, 100.toShort)
+    assert(ulpMin != ulpMax, "precondition: min and max must be distinct TimestampNanosVal values")
+
+    val ntzType = TimestampNTZNanosType(9)
+    val minDouble = toDouble(ulpMin, ntzType)
+    val maxDouble = toDouble(ulpMax, ntzType)
+    assert(minDouble == maxDouble,
+      s"precondition: toDouble(min)=$minDouble must equal toDouble(max)=$maxDouble " +
+        "(both within one ULP)")
+
+    val attrUlp = AttributeReference("ctsnanos_ulp", ntzType)()
+    val colStatUlp = ColumnStat(distinctCount = Some(10),
+      min = Some(ulpMin), max = Some(ulpMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val ulpMap = AttributeMap(Seq(attrUlp -> colStatUlp))
+
+    // Partial-overlap filter: value between min and max (logically), but since doubles collapse,
+    // the estimation must not throw and must return a sane result.
+    val filterVal = TimestampNanosVal.fromParts(epochMicros, 50.toShort)
+    val rowCount = 10L
+    val filter = Filter(LessThan(attrUlp, Literal(filterVal, ntzType)),
+      childStatsTestPlan(Seq(attrUlp), rowCount, ulpMap))
+    val estimated = filter.stats
+    assert(estimated.rowCount.isDefined, "estimation must produce a row count")
+    val estRows = estimated.rowCount.get
+    assert(estRows >= 0 && estRows <= rowCount,
+      s"estimated row count $estRows must be between 0 and $rowCount")
+  }
+
+  test("nanos filter estimation with pre-1970 negative epoch values (fromDouble floorDiv/Mod)") {
+    // Pre-1970 timestamps have negative epochMicros.  This exercises the floorDiv/floorMod path
+    // in EstimationUtils.fromDouble that reconstructs TimestampNanosVal from a negative double.
+    // 1969-12-31T23:59:50Z => epochMicros = -10000000L (10 seconds before epoch)
+    // 1969-12-31T23:59:59Z => epochMicros = -1000000L  (1 second before epoch)
+    val negMin = TimestampNanosVal.fromParts(-10000000L, 500.toShort)
+    val negMax = TimestampNanosVal.fromParts(-1000000L, 500.toShort)
+    val ntzType = TimestampNTZNanosType(9)
+    val attrNeg = AttributeReference("ctsnanos_neg", ntzType)()
+    val colStatNeg = ColumnStat(distinctCount = Some(10),
+      min = Some(negMin), max = Some(negMax),
+      nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))
+    val negMap = AttributeMap(Seq(attrNeg -> colStatNeg))
+
+    // Filter at ~1/3 of the range: -10000000500 to -1000000500 nanos, range = 9000000 nanos
+    // 1/3 point: -10000000500 + 3000000 = epochMicros=-7000000, nanos=500
+    val filterVal = TimestampNanosVal.fromParts(-7000000L, 500.toShort)
+    // Expected: fraction = 3/9 = 1/3, rows = ceil(10 * 1/3) = 4, ndv = 4
+    validateEstimatedStats(
+      Filter(LessThan(attrNeg, Literal(filterVal, ntzType)),
+        childStatsTestPlan(Seq(attrNeg), 10L, negMap)),
+      Seq(attrNeg -> ColumnStat(distinctCount = Some(4),
+        min = Some(negMin), max = Some(filterVal),
+        nullCount = Some(0), avgLen = Some(10), maxLen = Some(10))),
+      expectedRowCount = 4)
+  }
+
 }

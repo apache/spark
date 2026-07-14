@@ -235,6 +235,23 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     val map = catalogStat.toMap("ctsnanos")
     val roundtrip = CatalogColumnStat.fromMap("t", "ctsnanos", map)
     assert(roundtrip === Some(catalogStat))
+
+    // Pre-1970 (negative epochMicros) round-trip exercises floorDiv/floorMod in fromDouble.
+    // 1969-06-15T00:00:00.123456789 => epochMicros ~ -16070400000000L, nanosWithinMicro = 789
+    val pre1970Val = TimestampNanosVal.fromParts(-16070400000000L, 789.toShort)
+    val pre1970NtzStr = CatalogColumnStat.toExternalString(pre1970Val, "col", ntzNanosType)
+    val pre1970NtzParsed =
+      CatalogColumnStat.fromExternalString(pre1970NtzStr, "col", ntzNanosType, 2)
+    assert(pre1970NtzParsed === pre1970Val,
+      s"Pre-1970 NTZ nanos round-trip failed: formatted='$pre1970NtzStr', " +
+        s"parsed=$pre1970NtzParsed, expected=$pre1970Val")
+
+    val pre1970LtzStr = CatalogColumnStat.toExternalString(pre1970Val, "col", ltzNanosType)
+    val pre1970LtzParsed =
+      CatalogColumnStat.fromExternalString(pre1970LtzStr, "col", ltzNanosType, 2)
+    assert(pre1970LtzParsed === pre1970Val,
+      s"Pre-1970 LTZ nanos round-trip failed: formatted='$pre1970LtzStr', " +
+        s"parsed=$pre1970LtzParsed, expected=$pre1970Val")
   }
 
   test("SPARK-57839: ANALYZE TABLE FOR COLUMNS on nanosecond timestamp collects basic stats") {
