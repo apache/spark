@@ -105,8 +105,8 @@ object Connect {
         "Sets the time the server waits for the connection to be idle before sending a " +
           "gRPC/HTTP2 keepalive PING, to detect and terminate a silently-dead connection " +
           "(e.g. after a NAT gateway or load balancer drops an idle connection mapping " +
-          "without closing the socket). Also used as the minimum interval the server permits " +
-          "for keepalive PINGs sent by clients. Combined with " +
+          "without closing the socket). The server separately tolerates client-sent keepalive " +
+          "PINGs no more often than every 10s regardless of this setting. Combined with " +
           "spark.connect.grpc.keepAlive.timeout, this bounds how long a connection can be idle " +
           "before either side may declare it dead; a stall on either end (e.g. a long JVM GC " +
           "pause) longer than that combined window can cause an otherwise-healthy connection " +
