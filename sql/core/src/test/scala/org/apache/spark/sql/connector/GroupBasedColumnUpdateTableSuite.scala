@@ -212,4 +212,29 @@ class GroupBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, Row(-1, 2), "hr") :: Row(2, Row(3, 4), "hr") :: Nil)
   }
+
+  test("column-update ReplaceData: nested field identity update reports root struct as updated") {
+    createAndInitTableReplaceData("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
+      """{ "pk": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
+        |""".stripMargin)
+
+    // `SET s.c1 = s.c1` is semantically a no-op on the nested field, but the analyzer's
+    // AssignmentUtils rewrites nested field assignments into whole-struct rebuilds:
+    //     Assignment(s, named_struct("c1", s.c1, "c2", s.c2))
+    // `isIdentityAssignment` operates at root-column granularity and does NOT recognize the
+    // rebuilt struct as identity (its value is a `named_struct(...)`, not a plain Attribute
+    // matching the key). So `s` is reported in updatedColumns even though the values don't
+    // change. This documents the root-column granularity of `RowLevelOperationInfo` for the
+    // CoW path.
+    sql(s"UPDATE $tableNameAsString SET s.c1 = s.c1 WHERE pk = 1")
+
+    val updatedNames = table.lastUpdatedColumns.map(_.describe()).toSet
+    assert(updatedNames == Set("s"),
+      s"nested identity is reported as an update at root-column granularity: $updatedNames")
+
+    // Data correctness: the struct is rewritten but with equal values, so rows are unchanged.
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, Row(1, 2), "hr") :: Nil)
+  }
 }
