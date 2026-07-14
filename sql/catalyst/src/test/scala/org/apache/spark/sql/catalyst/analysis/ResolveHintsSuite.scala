@@ -406,5 +406,18 @@ class ResolveHintsSuite extends AnalysisTest {
             "advisoryPartitionSize" -> advisoryPartitionSize))
       }
     }
+
+    // REBALANCE_BY_SIZE hint should be ignored when AQE is disabled
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      Seq(
+        Seq(Literal(2048)),
+        Seq(Literal(4096L)),
+        Seq(Literal("4k")),
+        Seq(Literal("2k"), Literal("a"))).foreach { params =>
+        checkAnalysisWithoutViewWrapper(
+          UnresolvedHint("REBALANCE_BY_SIZE", params, table("TaBlE")),
+          testRelation)
+      }
+    }
   }
 }
