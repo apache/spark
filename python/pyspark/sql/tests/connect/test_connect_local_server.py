@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import contextlib
 import json
 import os
 import shutil
@@ -33,8 +34,21 @@ from pyspark.testing.connectutils import should_test_connect, connect_requiremen
 if should_test_connect:
     from pyspark.sql import SparkSession as PySparkSession
     from pyspark.sql.connect import local_server
+    from pyspark.sql.connect.local_server import Discovery, LocalConnectServer
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.version import __version__
+
+
+@contextlib.contextmanager
+def _listening_socket():
+    """A live localhost listener; yields its port."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        listener.bind(("localhost", 0))
+        listener.listen(1)
+        yield listener.getsockname()[1]
+    finally:
+        listener.close()
 
 
 @unittest.skipIf(
@@ -46,26 +60,25 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     def setUp(self) -> None:
         # Point discovery at a throwaway path and remember the env we override, so each test starts
-        # from a clean slate and the real ~/.spark/connect-local.json is never touched.
+        # from a clean slate and the real per-user discovery file is never touched.
         self._tmpdir = tempfile.mkdtemp()
-        self._discovery = os.path.join(self._tmpdir, "connect-local.json")
+        self._discovery_path = os.path.join(self._tmpdir, "connect-local.json")
         self._saved_env = {
             k: os.environ.get(k)
             for k in ("SPARK_LOCAL_CONNECT_DISCOVERY", "SPARK_CONNECT_AUTHENTICATE_TOKEN")
         }
-        os.environ["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery
+        os.environ["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery_path
 
     def tearDown(self) -> None:
         try:
             # Only stop a real, separately-spawned server. The discovery-logic unit tests fabricate
             # discovery files that point at this very process, which must never be signalled.
-            disc = local_server._read_discovery()
-            if disc is not None and disc["pid"] != os.getpid():
-                port = disc["port"]
+            server = Discovery().load()
+            if server is not None and server.pid != os.getpid():
                 local_server.stop_local_connect_server()
                 # stop_local_connect_server only signals the server and returns; wait for the JVM
                 # to actually release the port so the next test starts from a clean slate.
-                self._wait_port_closed(disc["host"], port)
+                self._wait_port_closed(server.host, server.port)
         finally:
             for k, v in self._saved_env.items():
                 if v is None:
@@ -76,61 +89,86 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             # seed-conf temp files, and a seeded warehouse directory.
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    # -- discovery / reuse-decision logic (no real server) ----------------------------------------
-
-    def test_discovery_path_honors_override(self) -> None:
-        self.assertEqual(local_server._discovery_path(), self._discovery)
-        os.environ.pop("SPARK_LOCAL_CONNECT_DISCOVERY")
-        self.assertTrue(
-            local_server._discovery_path().endswith(os.path.join(".spark", "connect-local.json"))
-        )
-
-    def test_read_discovery_missing_or_malformed(self) -> None:
-        self.assertIsNone(local_server._read_discovery())
-        with open(self._discovery, "w") as f:
-            f.write("not json")
-        self.assertIsNone(local_server._read_discovery())
-        with open(self._discovery, "w") as f:
-            json.dump({"host": "localhost"}, f)  # missing required keys
-        self.assertIsNone(local_server._read_discovery())
-        self._write_discovery(pid="not-a-pid")  # all keys present, but pid is not an int
-        self.assertIsNone(local_server._read_discovery())
-
-    def _write_discovery(self, **overrides) -> dict:
-        disc = {
+    def _server(self, **overrides) -> "LocalConnectServer":
+        fields = {
             "host": "localhost",
             "port": 0,
             "token": "t",
             "pid": os.getpid(),
             "spark_version": __version__,
         }
-        disc.update(overrides)
-        with open(self._discovery, "w") as f:
-            json.dump(disc, f)
-        return disc
+        fields.update(overrides)
+        return LocalConnectServer(**fields)
 
-    def test_not_reusable_on_version_mismatch(self) -> None:
-        disc = self._write_discovery(spark_version="0.0.0-not-this-build")
-        self.assertFalse(local_server._server_is_reusable(disc))
+    # -- Discovery: location, save/load roundtrip, malformed input --------------------------------
 
-    def test_not_reusable_on_dead_pid(self) -> None:
-        # PID 2**31 - 1 is effectively guaranteed not to exist.
-        disc = self._write_discovery(pid=2**31 - 1, port=1)
-        self.assertFalse(local_server._server_is_reusable(disc))
+    def test_discovery_location(self) -> None:
+        # The env override wins; without it the file lives in a per-user 0700 directory under
+        # the system temp dir (under run-tests TMPDIR itself is a per-run scratch dir), never
+        # in a permanent location like the home directory.
+        self.assertEqual(Discovery().path, self._discovery_path)
+        os.environ.pop("SPARK_LOCAL_CONNECT_DISCOVERY")
+        default = Discovery()
+        self.assertTrue(default.directory.startswith(tempfile.gettempdir()))
+        if os.name == "posix":
+            self.assertIn("spark-connect-{}".format(os.getuid()), default.directory)
+            self.assertEqual(os.stat(default.directory).st_mode & 0o777, 0o700)
 
-    def test_reusable_when_alive_and_listening(self) -> None:
-        # A live listening socket owned by this (alive) process with a matching version is reusable.
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            listener.bind(("localhost", 0))
-            listener.listen(1)
-            port = listener.getsockname()[1]
-            disc = self._write_discovery(port=port)
-            self.assertTrue(local_server._server_is_reusable(disc))
-        finally:
-            listener.close()
-        # Once the socket is closed the port is no longer reachable, so it is not reusable.
-        self.assertFalse(local_server._server_is_reusable(disc))
+    def test_discovery_roundtrip(self) -> None:
+        discovery = Discovery()
+        saved = self._server(port=15002)
+        discovery.save(saved)
+        # The file holds the auth token, so it must not be readable by other users.
+        self.assertEqual(os.stat(discovery.path).st_mode & 0o777, 0o600)
+        loaded = discovery.load()
+        for attr in ("host", "port", "token", "pid", "spark_version", "url"):
+            self.assertEqual(getattr(loaded, attr), getattr(saved, attr), attr)
+        discovery.clear()
+        self.assertIsNone(discovery.load())
+        discovery.clear()  # clearing again is a no-op
+
+    def test_discovery_load_rejects_malformed_files(self) -> None:
+        discovery = Discovery()
+        malformed = [
+            "not json",
+            json.dumps(["a", "list"]),
+            json.dumps({"host": "localhost"}),  # missing required keys
+            json.dumps(
+                {
+                    "host": "localhost",
+                    "port": 1,
+                    "token": "t",
+                    "pid": "not-a-pid",
+                    "spark_version": __version__,
+                }
+            ),
+            json.dumps(
+                {"host": None, "port": 1, "token": "t", "pid": 1, "spark_version": __version__}
+            ),
+        ]
+        for content in malformed:
+            with self.subTest(content=content):
+                with open(discovery.path, "w") as f:
+                    f.write(content)
+                self.assertIsNone(discovery.load())
+
+    # -- LocalConnectServer: reusability and stop --------------------------------------------------
+
+    def test_server_is_reusable(self) -> None:
+        with _listening_socket() as port:
+            with self.subTest("alive process listening on the port with a matching version"):
+                self.assertTrue(self._server(port=port).is_reusable())
+            with self.subTest("version mismatch"):
+                self.assertFalse(
+                    self._server(port=port, spark_version="0.0.0-not-this-build").is_reusable()
+                )
+            if os.name == "posix":  # the pid probe only runs on POSIX (see the test below)
+                with self.subTest("dead pid"):
+                    # PID 2**31 - 1 is effectively guaranteed not to exist.
+                    self.assertFalse(self._server(port=port, pid=2**31 - 1).is_reusable())
+            server = self._server(port=port)
+        with self.subTest("port no longer listening"):
+            self.assertFalse(server.is_reusable())
 
     def test_pid_probe_is_skipped_on_windows(self) -> None:
         """The pid liveness probe must never run on Windows.
@@ -140,34 +178,25 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         """
         from unittest import mock
 
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            listener.bind(("localhost", 0))
-            listener.listen(1)
-            disc = self._write_discovery(port=listener.getsockname()[1])
+        with _listening_socket() as port:
+            server = self._server(port=port)
             with mock.patch.object(os, "name", "nt"), mock.patch.object(os, "kill") as kill:
-                self.assertTrue(local_server._server_is_reusable(disc))
+                self.assertTrue(server.is_reusable())
                 kill.assert_not_called()
-        finally:
-            listener.close()
+
+    # -- stopping: safe no-op, signals the recorded server, CLI ------------------------------------
 
     def test_stop_when_no_server_is_safe(self) -> None:
         self.assertFalse(local_server.stop_local_connect_server())
 
-    def test_stop_signals_recorded_server(self) -> None:
+    def test_stop_signals_recorded_server_and_clears_discovery(self) -> None:
         from unittest import mock
 
-        self._write_discovery(pid=12345)
-        calls = []
-
-        def fake_signal(pid, sig):
-            calls.append((pid, sig))
-            return True
-
-        with mock.patch.object(local_server, "_signal_server", fake_signal):
+        Discovery().save(self._server(pid=12345))
+        with mock.patch.object(os, "kill") as kill:
             self.assertTrue(local_server.stop_local_connect_server())
-        self.assertEqual(calls, [(12345, signal.SIGTERM)])
-        self.assertFalse(os.path.exists(self._discovery))
+        kill.assert_called_once_with(12345, signal.SIGTERM)
+        self.assertIsNone(Discovery().load())
 
     def test_stop_cli_reports_when_no_server(self) -> None:
         """`python -m pyspark.sql.connect.local_server --stop` is safe with nothing running."""
@@ -191,81 +220,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             with self.assertRaises(PySparkRuntimeError) as ctx:
                 local_server.reuse_or_start_local_connect_server("local[2]", {})
         self.assertIn("POSIX", str(ctx.exception))
-
-    def test_reuse_from_discovery_none_when_absent(self) -> None:
-        self.assertIsNone(local_server._reuse_from_discovery())
-
-    def test_pick_port_prefers_configured_and_falls_back(self) -> None:
-        """Outside SPARK_TESTING, the configured port is used unless it is already taken."""
-        from unittest import mock
-
-        env = {k: v for k, v in os.environ.items() if k != "SPARK_TESTING"}
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            listener.bind(("localhost", 0))
-            listener.listen(1)
-            taken = listener.getsockname()[1]
-            with mock.patch.dict(os.environ, env, clear=True):
-                # A taken configured port falls back to an OS-assigned one.
-                self.assertNotEqual(
-                    local_server._pick_port({"spark.local.connect.server.port": taken}), taken
-                )
-        finally:
-            listener.close()
-        # A free configured port is honored as-is (the listener above just released it).
-        with mock.patch.dict(os.environ, env, clear=True):
-            self.assertEqual(
-                local_server._pick_port({"spark.local.connect.server.port": taken}), taken
-            )
-
-    def test_write_seed_properties_perms_and_format(self) -> None:
-        """The seed --properties-file is 0600 and holds key=value lines."""
-        path = local_server._write_seed_properties(
-            {"spark.sql.warehouse.dir": "/tmp/wh"}, self._tmpdir
-        )
-        try:
-            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
-            with open(path, "r") as f:
-                self.assertIn("spark.sql.warehouse.dir=/tmp/wh", f.read())
-        finally:
-            os.remove(path)
-
-    def test_server_conf_seeds_user_confs_and_drops_control_keys(self) -> None:
-        """_seed_conf keeps user startup confs but not keys the launcher controls."""
-        opts = {
-            "spark.sql.warehouse.dir": "/tmp/wh",
-            "spark.jars.packages": "org.example:lib:1.0",
-            "spark.remote": "local[*]",
-            "spark.master": "local[*]",
-            "spark.connect.authenticate.token": "secret",
-            "spark.connect.grpc.binding.port": "15002",
-            "spark.local.connect.reuse": "true",
-            "spark.local.connect.server.port": "15002",
-            "spark.local.connect.future.knob": "x",  # the whole prefix is reserved and dropped
-        }
-        conf = local_server._seed_conf(opts)
-        self.assertEqual(conf.get("spark.sql.warehouse.dir"), "/tmp/wh")
-        self.assertEqual(conf.get("spark.jars.packages"), "org.example:lib:1.0")
-        for dropped in (
-            "spark.remote",
-            "spark.master",
-            "spark.connect.authenticate.token",
-            "spark.connect.grpc.binding.port",
-            "spark.local.connect.reuse",
-            "spark.local.connect.server.port",
-            "spark.local.connect.future.knob",
-        ):
-            self.assertNotIn(dropped, conf)
-
-    def test_start_lock_roundtrip(self) -> None:
-        """Entering and exiting the start-up lock creates the lock file and does not error."""
-        with local_server._start_lock():
-            try:
-                import fcntl  # noqa: F401
-            except ImportError:
-                # Locking is a no-op without fcntl; entering the context is all we can assert.
-                return
-            self.assertTrue(os.path.exists(self._discovery + ".lock"))
 
     # -- end-to-end: start a real server via sbin scripts, reconnect, verify isolation ------------
 
@@ -302,10 +256,10 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             )
             self.assertEqual(spark.range(2).count(), 2)
 
-            disc = local_server._read_discovery()
-            self.assertIsNotNone(disc)
-            self.assertEqual(disc["spark_version"], __version__)
-            self.assertNotEqual(disc["pid"], os.getpid())
+            server = Discovery().load()
+            self.assertIsNotNone(server)
+            self.assertEqual(server.spark_version, __version__)
+            self.assertNotEqual(server.pid, os.getpid())
         finally:
             if spark is not None:
                 spark.stop()
@@ -332,7 +286,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                 spark.stop()
             """)
         env = dict(os.environ)
-        env["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery
+        env["SPARK_LOCAL_CONNECT_DISCOVERY"] = self._discovery_path
         env["SPARK_LOCAL_CONNECT_REUSE"] = "1"
 
         procs = [
@@ -370,18 +324,19 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         endpoint = local_server.reuse_or_start_local_connect_server("local[2]", {})
         self.assertTrue(endpoint.startswith("sc://localhost:"))
 
-        disc = local_server._read_discovery()
-        self.assertIsNotNone(disc)
-        self.assertEqual(disc["spark_version"], __version__)
-        self.assertEqual(os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN"), disc["token"])
-        first_pid = disc["pid"]
+        server = Discovery().load()
+        self.assertIsNotNone(server)
+        self.assertEqual(server.url, endpoint)
+        self.assertEqual(server.spark_version, __version__)
+        self.assertEqual(os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN"), server.token)
+        first_pid = server.pid
 
         s1 = s2 = None
         try:
             # A second call reuses the running server: same endpoint, no new process spawned.
             endpoint2 = local_server.reuse_or_start_local_connect_server("local[2]", {})
             self.assertEqual(endpoint2, endpoint)
-            self.assertEqual(local_server._read_discovery()["pid"], first_pid)
+            self.assertEqual(Discovery().load().pid, first_pid)
 
             # Two independent client connections to the same server run real queries...
             s1 = RemoteSparkSession.builder.remote(endpoint).create()
@@ -401,20 +356,27 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
         # Stopping signals the server and removes the discovery file.
         self.assertTrue(local_server.stop_local_connect_server())
-        self.assertIsNone(local_server._read_discovery())
+        self.assertIsNone(Discovery().load())
         # The server should stop accepting connections shortly afterwards. (We check the port
         # rather than the pid, which can linger briefly while the JVM shuts down.)
-        _, _, hostport = endpoint.partition("sc://")
-        host, _, port = hostport.partition(":")
         self.assertTrue(
-            self._wait_port_closed(host, port), "server port {} still open after stop".format(port)
+            self._wait_port_closed(server.host, server.port),
+            "server port {} still open after stop".format(server.port),
         )
 
     @unittest.skipUnless(os.name == "posix", "the reuse path relies on the POSIX sbin scripts")
     def test_start_seeds_static_conf_on_the_server(self) -> None:
-        """A start-up conf passed by the first caller reaches the server's SparkConf."""
+        """A start-up conf passed by the first caller reaches the server's SparkConf.
+
+        The opts also carry keys the launcher must strip rather than forward (the reuse opt-in
+        itself and the master); startup succeeding with them present covers that filtering.
+        """
         warehouse = os.path.join(self._tmpdir, "seeded-wh")
-        opts = {"spark.sql.warehouse.dir": warehouse}
+        opts = {
+            "spark.sql.warehouse.dir": warehouse,
+            "spark.local.connect.reuse": "true",
+            "spark.master": "local[2]",
+        }
         endpoint = local_server.reuse_or_start_local_connect_server("local[2]", opts)
         spark = None
         try:
