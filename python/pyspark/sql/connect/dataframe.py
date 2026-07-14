@@ -1394,7 +1394,7 @@ class DataFrame(ParentDataFrame):
                 min_non_nulls = None
             else:
                 raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
+                    errorClass="VALUE_NOT_ANY_OR_ALL",
                     messageParameters={"arg_name": "how", "arg_value": str(how)},
                 )
 

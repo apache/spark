@@ -28,7 +28,7 @@ Specifically, install `black` and dependencies from the "Spark Connect python pr
 
 
 ```
-pip install -r dev/requirements.txt
+pip install --group dev
 ```
 
 Install [buf](https://github.com/bufbuild/buf)

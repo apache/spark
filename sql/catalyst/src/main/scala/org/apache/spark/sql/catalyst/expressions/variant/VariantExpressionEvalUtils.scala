@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions.variant
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantSizeLimitException, VariantUtil}
+import org.apache.spark.types.variant.{Variant, VariantBuilder, VariantPathTypeMismatchException, VariantSizeLimitException, VariantUtil}
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
@@ -75,15 +76,38 @@ object VariantExpressionEvalUtils {
   def isValidVariant(input: VariantVal): Boolean =
     VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
-  /** Throws `INVALID_VARIANT_PATH` on a malformed path or on the empty (root `$`) path. */
-  def parseVariantDeletePath(pathValue: String): Array[VariantPathSegment] = {
+  /**
+   * Parse a JSONPath for a variant manipulation function. Throws `INVALID_VARIANT_PATH` on a
+   * malformed path or on the empty (root `$`) path.
+   */
+  def parseVariantPath(pathValue: String, functionName: String): Array[VariantPathSegment] = {
     val parsed = VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     if (parsed.isEmpty) {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     parsed
+  }
+
+  /** Render a parsed path prefix back to a JSONPath string for error messages. */
+  private def renderVariantPath(segments: Array[VariantBuilder.PathSegment]): String = {
+    val sb = new StringBuilder("$")
+    segments.foreach {
+      case o: VariantBuilder.ObjectKeySegment =>
+        val key = o.key
+        // Dot notation only parses keys with no `.` or `[` (and at least one char); anything else
+        // must use bracket notation so the rendered path round-trips to the same segments.
+        if (key.nonEmpty && !key.contains('.') && !key.contains('[')) {
+          sb.append('.').append(key)
+        } else if (!key.contains('\'')) {
+          sb.append("['").append(key).append("']")
+        } else {
+          sb.append("[\"").append(key).append("\"]")
+        }
+      case a: VariantBuilder.ArrayIndexSegment => sb.append('[').append(a.index).append(']')
+    }
+    sb.toString
   }
 
   def toJavaSegments(
@@ -103,7 +127,53 @@ object VariantExpressionEvalUtils {
   }
 
   def deleteAtPath(input: VariantVal, path: UTF8String): VariantVal =
-    deleteAtPath(input, toJavaSegments(parseVariantDeletePath(path.toString)))
+    deleteAtPath(input, toJavaSegments(parseVariantPath(path.toString, "variant_delete")))
+
+  /**
+   * Insert `value` into `input` at `javaSegments`. `path` is the source string used in error
+   * messages. The cast and insert share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT`
+   * and a type mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `failOnError` is false (the
+   * `try_variant_insert` mode), a duplicate key or path type mismatch returns null instead of
+   * throwing; a size overflow (and a malformed path, rejected earlier during parsing) is still
+   * raised.
+   */
+  def insertAtPath(
+      input: VariantVal,
+      javaSegments: Array[VariantBuilder.PathSegment],
+      path: String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    try {
+      val valVal = castToVariant(value, valueDataType)
+      val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
+      val out = VariantBuilder.insertAtPath(v, javaSegments, valVariant)
+      new VariantVal(out.getValue, out.getMetadata)
+    } catch {
+      case _: VariantPathTypeMismatchException if !failOnError => null
+      case e: SparkRuntimeException if !failOnError && e.getCondition == "VARIANT_DUPLICATE_KEY" =>
+        null
+      case e: VariantPathTypeMismatchException =>
+        throw QueryExecutionErrors.variantPathTypeMismatch(
+          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+    }
+  }
+
+  def insertAtPath(
+      input: VariantVal,
+      path: UTF8String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String,
+      failOnError: Boolean): VariantVal = {
+    val pathStr = path.toString
+    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
+    insertAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
+  }
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {

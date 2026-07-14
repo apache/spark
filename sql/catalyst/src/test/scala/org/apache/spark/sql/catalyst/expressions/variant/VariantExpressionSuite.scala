@@ -1326,4 +1326,173 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       noPaths.checkInputDataTypes()
     }
   }
+
+  test("variant_insert") {
+    def checkInsert(input: String, path: String, value: Expression, expected: String): Unit = {
+      Seq(true, false).foreach { failOnError =>
+        val expr = VariantInsert(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError)
+        checkEvaluation(
+          ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+          expected)
+      }
+    }
+
+    // A recoverable error: `variant_insert` throws, but `try_variant_insert` returns NULL.
+    def checkInsertRecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        VariantInsert(Literal(parseJson(input)), Literal.create(path, StringType), value),
+        condition,
+        parameters)
+      checkEvaluation(
+        VariantInsert(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError = false),
+        null)
+    }
+
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
+    // the `functionName` in the error message differs.
+    def checkInsertUnrecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: String => Map[String, String]): Unit = {
+      Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
+        case (name, failOnError) =>
+          checkErrorInExpression[SparkRuntimeException](
+            VariantInsert(
+              Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError),
+            condition,
+            parameters(name))
+      }
+    }
+
+    // Object inserts.
+    checkInsert("""{"a": 1}""", "$.b", Literal(2), """{"a":1,"b":2}""")
+    checkInsert("{}", "$.a", Literal(1), """{"a":1}""")
+    checkInsert("""{"a": {"b": 1}}""", "$.a.c", Literal(3), """{"a":{"b":1,"c":3}}""")
+
+    // Missing intermediate keys are created; the next segment's kind picks the container.
+    checkInsert("{}", "$.a.b.c", Literal(99), """{"a":{"b":{"c":99}}}""")
+    checkInsert("{}", "$.a[0]", Literal(1), """{"a":[1]}""")
+
+    // Array inserts shift existing elements right.
+    checkInsert("""["a","b","c"]""", "$[1]", Literal("z"), """["a","z","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[0]", Literal("z"), """["z","a","b","c"]""")
+    checkInsert("""["a","b","c"]""", "$[3]", Literal("z"), """["a","b","c","z"]""")
+    checkInsert("""["a","b"]""", "$[5]", Literal("z"), """["a","b",null,null,null,"z"]""")
+
+    // A missing intermediate created as an array is also padded with nulls up to the index.
+    checkInsert("""{"a": []}""", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+    checkInsert("""{"a": [1, 2]}""", "$.a[3].b", Literal(2), """{"a":[1,2,null,{"b":2}]}""")
+    checkInsert("{}", "$.a[2]", Literal(1), """{"a":[null,null,1]}""")
+    checkInsert("{}", "$.a[2].b", Literal(1), """{"a":[null,null,{"b":1}]}""")
+
+    // Descending through an existing container, then inserting into it.
+    checkInsert("""[{"a": 1}]""", "$[0].b", Literal(2), """[{"a":1,"b":2}]""")
+    checkInsert("""[{"x": 0}, {"a": 1}]""", "$[1].b", Literal(2), """[{"x":0},{"a":1,"b":2}]""")
+    checkInsert("""{"a": [1, 2, 3]}""", "$.a[1]", Literal(9), """{"a":[1,9,2,3]}""")
+
+    // Bracket and dot notations are interchangeable: `['k']`, `["k"]`, and `.k` in one path.
+    checkInsert(
+      """{"a": {"b": {}}}""", """$['a'].b["c"]""", Literal(1), """{"a":{"b":{"c":1}}}""")
+
+    // Special / edge-case keys.
+    checkInsert("""{"a": 1}""", "$['']", Literal(2), """{"":2,"a":1}""")
+    checkInsert("""{"a": 1}""", "$['?']", Literal(2), """{"?":2,"a":1}""")
+    checkInsert(
+      """{"a": 1}""", "$['key with spaces']", Literal(2), """{"a":1,"key with spaces":2}""")
+    checkInsert("""{"a": 1}""", "$.fb:testid", Literal(2), """{"a":1,"fb:testid":2}""")
+
+    // Insert a variant null (the JSON null literal) vs. a verbatim string vs. structured JSON.
+    checkInsert("""{"a": 1}""", "$.b", Literal(parseJson("null")), """{"a":1,"b":null}""")
+    checkInsert("{}", "$.a", Literal("""{"x":1}"""), """{"a":"{\"x\":1}"}""")
+    checkInsert("{}", "$.a", Literal(parseJson("""{"x":1}""")), """{"a":{"x":1}}""")
+
+    // Values of various castable types exercise the corresponding `castToVariant` branches.
+    checkInsert("{}", "$.a", Literal(true), """{"a":true}""")
+    checkInsert("{}", "$.a", Literal(7L), """{"a":7}""")
+    checkInsert("{}", "$.a", Literal(2.5), """{"a":2.5}""")
+    checkInsert(
+      "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
+
+    Seq(true, false).foreach { failOnError =>
+      checkEvaluation(
+        VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1), failOnError),
+        null)
+    }
+    checkInsert("""{"a": 1}""", null, Literal(1), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
+    checkInsert("""{"a": 1}""", "$.b", Literal.create(null, NullType), null)
+
+    Seq(true, false).foreach { failOnError =>
+      val dynamic = VariantInsert(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        """{"a":1,"b":2}""",
+        InternalRow(UTF8String.fromString("$.b")))
+    }
+
+    // Recoverable errors: `variant_insert` throws; `try_variant_insert` returns NULL. A duplicate
+    // key and every shape of path type mismatch are all recoverable.
+    checkInsertRecoverableError("""{"a": 1}""", "$.a", Literal(2),
+      "VARIANT_DUPLICATE_KEY",
+      Map("key" -> "a"))
+    checkInsertRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a": [1, 2]}""", "$.a.b", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a": 5}""", "$.a[0]", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("5", "$.a", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
+    checkInsertRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
+      "VARIANT_PATH_TYPE_MISMATCH",
+      Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
+
+    // Structs and maps are rejected at analysis.
+    Seq(
+      Literal.create(null, MapType(StringType, IntegerType)),
+      Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
+    ).foreach { v =>
+      Seq(true, false).foreach { failOnError =>
+        assert(
+          VariantInsert(Literal(parseJson("{}")), Literal("$.a"), v, failOnError)
+            .checkInputDataTypes().isFailure)
+      }
+    }
+
+    // Unrecoverable errors: both functions throw.
+    checkInsertUnrecoverableError("{}", "$", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> "$", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", "abc", Literal(1),
+      "INVALID_VARIANT_PATH",
+      name => Map("path" -> "abc", "functionName" -> s"`$name`"))
+
+    val tooBig = "x".repeat(16 * 1024 * 1024)
+    checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
+      "VARIANT_SIZE_LIMIT",
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", "$.a", Literal(tooBig),
+      "VARIANT_SIZE_LIMIT",
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+  }
 }

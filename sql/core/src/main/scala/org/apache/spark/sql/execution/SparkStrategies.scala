@@ -1151,7 +1151,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case f: logical.TypedFilter =>
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
-        execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
+        val useSingleTask = e.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        execution.ExpandExec(e.projections, e.output, planLater(child), useSingleTask) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
         if (sampleMethod == logical.SampleMethod.System) {
           // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples
@@ -1161,8 +1163,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             "TABLESAMPLE SYSTEM node was not properly handled by V2ScanRelationPushDown.")
         }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data, _, stream) =>
-        LocalTableScanExec(output, data, stream) :: Nil
+      case r @ logical.LocalRelation(output, data, _, stream) =>
+        val useSingleTask = r.getTagValue(
+          datasources.MarkSingleTaskExecution.markTag).getOrElse(false)
+        LocalTableScanExec(output, data, stream, useSingleTask) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical

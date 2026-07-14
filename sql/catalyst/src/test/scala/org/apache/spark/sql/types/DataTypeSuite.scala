@@ -206,6 +206,55 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
   }
 
+  test("loading a UDT class from a schema string is enabled by default") {
+    val udt = new ExampleBaseTypeUDT()
+    assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+  }
+
+  test("loading a UDT class from a schema string can be disabled") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          DataType.fromJson(udt.json)
+        },
+        condition = "UDT_CLASS_LOADING_DISABLED",
+        parameters = Map("udtClass" -> udt.getClass.getName, "allowed" -> ""))
+    }
+  }
+
+  test("disabled UDT loading still honors the allow list") {
+    val udt = new ExampleBaseTypeUDT()
+    withSQLConf(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> udt.getClass.getName) {
+      assert(DataType.fromJson(udt.json).isInstanceOf[ExampleBaseTypeUDT])
+    }
+  }
+
+  test("a schema string cannot load an arbitrary non-UserDefinedType class") {
+    // Simulate a crafted schema string (e.g. from Parquet file metadata) whose UDT "class" field
+    // points at an arbitrary class that is not a UserDefinedType. Spark must refuse to load and
+    // instantiate it, both when UDT loading is enabled and when the class is explicitly allowed.
+    val gadget = classOf[java.lang.Object].getName
+    val json = s"""{"type":"udt","class":"$gadget","pyClass":null,"sqlType":"integer"}"""
+    Seq(
+      Map(SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "true"),
+      Map(
+        SQLConf.ALLOW_CREATING_UDT_FROM_STRING.key -> "false",
+        SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES.key -> gadget)
+    ).foreach { conf =>
+      withSQLConf(conf.toSeq: _*) {
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromJson(json)
+          },
+          condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          parameters = Map("udtClass" -> gadget))
+      }
+    }
+  }
+
   def checkDataTypeFromJson(dataType: DataType): Unit = {
     test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)

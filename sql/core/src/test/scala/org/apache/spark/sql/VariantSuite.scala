@@ -295,6 +295,150 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     }
   }
 
+  test("variant_insert with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{\"a\": 1}'), '$.b', 2))"),
+      rows("""{"a":1,"b":2}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('[\"a\",\"b\",\"c\"]'), '$[1]', 'z'))"),
+      rows("""["a","z","b","c"]"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{}'), '$.a', parse_json('{\"x\":1}')))"),
+      rows("""{"a":{"x":1}}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{}'), '$.a', parse_json('null')))"),
+      rows("""{"a":null}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(CAST(NULL AS VARIANT), '$.a', 1))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{\"a\": 1}'), '$.b', NULL))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(variant_insert(parse_json('{\"a\": 1}'), NULL, 1))"),
+      rows(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_insert(parse_json('{\"a\": 1}'), '$.a', 2)").collect()
+      },
+      condition = "VARIANT_DUPLICATE_KEY",
+      parameters = Map("key" -> "a"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_insert(parse_json('{\"a\": 1}'), '$.a.b', 2)").collect()
+      },
+      condition = "VARIANT_PATH_TYPE_MISMATCH",
+      parameters = Map(
+        "path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> toSQLId("variant_insert")))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT variant_insert(parse_json('{}'), '$', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("variant_insert")))
+
+    // A raw struct/map value is not castable to variant and is rejected at analysis.
+    assert(intercept[AnalysisException] {
+      sql("SELECT variant_insert(parse_json('{}'), '$.a', named_struct('x', 1))")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+  }
+
+  test("variant_insert with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1}""", "$.b", 2),
+          ("""["a","b"]""", "$[0]", 9),
+          (null, "$.b", 2)
+        ).toDF("json", "path", "val")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(variant_insert(v, col("path"), col("val"))).alias("r"))
+        checkAnswer(out, rows("""{"a":1,"b":2}""", """[9,"a","b"]""", null))
+
+        // A foldable literal path combined with a dynamic value.
+        val objDf = Seq(
+          ("""{"a": 1}""", 2),
+          ("""{"x": 5}""", 9),
+          (null, 2)
+        ).toDF("json", "val")
+        val objV = parse_json(objDf("json"))
+        val out2 = objDf.select(to_json(variant_insert(objV, lit("$.z"), col("val"))).alias("r"))
+        checkAnswer(out2, rows("""{"a":1,"z":2}""", """{"x":5,"z":9}""", null))
+
+        // String-path overload of the DataFrame API.
+        val out3 = objDf.select(to_json(variant_insert(objV, "$.z", col("val"))).alias("r"))
+        checkAnswer(out3, rows("""{"a":1,"z":2}""", """{"x":5,"z":9}""", null))
+      }
+    }
+  }
+
+  test("try_variant_insert with literal arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.b', 2))"),
+      rows("""{"a":1,"b":2}"""))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.a', 2))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.a.b', 2))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$[0]', 2))"),
+      rows(null))
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 5}'), '$.a[0]', 2))"),
+      rows(null))
+
+    checkAnswer(
+      sql("SELECT to_json(try_variant_insert(parse_json('{\"a\": 1}'), '$.b', NULL))"),
+      rows(null))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("SELECT try_variant_insert(parse_json('{}'), '$', 1)").collect()
+      },
+      condition = "INVALID_VARIANT_PATH",
+      parameters = Map("path" -> "$", "functionName" -> toSQLId("try_variant_insert")))
+  }
+
+  test("try_variant_insert with dynamic arguments") {
+    def rows(results: Any*): Seq[Row] = results.map(Row(_))
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq(
+          ("""{"a": 1}""", "$.b"),
+          ("""{"a": 1}""", "$.a"),
+          ("""{"a": 1}""", "$.a.b"),
+          (null, "$.b")
+        ).toDF("json", "path")
+        val v = parse_json(col("json"))
+        val out = df.select(to_json(try_variant_insert(v, col("path"), lit(2))).alias("r"))
+        checkAnswer(out, rows("""{"a":1,"b":2}""", null, null, null))
+
+        val out2 = df.select(to_json(try_variant_insert(v, "$.b", lit(2))).alias("r"))
+        checkAnswer(
+          out2,
+          rows("""{"a":1,"b":2}""", """{"a":1,"b":2}""", """{"a":1,"b":2}""", null))
+      }
+    }
+  }
+
   test("round trip tests") {
     withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
       val rand = new Random(42)

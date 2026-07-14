@@ -59,6 +59,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     mapOutputTracker = mock(classOf[MapOutputTracker])
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(Seq.empty.iterator)
+    when(mapOutputTracker.getStaleMapIndexes(any())).thenReturn(mutable.Set.empty[Int])
   }
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
@@ -2075,5 +2076,85 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     assert(iterator.next()._1 === ShuffleBlockId(0, 0, 0))
     assert(iterator.next()._1 === ShuffleBlockId(0, 1, 0))
     assert(!iterator.hasNext)
+  }
+
+  test("SPARK-57491: fallback behavior when stale mapIndex is in/not in merged block") {
+    val blockManager = createMockBlockManager()
+    val localHost = "test-local-host"
+    val localBmId = BlockManagerId("test-client", localHost, 1)
+    val pushMergedBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, localHost, 1)
+    val localDirs = Array("test-merged-dir-1", "test-merged-dir-2")
+    initHostLocalDirManager(blockManager, Map(SHUFFLE_MERGER_IDENTIFIER -> localDirs))
+
+    when(mapOutputTracker.getStaleMapIndexes(0)).thenReturn(mutable.Set(1))
+    when(mapOutputTracker.getMapSizesForMergeResult(0, 2))
+      .thenReturn(Seq((localBmId,
+        toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 1, 2)), 1L, 1))).iterator)
+    doReturn(createMockManagedBuffer(100)).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 0, 2))
+    doReturn(createMockManagedBuffer(100)).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 1, 2))
+
+    // Stale mapIndex IS in the merged block's bitmap -> should trigger fallback
+    val bitmaps1 = Array(new RoaringBitmap)
+    bitmaps1(0).add(0) // chunk 0 has mapIndex 0
+    bitmaps1(0).add(1) // chunk 0 also has mapIndex 1 (stale)
+
+    val pushMergedBlockMeta1 = createMockPushMergedBlockMeta(bitmaps1.length, bitmaps1)
+    when(blockManager.getLocalMergedBlockMeta(ShuffleMergedBlockId(0, 0, 2), localDirs))
+      .thenReturn(pushMergedBlockMeta1)
+    doReturn(Seq(createMockManagedBuffer(100), createMockManagedBuffer(100)))
+      .when(blockManager).getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+    doReturn(createMockManagedBuffer(100)).when(blockManager)
+      .getLocalBlockData(ShuffleBlockId(0, 3, 2))
+
+    val blocksByAddress1 = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (localBmId, toBlockList(Seq(ShuffleBlockId(0, 3, 2)), 1L, 1)),
+      (pushMergedBmId, toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)), 200L,
+        SHUFFLE_PUSH_MAP_ID)))
+
+    val taskContext1 = TaskContext.empty()
+    val shuffleMetrics1 = taskContext1.taskMetrics.createTempShuffleReadMetrics()
+    val iterator1 = createShuffleBlockIteratorWithDefaults(blocksByAddress1,
+      blockManager = Some(blockManager),
+      shuffleMetrics = Some(shuffleMetrics1))
+
+    val (id1, _) = iterator1.next()
+    assert(id1 === ShuffleBlockId(0, 3, 2))
+
+    val (id2, _) = iterator1.next()
+    assert(id2 === ShuffleBlockId(0, 0, 2))
+    val (id3, _) = iterator1.next()
+    assert(id3 === ShuffleBlockId(0, 1, 2))
+    assert(!iterator1.hasNext)
+    assert(shuffleMetrics1.mergedFetchFallbackCount === 1)
+
+    // Stale mapIndex is NOT in the merged block's bitmap -> should NOT trigger fallback
+    val bitmaps2 = Array(new RoaringBitmap, new RoaringBitmap)
+    bitmaps2(0).add(0) // chunk 0 has mapIndex 0
+    bitmaps2(1).add(2) // chunk 1 has mapIndex 2
+
+    val pushMergedBlockMeta2 = createMockPushMergedBlockMeta(bitmaps2.length, bitmaps2)
+    when(blockManager.getLocalMergedBlockMeta(ShuffleMergedBlockId(0, 0, 2), localDirs))
+      .thenReturn(pushMergedBlockMeta2)
+    doReturn(Seq(createMockManagedBuffer(100), createMockManagedBuffer(100)))
+      .when(blockManager).getLocalMergedBlockData(ShuffleMergedBlockId(0, 0, 2), localDirs)
+
+    val blocksByAddress2 = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
+      (pushMergedBmId, toBlockList(Seq(ShuffleMergedBlockId(0, 0, 2)), 200L,
+        SHUFFLE_PUSH_MAP_ID)))
+
+    val taskContext2 = TaskContext.empty()
+    val shuffleMetrics2 = taskContext2.taskMetrics.createTempShuffleReadMetrics()
+    val iterator2 = createShuffleBlockIteratorWithDefaults(blocksByAddress2,
+      blockManager = Some(blockManager),
+      shuffleMetrics = Some(shuffleMetrics2))
+
+    val (id4, _) = iterator2.next()
+    assert(id4.isInstanceOf[ShuffleBlockChunkId])
+    val (id5, _) = iterator2.next()
+    assert(id5.isInstanceOf[ShuffleBlockChunkId])
+    assert(!iterator2.hasNext)
+    assert(shuffleMetrics2.mergedFetchFallbackCount === 0)
   }
 }

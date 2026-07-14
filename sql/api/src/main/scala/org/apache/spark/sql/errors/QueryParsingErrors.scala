@@ -550,8 +550,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def storedAsAndStoredByBothSpecifiedError(ctx: CreateFileFormatContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0033", ctx)
+  def storedAsAndStoredByBothSpecifiedError(): Throwable = {
+    SparkException.internalError("Expected either STORED AS or STORED BY, not both.")
   }
 
   def operationInHiveStyleCommandUnsupportedError(
@@ -875,6 +875,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0056",
       messageParameters = Map("reason" -> reason),
+      ctx)
+  }
+
+  def invalidAtSyntaxTimestamp(
+      timestamp: String,
+      format: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      messageParameters = Map("timestamp" -> timestamp, "format" -> format),
       ctx)
   }
 

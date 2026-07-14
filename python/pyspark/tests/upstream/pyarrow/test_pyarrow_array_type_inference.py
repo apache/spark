@@ -299,7 +299,10 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
 
         # pandas >= 3 infers large_string instead of string for object-dtype string Series
         string_type = pa.large_string() if LooseVersion(pd.__version__) >= "3.0.0" else pa.string()
-        # pandas >= 3 defaults to microsecond resolution instead of nanosecond
+        # pandas >= 3 parses/constructs datetime and timedelta at microsecond resolution
+        # instead of nanosecond (e.g. to_datetime, Timestamp(str), to_timedelta, tz-aware).
+        # The min/max boundary constants and the Timedelta(0) scalar stay nanosecond-backed
+        # in both pandas 2 and 3, since those values only fit in nanosecond resolution.
         ts_unit = "us" if LooseVersion(pd.__version__) >= "3.0.0" else "ns"
 
         sg = ZoneInfo("Asia/Singapore")
@@ -328,12 +331,12 @@ class PyArrowArrayTypeInferenceTests(unittest.TestCase):
             (pd.Series([date1, date2]), pa.date32()),
             (pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp(ts_unit)),
             (pd.Series([pd.Timestamp("1970-01-01")]), pa.timestamp(ts_unit)),
-            (pd.Series([pd.Timestamp.min]), pa.timestamp(ts_unit)),
-            (pd.Series([pd.Timestamp.max]), pa.timestamp(ts_unit)),
+            (pd.Series([pd.Timestamp.min]), pa.timestamp("ns")),
+            (pd.Series([pd.Timestamp.max]), pa.timestamp("ns")),
             (pd.Series(pd.to_timedelta(["1 day", "2 hours"])), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta(0)]), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta.min]), pa.duration(ts_unit)),
-            (pd.Series([pd.Timedelta.max]), pa.duration(ts_unit)),
+            (pd.Series([pd.Timedelta(0)]), pa.duration("ns")),
+            (pd.Series([pd.Timedelta.min]), pa.duration("ns")),
+            (pd.Series([pd.Timedelta.max]), pa.duration("ns")),
             # Timezone-aware
             (pd.Series([dt1_sg, dt2_sg]), pa.timestamp(ts_unit, tz="Asia/Singapore")),
             (pd.Series([ts1_la, ts2_la]), pa.timestamp(ts_unit, tz=la)),

@@ -503,7 +503,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_pin_thread",
@@ -591,6 +590,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
+        "pyspark.sql.tests.arrow.test_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
         "pyspark.sql.tests.arrow.test_arrow_udf",
@@ -600,6 +600,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.arrow.test_arrow_udf_typehints",
         "pyspark.sql.tests.arrow.test_arrow_udtf",
         "pyspark.sql.tests.pandas.test_pandas_cogrouped_map",
+        "pyspark.sql.tests.pandas.test_pandas_cogrouped_map_misc",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_map",
         "pyspark.sql.tests.pandas.test_pandas_udf",
@@ -817,12 +818,17 @@ pyspark_ml = Module(
 
 pyspark_install = Module(
     name="pyspark-install",
-    dependencies=[core],
+    dependencies=[],
     source_file_regexes=[
+        # Python package tests will be triggered with this module
+        # Any changes in python/ should trigger this module
+        # This module won't be executed for post-commit CIs so it's cheap
+        "python/",
         "python/pyspark/install.py",
         "python/pyspark/tests/test_install_spark.py",
     ],
     python_test_goals=[
+        "pyspark.tests.test_import_spark",
         "pyspark.tests.test_install_spark",
     ],
 )
@@ -907,6 +913,10 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
         "pyspark.pandas.tests.data_type_ops.test_null_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
+        "pyspark.pandas.tests.data_type_ops.test_num_ops_integral_ext",
+        "pyspark.pandas.tests.data_type_ops.test_num_ops_integral_ext_astype_cmp",
+        "pyspark.pandas.tests.data_type_ops.test_num_ops_fractional_ext",
+        "pyspark.pandas.tests.data_type_ops.test_num_ops_fractional_ext_astype_cmp",
         "pyspark.pandas.tests.data_type_ops.test_num_arithmetic",
         "pyspark.pandas.tests.data_type_ops.test_num_mod",
         "pyspark.pandas.tests.data_type_ops.test_num_mul_div",
@@ -1066,6 +1076,7 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.groupby.test_size",
         "pyspark.pandas.tests.groupby.test_split_apply",
         "pyspark.pandas.tests.groupby.test_split_apply_count",
+        "pyspark.pandas.tests.groupby.test_split_apply_mean",
         "pyspark.pandas.tests.groupby.test_split_apply_first",
         "pyspark.pandas.tests.groupby.test_split_apply_last",
         "pyspark.pandas.tests.groupby.test_split_apply_min_max",
@@ -1076,6 +1087,7 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.groupby.test_stat_adv",
         "pyspark.pandas.tests.groupby.test_stat_ddof",
         "pyspark.pandas.tests.groupby.test_stat_func",
+        "pyspark.pandas.tests.groupby.test_stat_median",
         "pyspark.pandas.tests.groupby.test_stat_prod",
         "pyspark.pandas.tests.groupby.test_value_counts",
         "pyspark.pandas.tests.diff_frames_ops.test_align",
@@ -1213,6 +1225,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_grouped_map",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map",
+        "pyspark.sql.tests.connect.arrow.test_parity_arrow_cogrouped_map_misc",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_python_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf",
         "pyspark.sql.tests.connect.arrow.test_parity_arrow_udf_scalar",
@@ -1222,6 +1235,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.pandas.test_parity_pandas_cogrouped_map_misc",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar",
         "pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_grouped_agg",
@@ -1342,6 +1356,10 @@ pyspark_pandas_connect = Module(
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_datetime_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_null_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops_integral_ext",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops_integral_ext_astype_cmp",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops_fractional_ext",
+        "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_ops_fractional_ext_astype_cmp",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_num_reverse",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_string_ops",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_udt_ops",
@@ -1485,6 +1503,7 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.groupby.test_parity_stat_adv",
         "pyspark.pandas.tests.connect.groupby.test_parity_stat_ddof",
         "pyspark.pandas.tests.connect.groupby.test_parity_stat_func",
+        "pyspark.pandas.tests.connect.groupby.test_parity_stat_median",
         "pyspark.pandas.tests.connect.groupby.test_parity_stat_prod",
         "pyspark.pandas.tests.connect.groupby.test_parity_aggregate",
         "pyspark.pandas.tests.connect.groupby.test_parity_apply_func",
@@ -1495,6 +1514,7 @@ pyspark_pandas_slow_connect = Module(
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_count",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_first",
+        "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_mean",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_last",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_min_max",
         "pyspark.pandas.tests.connect.groupby.test_parity_split_apply_skew",
@@ -1559,13 +1579,8 @@ pyspark_pandas_slow_connect = Module(
 
 pyspark_errors = Module(
     name="pyspark-errors",
-    dependencies=[],
+    dependencies=[pyspark_core],
     source_file_regexes=[
-        # SPARK-44544: Force the execution of pyspark_errors when there are any changes
-        # in PySpark, since the Python Packaging Tests is only enabled within this module.
-        # This module is the smallest Python test module, it contains only 1 test file
-        # and normally takes < 2 seconds, so the additional cost is small.
-        "python/",
         "python/pyspark/errors",
     ],
     python_test_goals=[
@@ -1622,6 +1637,7 @@ docs = Module(
     dependencies=[],
     source_file_regexes=[
         "docs/",
+        "python/docs/",
     ],
 )
 
@@ -1710,12 +1726,17 @@ dev_tools = Module(
         "scalastyle-config.xml",
         "dev/checkstyle.xml",
         "dev/checkstyle-suppressions.xml",
+        "dev/create_jira_and_branch.py",
+        "dev/create_spark_jira.py",
         "dev/spark-test-image/lint/Dockerfile",
         "dev/lint-python",
         "dev/lint-scala",
         "dev/reformat-python",
         "dev/structured_logging_style.py",
+        "dev/make-distribution.sh",
         "dev/merge_spark_pr.py",
+        "dev/requirements.txt",
+        "dev/pr_merge_status.py",
         "dev/create_spark_jira.py",
         "dev/create-release/",
     ],

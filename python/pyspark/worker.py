@@ -1755,9 +1755,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                     # then call eval once per input row.
                     pylist = [
                         (
-                            [conv(v) for v in column.to_pylist()]
+                            [conv(v) for v in ArrowTableToRowsConversion._to_pylist(column)]
                             if conv is not None
-                            else column.to_pylist()
+                            else ArrowTableToRowsConversion._to_pylist(column)
                         )
                         for column, conv in zip(batch.columns, converters)
                     ]
@@ -3067,7 +3067,11 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 # --- Input: Arrow -> Python columns ---
                 columns = [
-                    [conv(v) for v in col.to_pylist()] if conv is not None else col.to_pylist()
+                    (
+                        [conv(v) for v in ArrowTableToRowsConversion._to_pylist(col)]
+                        if conv is not None
+                        else ArrowTableToRowsConversion._to_pylist(col)
+                    )
                     for col, conv in zip(input_batch.itercolumns(), arrow_to_py_converters)
                 ]
                 if not columns:
