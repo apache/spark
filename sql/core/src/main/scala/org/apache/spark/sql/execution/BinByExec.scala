@@ -36,11 +36,7 @@ import org.apache.spark.sql.types.DoubleType
  * Bin boundaries reuse [[DateTimeUtils.timeBucketDTInterval]] /
  * [[DateTimeUtils.timestampAddDayTime]], matching `time_bucket`: sub-day widths use UTC microsecond
  * arithmetic, multi-day widths use civil-time arithmetic in the session zone (UTC for
- * TIMESTAMP_NTZ). DISTRIBUTE UNIFORM columns are FLOAT or DOUBLE only (enforced by `ResolveBinBy`)
- * and scale by plain IEEE multiplication.
- *
- * Output mirrors the logical `BinBy`: child columns with each DISTRIBUTE slot swapped to its scaled
- * produced attribute, then the three appended columns.
+ * TIMESTAMP_NTZ). DISTRIBUTE UNIFORM columns are FLOAT or DOUBLE only and scale by multiplication.
  */
 case class BinByExec(
     binWidthMicros: Long,
@@ -150,9 +146,8 @@ case class BinByExec(
     }
 
   /**
-   * Builds the scaled projection over `JoinedRow(childRow, appendedRow)`: a `BoundReference` for
-   * each forwarded child column, `Cast(Multiply(Cast(col, Double), ratioRef))` for the
-   * DISTRIBUTE columns, and `BoundReference`s into the appended row for the appended cols.
+   * Output projection over `JoinedRow(childRow, appendedRow)`: DISTRIBUTE columns scaled by the
+   * ratio, other columns passed through.
    */
   private def buildOutputExpressions(childLen: Int): Seq[Expression] = {
     val distSet = distributeColumns.map(bindOrdinal).toSet
@@ -178,9 +173,8 @@ case class BinByExec(
   }
 
   /**
-   * Builds the null-range projection over the child row only: non-DISTRIBUTE forwarded columns
-   * pass through unchanged; DISTRIBUTE columns and the three appended columns are NULL (no valid
-   * bin exists, so no scaled value or bin boundary can be computed).
+   * Null-range projection over the child row: DISTRIBUTE and appended columns are NULL (no valid
+   * bin), other columns passed through.
    */
   private def buildNullRangeExpressions(): Seq[Expression] = {
     val distSet = distributeColumns.map(bindOrdinal).toSet

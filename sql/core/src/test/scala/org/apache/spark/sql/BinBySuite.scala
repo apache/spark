@@ -26,20 +26,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class BinBySuite extends QueryTest with SharedSparkSession {
 
-  // The BIN BY tests pin the session zone to UTC, so expected timestamps must be built at UTC too
-  // (Timestamp.valueOf would parse in the JVM default zone and mismatch the UTC session output).
-  private def ts(s: String): Timestamp =
-    Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).toInstant(ZoneOffset.UTC))
-
-  // Builds the instant of a civil time in `zone`, for tests that pin a non-UTC session zone.
-  private def tsAt(s: String, zone: ZoneId): Timestamp =
+  private def tsAt(s: String, zone: ZoneId = ZoneOffset.UTC): Timestamp =
     Timestamp.from(LocalDateTime.parse(s.replace(' ', 'T')).atZone(zone).toInstant)
 
-  // TIMESTAMP_NTZ output columns materialize as `LocalDateTime` (zone-agnostic wall-clock time).
   private def ntz(s: String): LocalDateTime = LocalDateTime.parse(s.replace(' ', 'T'))
 
-  // Reproduces the operator's ratio arithmetic (`overlapMicros / totalMicros` in double) so an
-  // expected `bin_distribute_ratio` matches the kernel's bits (checkAnswer compares doubles raw).
   private def ratio(overlapMicros: Long, totalMicros: Long): Double =
     overlapMicros.toDouble / totalMicros.toDouble
 
@@ -71,8 +62,8 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
           |ORDER BY bin_start""".stripMargin)
       checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), ts("2024-01-01 00:05:00"), 0.5, 50.0),
-        Row(ts("2024-01-01 00:05:00"), ts("2024-01-01 00:10:00"), 0.5, 50.0)))
+        Row(tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 0.5, 50.0),
+        Row(tsAt("2024-01-01 00:05:00"), tsAt("2024-01-01 00:10:00"), 0.5, 50.0)))
     }
   }
 
@@ -91,8 +82,8 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (f, d))
           |ORDER BY bin_start""".stripMargin)
       checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), 50.0f, 100.0),
-        Row(ts("2024-01-01 00:05:00"), 50.0f, 100.0)))
+        Row(tsAt("2024-01-01 00:00:00"), 50.0f, 100.0),
+        Row(tsAt("2024-01-01 00:05:00"), 50.0f, 100.0)))
     }
   }
 
@@ -109,7 +100,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
       checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), ts("2024-01-01 00:05:00"), 1.0, 100.0)))
+        Row(tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 1.0, 100.0)))
     }
   }
 
@@ -117,8 +108,6 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // A NULL in either range column triggers the null-range path, so cover both a NULL rangeStart
-      // and a NULL rangeEnd. The `id` passthrough column is non-NULL and must survive unchanged.
       val df = spark.sql(
         """SELECT id, bin_start, bin_end, bin_distribute_ratio, value
           |FROM VALUES
@@ -129,8 +118,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
           |ORDER BY id""".stripMargin)
-      // All computed columns are NULL: no valid bin exists so neither scaled values nor bin
-      // boundaries can be computed. The non-DISTRIBUTE passthrough column `id` is unaffected.
+      // A NULL range nulls every computed column; only the `id` passthrough survives.
       checkAnswer(df, Seq(
         Row(1, null, null, null, null),
         Row(2, null, null, null, null)))
@@ -171,9 +159,9 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |BIN BY (
           |  RANGE ts_start TO ts_end BIN WIDTH INTERVAL '5' MINUTE
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))""".stripMargin)
-      // rangeStart == rangeEnd: one row in the bin containing the instant, ratio 1.0, value kept.
+      // rangeStart == rangeEnd: one row, ratio 1.0, value kept.
       checkAnswer(df, Seq(
-        Row(ts("2024-01-01 00:00:00"), ts("2024-01-01 00:05:00"), 1.0, 100.0)))
+        Row(tsAt("2024-01-01 00:00:00"), tsAt("2024-01-01 00:05:00"), 1.0, 100.0)))
     }
   }
 
@@ -209,9 +197,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
     withSQLConf(
         SQLConf.BIN_BY_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // The struct is passed through by reference on the JoinedRow left side and shared across the
-      // sub-rows of one input row; the per-partition UnsafeProjection copies it at each emit, so it
-      // must appear identically on every split row.
+      // A nested struct passthrough must appear identically on every split sub-row.
       val df = spark.sql(
         """SELECT s, bin_start, value
           |FROM VALUES
@@ -223,8 +209,8 @@ class BinBySuite extends QueryTest with SharedSparkSession {
           |  ALIGN TO TIMESTAMP '2024-01-01 00:00:00' DISTRIBUTE UNIFORM (value))
           |ORDER BY bin_start""".stripMargin)
       checkAnswer(df, Seq(
-        Row(Row(1, "x"), ts("2024-01-01 00:00:00"), 50.0),
-        Row(Row(1, "x"), ts("2024-01-01 00:05:00"), 50.0)))
+        Row(Row(1, "x"), tsAt("2024-01-01 00:00:00"), 50.0),
+        Row(Row(1, "x"), tsAt("2024-01-01 00:05:00"), 50.0)))
     }
   }
 
@@ -246,8 +232,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
 
   test("BIN BY executes on NTZ inputs with the epoch default origin") {
     withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
-      // NTZ output columns are TIMESTAMP_NTZ and the default origin is the wall-clock epoch (LTZ
-      // defaults to the session-zone epoch); a 10-minute range over a 5-minute grid splits in two.
+      // NTZ inputs default the origin to the wall-clock epoch.
       val df = spark.sql(
         """SELECT bin_start, bin_end, bin_distribute_ratio, value
           |FROM VALUES

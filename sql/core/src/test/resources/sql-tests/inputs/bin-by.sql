@@ -1,10 +1,3 @@
--- BIN BY relation operator: end-to-end execution and output snapshots.
--- Per-row edge cases (inverted / NULL / zero-length) and DST variants are covered by BinBySuite;
--- this file snapshots the main scenarios plus representative analysis errors.
-
--- Enable the operator (gated off by default) and pin the session zone to UTC so the TIMESTAMP
--- literals and LTZ output are zone-independent. These are SQL statements, not `--SET` header
--- directives, so they also apply under ThriftServerQueryTestSuite (which ignores header configs).
 SET spark.sql.binByRelationOperator.enabled = true;
 SET TIME ZONE 'UTC';
 
@@ -15,8 +8,7 @@ SELECT * FROM VALUES
 AS metrics(ts_start, ts_end, value);
 
 
--- Single-bin pass-through (row 1) and a multi-bin split with proportional redistribution (row 2).
--- The input range columns pass through unclipped on every sub-row.
+-- Basic split: one row fits a single bin, the other spans multiple bins.
 SELECT * FROM metrics BIN BY (
   RANGE ts_start TO ts_end
   BIN WIDTH INTERVAL '5' MINUTE
