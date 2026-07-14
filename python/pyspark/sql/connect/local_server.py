@@ -20,44 +20,21 @@ Opt-in reuse of a persistent local Spark Connect server (``spark.local.connect.r
 ``SPARK_LOCAL_CONNECT_REUSE``).
 
 By default ``SparkSession.builder.remote("local[*]").getOrCreate()`` boots a fresh in-process
-Connect server in every Python process (see ``SparkSession._start_connect_server`` in
-``pyspark.sql.connect.session``). When reuse is enabled, the first run instead starts one
-long-lived server through the standard ``sbin/start-connect-server.sh`` script -- the same
-daemon a user would start by hand -- and records how to reach it in a *discovery file* (host,
-port, auth token, pid and Spark version). Later runs validate that record (matching Spark
-version, live pid, port accepting connections) and reconnect instead of starting another
-server. Each client connection gets its own isolated server-side session, so session-local
-state (temp views, runtime SQL confs, session artifacts) does not leak between runs.
+Connect server in every Python process. With reuse enabled, the first run starts one
+long-lived server through ``sbin/start-connect-server.sh`` and records how to reach it (host,
+port, auth token, pid, Spark version) in a discovery file; later runs reconnect to it if the
+version matches, the pid is alive, and the port accepts connections. Each run still gets its
+own server-side session, so session-local state does not leak between runs.
 
-The module is built from three components:
+The discovery file, the daemon's pid file, and the logs live in a per-user ``0700`` directory
+under the system temp dir; ``SPARK_LOCAL_CONNECT_DISCOVERY`` overrides the discovery file
+location. The auth token is stored with ``0600`` and the server binds localhost, so other
+users on the machine can neither read the token nor reach the server. Processes of the same
+user share the server by design.
 
-- :class:`LocalConnectServer` -- one persistent server: its ``url``, whether this client can
-  reuse it (:meth:`LocalConnectServer.is_reusable`) and stopping it
-  (:meth:`LocalConnectServer.stop`).
-- :class:`Discovery` -- the discovery file: where it lives, loading it back as a
-  ``LocalConnectServer``, atomically saving one, and the cross-process lock serializing
-  server start-up.
-- :class:`ServerLauncher` -- starting a fresh server through ``sbin/start-connect-server.sh``
-  (which daemonizes it via ``sbin/spark-daemon.sh``) and waiting until it accepts connections.
-
-The discovery file -- and with it the daemon's pid file and logs -- lives in a per-user
-directory under the system temp dir (``<tempdir>/spark-connect-<uid>``, mode ``0700``), so
-nothing accumulates in permanent directories and stale records do not survive a reboot. Set
-``SPARK_LOCAL_CONNECT_DISCOVERY`` to relocate the discovery file (and the rest with it).
-
-Threat model: this is a local development convenience, and the boundary drawn is *other
-users on the same machine*. The server binds ``localhost`` and requires the auth token; the
-token lives in the ``0600`` discovery file inside the ``0700`` per-user directory, whose
-ownership is verified before trusting anything read from it (the temp dir itself is
-world-writable). Processes of the same user are trusted -- they may reuse, reconfigure, or
-stop the shared server, which is the point of the feature.
-
-The server runs until stopped with::
-
-    python -m pyspark.sql.connect.local_server --stop
-
-or ``sbin/stop-connect-server.sh``. This relies on the POSIX shell scripts under ``sbin/``, so
-the reuse path is not supported on Windows.
+The server runs until stopped with ``python -m pyspark.sql.connect.local_server --stop`` or
+``sbin/stop-connect-server.sh``. Windows is not supported, as this relies on the POSIX
+scripts under ``sbin/``.
 """
 
 import argparse
@@ -100,7 +77,6 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _per_user_runtime_dir() -> str:
-    """Create (if needed) and return the per-user runtime directory under the temp dir."""
     try:
         owner = str(os.getuid())
     except AttributeError:  # Windows; the reuse path is rejected there anyway
@@ -119,12 +95,7 @@ def _per_user_runtime_dir() -> str:
 
 
 class LocalConnectServer:
-    """One persistent local Spark Connect server, as recorded in the discovery file.
-
-    A plain record of how to reach the server (host, port, auth token) and identify it (pid,
-    Spark version), plus the operations scoped to it: the client ``url``, probing whether this
-    client can reuse it, and stopping it.
-    """
+    """One persistent local Connect server, as recorded in the discovery file."""
 
     def __init__(self, host: str, port: int, token: str, pid: int, spark_version: str):
         self.host = host
@@ -135,24 +106,19 @@ class LocalConnectServer:
 
     @property
     def url(self) -> str:
-        """The ``sc://host:port`` endpoint clients connect to."""
         return "sc://{}:{}".format(self.host, self.port)
 
     def is_listening(self) -> bool:
-        """Whether the server currently accepts TCP connections on its recorded port."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.5)
             return sock.connect_ex((self.host, self.port)) == 0
 
     def is_reusable(self) -> bool:
-        """Decide whether this client process can reuse the server.
+        """Whether this client can reuse the server: same Spark version, pid alive, port open.
 
-        Reuse requires that the recorded Spark version matches this client's, that the
-        recorded process is still alive, and that it is accepting connections on the recorded
-        port. A version mismatch, dead pid, or closed port means the caller must start its own
-        server instead. The pid probe runs only on POSIX: on Windows ``os.kill(pid, 0)``
-        *terminates* the target process rather than testing it, so there the port probe is the
-        only liveness signal.
+        The pid probe runs only on POSIX: on Windows ``os.kill(pid, 0)`` terminates the
+        target process instead of testing it, so there the port probe is the only liveness
+        signal.
         """
         from pyspark.version import __version__
 
@@ -163,7 +129,7 @@ class LocalConnectServer:
         return self.is_listening()
 
     def stop(self) -> bool:
-        """Best-effort SIGTERM to the server JVM; ``False`` if it could not be signalled."""
+        """Best-effort SIGTERM to the server JVM."""
         try:
             os.kill(self.pid, signal.SIGTERM)
             return True
@@ -172,17 +138,10 @@ class LocalConnectServer:
 
 
 class Discovery:
-    """The discovery file through which runs find the persistent local server.
+    """Reads and writes the discovery file recording the persistent local server.
 
-    Owns everything scoped to that file: its location, parsing it back into a
-    :class:`LocalConnectServer` (:meth:`load`), atomically writing one with ``0600`` perms
-    (:meth:`save`, the file holds the auth token), and the cross-process file lock that
-    serializes server start-up (:meth:`lock`). Its :attr:`directory` also hosts the daemon's
-    pid file and logs.
-
-    The default location is ``spark-connect-<uid>/connect-local.json`` under the system temp
-    dir -- per-user, mode ``0700``, and gone after a reboot -- and can be overridden with the
-    ``SPARK_LOCAL_CONNECT_DISCOVERY`` environment variable.
+    The file lives in a per-user directory under the system temp dir, or wherever
+    ``SPARK_LOCAL_CONNECT_DISCOVERY`` points; the daemon's pid file and logs sit next to it.
     """
 
     def __init__(self, path: Optional[str] = None):
@@ -194,7 +153,6 @@ class Discovery:
 
     @property
     def directory(self) -> str:
-        """Directory holding the discovery file, the daemon's pid file, and its logs."""
         return os.path.dirname(self.path) or os.getcwd()
 
     def load(self) -> Optional[LocalConnectServer]:
@@ -221,7 +179,7 @@ class Discovery:
         return server
 
     def save(self, server: LocalConnectServer) -> None:
-        """Atomically write the discovery file with ``0600`` perms (it holds the auth token)."""
+        """Atomically write the discovery file with ``0600`` perms; it holds the auth token."""
         parent = os.path.dirname(self.path)
         if parent:
             os.makedirs(parent, exist_ok=True)
@@ -239,16 +197,15 @@ class Discovery:
         os.replace(tmp, self.path)
 
     def clear(self) -> None:
-        """Remove the discovery file, if present."""
         with contextlib.suppress(OSError):
             os.remove(self.path)
 
     @contextlib.contextmanager
     def lock(self) -> Iterator[None]:
-        """Exclusive cross-process file lock serializing persistent-server start-up.
+        """Cross-process file lock serializing server start-up.
 
-        On platforms without ``fcntl`` this is a no-op: racing callers may each start a
-        server, and the losers reconnect to the one that wins the discovery-file update.
+        Without ``fcntl`` this is a no-op: racing callers may each start a server, and the
+        losers reconnect to the one that wins the discovery-file update.
         """
         try:
             import fcntl
@@ -268,22 +225,13 @@ class Discovery:
 
 
 def _daemon_pid_file(directory: str) -> str:
-    """The pid file spark-daemon.sh maintains for the server started by this module.
-
-    Shared knowledge between :class:`ServerLauncher` (reads it while waiting for start-up)
-    and :func:`stop_local_connect_server` (removes it so a fresh start is never refused).
-    """
+    """The pid file spark-daemon.sh maintains for the server started by this module."""
     return os.path.join(directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
 
 
 class ServerLauncher:
-    """Starts a persistent local Connect server through ``sbin/start-connect-server.sh``.
-
-    Owns the launch-time machinery: choosing the port, seeding start-up configs through a
-    ``--properties-file``, invoking the sbin script (which daemonizes the server JVM via
-    ``sbin/spark-daemon.sh``), and waiting until the server accepts connections -- at which
-    point the discovery file is written and the running :class:`LocalConnectServer` returned.
-    Callers must hold ``Discovery.lock`` (see :func:`reuse_or_start_local_connect_server`).
+    """Starts a persistent local server via ``sbin/start-connect-server.sh`` and waits until
+    it accepts connections. Callers must hold ``Discovery.lock()``.
     """
 
     _READY_TIMEOUT = 120
@@ -297,7 +245,6 @@ class ServerLauncher:
         self._pid_file = _daemon_pid_file(self._directory)
 
     def launch(self) -> LocalConnectServer:
-        """Start the server, wait until it is reachable, and record it for later runs."""
         os.makedirs(self._directory, exist_ok=True)
         token = self._token()
         port = self._pick_port()
@@ -311,12 +258,8 @@ class ServerLauncher:
                     os.remove(conf_file)
 
     def _token(self) -> str:
-        """The auth token for the new server.
-
-        Same precedence as the in-process ``_start_connect_server``: an explicit env token,
-        then one passed as a conf, then a fresh one. The token travels through the
-        environment, never argv, where it would be visible in ``ps`` output.
-        """
+        # Same precedence as the in-process _start_connect_server: explicit env token, then
+        # conf, then a fresh one. Passed via the environment so it never shows up in `ps`.
         return (
             os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
             or self._opts.get("spark.connect.authenticate.token")
@@ -324,14 +267,11 @@ class ServerLauncher:
         )
 
     def _pick_port(self) -> int:
-        """Choose the port for the fresh server.
-
-        Tests always use an OS-assigned free port so suites can run in parallel. Otherwise
-        the configured/default port is honored unless it is already taken -- e.g. by a stale
-        server just rejected on version mismatch -- in which case an OS-assigned port is used
-        instead. Unlike the in-process path, the standalone script cannot report an ephemeral
-        port back to us, so the free port is picked (and released) here, subject to a small
-        race until the server binds it.
+        """Under SPARK_TESTING always use an OS-assigned free port so suites can run in
+        parallel; otherwise honor the configured/default port, falling back to a free one if
+        it is taken (e.g. by a stale server just rejected on version mismatch). The sbin
+        script cannot report an ephemeral port back, so the free port is picked and released
+        here, with a small race until the server binds it.
         """
 
         def free_port() -> int:
@@ -354,14 +294,11 @@ class ServerLauncher:
                 return free_port()
 
     def _seed_conf(self) -> Dict[str, Any]:
-        """Start-up configs to seed the freshly started server with.
-
-        Mirrors the merge that the in-process ``SparkSession._start_connect_server`` applies
-        to its ``SparkConf`` so that first-run behavior matches (warehouse dir, app name,
-        jars/packages, catalog confs, etc.). Keys the launcher controls itself (master, port,
-        token) and the ``spark.local.connect.*`` opt-in keys are excluded. This only seeds
-        the run that *starts* the server; a later run reconnecting to an already-warm JVM
-        cannot change its static configs.
+        """Startup confs for the new server, merged like the in-process
+        ``_start_connect_server`` merges ``PYSPARK_REMOTE_INIT_CONF_*`` with the builder
+        opts, minus the keys the launcher sets itself and the ``spark.local.connect.*``
+        opt-in keys. Only the run that starts the server can seed static confs; later runs
+        find the JVM already warm.
         """
         conf: Dict[str, Any] = {}
         for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
@@ -379,11 +316,8 @@ class ServerLauncher:
         return conf
 
     def _write_seed_properties(self) -> Optional[str]:
-        """Write the seed configs as a ``--properties-file`` for spark-submit, or ``None``.
-
-        Written with ``0600`` perms since configs may hold sensitive values; passing a file
-        keeps them off the server's argv, where they would be visible in ``ps`` output.
-        """
+        # Written with 0600 perms since confs may hold sensitive values; a --properties-file
+        # keeps them off the server's argv where they would show up in `ps`.
         seed = self._seed_conf()
         if not seed:
             return None
@@ -398,7 +332,6 @@ class ServerLauncher:
         return path
 
     def _daemon_pid(self) -> Optional[int]:
-        """The pid spark-daemon.sh recorded for the server it started, if any."""
         try:
             with open(self._pid_file, "r") as f:
                 return int(f.read().strip())
@@ -406,7 +339,6 @@ class ServerLauncher:
             return None
 
     def _run_script(self, port: int, token: str, conf_file: Optional[str]) -> None:
-        """Run ``sbin/start-connect-server.sh``, which daemonizes the server JVM."""
         from pyspark.find_spark_home import _find_spark_home
 
         spark_home = os.environ.get("SPARK_HOME") or _find_spark_home()
@@ -460,7 +392,6 @@ class ServerLauncher:
             )
 
     def _await_ready(self, port: int, token: str) -> LocalConnectServer:
-        """Wait for the daemonized server to accept connections, then record it."""
         from pyspark.version import __version__
 
         deadline = time.time() + self._READY_TIMEOUT
@@ -477,7 +408,6 @@ class ServerLauncher:
                     )
             time.sleep(0.25)
 
-        # Timed out: best-effort stop of the server we just started, then fail.
         pid = self._daemon_pid()
         if pid is not None:
             with contextlib.suppress(OSError):
@@ -492,11 +422,9 @@ class ServerLauncher:
 def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
     """Reuse a running persistent local Connect server, or start one if none is reusable.
 
-    Returns the ``sc://host:port`` endpoint to connect to, and sets
-    ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates against that server.
-    This is the opt-in counterpart of ``SparkSession._start_connect_server`` and is only
-    reached for a ``local`` master when ``spark.local.connect.reuse`` /
-    ``SPARK_LOCAL_CONNECT_REUSE`` is set.
+    Returns the ``sc://host:port`` endpoint and sets ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so
+    the client authenticates against that server. Only reached for a ``local`` master when
+    the reuse opt-in is set; see ``SparkSession.getOrCreate`` in ``pyspark.sql.session``.
     """
     if os.name != "posix":
         raise _start_failed(
@@ -505,12 +433,9 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
             'connect with .remote("sc://...")'
         )
     discovery = Discovery()
-    # Fast path: reuse an already-running server without taking the cross-process lock.
     server = discovery.load()
     if server is None or not server.is_reusable():
-        # No reusable server yet. Serialize start-up across processes when file locking is
-        # available. Without it, racing callers may each start a server; the winner writes
-        # the discovery file and the others reconnect to it.
+        # Re-check under the lock: another process may have started a server meanwhile.
         with discovery.lock():
             server = discovery.load()
             if server is None or not server.is_reusable():
@@ -520,24 +445,18 @@ def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> st
 
 
 def stop_local_connect_server() -> bool:
-    """Stop the persistent local Spark Connect server started by the reuse path, if any.
-
-    Returns ``True`` if a running server was signalled to stop. Safe to call when none is
-    running. Also exposed on the command line for the dev loop::
-
-        python -m pyspark.sql.connect.local_server --stop
+    """Stop the recorded persistent local Connect server, if any; safe to call when none is
+    running. Also available as ``python -m pyspark.sql.connect.local_server --stop``.
     """
     discovery = Discovery()
-    # Hold the start-up lock so a stop racing a concurrent launch cannot signal or unlink the
-    # newcomer's record mid-start; the stop simply waits for the launch to finish first.
+    # Under the lock so a stop racing a concurrent launch cannot unlink the newcomer's record.
     with discovery.lock():
         server = discovery.load()
         stopped = False
         if server is not None and server.pid != os.getpid():
             stopped = server.stop()
         discovery.clear()
-        # Also drop the spark-daemon.sh pid file so a fresh start is never refused on its
-        # account.
+        # Drop the spark-daemon.sh pid file too, or it would refuse the next start.
         with contextlib.suppress(OSError):
             os.remove(_daemon_pid_file(discovery.directory))
         return stopped
