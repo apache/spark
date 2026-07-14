@@ -41,7 +41,6 @@ if should_test_connect:
 
 @contextlib.contextmanager
 def _listening_socket():
-    """A live localhost listener; yields its port."""
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         listener.bind(("localhost", 0))
@@ -59,8 +58,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
     """Tests for the opt-in persistent local Spark Connect server (SPARK_LOCAL_CONNECT_REUSE)."""
 
     def setUp(self) -> None:
-        # Point discovery at a throwaway path and remember the env we override, so each test starts
-        # from a clean slate and the real per-user discovery file is never touched.
+        # Point discovery at a throwaway path so the real per-user file is never touched.
         self._tmpdir = tempfile.mkdtemp()
         self._discovery_path = os.path.join(self._tmpdir, "connect-local.json")
         self._saved_env = {
@@ -71,13 +69,12 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         try:
-            # Only stop a real, separately-spawned server. The discovery-logic unit tests fabricate
-            # discovery files that point at this very process, which must never be signalled.
+            # Only stop a real, separately-spawned server. Several tests fabricate discovery
+            # files pointing at this very process, which must never be signalled.
             server = Discovery().load()
             if server is not None and server.pid != os.getpid():
                 local_server.stop_local_connect_server()
-                # stop_local_connect_server only signals the server and returns; wait for the JVM
-                # to actually release the port so the next test starts from a clean slate.
+                # Wait for the JVM to release the port so the next test starts clean.
                 self._wait_port_closed(server.host, server.port)
         finally:
             for k, v in self._saved_env.items():
@@ -85,8 +82,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
-            # Remove the whole scratch dir: besides the discovery file it may hold a .lock file,
-            # seed-conf temp files, and a seeded warehouse directory.
             shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def _server(self, **overrides) -> "LocalConnectServer":
@@ -100,13 +95,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         fields.update(overrides)
         return LocalConnectServer(**fields)
 
-    # -- Discovery: location, save/load roundtrip, malformed input --------------------------------
-
     def test_discovery_location(self) -> None:
-        # The env override wins; without it the file lives in a per-user 0700 directory under
-        # the system temp dir (under run-tests TMPDIR itself is a per-run scratch dir), never
-        # in a permanent location like the home directory.
         self.assertEqual(Discovery().path, self._discovery_path)
+        # Without the override the file lives in a per-user 0700 dir under the temp dir.
         os.environ.pop("SPARK_LOCAL_CONNECT_DISCOVERY")
         default = Discovery()
         self.assertTrue(default.directory.startswith(tempfile.gettempdir()))
@@ -118,7 +109,7 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         discovery = Discovery()
         saved = self._server(port=15002)
         discovery.save(saved)
-        # The file holds the auth token, so it must not be readable by other users.
+        # The file holds the auth token and must not be readable by other users.
         self.assertEqual(os.stat(discovery.path).st_mode & 0o777, 0o600)
         loaded = discovery.load()
         for attr in ("host", "port", "token", "pid", "spark_version", "url"):
@@ -152,8 +143,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
                     f.write(content)
                 self.assertIsNone(discovery.load())
 
-    # -- LocalConnectServer: reusability and stop --------------------------------------------------
-
     def test_server_is_reusable(self) -> None:
         with _listening_socket() as port:
             with self.subTest("alive process listening on the port with a matching version"):
@@ -171,11 +160,8 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             self.assertFalse(server.is_reusable())
 
     def test_pid_probe_is_skipped_on_windows(self) -> None:
-        """The pid liveness probe must never run on Windows.
-
-        There ``os.kill(pid, 0)`` does not probe the process -- it unconditionally *terminates*
-        it via TerminateProcess -- so the reuse check would kill the very server it is examining.
-        """
+        # On Windows os.kill(pid, 0) terminates the target instead of probing it, so the
+        # reuse check would kill the very server it is examining.
         from unittest import mock
 
         with _listening_socket() as port:
@@ -183,8 +169,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             with mock.patch.object(os, "name", "nt"), mock.patch.object(os, "kill") as kill:
                 self.assertTrue(server.is_reusable())
                 kill.assert_not_called()
-
-    # -- stopping: safe no-op, signals the recorded server, CLI ------------------------------------
 
     def test_stop_when_no_server_is_safe(self) -> None:
         self.assertFalse(local_server.stop_local_connect_server())
@@ -199,7 +183,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         self.assertIsNone(Discovery().load())
 
     def test_stop_cli_reports_when_no_server(self) -> None:
-        """`python -m pyspark.sql.connect.local_server --stop` is safe with nothing running."""
         result = subprocess.run(
             [sys.executable, "-m", "pyspark.sql.connect.local_server", "--stop"],
             env=dict(os.environ),
@@ -211,7 +194,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         self.assertIn("No running persistent local Spark Connect server", result.stdout)
 
     def test_reuse_or_start_requires_posix(self) -> None:
-        """The reuse path depends on the sbin shell scripts and must refuse to run elsewhere."""
         from unittest import mock
 
         from pyspark.errors import PySparkRuntimeError
@@ -220,8 +202,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             with self.assertRaises(PySparkRuntimeError) as ctx:
                 local_server.reuse_or_start_local_connect_server("local[2]", {})
         self.assertIn("POSIX", str(ctx.exception))
-
-    # -- end-to-end: start a real server via sbin scripts, reconnect, verify isolation ------------
 
     def _release(self, session) -> None:
         """Close one client session without stopping the shared server."""
@@ -235,7 +215,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             pass
 
     def _wait_port_closed(self, host, port, timeout=30) -> bool:
-        """Wait for ``host:port`` to stop accepting connections; return True if it closed."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -319,8 +298,6 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "the reuse path relies on the POSIX sbin scripts")
     def test_start_reuse_and_session_isolation(self) -> None:
-        # First call starts a persistent server via sbin scripts and records it in the discovery
-        # file.
         endpoint = local_server.reuse_or_start_local_connect_server("local[2]", {})
         self.assertTrue(endpoint.startswith("sc://localhost:"))
 
@@ -333,18 +310,17 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
         s1 = s2 = None
         try:
-            # A second call reuses the running server: same endpoint, no new process spawned.
+            # A second call reuses the running server instead of spawning a new one.
             endpoint2 = local_server.reuse_or_start_local_connect_server("local[2]", {})
             self.assertEqual(endpoint2, endpoint)
             self.assertEqual(Discovery().load().pid, first_pid)
 
-            # Two independent client connections to the same server run real queries...
             s1 = RemoteSparkSession.builder.remote(endpoint).create()
             s2 = RemoteSparkSession.builder.remote(endpoint).create()
             self.assertEqual(s1.range(5).count(), 5)
             self.assertEqual(s2.range(3).count(), 3)
 
-            # ...and session-local state (a temp view) does not leak across connections.
+            # Session-local state must not leak across connections.
             s1.range(1).createOrReplaceTempView("only_in_s1")
             self.assertIn("only_in_s1", [t.name for t in s1.catalog.listTables()])
             self.assertNotIn("only_in_s1", [t.name for t in s2.catalog.listTables()])
@@ -354,11 +330,9 @@ class LocalConnectServerReuseTests(unittest.TestCase):
             if s2 is not None:
                 self._release(s2)
 
-        # Stopping signals the server and removes the discovery file.
         self.assertTrue(local_server.stop_local_connect_server())
         self.assertIsNone(Discovery().load())
-        # The server should stop accepting connections shortly afterwards. (We check the port
-        # rather than the pid, which can linger briefly while the JVM shuts down.)
+        # Check the port rather than the pid, which can linger while the JVM shuts down.
         self.assertTrue(
             self._wait_port_closed(server.host, server.port),
             "server port {} still open after stop".format(server.port),
@@ -366,11 +340,8 @@ class LocalConnectServerReuseTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "posix", "the reuse path relies on the POSIX sbin scripts")
     def test_start_seeds_static_conf_on_the_server(self) -> None:
-        """A start-up conf passed by the first caller reaches the server's SparkConf.
-
-        The opts also carry keys the launcher must strip rather than forward (the reuse opt-in
-        itself and the master); startup succeeding with them present covers that filtering.
-        """
+        # spark.local.connect.* and spark.master must be stripped from the seed, not
+        # forwarded; startup succeeding with them present covers that.
         warehouse = os.path.join(self._tmpdir, "seeded-wh")
         opts = {
             "spark.sql.warehouse.dir": warehouse,
@@ -381,12 +352,12 @@ class LocalConnectServerReuseTests(unittest.TestCase):
         spark = None
         try:
             spark = RemoteSparkSession.builder.remote(endpoint).create()
-            # The per-session apply path cannot set this static conf after the JVM is running.
+            # A static conf cannot be set per-session after the JVM is up, so seeing it here
+            # proves the seed reached the server's SparkConf.
             self.assertTrue(spark.conf.get("spark.sql.warehouse.dir").endswith(warehouse))
         finally:
             if spark is not None:
                 self._release(spark)
-            # tearDown stops the server and waits for the port to close.
 
 
 if __name__ == "__main__":
