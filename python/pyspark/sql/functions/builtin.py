@@ -21907,7 +21907,7 @@ def variant_set(
         _to_java_column(v),
         _to_java_column(path_col),
         _to_java_column(value),
-        _to_java_column(lit(create_if_missing)),
+        _enum_to_value(create_if_missing),
     )
 
 
