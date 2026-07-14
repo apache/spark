@@ -124,8 +124,22 @@ jobs:
       - name: Build docs
         run: |
           cd docs
-          SKIP_RDOC=1 bundle exec jekyll build
+          SKIP_RDOC=1 bundle exec jekyll build 2>&1 | tee "$RUNNER_TEMP/docs-build.log"
 
       - name: Remove javadoc problem matcher
         if: always()
         run: echo "::remove-matcher owner=javadoc-doclint::"
+
+      - name: Extract annotations
+        if: always()
+        run: |
+          grep -E '^::(error|warning|notice) ' "$RUNNER_TEMP/docs-build.log" \
+            > "$RUNNER_TEMP/annotations.txt" || true
+
+      - name: Upload annotations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-annotations
+          path: ${{ runner.temp }}/annotations.txt
+          retention-days: 3
