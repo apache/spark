@@ -104,7 +104,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         memory_limit_mb = int(os.environ.get("PYSPARK_EXECUTOR_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
-        TaskContext._setTaskContext(init_info.task_context.to_task_context())
+        task_context = init_info.task_context.to_task_context()
+        TaskContext._setTaskContext(task_context)
 
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
@@ -310,7 +311,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 )
 
                 with WorkerSamplingProfiler(
-                    sampling_interval=runner_conf.udf_profiler_sampling_interval
+                    sampling_interval=runner_conf.udf_profiler_sampling_interval,
+                    task_context=task_context,
                 ) as profiler:
                     run_process()
                 profiler.save(accumulator)

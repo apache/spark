@@ -55,6 +55,7 @@ from pyspark.profiler import (
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ProfileResults, ProfileResultsV2
+    from pyspark.taskcontext import TaskContext
 
 
 class _ProfileResultsParam(AccumulatorParam[Optional["ProfileResults"]]):
@@ -142,9 +143,11 @@ class WorkerSamplingProfiler:
 
     def __init__(
         self,
+        task_context: "TaskContext",
         sampling_interval: float = 1000,
     ) -> None:
         self._callstack_data = {}
+        self._task_context = task_context
         self._sampling_interval = sampling_interval
         self._stop_event = threading.Event()
 
@@ -163,7 +166,7 @@ class WorkerSamplingProfiler:
         WorkerSamplingProfiler._sampling_thread = None
 
     def save(self, accumulator: Accumulator["ProfileResultsV2"]) -> None:
-        accumulator.add({"callstack": self._callstack_data})
+        accumulator.add({self._get_task_key(): {"callstack": self._callstack_data}})
 
     def _start_sampling_thread(self) -> None:
         if self._sampling_thread is not None:
@@ -197,6 +200,10 @@ class WorkerSamplingProfiler:
     def _get_ident_from_frame(self, frame: FrameType) -> str:
         code = frame.f_code
         return f"{code.co_qualname} ({code.co_filename}:{code.co_firstlineno})"
+
+    def _get_task_key(self) -> str:
+        tc = self._task_context
+        return f"{tc.stageId()}_{tc.partitionId()}.{tc.attemptNumber()}_{tc.taskAttemptId()}"
 
 
 class WorkerPerfProfiler:
