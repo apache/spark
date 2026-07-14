@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CaseWhen, Cast, Coalesce, Expression, If, Literal, Lower, String2TrimExpression, Substring, UnsafeRow, Upper}
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
+import org.apache.spark.MapOutputStatistics
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CaseWhen, Cast, Coalesce, Expression, If, Literal, String2TrimExpression, Substring, UnsafeRow}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.LeftExistence
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.catalyst.plans.logical.{Join, SHUFFLE_MERGE}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
@@ -30,12 +31,21 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.window.{WindowExecBase, WindowGroupLimitExec}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Converts a [[SortMergeJoinExec]] into a [[ShuffledHashJoinExec]] during adaptive execution when
  * a build side's materialized shuffle statistics show it is small enough for a local hash map.
- * Unlike [[DynamicJoinSelection]], this runs on the physical plan, so it can reach the input
- * shuffle through operators (aggregate, project, filter, window, etc...) sitting above it.
+ *
+ * This runs on the physical plan and owns the shuffled-hash-over-sort-merge selection that AQE
+ * makes from materialized shuffle statistics. It is gated by
+ * `spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled` (default true, the master
+ * switch), and has two modes:
+ *   - Default: it looks through the sort merge join's own required [[SortExec]] to reach a
+ *     *direct* input shuffle.
+ *   - Behind `...convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled`: it
+ *     additionally looks through non-shuffle operators (aggregate, project, filter, window,
+ *     left-existence join) sitting above the shuffle.
  *
  * The swap is shuffle-free since both joins are `ShuffledJoin`s with the same distribution and
  * partitioning; only the child sorts become unnecessary. As a shuffled hash join loses the sort
@@ -43,8 +53,7 @@ import org.apache.spark.sql.execution.window.{WindowExecBase, WindowGroupLimitEx
  * ancestor still needs, and AQE's [[CostEvaluator]] decides whether to adopt the converted plan.
  *
  * A shuffled hash join builds a non-spillable local hash map, so the traversed operators must not
- * blow up the build size that the input shuffle statistics estimate. Two guards keep that estimate
- * a valid bound (see [[ExtractShuffleStage]] and [[selectBuildSide]]):
+ * blow up the build size that the input shuffle statistics estimate:
  *   - the traversal only looks through an operator whose output expressions are all size-bounded
  *     (see [[isSizeBoundedExpr]]), so no operator can widen a row in a way the shuffle statistics
  *     cannot see; and
@@ -54,33 +63,15 @@ import org.apache.spark.sql.execution.window.{WindowExecBase, WindowGroupLimitEx
 case class ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements: EnsureRequirements)
   extends Rule[SparkPlan] with JoinSelectionHelper {
 
-  /**
-   * Chooses the build side for the shuffled hash join. A side is eligible only if it is allowed
-   * as a build side for this join type and its (widening-adjusted) input shuffle is small enough
-   * to build a local hash map. When both sides are eligible, the smaller one (by widening-adjusted
-   * total shuffle bytes) is chosen.
-   */
-  private def selectBuildSide(
-      smj: SortMergeJoinExec,
-      left: ShuffleQueryStageExec,
-      right: ShuffleQueryStageExec): Option[BuildSide] = {
-    val leftFactor = wideningFactor(smj.left.output, left.output)
-    val rightFactor = wideningFactor(smj.right.output, right.output)
-    val canBuildLeft = canBuildShuffledHashJoinLeft(smj.joinType) &&
-      preferShuffledHashJoin(left.mapStats.get, leftFactor)
-    val canBuildRight = canBuildShuffledHashJoinRight(smj.joinType) &&
-      preferShuffledHashJoin(right.mapStats.get, rightFactor)
-    if (canBuildLeft && canBuildRight) {
-      val leftSize = left.mapStats.get.bytesByPartitionId.sum * leftFactor
-      val rightSize = right.mapStats.get.bytesByPartitionId.sum * rightFactor
-      if (leftSize < rightSize) Some(BuildLeft) else Some(BuildRight)
-    } else if (canBuildLeft) {
-      Some(BuildLeft)
-    } else if (canBuildRight) {
-      Some(BuildRight)
-    } else {
-      None
-    }
+  private def preferShuffledHashJoin(
+      mapStats: MapOutputStatistics,
+      sizeInBytesFactor: Double): Boolean = {
+    val maxShuffledHashJoinLocalMapThreshold =
+      conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
+    val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
+      mapStats.bytesByPartitionId.forall(
+        _ * sizeInBytesFactor <= maxShuffledHashJoinLocalMapThreshold)
   }
 
   /**
@@ -105,9 +96,10 @@ case class ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements: EnsureRequ
       buildRowSize / shuffleRowSize)
   }
 
-  private def hasJoinStrategyHint(smj: SortMergeJoinExec): Boolean = smj.logicalLink.exists {
+  private def hasSortMergeJoinHint(smj: SortMergeJoinExec): Boolean = smj.logicalLink.exists {
     case j: Join =>
-      j.hint.leftHint.exists(_.strategy.isDefined) || j.hint.rightHint.exists(_.strategy.isDefined)
+      j.hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
+        j.hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
     case _ => false
   }
 
@@ -115,17 +107,39 @@ case class ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements: EnsureRequ
     if (!conf.convertSortMergeJoinToShuffledHashJoinEnabled) {
       return plan
     }
+    val lookThroughOperatorsEnabled =
+      conf.convertSortMergeJoinToShuffledHashJoinLookThroughOperatorsEnabled
     val optimizedPlan = plan.transformUp {
       case smj @ SortMergeJoinExec(leftKeys, rightKeys, joinType, condition,
-        ExtractShuffleStage(left), ExtractShuffleStage(right), false)
+        left, right, isSkewJoin)
           // Do not convert if the join keys are not hash-join-compatible (e.g. collated or other
           // non-binary-stable string keys), since a hash join matches keys by binary equality and
           // would return wrong results. This mirrors the guard on the other SHJ-planning paths.
-          if !hasJoinStrategyHint(smj) && hashJoinSupported(leftKeys, rightKeys) =>
-        selectBuildSide(smj, left, right) match {
+          if !hasSortMergeJoinHint(smj) && hashJoinSupported(leftKeys, rightKeys) =>
+        val leftStage = findShuffleStage(left, lookThroughOperatorsEnabled)
+        val rightStage = findShuffleStage(right, lookThroughOperatorsEnabled)
+        val leftFactor = wideningFactor(smj.left.output, left.output)
+        val rightFactor = wideningFactor(smj.right.output, right.output)
+        val canBuildLeft = leftStage.isDefined && canBuildShuffledHashJoinLeft(smj.joinType) &&
+          preferShuffledHashJoin(leftStage.get.mapStats.get, leftFactor)
+        val canBuildRight = rightStage.isDefined && canBuildShuffledHashJoinRight(smj.joinType) &&
+          preferShuffledHashJoin(rightStage.get.mapStats.get, rightFactor)
+        val buildSide = if (canBuildLeft && canBuildRight) {
+          val leftSize = leftStage.get.mapStats.get.bytesByPartitionId.sum * leftFactor
+          val rightSize = rightStage.get.mapStats.get.bytesByPartitionId.sum * rightFactor
+          if (leftSize < rightSize) Some(BuildLeft) else Some(BuildRight)
+        } else if (canBuildLeft) {
+          Some(BuildLeft)
+        } else if (canBuildRight) {
+          Some(BuildRight)
+        } else {
+          None
+        }
+
+        buildSide match {
           case Some(buildSide) =>
             ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition,
-              stripSort(smj.left), stripSort(smj.right))
+              stripSort(smj.left), stripSort(smj.right), isSkewJoin)
           case None => smj
         }
     }
@@ -149,40 +163,47 @@ case class ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements: EnsureRequ
   }
 
   /**
-   * Finds a join child's input shuffle, looking through the [[SortExec]] and other non-shuffle
-   * operators (aggregate, project, filter, window, left-existence join) above it. Descent stops at
-   * the first [[ShuffleQueryStageExec]], which is thus guaranteed to be the join's own input
-   * shuffle whose statistics bound (or, for a reducing aggregate, upper-bound) the build side. The
-   * stage must be materialized with stats and originate from [[EnsureRequirements]], so swapping
-   * the join type does not change the shuffle.
+   * Finds a join child's input shuffle. Descent stops at the first [[ShuffleQueryStageExec]], which
+   * is thus guaranteed to be the join's own input shuffle whose statistics bound (or, for a
+   * reducing aggregate, upper-bound) the build side. The stage must be materialized with stats and
+   * originate from [[EnsureRequirements]], so swapping the join type does not change the shuffle.
+   *
+   * The traversal has two modes:
+   *   - Default: it looks through the sort merge join's own required [[SortExec]] to reach a
+   *     *direct* input shuffle.
+   *   - Behind `...convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled`: it
+   *     additionally looks through non-shuffle operators (aggregate, project, filter, window,
+   *     left-existence join) sitting above the shuffle.
    *
    * A [[ProjectExec]], [[BaseAggregateExec]] or [[WindowExecBase]] is only traversed when all of
    * its output expressions are size-bounded (see [[isSizeBoundedExpr]]); otherwise the shuffle
    * bytes could badly under-estimate the non-spillable hash-map build size (e.g.
    * `repeat(max(c2), 10000)` above a small shuffle), so descent stops and the join is left as is.
    */
-  object ExtractShuffleStage {
-    def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = findShuffleStage(plan)
-
-    @tailrec
-    private def findShuffleStage(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-      case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
-        s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS => Some(s)
-      case _: FilterExec | _: SortExec | _: WindowGroupLimitExec | _: CollectMetricsExec =>
-        findShuffleStage(plan.children.head)
-      case p: ProjectExec if p.projectList.forall(isSizeBoundedExpr) =>
-        findShuffleStage(p.child)
-      case a: BaseAggregateExec if a.resultExpressions.forall(isSizeBoundedExpr) =>
-        findShuffleStage(a.child)
-      case w: WindowExecBase if w.windowExpression.forall(isSizeBoundedExpr) =>
-        findShuffleStage(w.child)
-      case join: BaseJoinExec =>
-        join.joinType match {
-          case LeftExistence(_) => findShuffleStage(join.left)
-          case _ => None
-        }
-      case _ => None
-    }
+  @tailrec
+  private def findShuffleStage(
+      plan: SparkPlan,
+      lookThroughOperatorsEnabled: Boolean): Option[ShuffleQueryStageExec] = plan match {
+    case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
+      s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS => Some(s)
+      // Always on: look through the join's own required sort to reach a direct input shuffle.
+    case _: SortExec => findShuffleStage(plan.children.head, lookThroughOperatorsEnabled)
+      // The look-through capability below is gated by its own config.
+    case _ if !lookThroughOperatorsEnabled => None
+    case _: FilterExec | _: WindowGroupLimitExec | _: CollectMetricsExec =>
+      findShuffleStage(plan.children.head, lookThroughOperatorsEnabled)
+    case p: ProjectExec if p.projectList.forall(isSizeBoundedExpr) =>
+      findShuffleStage(p.child, lookThroughOperatorsEnabled)
+    case a: BaseAggregateExec if a.resultExpressions.forall(isSizeBoundedExpr) =>
+      findShuffleStage(a.child, lookThroughOperatorsEnabled)
+    case w: WindowExecBase if w.windowExpression.forall(isSizeBoundedExpr) =>
+      findShuffleStage(w.child, lookThroughOperatorsEnabled)
+    case join: BaseJoinExec =>
+      join.joinType match {
+        case LeftExistence(_) => findShuffleStage(join.left, lookThroughOperatorsEnabled)
+        case _ => None
+      }
+    case _ => None
   }
 
   /**
@@ -200,22 +221,29 @@ case class ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements: EnsureRequ
    * the shuffle below) is bounded through this same [[Attribute]] case.
    *
    * A fixed-width result ([[UnsafeRow.isFixedLength]], stored in an 8-byte word) is bounded
-   * regardless of inputs. Beyond that, only a whitelist of length-non-increasing transforms over
-   * bounded children is accepted; anything else (e.g. `repeat`, `concat`, arithmetic on strings) is
-   * treated as potentially widening.
+   * regardless of inputs. A variable-width [[Literal]] is bounded only when its actual byte size is
+   * no larger than the data type's `defaultSize` that [[wideningFactor]] assumes; otherwise a large
+   * folded constant (e.g. `repeat('x', 100000)` constant-folded into a `Literal`) would slip past
+   * the size estimate. Beyond that, only a whitelist of length-non-increasing transforms over
+   * bounded children is accepted; anything else (e.g. `repeat`, `concat`, `upper`/`lower` - Unicode
+   * case mapping can grow the UTF-8 byte length - arithmetic on strings) is treated as potentially
+   * widening.
    */
   private def isSizeBoundedExpr(expr: Expression): Boolean = {
     if (UnsafeRow.isFixedLength(expr.dataType)) {
       return true
     }
     expr match {
-      case _: Attribute | _: Literal => true
+      case _: Attribute => true
+      // A variable-width literal is bounded only when its actual byte size is known and no larger
+      // than the data type's `defaultSize` that `wideningFactor` assumes; otherwise a large folded
+      // constant (e.g. `repeat('x', 100000)` constant-folded into a `Literal`) would slip past the
+      // estimate. An unmeasurable literal (`valueSizeInBytes` is None) is treated as widening.
+      case lit: Literal => lit.valueSizeInBytes.exists(_ <= lit.dataType.defaultSize)
       case e: Alias => isSizeBoundedExpr(e.child)
-      // The Cast is a very common expression, it may slightly increase the size in bytes
+      // Cast is a very common expression; it may slightly increase the size in bytes
       // but should be tolerated.
       case e: Cast => isSizeBoundedExpr(e.child)
-      case e: Upper => isSizeBoundedExpr(e.child)
-      case e: Lower => isSizeBoundedExpr(e.child)
       case e: Substring => isSizeBoundedExpr(e.str)
       case e: String2TrimExpression => isSizeBoundedExpr(e.srcStr)
       // Conditionals only pick one of their (bounded) branch values.

@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -854,5 +854,49 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Other explicit collations are rendered as before.
     assert(Literal(UTF8String.fromString("x"), StringType("UTF8_LCASE")).sql ===
       "'x' collate UTF8_LCASE")
+  }
+
+  test("valueSizeInBytes") {
+    // A null value reports the type's default size.
+    assert(Literal.create(null, StringType).valueSizeInBytes === Some(StringType.defaultSize))
+    assert(Literal.create(null, IntegerType).valueSizeInBytes === Some(IntegerType.defaultSize))
+
+    // Fixed-length types report their default size.
+    assert(Literal(1).valueSizeInBytes === Some(IntegerType.defaultSize))
+    assert(Literal(1L).valueSizeInBytes === Some(LongType.defaultSize))
+    assert(Literal(1.0).valueSizeInBytes === Some(DoubleType.defaultSize))
+    assert(Literal(true).valueSizeInBytes === Some(BooleanType.defaultSize))
+    assert(Literal(Decimal(1), DecimalType(10, 0)).valueSizeInBytes ===
+      Some(DecimalType(10, 0).defaultSize))
+
+    // Variable-length string / binary report their real byte length, not the default size.
+    assert(Literal(UTF8String.fromString(""), StringType).valueSizeInBytes === Some(0))
+    assert(Literal(UTF8String.fromString("abc"), StringType).valueSizeInBytes === Some(3))
+    // A multi-byte UTF-8 character counts its encoded bytes.
+    assert(Literal(UTF8String.fromString("é"), StringType).valueSizeInBytes === Some(2))
+    assert(Literal(Array[Byte](1, 2, 3, 4), BinaryType).valueSizeInBytes === Some(4))
+
+    // Array sums element sizes.
+    assert(Literal.create(Array("a", "bc"), ArrayType(StringType)).valueSizeInBytes === Some(3))
+    assert(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)).valueSizeInBytes ===
+      Some(3 * IntegerType.defaultSize))
+
+    // Map sums key and value sizes.
+    assert(Literal.create(Map("a" -> "bc"), MapType(StringType, StringType)).valueSizeInBytes ===
+      Some(3))
+
+    // Struct sums field sizes.
+    val structType = StructType(Seq(
+      StructField("s", StringType), StructField("i", IntegerType)))
+    assert(Literal.create(Row("abc", 1), structType).valueSizeInBytes ===
+      Some(3 + IntegerType.defaultSize))
+
+    // CalendarInterval reports its (fixed) default size.
+    assert(Literal(new CalendarInterval(1, 2, 3), CalendarIntervalType).valueSizeInBytes ===
+      Some(CalendarIntervalType.defaultSize))
+
+    // An unmeasurable variable-length type (e.g. variant) returns None.
+    assert(Literal(new VariantVal(Array[Byte](1, 2), Array[Byte](3)), VariantType).valueSizeInBytes
+      === None)
   }
 }

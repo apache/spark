@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
 import org.apache.spark.sql.catalyst.SQLConfHelper
@@ -291,17 +290,6 @@ case object BuildLeft extends BuildSide
 
 trait JoinSelectionHelper extends SQLConfHelper with Logging {
 
-  def preferShuffledHashJoin(
-      mapStats: MapOutputStatistics,
-      sizeInBytesFactor: Double = 1.0): Boolean = {
-    val maxShuffledHashJoinLocalMapThreshold =
-      conf.getConf(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD)
-    val advisoryPartitionSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    advisoryPartitionSize <= maxShuffledHashJoinLocalMapThreshold &&
-      mapStats.bytesByPartitionId.forall(
-        _ * sizeInBytesFactor <= maxShuffledHashJoinLocalMapThreshold)
-  }
-
   def getBroadcastBuildSide(
       join: Join,
       hintOnly: Boolean,
@@ -336,20 +324,16 @@ trait JoinSelectionHelper extends SQLConfHelper with Logging {
       if (hintOnly) {
         hintToShuffleHashJoinLeft(join.hint)
       } else {
-        hintToPreferShuffleHashJoinLeft(join.hint) ||
-          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
-            muchSmaller(join.left, join.right, conf)) ||
-          forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.left, conf) &&
+          muchSmaller(join.left, join.right, conf)) || forceApplyShuffledHashJoin(conf)
       }
     }
     def shouldBuildRight(): Boolean = {
       if (hintOnly) {
         hintToShuffleHashJoinRight(join.hint)
       } else {
-        hintToPreferShuffleHashJoinRight(join.hint) ||
-          (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
-            muchSmaller(join.right, join.left, conf)) ||
-          forceApplyShuffledHashJoin(conf)
+        (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(join.right, conf) &&
+          muchSmaller(join.right, join.left, conf)) || forceApplyShuffledHashJoin(conf)
       }
     }
     getBuildSide(
@@ -484,18 +468,6 @@ trait JoinSelectionHelper extends SQLConfHelper with Logging {
 
   def hintToShuffleHashJoinRight(hint: JoinHint): Boolean = {
     hint.rightHint.exists(_.strategy.contains(SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoinLeft(hint: JoinHint): Boolean = {
-    hint.leftHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoinRight(hint: JoinHint): Boolean = {
-    hint.rightHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
-  }
-
-  def hintToPreferShuffleHashJoin(hint: JoinHint): Boolean = {
-    hintToPreferShuffleHashJoinLeft(hint) || hintToPreferShuffleHashJoinRight(hint)
   }
 
   def hintToShuffleHashJoin(hint: JoinHint): Boolean = {

@@ -50,6 +50,7 @@ import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdat
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED => LOOK_THROUGH_OPERATORS}
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor, TimeMode, TimerValues, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -69,6 +70,10 @@ class AdaptiveQueryExecSuite
   import testImplicits._
 
   setupTestData()
+
+  // Short alias for the long config key, to keep the SMJ-to-SHJ conversion tests within the line
+  // length limit.
+  private val lookThroughOperatorsKey = LOOK_THROUGH_OPERATORS.key
 
   override protected def sparkConf =
     super.sparkConf.set(SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key, "0")
@@ -2471,8 +2476,8 @@ class AdaptiveQueryExecSuite
         .toDF("c1", "c2").createOrReplaceTempView("t2")
 
       // The t2 side has a non-shuffle operator (aggregate, optionally with a filter) between the
-      // join and its input shuffle, so DynamicJoinSelection's hint path does not fire. The new
-      // physical rule looks through those operators to the materialized shuffle stage.
+      // join and its input shuffle, so the default direct-shuffle path does not reach the shuffle;
+      // only the look-through mode converts it.
       val queries = Seq(
         "SELECT t1.c1, x.cnt FROM t1 JOIN " +
           "(SELECT c1, count(*) AS cnt FROM t2 GROUP BY c1) x ON t1.c1 = x.c1",
@@ -2488,9 +2493,9 @@ class AdaptiveQueryExecSuite
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
         SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500") {
         queries.foreach { query =>
-          // Enabled (default): the sort merge join is converted to a shuffled hash join.
+          // Look-through enabled: the sort merge join is converted to a shuffled hash join.
           withSQLConf(
-            SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+            lookThroughOperatorsKey -> "true") {
             val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
             assert(findTopLevelSortMergeJoin(origin).size === 1)
             val shj = findTopLevelShuffledHashJoin(adaptive)
@@ -2498,9 +2503,10 @@ class AdaptiveQueryExecSuite
             assert(shj.head.buildSide == BuildRight)
             assert(findTopLevelSortMergeJoin(adaptive).isEmpty)
           }
-          // Disabled: the join stays a sort merge join (previous behavior).
+          // Look-through disabled (default): the aggregate blocks the direct-shuffle path, so the
+          // join stays a sort merge join.
           withSQLConf(
-            SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "false") {
+            lookThroughOperatorsKey -> "false") {
             val (_, adaptive) = runAdaptiveAndVerifyResult(query)
             assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
               s"expected no shuffled hash join for query: $query")
@@ -2533,11 +2539,9 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
         SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500",
-        SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+        lookThroughOperatorsKey -> "true") {
         val (_, adaptive) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
           "a widening aggregate above the shuffle must keep the join as a sort merge join")
@@ -2565,11 +2569,9 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
         SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
-        SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+        lookThroughOperatorsKey -> "true") {
         val (_, adaptive) = runAdaptiveAndVerifyResult(query)
         val shj = findTopLevelShuffledHashJoin(adaptive)
         assert(shj.size === 1,
@@ -2600,11 +2602,9 @@ class AdaptiveQueryExecSuite
         var converted = false
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-          SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-            "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
           SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
           SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500",
-          SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true",
+          lookThroughOperatorsKey -> "true",
           SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR.key ->
             minWideningFactor) {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
@@ -2633,18 +2633,17 @@ class AdaptiveQueryExecSuite
         (1 to 4000).map(i => TestData(i % 20 + 1, i.toString)), 4)
         .toDF("c1", "c2").createOrReplaceTempView("big")
 
-      // The inner join over the two small tables is convertible, but the outer sort merge join
-      // requires its (left) child ordered on the join key. When the inner join is converted to a
-      // shuffled hash join (ordering Nil), EnsureRequirements must re-insert the sort above it so
-      // the outer sort merge join's required ordering is still satisfied and the result is correct.
-      val query = "SELECT small1.c1 FROM small1 JOIN small2 ON small1.c1 = small2.c1 " +
+      // The inner join over the two small tables is convertible to a shuffled hash join. The outer
+      // join is pinned to a sort merge join with a MERGE hint, and it requires its (left) child
+      // ordered on the join key. When the inner join is converted to a shuffled hash join
+      // (ordering Nil), EnsureRequirements must re-insert the sort above it so the outer sort merge
+      // join's required ordering is still satisfied and the result is correct.
+      val query = "SELECT /*+ MERGE(big) */ small1.c1 FROM " +
+        "small1 JOIN small2 ON small1.c1 = small2.c1 " +
         "JOIN big ON small1.c1 = big.c1"
 
-      // Exclude DynamicJoinSelection so only the new physical rule can convert, isolating it.
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
         SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
         SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
@@ -2707,7 +2706,7 @@ class AdaptiveQueryExecSuite
         (1 to 2000).map(i => TestData(i % 20 + 1, i.toString)), 4)
         .toDF("k", "v").createOrReplaceTempView("big")
       spark.sparkContext.parallelize(
-        (1 to 20).map(i => TestData(i, i.toString)), 4)
+        (1 to 10).map(i => TestData(i, i.toString)), 4)
         .toDF("k", "v").createOrReplaceTempView("small")
 
       // Both join sides are sort aggregates grouped by the join key, so each child is already
@@ -2725,16 +2724,14 @@ class AdaptiveQueryExecSuite
         case s: SortExec if !s.global => s
       }.size
 
-      // Force sort aggregate and exclude DynamicJoinSelection so only the new rule can convert.
+      // Force sort aggregate so each join child is ordered on the key for free.
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.USE_HASH_AGG.key -> "false",
         SQLConf.USE_OBJECT_HASH_AGG.key -> "false",
-        SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
-          "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
-        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
-        SQLConf.ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key -> "true") {
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500",
+        lookThroughOperatorsKey -> "true") {
         // Not counting local sorts: the conversion is adopted even though it adds a local sort.
         withSQLConf(SQLConf.ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED.key -> "false") {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
@@ -2797,8 +2794,8 @@ class AdaptiveQueryExecSuite
         .toDF("c1", "c2").createOrReplaceTempView("t2")
 
       // The join is convertible by size, but the user explicitly asked for a sort merge join with
-      // a MERGE hint. The conversion must respect the hint and keep the sort merge join, matching
-      // DynamicJoinSelection which never overrides an existing join strategy hint.
+      // a MERGE hint. The conversion must respect the hint and keep the sort merge join, never
+      // overriding an existing SHUFFLE_MERGE join strategy hint.
       val query = "SELECT /*+ MERGE(t1, t2) */ t1.c1, t2.c2 FROM t1 JOIN t2 ON t1.c1 = t2.c1"
 
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
@@ -2810,6 +2807,67 @@ class AdaptiveQueryExecSuite
         assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
           "an explicit MERGE hint must keep the join as a sort merge join")
         assert(findTopLevelSortMergeJoin(adaptive).size === 1)
+      }
+    }
+  }
+
+  test("SPARK-58084: Do not convert when a project adds a large folded constant") {
+    withTempView("t1", "t2") {
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      val query =
+        "SELECT t1.c1, x.wide FROM t1 JOIN " +
+          "(SELECT c2, coalesce(c2, repeat('x', 100)) AS wide FROM t2 GROUP BY c2) x " +
+          "ON t1.c2 = x.c2"
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500",
+        lookThroughOperatorsKey -> "true") {
+        val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
+          "a large folded constant above the shuffle must keep the join as a sort merge join")
+        assert(findTopLevelSortMergeJoin(adaptive).size === 1)
+      }
+    }
+  }
+
+  test("SPARK-58084: Convert still fires when DemoteBroadcastHashJoin adds NO_BROADCAST_HASH") {
+    withTempView("t1", "t2") {
+      // t1 (the build candidate) has many empty partitions, so DemoteBroadcastHashJoin demotes
+      // broadcast on it with a NO_BROADCAST_HASH hint. That hint only forbids broadcasting and must
+      // not block converting the sort merge join to a shuffled hash join. DemoteBroadcastHashJoin
+      // is left enabled (unlike the other conversion tests) so the interaction is exercised.
+      spark.sparkContext.parallelize(
+        (1 to 2).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 2).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      // An aggregate sits between the join and t1's input shuffle, so the logical
+      // DemoteBroadcastHashJoin rule cannot see a direct shuffle child and only the physical rule
+      // can convert - which is exactly the look-through case this rule adds.
+      val query =
+        "SELECT x.c1, t2.c1 FROM " +
+          "(SELECT c1, count(*) AS cnt FROM t1 GROUP BY c1) x JOIN t2 ON x.c1 = t2.c1"
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "6",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100000",
+        lookThroughOperatorsKey -> "true") {
+        val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelShuffledHashJoin(adaptive).size === 1,
+          "a NO_BROADCAST_HASH hint must not block the conversion")
+        assert(findTopLevelSortMergeJoin(adaptive).isEmpty)
       }
     }
   }
