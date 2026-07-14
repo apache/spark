@@ -237,6 +237,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def sqlAsofJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
+      ctx)
+  }
+
+  def sqlAsOfJoinMatchConditionInvalidOperator(
+      operator: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+      messageParameters = Map("operator" -> operator),
+      ctx)
+  }
+
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.REPETITIVE_WINDOW_DEFINITION",

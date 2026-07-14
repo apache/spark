@@ -48,7 +48,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
           if right.resolved && !j.duplicateResolved && noMissingInput(right.plan) =>
         j.copy(right = right.withNewPlan(dedupRight(left, right.plan)))
       // Resolve duplicate output for AsOfJoin.
-      case j @ AsOfJoin(left, right, _, _, _, _, _)
+      case j @ AsOfJoin(left, right, _, _, _, _, _, _, _)
           if !j.duplicateResolved && noMissingInput(right) =>
         j.copy(right = dedupRight(left, right))
       // Resolve duplicate output for NearestByJoin.

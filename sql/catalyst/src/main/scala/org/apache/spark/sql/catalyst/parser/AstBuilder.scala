@@ -2505,11 +2505,17 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      if (ctx.nearestByClause != null) {
-        withNearestByJoin(ctx, base, baseJoinType)
+      val joinPostfix = Option(ctx.asofJoinPostfix)
+      val joinCriteriaCtx = joinPostfix.flatMap(p => Option(p.joinCriteria))
+      val nearestByClauseCtx = joinPostfix.flatMap(p => Option(p.nearestByClause))
+
+      if (ctx.asofJoinCriteria != null) {
+        withAsOfJoin(ctx, base, ctx.asofJoinCriteria)
+      } else if (nearestByClauseCtx.isDefined) {
+        withNearestByJoin(ctx, base, baseJoinType, nearestByClauseCtx.get)
       } else {
         // Resolve the join type and join condition
-        val (joinType, condition) = Option(ctx.joinCriteria) match {
+        val (joinType, condition) = joinCriteriaCtx match {
           case Some(c) if c.USING != null =>
             if (ctx.LATERAL != null) {
               throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
@@ -2546,6 +2552,56 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
+  private def asOfMatchConditionFromExpression(
+      expr: Expression,
+      ctx: ParserRuleContext): (Expression, MatchComparisonOperator, Expression) = {
+    expr match {
+      case GreaterThanOrEqual(left, right) => (left, GreaterThanOrEqualOp, right)
+      case GreaterThan(left, right) => (left, GreaterThanOp, right)
+      case LessThanOrEqual(left, right) => (left, LessThanOrEqualOp, right)
+      case LessThan(left, right) => (left, LessThanOp, right)
+      case _ =>
+        throw QueryParsingErrors.sqlAsOfJoinMatchConditionInvalidOperator(
+          asOfMatchConditionInvalidOperatorText(expr), ctx)
+    }
+  }
+
+  private def asOfMatchConditionInvalidOperatorText(expr: Expression): String = expr match {
+    case EqualTo(_, _) => "="
+    case And(_, _) => "AND"
+    case Or(_, _) => "OR"
+    case _ => expr.prettyName
+  }
+
+  /**
+   * Build an [[AsOfJoin]] from the parsed `ASOF JOIN ... MATCH_CONDITION` clause.
+   */
+  private def withAsOfJoin(
+      ctx: JoinRelationContext,
+      base: LogicalPlan,
+      criteria: AsofJoinCriteriaContext): AsOfJoin = {
+    if (!conf.getConf(SQLConf.SQL_ASOF_JOIN_ENABLED)) {
+      throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
+    }
+    val joinType = Option(ctx.asofJoinType) match {
+      case None => Inner
+      case Some(jt) if jt.LEFT != null => LeftOuter
+      case _ => Inner
+    }
+    val (leftExpr, operator, rightExpr) =
+      asOfMatchConditionFromExpression(expression(criteria.matchExpr), criteria.matchExpr)
+    val (condition, usingColumns) =
+      (Option(criteria.onExpr), Option(criteria.identifierList)) match {
+      case (Some(expr), None) => (Some(expression(expr)), None)
+      case (None, Some(ids)) => (None, Some(visitIdentifierList(ids)))
+      case (None, None) => (None, None)
+      case _ =>
+        throw SparkException.internalError(s"Unimplemented asofJoinCriteria: $criteria")
+    }
+    AsOfJoin.fromMatchCondition(
+      base, plan(ctx.right), leftExpr, operator, rightExpr, condition, joinType, usingColumns)
+  }
+
   /**
    * Build a [[NearestByJoin]] from the parsed `NEAREST BY` clause attached to a join relation.
    * Validates that the clause is not combined with `LATERAL` and that the base join type is one
@@ -2555,7 +2611,8 @@ class AstBuilder extends DataTypeAstBuilder
   private def withNearestByJoin(
       ctx: JoinRelationContext,
       base: LogicalPlan,
-      baseJoinType: JoinType): NearestByJoin = {
+      baseJoinType: JoinType,
+      nearestByClause: NearestByClauseContext): NearestByJoin = {
     if (ctx.LATERAL != null) {
       throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
     }
@@ -2563,7 +2620,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
         ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
     }
-    val clause = ctx.nearestByClause
+    val clause = nearestByClause
     val approx = clause.APPROX != null
     val numResults = Option(clause.num).map { n =>
       // Guard against literals that overflow Long.
