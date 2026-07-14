@@ -4663,6 +4663,171 @@ sha2.__doc__ = pysparkfuncs.sha2.__doc__
 # Datasketch Functions
 
 
+def approx_frequent_items(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_frequent_items"
+    if k is None and maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    elif maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col, lit(k))
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k), lit(maxItemsTracked))
+
+
+approx_frequent_items.__doc__ = pysparkfuncs.approx_frequent_items.__doc__
+
+
+def approx_heavy_hitters(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_heavy_hitters"
+    if k is None and maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    elif maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col, lit(k))
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k), lit(maxItemsTracked))
+
+
+approx_heavy_hitters.__doc__ = pysparkfuncs.approx_heavy_hitters.__doc__
+
+
+def approx_frequent_items_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_frequent_items_accumulate"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+approx_frequent_items_accumulate.__doc__ = pysparkfuncs.approx_frequent_items_accumulate.__doc__
+
+
+def approx_heavy_hitters_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_heavy_hitters_accumulate"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+approx_heavy_hitters_accumulate.__doc__ = pysparkfuncs.approx_heavy_hitters_accumulate.__doc__
+
+
+def approx_frequent_items_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_frequent_items_combine"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+approx_frequent_items_combine.__doc__ = pysparkfuncs.approx_frequent_items_combine.__doc__
+
+
+def approx_heavy_hitters_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_heavy_hitters_combine"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+approx_heavy_hitters_combine.__doc__ = pysparkfuncs.approx_heavy_hitters_combine.__doc__
+
+
+def approx_frequent_items_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_frequent_items_estimate"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+approx_frequent_items_estimate.__doc__ = pysparkfuncs.approx_frequent_items_estimate.__doc__
+
+
+def approx_heavy_hitters_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "approx_heavy_hitters_estimate"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+approx_heavy_hitters_estimate.__doc__ = pysparkfuncs.approx_heavy_hitters_estimate.__doc__
+
+
+def approx_top_k(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items instead.", FutureWarning)
+    return approx_frequent_items(col, k, maxItemsTracked)
+
+
+approx_top_k.__doc__ = pysparkfuncs.approx_top_k.__doc__
+
+
+def approx_top_k_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn(
+        "Deprecated in 4.1.0, use approx_frequent_items_accumulate instead.", FutureWarning
+    )
+    return approx_frequent_items_accumulate(col, maxItemsTracked)
+
+
+approx_top_k_accumulate.__doc__ = pysparkfuncs.approx_top_k_accumulate.__doc__
+
+
+def approx_top_k_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_combine instead.", FutureWarning)
+    return approx_frequent_items_combine(col, maxItemsTracked)
+
+
+approx_top_k_combine.__doc__ = pysparkfuncs.approx_top_k_combine.__doc__
+
+
+def approx_top_k_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_estimate instead.", FutureWarning)
+    return approx_frequent_items_estimate(col, k)
+
+
+approx_top_k_estimate.__doc__ = pysparkfuncs.approx_top_k_estimate.__doc__
+
+
 def hll_sketch_agg(
     col: "ColumnOrName",
     lgConfigK: Optional[Union[int, Column]] = None,

@@ -24,7 +24,7 @@ Spark's SQL and DataFrame APIs provide a collection of sketch-based approximate 
 Sketches are compact data structures that summarize large datasets, supporting distributed aggregation through serialization and merging. This makes them ideal for use cases including (so far):
 - **Approximate count distinct** (HLL, Theta, and Tuple sketches)
 - **Approximate quantile estimation** (KLL sketches)
-- **Approximate frequent items** (Top-K sketches)
+- **Approximate frequent items** (Frequent Items sketches)
 - **Set operations** on distinct counts (Theta and Tuple sketches)
 - **Distinct counting with aggregated summaries** (Tuple sketches)
 
@@ -64,10 +64,11 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [kll_sketch_merge_*](#kll_sketch_merge_)
   * [kll_sketch_get_quantile_*](#kll_sketch_get_quantile_)
   * [kll_sketch_get_rank_*](#kll_sketch_get_rank_)
-* [Approximate Top-K Functions](#approximate-top-k-functions)
-  * [approx_top_k_accumulate](#approx_top_k_accumulate)
-  * [approx_top_k_combine](#approx_top_k_combine)
-  * [approx_top_k_estimate](#approx_top_k_estimate)
+* [Approximate Frequent Items (Heavy Hitters) Functions](#approximate-frequent-items-heavy-hitters-functions)
+  * [approx_frequent_items](#approx_frequent_items)
+  * [approx_frequent_items_accumulate](#approx_frequent_items_accumulate)
+  * [approx_frequent_items_combine](#approx_frequent_items_combine)
+  * [approx_frequent_items_estimate](#approx_frequent_items_estimate)
 * [Best Practices](#best-practices)
   * [Choosing Between HLL and Theta Sketches](#choosing-between-hll-and-theta-sketches)
   * [Accuracy vs. Memory Trade-offs](#accuracy-vs-memory-trade-offs)
@@ -76,7 +77,7 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [Example: Tracking Daily Unique Users with HLL Sketches](#example-tracking-daily-unique-users-with-hll-sketches)
   * [Example: Computing Percentiles Over Time with KLL Sketches](#example-computing-percentiles-over-time-with-kll-sketches)
   * [Example: Set Operations with Theta Sketches](#example-set-operations-with-theta-sketches)
-  * [Example: Finding Trending Items with Top-K Sketches](#example-finding-trending-items-with-top-k-sketches)
+  * [Example: Finding Trending Items with Frequent Items Sketches](#example-finding-trending-items-with-frequent-items-sketches)
   * [Example: Distinct Users with Aggregated Metrics Using Tuple Sketches](#example-distinct-users-with-aggregated-metrics-using-tuple-sketches)
 
 ---
@@ -1151,50 +1152,90 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 
 ---
 
-## Approximate Top-K Functions
+## Approximate Frequent Items (Heavy Hitters) Functions
 
-Top-K functions estimate the most frequent items (heavy hitters) in a dataset using the DataSketches Frequent Items sketch.
+Frequent Items functions estimate the most frequent items (heavy hitters) in a dataset using the DataSketches Frequent Items sketch.
 
 See the [Apache DataSketches Frequency documentation](https://datasketches.apache.org/docs/Frequency/FrequencySketches.html) for more information.
 
-### approx_top_k_accumulate
+> [!IMPORTANT]
+> The Frequent Items sketch does NOT guarantee exact top-k ranking semantics. It provides mathematical error-bound guarantees rather than a strict top-k list.
+> 1. The result count can be less than `k` (or even empty / zero items) depending on the frequency distribution in the stream and the configured sketch size (`maxItemsTracked`). For example, if no single item's frequency exceeds the sketch's error threshold, the sketch can legitimately return an empty array, even if `k` is set to a large number.
+> 2. It utilizes `ErrorType.NO_FALSE_POSITIVES` by default. This means:
+>    - **No False Positives**: Every item returned is guaranteed to have a true frequency greater than the threshold. There will be no incorrect items in the output.
+>    - **Potential False Negatives**: Some items whose true frequency is slightly above the threshold might be missed due to the approximate nature of the sketch.
 
-Creates a sketch that can be stored and later combined or estimated. Useful for pre-aggregating data.
+### approx_frequent_items
+
+Returns the approximate frequent items (heavy hitters) in a column. The result is an array of structs, each containing a frequent item and its estimated frequency. The items are sorted by their estimated frequency in descending order.
+
+`approx_heavy_hitters` is registered as an alias for this function.
 
 **Syntax:**
 ```sql
-approx_top_k_accumulate(expr [, maxItemsTracked])
+approx_frequent_items(expr [, k [, maxItemsTracked]])
+approx_heavy_hitters(expr [, k [, maxItemsTracked]])
 ```
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `expr` | Same as `approx_top_k` | The column to accumulate |
+| `expr` | Supported Type | The column containing items to analyze. Supported types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, TIMESTAMP, TIMESTAMP_NTZ, STRING, and DECIMAL. |
+| `k` | INT (optional) | Number of items to return. Default: 5. |
 | `maxItemsTracked` | INT (optional) | Maximum items tracked. Range: 1 to 1,000,000. Default: 10,000. |
 
-Returns a STRUCT containing a sketch state that can be passed to `approx_top_k_combine` or `approx_top_k_estimate`.
+Returns an ARRAY&lt;STRUCT&lt;item, count&gt;&gt; containing the frequent items sorted by count descending.
+
+**Examples:**
+```sql
+SELECT approx_frequent_items(expr) FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) tab(expr);
+-- Result: [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
+
+SELECT approx_frequent_items(expr, 2) FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
+-- Result: [{"item":"c","count":4},{"item":"d","count":2}]
+```
+
+### approx_frequent_items_accumulate
+
+Creates a sketch that can be stored and later combined or estimated. Useful for pre-aggregating data.
+
+`approx_heavy_hitters_accumulate` is registered as an alias for this function.
+
+**Syntax:**
+```sql
+approx_frequent_items_accumulate(expr [, maxItemsTracked])
+approx_heavy_hitters_accumulate(expr [, maxItemsTracked])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `expr` | Same as `approx_frequent_items` | The column to accumulate |
+| `maxItemsTracked` | INT (optional) | Maximum items tracked. Range: 1 to 1,000,000. Default: 10,000. |
+
+Returns a STRUCT containing a sketch state that can be passed to `approx_frequent_items_combine` or `approx_frequent_items_estimate`.
 
 **Examples:**
 ```sql
 -- Accumulate then estimate
-SELECT approx_top_k_estimate(approx_top_k_accumulate(expr))
+SELECT approx_frequent_items_estimate(approx_frequent_items_accumulate(expr))
 FROM VALUES (0), (0), (1), (1), (2), (3), (4), (4) tab(expr);
 -- Result: [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
 ```
 
----
-
-### approx_top_k_combine
+### approx_frequent_items_combine
 
 Combines multiple sketches into a single sketch.
 
+`approx_heavy_hitters_combine` is registered as an alias for this function.
+
 **Syntax:**
 ```sql
-approx_top_k_combine(state [, maxItemsTracked])
+approx_frequent_items_combine(state [, maxItemsTracked])
+approx_heavy_hitters_combine(state [, maxItemsTracked])
 ```
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `state` | STRUCT | A sketch state from `approx_top_k_accumulate` or `approx_top_k_combine` |
+| `state` | STRUCT | A sketch state from `approx_frequent_items_accumulate` or `approx_frequent_items_combine` |
 | `maxItemsTracked` | INT (optional) | If specified, sets the combined sketch size. If not specified, all input sketches must have the same maxItemsTracked. |
 
 Returns a STRUCT containing the combined sketch state.
@@ -1202,12 +1243,12 @@ Returns a STRUCT containing the combined sketch state.
 **Examples:**
 ```sql
 -- Combine sketches from different partitions
-SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 10000), 5)
+SELECT approx_frequent_items_estimate(approx_frequent_items_combine(sketch, 10000), 5)
 FROM (
-  SELECT approx_top_k_accumulate(expr) AS sketch
+  SELECT approx_frequent_items_accumulate(expr) AS sketch
   FROM VALUES (0), (0), (1), (1) tab(expr)
   UNION ALL
-  SELECT approx_top_k_accumulate(expr) AS sketch
+  SELECT approx_frequent_items_accumulate(expr) AS sketch
   FROM VALUES (2), (3), (4), (4) tab(expr)
 );
 -- Result: [{"item":0,"count":2},{"item":4,"count":2},{"item":1,"count":2},{"item":2,"count":1},{"item":3,"count":1}]
@@ -1217,29 +1258,34 @@ FROM (
 - Throws an error if input sketches have different `maxItemsTracked` values and no explicit value is provided.
 - Throws an error if input sketches have different item data types.
 
----
+### approx_frequent_items_estimate
 
-### approx_top_k_estimate
+Extracts the frequent items from a sketch.
 
-Extracts the top K items from a sketch.
+`approx_heavy_hitters_estimate` is registered as an alias for this function.
 
 **Syntax:**
 ```sql
-approx_top_k_estimate(state [, k])
+approx_frequent_items_estimate(state [, k])
+approx_heavy_hitters_estimate(state [, k])
 ```
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `state` | STRUCT | A sketch state from `approx_top_k_accumulate` or `approx_top_k_combine` |
-| `k` | INT (optional) | Number of top items to return. Default: 5. |
+| `state` | STRUCT | A sketch state from `approx_frequent_items_accumulate` or `approx_frequent_items_combine` |
+| `k` | INT (optional) | Number of items to return. Default: 5. |
 
 Returns an ARRAY&lt;STRUCT&lt;item, count&gt;&gt; containing the frequent items sorted by count descending.
 
 **Examples:**
 ```sql
-SELECT approx_top_k_estimate(approx_top_k_accumulate(expr), 2)
+SELECT approx_frequent_items_estimate(approx_frequent_items_accumulate(expr), 2)
 FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 -- Result: [{"item":"c","count":4},{"item":"d","count":2}]
+```
+
+> [!NOTE]
+> For backward compatibility, the old functions `approx_top_k`, `approx_top_k_accumulate`, `approx_top_k_combine`, and `approx_top_k_estimate` are still supported as deprecated aliases.
 ```
 
 ---
@@ -1265,7 +1311,7 @@ FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
 | Theta | lgNomEntries | Higher accuracy, more memory (8 * 2^lgNomEntries bytes) |
 | Tuple | lgNomEntries | Higher accuracy, more memory (16 * 2^lgNomEntries bytes for double, 12 * 2^lgNomEntries bytes for integer) |
 | KLL | k | Higher accuracy, more memory |
-| Top-K | maxItemsTracked | Better heavy-hitter detection, more memory |
+| Frequent Items | maxItemsTracked | Better heavy-hitter detection, more memory |
 
 ### Storing and Reusing Sketches
 
@@ -1421,12 +1467,12 @@ SELECT theta_sketch_estimate(
 ) as engaged_purchasers;
 ```
 
-### Example: Finding Trending Items with Top-K Sketches
+### Example: Finding Trending Items with Frequent Items Sketches
 
 Track the most frequently occurring items across batches.
 
 ```sql
--- Create a table to store hourly top-k sketches
+-- Create a table to store hourly frequent items sketches
 CREATE TABLE hourly_search_sketches (
   hour_ts TIMESTAMP,
   search_sketch STRUCT<sketch: BINARY, maxItemsTracked: INT, itemDataType: STRING, itemDataTypeDDL: STRING>
@@ -1436,18 +1482,18 @@ CREATE TABLE hourly_search_sketches (
 INSERT INTO hourly_search_sketches
 SELECT 
   DATE_TRUNC('hour', search_time) as hour_ts,
-  approx_top_k_accumulate(search_term, 10000) as search_sketch
+  approx_frequent_items_accumulate(search_term, 10000) as search_sketch
 FROM search_logs
 GROUP BY DATE_TRUNC('hour', search_time);
 
 -- Query: Get top 10 searches for a specific hour
-SELECT approx_top_k_estimate(search_sketch, 10) as top_searches
+SELECT approx_frequent_items_estimate(search_sketch, 10) as top_searches
 FROM hourly_search_sketches
 WHERE hour_ts = TIMESTAMP'2024-01-15 14:00:00';
 
 -- Query: Get top 10 searches across the full day by combining sketches
-SELECT approx_top_k_estimate(
-  approx_top_k_combine(search_sketch, 10000),
+SELECT approx_frequent_items_estimate(
+  approx_frequent_items_combine(search_sketch, 10000),
   10
 ) as daily_top_searches
 FROM hourly_search_sketches

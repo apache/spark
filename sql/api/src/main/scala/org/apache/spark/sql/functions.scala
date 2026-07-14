@@ -768,6 +768,346 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(e: Column, k: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_frequent_items", e, k, maxItemsTracked)
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(e: Column, k: Int, maxItemsTracked: Int): Column =
+    Column.fn("approx_frequent_items", e, lit(k), lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(columnName: String, k: Int, maxItemsTracked: Int): Column =
+    approx_frequent_items(Column(columnName), k, maxItemsTracked)
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(e: Column, k: Column): Column =
+    Column.fn("approx_frequent_items", e, k)
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(e: Column, k: Int): Column =
+    Column.fn("approx_frequent_items", e, lit(k))
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(columnName: String, k: Int): Column =
+    approx_frequent_items(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(e: Column): Column =
+    Column.fn("approx_frequent_items", e)
+
+  /**
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items(columnName: String): Column =
+    approx_frequent_items(Column(columnName))
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(e: Column, k: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_heavy_hitters", e, k, maxItemsTracked)
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(e: Column, k: Int, maxItemsTracked: Int): Column =
+    Column.fn("approx_heavy_hitters", e, lit(k), lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(columnName: String, k: Int, maxItemsTracked: Int): Column =
+    approx_heavy_hitters(Column(columnName), k, maxItemsTracked)
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(e: Column, k: Column): Column =
+    Column.fn("approx_heavy_hitters", e, k)
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(e: Column, k: Int): Column =
+    Column.fn("approx_heavy_hitters", e, lit(k))
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(columnName: String, k: Int): Column =
+    approx_heavy_hitters(Column(columnName), k)
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(e: Column): Column =
+    Column.fn("approx_heavy_hitters", e)
+
+  /**
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters(columnName: String): Column =
+    approx_heavy_hitters(Column(columnName))
+
+  /**
+   * Aggregate function: accumulates items into a frequent items sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_accumulate(e: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_frequent_items_accumulate", e, maxItemsTracked)
+
+  /**
+   * Aggregate function: accumulates items into a frequent items sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_accumulate(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_frequent_items_accumulate", e, lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: accumulates items into a frequent items sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_accumulate(columnName: String, maxItemsTracked: Int): Column =
+    approx_frequent_items_accumulate(Column(columnName), maxItemsTracked)
+
+  /**
+   * Aggregate function: accumulates items into a frequent items sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_accumulate(e: Column): Column =
+    Column.fn("approx_frequent_items_accumulate", e)
+
+  /**
+   * Aggregate function: accumulates items into a frequent items sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_accumulate(columnName: String): Column =
+    approx_frequent_items_accumulate(Column(columnName))
+
+  /**
+   * Aggregate function: accumulates items into a heavy hitters sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_accumulate(e: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_heavy_hitters_accumulate", e, maxItemsTracked)
+
+  /**
+   * Aggregate function: accumulates items into a heavy hitters sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_accumulate(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_heavy_hitters_accumulate", e, lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: accumulates items into a heavy hitters sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_accumulate(columnName: String, maxItemsTracked: Int): Column =
+    approx_heavy_hitters_accumulate(Column(columnName), maxItemsTracked)
+
+  /**
+   * Aggregate function: accumulates items into a heavy hitters sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_accumulate(e: Column): Column =
+    Column.fn("approx_heavy_hitters_accumulate", e)
+
+  /**
+   * Aggregate function: accumulates items into a heavy hitters sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_accumulate(columnName: String): Column =
+    approx_heavy_hitters_accumulate(Column(columnName))
+
+  /**
+   * Aggregate function: combines multiple frequent items sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_combine(e: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_frequent_items_combine", e, maxItemsTracked)
+
+  /**
+   * Aggregate function: combines multiple frequent items sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_combine(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_frequent_items_combine", e, lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: combines multiple frequent items sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_combine(columnName: String, maxItemsTracked: Int): Column =
+    approx_frequent_items_combine(Column(columnName), maxItemsTracked)
+
+  /**
+   * Aggregate function: combines multiple frequent items sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_combine(e: Column): Column =
+    Column.fn("approx_frequent_items_combine", e)
+
+  /**
+   * Aggregate function: combines multiple frequent items sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_combine(columnName: String): Column =
+    approx_frequent_items_combine(Column(columnName))
+
+  /**
+   * Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_combine(e: Column, maxItemsTracked: Column): Column =
+    Column.fn("approx_heavy_hitters_combine", e, maxItemsTracked)
+
+  /**
+   * Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_combine(e: Column, maxItemsTracked: Int): Column =
+    Column.fn("approx_heavy_hitters_combine", e, lit(maxItemsTracked))
+
+  /**
+   * Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_combine(columnName: String, maxItemsTracked: Int): Column =
+    approx_heavy_hitters_combine(Column(columnName), maxItemsTracked)
+
+  /**
+   * Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_combine(e: Column): Column =
+    Column.fn("approx_heavy_hitters_combine", e)
+
+  /**
+   * Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+   *
+   * @group agg_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_combine(columnName: String): Column =
+    approx_heavy_hitters_combine(Column(columnName))
+
+  /**
    * Aggregate function: returns the kurtosis of the values in a group.
    *
    * @group agg_funcs
@@ -6410,6 +6750,96 @@ object functions {
   def theta_sketch_estimate(columnName: String): Column = {
     theta_sketch_estimate(Column(columnName))
   }
+
+  /**
+   * Returns frequent items from a frequent items sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_estimate(c: Column, k: Column): Column =
+    Column.fn("approx_frequent_items_estimate", c, k)
+
+  /**
+   * Returns frequent items from a frequent items sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_estimate(c: Column, k: Int): Column =
+    Column.fn("approx_frequent_items_estimate", c, lit(k))
+
+  /**
+   * Returns frequent items from a frequent items sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_estimate(columnName: String, k: Int): Column =
+    approx_frequent_items_estimate(Column(columnName), k)
+
+  /**
+   * Returns frequent items from a frequent items sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_estimate(c: Column): Column =
+    Column.fn("approx_frequent_items_estimate", c)
+
+  /**
+   * Returns frequent items from a frequent items sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_frequent_items_estimate(columnName: String): Column =
+    approx_frequent_items_estimate(Column(columnName))
+
+  /**
+   * Returns heavy hitters from a heavy hitters sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_estimate(c: Column, k: Column): Column =
+    Column.fn("approx_heavy_hitters_estimate", c, k)
+
+  /**
+   * Returns heavy hitters from a heavy hitters sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_estimate(c: Column, k: Int): Column =
+    Column.fn("approx_heavy_hitters_estimate", c, lit(k))
+
+  /**
+   * Returns heavy hitters from a heavy hitters sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_estimate(columnName: String, k: Int): Column =
+    approx_heavy_hitters_estimate(Column(columnName), k)
+
+  /**
+   * Returns heavy hitters from a heavy hitters sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_estimate(c: Column): Column =
+    Column.fn("approx_heavy_hitters_estimate", c)
+
+  /**
+   * Returns heavy hitters from a heavy hitters sketch.
+   *
+   * @group sketch_funcs
+   * @since 4.1.0
+   */
+  def approx_heavy_hitters_estimate(columnName: String): Column =
+    approx_heavy_hitters_estimate(Column(columnName))
 
   /**
    * Unions two binary representations of Datasketches ThetaSketch objects in the input columns
