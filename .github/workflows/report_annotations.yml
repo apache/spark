@@ -54,10 +54,10 @@ jobs:
       actions: read
       checks: write
     steps:
-      - name: Checkout problem matchers
+      - name: Checkout Spark
         uses: actions/checkout@v6
-        with:
-          sparse-checkout: .github/problem-matchers
+        # with:
+        #   sparse-checkout: .github/problem-matchers
 
       - name: Download build logs
         id: download-logs
