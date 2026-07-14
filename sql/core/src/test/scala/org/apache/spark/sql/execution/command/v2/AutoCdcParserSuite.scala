@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{
   UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{
-  AutoCdcIntoCommand,
+  AutoCdcInto,
   CreateFlowCommand,
   CreateStreamingTableAutoCdc,
   LogicalPlan,
@@ -71,7 +71,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("myflow"))
     assert(cmd.comment.isEmpty)
 
-    val cdc = cmd.flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = cmd.flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("source"))
@@ -89,7 +89,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("mycat", "myschema", "source"))
   }
@@ -124,7 +124,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (k)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
       Seq("myschema", "mytable"))
   }
@@ -136,7 +136,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (k)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.targetTable.asInstanceOf[UnresolvedIdentifier].nameParts ==
       Seq("mycat", "myschema", "mytable"))
   }
@@ -149,7 +149,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |APPLY AS DELETE WHEN op = 'DELETE'
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.deleteCondition.isDefined)
     assert(cdc.deleteCondition.get.sql.contains("op"))
   }
@@ -162,7 +162,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts
         |COLUMNS (id, name, value)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.includeColumns.get.map(_.name) == Seq("id", "name", "value"))
     assert(cdc.excludeColumns.isEmpty)
   }
@@ -175,7 +175,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts
         |COLUMNS * EXCEPT (op, ts)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.includeColumns.isEmpty)
     assert(cdc.excludeColumns.get.map(_.name) == Seq("op", "ts"))
   }
@@ -189,7 +189,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY timestamp
         |COLUMNS (key1, key2, key3, timestamp)""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.keys.map(_.name) == Seq("key1", "key2"))
     assert(cdc.deleteCondition.isDefined)
     assert(cdc.sequenceByExpr == UnresolvedAttribute("timestamp"))
@@ -523,7 +523,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     val source = streamSource(cdc.source)
     assert(source.multipartIdentifier == Seq("source"))
   }
@@ -535,7 +535,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |KEYS (id)
         |SEQUENCE BY ts""".stripMargin)
 
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.source.isStreaming)
     val alias = cdc.source.asInstanceOf[SubqueryAlias]
     assert(alias.alias == "s")
@@ -550,7 +550,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     // The subquery wraps the STREAM read in Project/Filter/SubqueryAlias nodes; isStreaming
     // propagates up through them, so the whole source is recognized as streaming.
-    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcIntoCommand]
+    val cdc = plan.asInstanceOf[CreateFlowCommand].flowOperation.asInstanceOf[AutoCdcInto]
     assert(cdc.source.isStreaming)
     assert(cdc.source.isInstanceOf[SubqueryAlias])
   }

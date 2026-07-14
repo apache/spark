@@ -18,19 +18,24 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 
 /**
- * Logical plan node for an AUTO CDC INTO command, used by Spark Declarative Pipelines.
+ * Logical plan node for an AUTO CDC INTO operation, used by Spark Declarative Pipelines.
  *
  * This represents a CDC (Change Data Capture) operation that applies an ordered change event
  * stream from [[source]] into [[targetTable]] using SCD Type 1 (upsert) semantics.
  *
- * This node serves as a parse-time placeholder for a pipeline CDC definition and cannot be
- * executed directly. It will be interpreted by the pipeline submodule once execution support
- * is added (SPARK-57402). The [[targetTable]] and [[source]] relations are exposed as the node's
- * children (left and right respectively) so the analyzer resolves them through the normal plan
- * resolution path.
+ * This node only ever appears as the flow operation of a [[CreateFlowCommand]] (parsed from
+ * `CREATE FLOW ... AS AUTO CDC INTO ...`); there is no standalone `AUTO CDC INTO` syntax. It is a
+ * plain [[LogicalPlan]] rather than a [[Command]] so that it is never eagerly executed or planned
+ * on its own -- it is interpreted by the pipeline submodule during a pipeline execution. Unlike a
+ * [[ParsedStatement]], it is not rewritten into another plan during analysis; the pipeline
+ * submodule consumes it as-is, so it relies on the default resolution semantics (resolved once its
+ * children and expressions are resolved) rather than being forced unresolved. The [[targetTable]]
+ * and [[source]] relations are exposed as the node's children (left and right respectively) so the
+ * analyzer resolves them through the normal plan resolution path.
  *
  * @param targetTable    The target table to apply changes into, as an `UnresolvedIdentifier`.
  *                       Exposed as the node's left child.
@@ -49,7 +54,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  *                       except these). [[None]] when no COLUMNS clause was specified. Mutually
  *                       exclusive with [[includeColumns]].
  */
-case class AutoCdcIntoCommand(
+case class AutoCdcInto(
     targetTable: LogicalPlan,
     source: LogicalPlan,
     keys: Seq[UnresolvedAttribute],
@@ -57,11 +62,15 @@ case class AutoCdcIntoCommand(
     sequenceByExpr: Expression,
     includeColumns: Option[Seq[UnresolvedAttribute]],
     excludeColumns: Option[Seq[UnresolvedAttribute]]
-) extends BinaryCommand {
+) extends LogicalPlan with BinaryLike[LogicalPlan] {
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = source
 
+  // This node is a parse-time placeholder that is never executed or projected from directly; the
+  // pipeline submodule reads its fields instead. It therefore produces no output columns.
+  override def output: Seq[Attribute] = Nil
+
   override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan, newRight: LogicalPlan): AutoCdcIntoCommand =
+      newLeft: LogicalPlan, newRight: LogicalPlan): AutoCdcInto =
     copy(targetTable = newLeft, source = newRight)
 }
