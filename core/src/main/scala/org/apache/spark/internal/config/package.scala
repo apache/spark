@@ -2487,6 +2487,18 @@ package object config {
       .enumConf(SchedulingMode)
       .createWithDefault(SchedulingMode.FIFO)
 
+  private[spark] val SCHEDULER_ROOT_POOL_ALGORITHM_CLASS =
+    ConfigBuilder("spark.scheduler.rootPool.algorithm.class")
+      .doc("Fully qualified name of a class implementing " +
+        "org.apache.spark.scheduler.SchedulingAlgorithm, used to order the scheduler's root " +
+        "pool. The class must have a no-argument constructor. When unset, the ordering is " +
+        "derived from spark.scheduler.mode (FAIR or FIFO). In FAIR mode the root pool orders " +
+        "the top-level pools; in FIFO mode it orders the task sets directly.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createOptional
+
   private[spark] val STREAMING_ID_AWARE_SCHEDULER_LOGGING_ENABLED =
     ConfigBuilder("spark.scheduler.streaming.idAwareLogging.enabled")
       .doc("When true, scheduler log messages for streaming tasks include " +
