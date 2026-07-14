@@ -324,10 +324,11 @@ how Spark treats task events from a stage attempt that is later discarded.
   the connected component over *pipelined* edges only (§3), so a regular shuffle is a group
   *boundary*: its producer and consumer fall into different groups by construction, splitting a
   pipelined region rather than sitting inside one. A regular shuffle therefore should never be
-  internal to a group. The scheduler still verifies this as an invariant at stage/group creation and
-  fails fast if violated — a regular edge whose endpoints landed in the same group would be a
-  contradiction (co-schedule them, yet materialize-before-read), signalling inconsistent pipelined
-  marking rather than a valid plan.
+  internal to a group. The scheduler still verifies this invariant at stage/group creation and fails
+  fast if violated. A regular edge whose endpoints landed in the same group would be a contradiction:
+  group membership says co-schedule the two stages, while a regular edge says the consumer must wait
+  for the producer to fully materialize first. Such an edge signals inconsistent pipelined marking,
+  not a valid plan.
 - Pipelined edges are intra-group by construction, so they never cross a group boundary.
 
 ---
@@ -366,7 +367,7 @@ than mis-scheduling it; it is expected to be supported later.
 |--------------------|------|--------------|
 | Statically-indeterminate producer | moot | Its recovery is stage rollback-and-recompute, which a group never performs (§6: any failure aborts the group), so the mechanism is never reached. (A producer whose output RDD is classified `INDETERMINATE` — a rerun can yield different data, not just a different order — determinable from the RDD graph at stage-creation time.) |
 | Checksum-mismatch full retry | moot | The runtime counterpart to static indeterminism: it checksums each map task's output and, on a cross-attempt mismatch, rolls back and re-runs the succeeding stages. A group never keeps succeeding stages across a retry (§6), so this never fires. |
-| Barrier execution in a member stage | incompatible | Barrier exposes output only after a global sync, contradicting concurrent partial reads. |
+| Barrier execution in a member stage | incompatible | Barrier mode runs a stage's tasks as an atomic gang with whole-stage retry — on any failure the entire stage is recomputed — which discards and regenerates output a pipelined consumer has already read incrementally (the same hazard as speculative execution below). It also lets tasks rendezvous in lockstep mid-stage (`barrier()`), at odds with per-partition incremental production/consumption on the pipelined edge. |
 | Dynamic resource allocation | incompatible | Gang admission needs a stable slot set; reclaiming executors from a pinned-open group can deadlock it. |
 | Speculative execution | incompatible | A speculative producer copy races a consumer already reading partial output; no commit barrier protects the read. |
 | Push-based shuffle merge as a pipelined (incremental) shuffle | incompatible | Push-based merge exposes output only after a post-completion "finalize" step — the opposite of incremental reads — so it cannot serve as the incremental shuffle within a PG. (A PG's regular input/output edges may still use push-based merge, like any regular shuffle — §7.) |
