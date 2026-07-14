@@ -29,7 +29,8 @@ private[sql] case class LogicalWriteInfoImpl(
     schema: StructType,
     options: CaseInsensitiveStringMap,
     override val rowIdSchema: Optional[StructType] = Optional.empty[StructType],
-    override val metadataSchema: Optional[StructType] = Optional.empty[StructType])
+    override val metadataSchema: Optional[StructType] = Optional.empty[StructType],
+    override val updateSchema: Optional[StructType] = Optional.empty[StructType])
   extends LogicalWriteInfo
 
 object LogicalWriteInfoImpl {
@@ -38,12 +39,14 @@ object LogicalWriteInfoImpl {
       schema: StructType,
       options: CaseInsensitiveStringMap,
       rowIdSchema: Option[StructType],
-      metadataSchema: Option[StructType]): LogicalWriteInfoImpl = {
+      metadataSchema: Option[StructType],
+      updateSchema: Option[StructType]): LogicalWriteInfoImpl = {
     LogicalWriteInfoImpl(
       queryId,
       schema,
       options,
       rowIdSchema.toJava,
-      metadataSchema.toJava)
+      metadataSchema.toJava,
+      updateSchema.toJava)
   }
 }
