@@ -131,16 +131,10 @@ jobs:
         if: always()
         run: echo "::remove-matcher owner=javadoc-doclint::"
 
-      - name: Extract annotations
-        if: always()
-        run: |
-          grep -E '^::(error|warning|notice) ' "$RUNNER_TEMP/docs-build.log" \
-            > "$RUNNER_TEMP/annotations.txt" || true
-
-      - name: Upload annotations
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: docs-annotations
-          path: ${{ runner.temp }}/annotations.txt
+          name: docs-build-log
+          path: ${{ runner.temp }}/docs-build.log
           retention-days: 3

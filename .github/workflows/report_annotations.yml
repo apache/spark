@@ -27,8 +27,9 @@
 # do appear inline.
 #
 # To add annotations from a new workflow:
-# 1. In the source workflow, grep ::error/::warning lines from the build log.
-# 2. Upload them as an artifact matching the pattern "*-annotations".
+# 1. In the source workflow, capture the build log with tee and upload it
+#    as an artifact matching the pattern "*-build-log".
+# 2. Add problem matcher JSON files to .github/problem-matchers/.
 # 3. Add the source workflow's name to the list below.
 
 name: Report annotations
@@ -53,24 +54,38 @@ jobs:
       actions: read
       checks: write
     steps:
-      - name: Download annotations
+      - name: Checkout problem matchers
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/problem-matchers
+
+      - name: Download build logs
         id: download
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
-          pattern: "*-annotations"
+          pattern: "*-build-log"
           merge-multiple: true
 
-      - name: Replay annotations
+      - name: Replay logs through problem matchers
         if: steps.download.outcome == 'success'
         run: |
-          count=0
-          for f in *.txt; do
-            [ -f "$f" ] || continue
-            [ -s "$f" ] || continue
-            count=$((count + $(wc -l < "$f")))
-            cat "$f"
+          # Register all available problem matchers.
+          for matcher in .github/problem-matchers/*.json; do
+            echo "::add-matcher::$matcher"
           done
-          echo "Replayed ${count} annotation(s) from workflow: ${{ github.event.workflow_run.name }}"
+
+          # Replay each build log so the runner creates annotations.
+          for log in *.log; do
+            [ -f "$log" ] || continue
+            echo "--- Replaying $log ---"
+            cat "$log"
+          done
+
+          # Clean up matchers.
+          for matcher in .github/problem-matchers/*.json; do
+            owner=$(python3 -c "import json; print(json.load(open('$matcher'))['problemMatcher'][0]['owner'])")
+            echo "::remove-matcher owner=$owner::"          
+          done
