@@ -44,10 +44,10 @@ Set SPARK_GENERATE_GOLDEN_FILES=1 before running:
     SPARK_GENERATE_GOLDEN_FILES=1 python -m pytest \\
         python/pyspark/tests/upstream/pyarrow/test_pyarrow_arrow_to_pandas_default.py
 
-## PyArrow Version Compatibility
+## PyArrow and pandas Version Compatibility
 
-The golden files capture behavior for a specific PyArrow version.
-Regenerate when upgrading PyArrow, as to_pandas() behavior may change.
+The golden files capture behavior for specific PyArrow and pandas versions.
+Regenerate when upgrading either dependency, as to_pandas() behavior may change.
 """
 
 import datetime
@@ -57,6 +57,7 @@ import unittest
 from decimal import Decimal
 from typing import Callable, List, Optional
 
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
     have_pyarrow,
     have_pandas,
@@ -66,6 +67,9 @@ from pyspark.testing.utils import (
     numpy_requirement_message,
 )
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+
+if have_pandas:
+    import pandas as pd
 
 
 @unittest.skipIf(
@@ -80,6 +84,15 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
     decimal, date, timestamp, duration, time, null, and nested types.
     Each type is tested both without and with null values.
     """
+
+    @property
+    def pandas_dir(self):
+        # Pandas 3 uses its dedicated string dtype for Arrow string arrays,
+        # while earlier versions use the object dtype.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "pandas_3"
+        else:
+            return "pandas_2"
 
     def compare_or_generate_golden_matrix(
         self,
@@ -100,7 +113,9 @@ class PyArrowArrayToPandasDefaultTests(GoldenFileTestMixin, unittest.TestCase):
         """
         generating = self.is_generating_golden()
 
-        test_dir = os.path.dirname(inspect.getfile(type(self)))
+        test_dir = os.path.join(os.path.dirname(inspect.getfile(type(self))), self.pandas_dir)
+        if generating:
+            os.makedirs(test_dir, exist_ok=True)
         golden_csv = os.path.join(test_dir, f"{golden_file_prefix}.csv")
         golden_md = os.path.join(test_dir, f"{golden_file_prefix}.md")
 
