@@ -7270,6 +7270,30 @@
     ],
     "sqlState" : "42K09"
   },
+  "STREAMING_ASYNC_OPERATION_FAILED" : {
+    "message" : [
+      "Asynchronous streaming operation failed with exception: <message>"
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_CHECKPOINT_LOG_WRITE_FAILURE" : {
+    "message" : [
+      "Failed to write a streaming query checkpoint log entry."
+    ],
+    "subClass" : {
+      "COMMIT_LOG" : {
+        "message" : [
+          "Failed to write commit log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      },
+      "OFFSET_LOG" : {
+        "message" : [
+          "Failed to write offset log entry for batch <batchId> at checkpoint location <checkpointLocation>. Check that the checkpoint location is writable and retry the query."
+        ]
+      }
+    },
+    "sqlState" : "58030"
+  },
   "STREAMING_CHECKPOINT_MISSING_METADATA_FILE" : {
     "message" : [
       "Checkpoint location <checkpointLocation> is in an inconsistent state: the metadata file is missing but offset and/or commit logs contain data. Please restore the metadata file or create a new checkpoint directory."
@@ -7370,6 +7394,11 @@
       "Streaming real-time mode has the following limitation:"
     ],
     "subClass" : {
+      "ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_NON_ZERO" : {
+        "message" : [
+          "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
+        ]
+      },
       "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
         "message" : [
           "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."

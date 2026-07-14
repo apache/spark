@@ -268,8 +268,7 @@ Stateful operations of any kind are not supported in this release. This includes
 aggregations, `dropDuplicates` / `dropDuplicatesWithinWatermark`, stream-stream joins, `repartition`
 and other operations that introduce a shuffle, and stateful operators such as
 `flatMapGroupsWithState` and `transformWithState`. Support for stateful operations is planned
-starting in Spark 4.3. Asynchronous progress tracking is also not supported; enabling it fails with
-`STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED`.
+starting in Spark 4.3.
 
 ## Fault Tolerance
 

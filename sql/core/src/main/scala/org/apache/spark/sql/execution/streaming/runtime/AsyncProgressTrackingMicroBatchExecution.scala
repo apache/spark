@@ -20,11 +20,12 @@ package org.apache.spark.sql.execution.streaming.runtime
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException, SparkThrowable}
 import org.apache.spark.internal.LogKeys.{BATCH_ID, PRETTY_ID_STRING}
 import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger}
+import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger, StreamingErrors}
 import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.streaming.Trigger
@@ -43,8 +44,8 @@ class AsyncProgressTrackingMicroBatchExecution(
 
   import AsyncProgressTrackingMicroBatchExecution._
 
-  protected val asyncProgressTrackingCheckpointingIntervalMs: Long
-  = getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions)
+  protected val asyncProgressTrackingCheckpointingIntervalMs: Long =
+    getAsyncProgressTrackingCheckpointingIntervalMs(extraOptions, trigger)
 
   // Offsets that are ready to be committed by the source.
   // This is needed so that we can call source commit in the same thread as micro-batch execution
@@ -61,8 +62,15 @@ class AsyncProgressTrackingMicroBatchExecution(
   // writes to execute in order in a serialized fashion
   protected val asyncWritesExecutorService
   = ThreadUtils.newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
-    "async-log-write",
-    2, // one for offset commit and one for completion commit
+    AsyncProgressTrackingMicroBatchExecution.ASYNC_LOG_WRITE_THREAD_NAME,
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      // Two tasks can be buffered, one in the active task and one in the queue.
+      // This is to make sure we finish completion commit of the last batch before starting
+      // the offset commit of the new batch.
+      1
+    } else {
+      2 // One for offset commit and one for completion commit.
+    },
     new RejectedExecutionHandler() {
       override def rejectedExecution(r: Runnable, executor: ThreadPoolExecutor): Unit = {
         try {
@@ -138,50 +146,77 @@ class AsyncProgressTrackingMicroBatchExecution(
     // Hence, state repartitioning cannot happen.
   }
 
-  /**
-   * Should not call super method as we need to do something completely different
-   * in this method for async progress tracking
-   */
-  override def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
+  private def interruptStreamExecutionWithError(th: Throwable): Unit = {
+    logError(log"Interrupting stream execution due to error in async " +
+      log"progress tracking for query ${MDC(PRETTY_ID_STRING, prettyIdString)}", th)
+    errorNotifier.markError(th)
+
+    // Immediately stop further processing.
+    sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    // Cannot use stop() because of deadlock:
+    //   stop() will not return until this async commit thread stops,
+    //   but this thread cannot stop until stop() returns.
+    queryExecutionThread.interrupt()
+
+    // Codes after interrupt may never run, for critical cleanup, put them in cleanup().
+    sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    asyncWritesExecutorService.shutdownNow()
+  }
+
+  private def enqueueLastPersistedBatchForCommit(
+      batchId: Long, persistedToDurableStorage: Boolean): Unit = {
+    if (persistedToDurableStorage) {
+      // batch id cache not initialized
+      if (lastBatchPersistedToDurableStorage.get == -1) {
+        lastBatchPersistedToDurableStorage.set(
+          offsetLog.getPrevBatchFromStorage(batchId).getOrElse(-1))
+      }
+
+      if (batchId != 0 && lastBatchPersistedToDurableStorage.get != -1) {
+        // sanity check to make sure batch ids are monotonically increasing
+        assert(lastBatchPersistedToDurableStorage.get < batchId)
+        val prevBatchOff = offsetLog.get(lastBatchPersistedToDurableStorage.get())
+        if (prevBatchOff.isDefined) {
+          // Offset is ready to be committed by the source. Add to queue
+          sourceCommitQueue.add(prevBatchOff.get)
+        } else {
+          throw new IllegalStateException(
+            s"Failed to commit processed data in the source because batch " +
+              s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log." +
+              s"  This should not happen.")
+        }
+      }
+      lastBatchPersistedToDurableStorage.set(batchId)
+    }
+  }
+
+  private def asyncAddToOffsetLog(execCtx: MicroBatchExecutionContext): Unit = {
     // Because we are using a thread pool with only one thread, async writes to the offset log
     // are still written in a serial / in order fashion
-    offsetLog
-      .addAsync(execCtx.batchId,
-        execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata))
-      .thenAccept((tuple: (Long, Boolean)) => {
-        val (batchId: Long, persistedToDurableStorage: Boolean) = tuple
+    logInfo(log"Submitting async offset log write for batch ${MDC(BATCH_ID, execCtx.batchId)}.")
+    val offsetSeq = execCtx.endOffsets.toOffsets(
+      sources, sourceIdMap, execCtx.offsetSeqMetadata)
+    offsetLog.addAsync(execCtx.batchId, offsetSeq)
+      .thenAccept { case (batchId, persistedToDurableStorage) =>
+        enqueueLastPersistedBatchForCommit(batchId, persistedToDurableStorage)
         if (persistedToDurableStorage) {
-          // batch id cache not initialized
-          if (lastBatchPersistedToDurableStorage.get == -1) {
-            lastBatchPersistedToDurableStorage.set(
-              offsetLog.getPrevBatchFromStorage(batchId).getOrElse(-1L))
-          }
-
-          if (batchId != 0 && lastBatchPersistedToDurableStorage.get != -1) {
-            // sanity check to make sure batch ids are monotonically increasing
-            assert(lastBatchPersistedToDurableStorage.get < batchId)
-            val prevBatchOff = offsetLog.get(lastBatchPersistedToDurableStorage.get())
-            if (prevBatchOff.isDefined) {
-              // Offset is ready to be committed by the source. Add to queue
-              sourceCommitQueue.add(prevBatchOff.get)
-            } else {
-              throw new IllegalStateException(
-                s"Failed to commit processed data in the source because batch " +
-                  s"${lastBatchPersistedToDurableStorage.get()} doesn't exist in the offset log." +
-                  s"  This should not happen.")
-            }
-          }
-          lastBatchPersistedToDurableStorage.set(batchId)
+          logInfo(log"Committed async offset log to disk for batch ${MDC(BATCH_ID, batchId)}.")
+        } else {
+          logInfo(log"Committed async offset log to memory for batch ${MDC(BATCH_ID, batchId)}.")
         }
-      })
+      }
       .exceptionally((th: Throwable) => {
         logError(log"Encountered error while performing async offset write for batch " +
           log"${MDC(BATCH_ID, execCtx.batchId)}", th)
-        errorNotifier.markError(th)
-        return
+        handleAsyncLogWriteError(th, execCtx.batchId, StreamingErrors.offsetLogWriteFailure)
+        null.asInstanceOf[Void]
       })
+  }
 
-    // check if there are offsets that are ready to be committed by the source
+  /**
+   * Check if there are offsets that are ready to be committed by the source.
+   */
+  private def commitAllSources(): Unit = {
     var offset = sourceCommitQueue.poll()
     while (offset != null) {
       commitSources(offset)
@@ -189,38 +224,110 @@ class AsyncProgressTrackingMicroBatchExecution(
     }
   }
 
+  /**
+   * Should not call super method as we need to do something completely different
+   * in this method for async progress tracking
+   */
+  override def markMicroBatchStart(execCtx: MicroBatchExecutionContext): Unit = {
+    if (!trigger.isInstanceOf[RealTimeTrigger]) {
+      asyncAddToOffsetLog(execCtx)
+    }
+
+    commitAllSources()
+  }
+
   override def markMicroBatchEnd(execCtx: MicroBatchExecutionContext): Unit = {
     watermarkTracker.updateWatermark(execCtx.executionPlan.executedPlan)
+
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      populateBatchOffsetsForRTM(execCtx)
+      execCtx.reportTimeTaken("walCommit") {
+        asyncAddToOffsetLog(execCtx)
+      }
+    }
+
+    // check if current batch there is a async write for the offset log is issued for this batch
+    // if so, we should do the same for commit log.  However, if this is the first batch executed
+    // in this run we should always persist to the commit log.  There can be situations in which
+    // the offset log has more entries than the commit log and on restart we need to make sure
+    // we write the missing entries to the commit log.  For example if the offset log is 0, 2, 5
+    // and the commit log is 0, 2.  On restart we will re-process the data from batch 3 -> 5.
+    // Batch 5 is already part of the offset log but we still need to write the entry to
+    // the commit log
     execCtx.reportTimeTaken("commitOffsets") {
-      // check if current batch there is a async write for the offset log is issued for this batch
-      // if so, we should do the same for commit log.  However, if this is the first batch executed
-      // in this run we should always persist to the commit log.  There can be situations in which
-      // the offset log has more entries than the commit log and on restart we need to make sure
-      // we write the missing entries to the commit log.  For example if the offset log is 0, 2, 5
-      // and the commit log is 0, 2.  On restart we will re-process the data from batch 3 -> 5.
-      // Batch 5 is already part of the offset log but we still need to write the entry to
-      // the commit log
+      logInfo(log"Submitting async commit log write for batch ${MDC(BATCH_ID, execCtx.batchId)}.")
+
       if (offsetLog.getAsyncOffsetWrite(execCtx.batchId).nonEmpty
         || isFirstBatch) {
         isFirstBatch = false
-
         commitLog
           .addAsync(execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))
+          .thenAccept((batchId: Long) => {
+            logInfo(log"Committed async commit log to disk for batch ${MDC(BATCH_ID, batchId)}.")
+          })
           .exceptionally((th: Throwable) => {
             logError(log"Got exception during async write to commit log for batch " +
               log"${MDC(BATCH_ID, execCtx.batchId)}", th)
-            errorNotifier.markError(th)
-            return
+            handleAsyncLogWriteError(th, execCtx.batchId, StreamingErrors.commitLogWriteFailure)
+            null.asInstanceOf[Void]
           })
       } else {
         if (!commitLog.addInMemory(
           execCtx.batchId, CommitMetadata(watermarkTracker.currentWatermark))) {
           throw QueryExecutionErrors.concurrentStreamLogUpdate(execCtx.batchId)
         }
+        logInfo(
+          log"Committed async commit log to memory for batch ${MDC(BATCH_ID, execCtx.batchId)}.")
       }
       offsetLog.removeAsyncOffsetWrite(execCtx.batchId)
     }
+    signalProcessAllAvailableIfRealTimeMode(execCtx)
     committedOffsets ++= execCtx.endOffsets
+  }
+
+  /**
+   * Categorize a raw IO failure surfaced via an async log-write future, then route it through
+   * the standard async error handling path. CompletableFuture wraps the underlying cause in
+   * CompletionException, so unwrap before checking whether it has already been categorized.
+   * `wrapAsLogWriteFailure` is one of the [[StreamingErrors]] log-write-failure factories.
+   */
+  private def handleAsyncLogWriteError(
+      asyncWriteError: Throwable,
+      batchId: Long,
+      wrapAsLogWriteFailure: (Long, String, Throwable) => Throwable): Unit = {
+    val rootCause = asyncWriteError match {
+      case ce: CompletionException if ce.getCause != null => ce.getCause
+      case ee: ExecutionException if ee.getCause != null => ee.getCause
+      case other => other
+    }
+    val categorized = if (rootCause.isInstanceOf[SparkThrowable]) {
+      asyncWriteError
+    } else {
+      wrapAsLogWriteFailure(batchId, resolvedCheckpointRoot, rootCause)
+    }
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      // For real time mode we need to interrupt the stream execution thread.
+      interruptStreamExecutionWithError(categorized)
+    } else {
+      errorNotifier.markError(categorized)
+    }
+  }
+
+  override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
+    try {
+      super.runActivatedStream(sparkSessionForStream)
+    } catch {
+      case e: Throwable
+        if StreamExecution.isInterruptionException(e, sparkSession.sparkContext) &&
+          errorNotifier.getError().isDefined =>
+        throw new SparkRuntimeException(
+          errorClass = "STREAMING_ASYNC_OPERATION_FAILED",
+          messageParameters = Map("message" -> errorNotifier.getError().get.getMessage),
+          cause = errorNotifier.getError().get
+        )
+      case e: Throwable =>
+        throw e
+    }
   }
 
   // need to look at the number of files on disk
@@ -237,11 +344,26 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   override def cleanup(): Unit = {
+    if (trigger.isInstanceOf[RealTimeTrigger] && errorNotifier.getError().isDefined) {
+      // No pending tasks in the queue should be executed if there was an error.
+      asyncWritesExecutorService.shutdownNow()
+      // Waiting for at max 30s, which is aligned with ThreadUtils.shutdown.
+      asyncWritesExecutorService.awaitTermination(30, TimeUnit.SECONDS)
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
+    } else {
+      ThreadUtils.shutdown(asyncWritesExecutorService)
+    }
+    if (asyncWritesExecutorService.isShutdown) {
+      logInfo(log"Async progress tracking executor for query " +
+        log"${MDC(PRETTY_ID_STRING, prettyIdString)} has been shutdown")
+    } else {
+      logWarning(log"Async progress tracking executor for query " +
+        log"${MDC(PRETTY_ID_STRING, prettyIdString)} failed to shutdown properly")
+      throw new TimeoutException(
+        "Failed to shutdown Async Progress Tracking executor in 30 seconds")
+    }
+    commitAllSources()
     super.cleanup()
-
-    ThreadUtils.shutdown(asyncWritesExecutorService)
-    logInfo(log"Async progress tracking executor pool for query " +
-      log"${MDC(PRETTY_ID_STRING, prettyIdString)} has been shutdown")
   }
 
   // used for testing
@@ -254,8 +376,7 @@ class AsyncProgressTrackingMicroBatchExecution(
   private def validateAndGetTrigger(): TriggerExecutor = {
     // validate that the pipeline is using a supported sink
     if (!extraOptions
-      .getOrElse(
-        ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK, "false")
+      .getOrElse(ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK, "false")
       .toBoolean) {
       try {
         plan.sink.name() match {
@@ -263,6 +384,8 @@ class AsyncProgressTrackingMicroBatchExecution(
           case "console" =>
           case "MemorySink" =>
           case "KafkaTable" =>
+          case "ForeachSink" =>
+          case "ContinuousMemorySink" =>
           case _ =>
             throw new IllegalArgumentException(
               s"Sink ${plan.sink.name()}" +
@@ -285,6 +408,13 @@ class AsyncProgressTrackingMicroBatchExecution(
 
     trigger match {
       case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
+      case _: RealTimeTrigger =>
+        if (asyncProgressTrackingCheckpointingIntervalMs != 0) {
+          throw new SparkIllegalArgumentException(
+            "STREAMING_REAL_TIME_MODE.ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_NON_ZERO"
+          )
+        }
+        ProcessingTimeExecutor(ProcessingTimeTrigger(0), triggerClock)
       case OneTimeTrigger =>
         throw new IllegalArgumentException(
           "Async progress tracking cannot be used with Once trigger")
@@ -313,16 +443,25 @@ object AsyncProgressTrackingMicroBatchExecution {
   val ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS =
     "asyncProgressTrackingCheckpointIntervalMs"
 
+  // Thread-name prefix of the single-threaded executor that performs async offset/commit
+  // log writes. Tests match on this to distinguish async writes from synchronous ones.
+  val ASYNC_LOG_WRITE_THREAD_NAME = "async-log-write"
+
   // for testing purposes
   val ASYNC_PROGRESS_TRACKING_OVERRIDE_SINK_SUPPORT_CHECK =
     "_asyncProgressTrackingOverrideSinkSupportCheck"
 
   private def getAsyncProgressTrackingCheckpointingIntervalMs(
-      extraOptions: Map[String, String]): Long = {
+      extraOptions: Map[String, String],
+      trigger: Trigger): Long = {
     extraOptions
       .getOrElse(
         ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS,
-        "1000"
+        if (trigger.isInstanceOf[RealTimeTrigger]) {
+          "0"
+        } else {
+          "1000"
+        }
       )
       .toLong
   }

@@ -3668,6 +3668,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val STREAMING_ASYNC_PROGRESS_TRACKING_REAL_TIME_MODE_ENABLED_BY_DEFAULT = buildConf(
+    "spark.sql.streaming.realTimeMode.asyncProgressTrackingByDefault.enabled")
+    .internal()
+    .doc("Whether asynchronous progress tracking should be enabled in real-time mode by " +
+      "default for stateless queries. If explicitly set, the stream writer option for async " +
+      "progress tracking will still take precedence over this flag.")
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
