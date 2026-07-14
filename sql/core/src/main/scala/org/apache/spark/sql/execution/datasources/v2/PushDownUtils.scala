@@ -58,7 +58,6 @@ object PushDownUtils extends Logging {
       filters: Seq[Expression],
       partitionFields: Option[Seq[PartitionPredicateField]])
       : (Either[Seq[sources.Filter], Seq[Predicate]], Seq[Expression]) = {
-    val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
     scanBuilder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
@@ -70,7 +69,7 @@ object PushDownUtils extends Logging {
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
-        for (filterExpr <- deterministicFilters) {
+        for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
               nestedPredicatePushdownEnabled = true)
@@ -90,9 +89,8 @@ object PushDownUtils extends Logging {
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
-        val finalPostScanFilters =
-          (postScanFilters ++ untranslatableExprs ++ nonDeterministicFilters).toImmutableArraySeq
-        (Left(r.pushedFilters().toImmutableArraySeq), finalPostScanFilters)
+        (Left(r.pushedFilters().toImmutableArraySeq),
+          (postScanFilters ++ untranslatableExprs).toImmutableArraySeq)
 
       case r: SupportsPushDownV2Filters =>
         // Divide the filters into those translatable and untranslatable to data source filters.
@@ -103,7 +101,7 @@ object PushDownUtils extends Logging {
         val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
-        for (filterExpr <- deterministicFilters) {
+        for (filterExpr <- filters) {
           val translated =
             DataSourceV2Strategy.translateFilterV2WithMapping(
               filterExpr, Some(translatedFilterToExpr))
@@ -132,11 +130,11 @@ object PushDownUtils extends Logging {
               rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(
-          finalPostScanFilters ++ nonDeterministicFilters,
-          ExpressionSet(untranslatableExprs ++ nonDeterministicFilters))
+        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
+          ExpressionSet(untranslatableExprs))
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
+        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
         val postScanFilters = r.pushFilters(deterministicFilters) ++ nonDeterministicFilters
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
