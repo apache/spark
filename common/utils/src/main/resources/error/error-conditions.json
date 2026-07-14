@@ -2187,6 +2187,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DISTRIBUTE_BY_UNSUPPORTED" : {
+    "message" : [
+      "DISTRIBUTE BY is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
@@ -9321,11 +9327,6 @@
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0012" : {
-    "message" : [
-      "DISTRIBUTE BY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0014" : {

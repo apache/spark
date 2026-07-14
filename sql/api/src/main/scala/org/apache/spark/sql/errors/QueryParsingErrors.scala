@@ -161,7 +161,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
+    new ParseException(errorClass = "DISTRIBUTE_BY_UNSUPPORTED", ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {

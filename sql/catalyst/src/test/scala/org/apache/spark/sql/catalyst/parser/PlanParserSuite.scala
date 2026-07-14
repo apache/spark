@@ -437,6 +437,18 @@ class PlanParserSuite extends AnalysisTest {
         stop = 41))
   }
 
+  test("DISTRIBUTE BY is not supported in the Catalyst parser") {
+    val sql = "select * from t distribute by a"
+    checkError(
+      exception = parseException(sql),
+      condition = "DISTRIBUTE_BY_UNSUPPORTED",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "distribute by a",
+        start = 16,
+        stop = 30))
+  }
+
   test("insert into") {
     import org.apache.spark.sql.catalyst.dsl.expressions._
     import org.apache.spark.sql.catalyst.dsl.plans._
