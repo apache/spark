@@ -160,9 +160,10 @@ materialize-before-read sequencing.
     for a second job to reuse — reuse across jobs is unsound for it.
     - This must be enforced, not assumed: from the scheduler's perspective a shuffle-map stage *can*
       be reused unless something forbids it. Spark would otherwise reuse a shuffle in two ways, and
-      **both** must be blocked. (1) Stage-object reuse via `shuffleIdToMapStage`: bypass it, so each
-      pipelined dependency gets a fresh producer stage. (2) Output-availability reuse: a re-created
-      producer would be skipped as already-done because its outputs are still registered in
+      **both** must be blocked. (1) Stage-object reuse via `shuffleIdToMapStage`: a pipelined
+      dependency is not enrolled in it, so each gets a fresh producer stage. (2) Output-availability
+      reuse: a re-created producer would be skipped as already-done because its outputs are still
+      registered in
       `MapOutputTracker` (`getMissingParentStages` treats a registered stage as available). Blocking
       only (1) is not enough. The fix for (2) is the same one §6 requires for executor loss: a
       pipelined shuffle is not tracked in `MapOutputTracker` at all — its availability is owned
@@ -280,10 +281,10 @@ how Spark treats task events from a stage attempt that is later discarded.
 ## 6. Failure
 
 - **Failure is group-atomic.** Any member task failure, for any reason, fails the whole group.
-  - *Single-stage resubmit is disabled for group members.* That isolated-resubmit branch is turned
-    off for a member of a pipelined group: the transient pipelined shuffle cannot be re-read and
-    members are co-scheduled, so a lone-stage resubmit is never valid. With it disabled, every member
-    failure necessarily routes to group failure.
+  - *Single-stage resubmit is not taken for group members.* The isolated-resubmit branch is never
+    taken for a member of a pipelined group: the transient pipelined shuffle cannot be re-read and
+    members are co-scheduled, so a lone-stage resubmit is never valid — every member failure instead
+    routes to group failure.
     - *Note this differs from the base scheduler,* which handles a task failure by resubmitting just
       that one stage — the `FetchFailed` -> resubmit path, and retry paths generally — recomputing
       the failed stage in isolation and resuming.
