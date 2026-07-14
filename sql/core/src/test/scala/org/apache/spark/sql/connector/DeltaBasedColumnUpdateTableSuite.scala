@@ -182,6 +182,23 @@ class DeltaBasedColumnUpdateTableSuite extends RowLevelOperationSuiteBase {
       s"dep must not be in update schema: $updateSchema")
   }
 
+  test("column-update: nested field identity update reports root struct as updated") {
+    createAndInitTable("pk INT NOT NULL, s STRUCT<c1: INT, c2: INT>, dep STRING",
+      """{ "pk": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET s.c1 = s.c1 WHERE pk = 1")
+
+    val updatedNames = table.lastUpdatedColumns.map(_.describe()).toSet
+    assert(updatedNames == Set("s"),
+      s"nested identity is reported as an update at root-column granularity: $updatedNames")
+
+    // Data correctness: the struct is rewritten but with equal values, so rows are unchanged.
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, Row(1, 2), "hr") :: Nil)
+  }
+
   test("column-update: updatedColumns contains non-identity assigned columns") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
