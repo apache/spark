@@ -576,7 +576,7 @@ class SqlGraphRegistrationContext(
           )
         case _ =>
           throw SqlGraphElementRegistrationException(
-            msg = "Unable flow type. Only INSERT INTO and AUTO CDC INTO flows are supported.",
+            msg = "Unknown flow type. Only INSERT INTO and AUTO CDC INTO flows are supported.",
             queryOrigin = queryOrigin
           )
       }
