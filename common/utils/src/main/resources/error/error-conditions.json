@@ -3496,8 +3496,20 @@
   },
   "INVALID_BUCKET_COUNT" : {
     "message" : [
-      "Number of buckets should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
+      "Invalid number of buckets."
     ],
+    "subClass" : {
+      "NON_INTEGER_LITERAL" : {
+        "message" : [
+          "Expected an integer literal, but got <describe>."
+        ]
+      },
+      "OUT_OF_RANGE" : {
+        "message" : [
+          "Should be greater than 0 but less than or equal to bucketing.maxBuckets (`<bucketingMaxBuckets>`). Got `<numBuckets>`."
+        ]
+      }
+    },
     "sqlState" : "22003"
   },
   "INVALID_BUCKET_FILE" : {
@@ -9366,11 +9378,6 @@
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0031" : {
-    "message" : [
-      "Invalid number of buckets: <describe>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0032" : {
