@@ -345,15 +345,16 @@ object DataType {
       }
       // Defense in depth: resolve the class without initializing it and verify that it really is a
       // UserDefinedType subclass before constructing it.
-      val clazz = try {
-        SparkClassUtils.classForName[UserDefinedType[_]](udtClass, initialize = false)
-      } catch {
-        case e: ClassNotFoundException =>
-          throw new SparkClassNotFoundException(
-            errorClass = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
-            messageParameters = Map("udtClass" -> udtClass),
-            cause = e)
-      }
+      val clazz =
+        try {
+          SparkClassUtils.classForName[UserDefinedType[_]](udtClass, initialize = false)
+        } catch {
+          case e: ClassNotFoundException =>
+            throw new SparkClassNotFoundException(
+              errorClass = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
+              messageParameters = Map("udtClass" -> udtClass),
+              cause = e)
+        }
       if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
         throw DataTypeErrors.udtClassNotUserDefinedTypeError(udtClass)
       }
