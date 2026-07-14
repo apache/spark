@@ -25,9 +25,10 @@ import scala.jdk.CollectionConverters._
 import com.google.protobuf.Message
 import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
 import io.grpc.MethodDescriptor.PrototypeMarshaller
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.ProtoUtils
-import io.grpc.protobuf.services.ProtoReflectionService
+import io.grpc.protobuf.services.{HealthStatusManager, ProtoReflectionService}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
@@ -314,8 +315,11 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  private val OverallHealthServiceName = HealthStatusManager.SERVICE_NAME_ALL_SERVICES
+
   private[connect] var server: Server = _
   private[connect] var bindingAddress: InetSocketAddress = _
+  private[connect] var healthStatusManager: HealthStatusManager = _
 
   private[connect] var uiTab: Option[SparkConnectServerTab] = None
   private[connect] var listener: SparkConnectServerListener = _
@@ -396,6 +400,8 @@ object SparkConnectService extends Logging {
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
+    val newHealthStatusManager = new HealthStatusManager()
+    setHealthStatus(newHealthStatusManager, ServingStatus.NOT_SERVING)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
     val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
@@ -409,6 +415,7 @@ object SparkConnectService extends Logging {
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
         .addService(sparkConnectService)
+        .addService(newHealthStatusManager.getHealthService)
 
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
@@ -443,6 +450,7 @@ object SparkConnectService extends Logging {
       startServiceFn,
       maxRetries,
       getClass.getName.stripSuffix("$"))
+    healthStatusManager = newHealthStatusManager
   }
 
   // Starts the service
@@ -462,6 +470,19 @@ object SparkConnectService extends Logging {
     postSparkConnectServiceStarted()
   }
 
+  /**
+   * Advertise the service as SERVING for gRPC health checks. Call this only once the SparkContext
+   * is fully initialized: when `start` runs from `DriverPlugin.init` the task scheduler and other
+   * subsystems that query execution needs are not up yet. The plugin path calls this from
+   * `DriverPlugin.registerMetrics` (fired later in initialization); the standalone server calls it
+   * right after `start` returns on an already-built context.
+   */
+  def markServing(): Unit = synchronized {
+    if (started && !stopped) {
+      setHealthStatus(ServingStatus.SERVING)
+    }
+  }
+
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = synchronized {
     if (stopped) {
       logWarning("The Spark Connect service has already been stopped.")
@@ -472,6 +493,7 @@ object SparkConnectService extends Logging {
       throw IllegalStateErrors.serviceNotStarted()
     }
 
+    enterTerminalHealthState()
     if (server != null) {
       if (timeout.isDefined && unit.isDefined) {
         server.shutdown()
@@ -488,6 +510,23 @@ object SparkConnectService extends Logging {
     started = false
     stopped = true
     postSparkConnectServiceEnd()
+  }
+
+  private def setHealthStatus(status: ServingStatus): Unit = {
+    if (healthStatusManager != null) {
+      setHealthStatus(healthStatusManager, status)
+    }
+  }
+
+  private def setHealthStatus(manager: HealthStatusManager, status: ServingStatus): Unit = {
+    manager.setStatus(OverallHealthServiceName, status)
+    manager.setStatus(SparkConnectServiceGrpc.SERVICE_NAME, status)
+  }
+
+  private def enterTerminalHealthState(): Unit = {
+    if (healthStatusManager != null) {
+      healthStatusManager.enterTerminalState()
+    }
   }
 
   /**

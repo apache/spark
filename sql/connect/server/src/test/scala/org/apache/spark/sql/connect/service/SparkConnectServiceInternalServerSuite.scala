@@ -17,12 +17,16 @@
 package org.apache.spark.sql.connect.service
 
 import java.net.ServerSocket
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Semaphore
+import java.util.concurrent.{CopyOnWriteArrayList, LinkedBlockingQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable
 
+import io.grpc.ManagedChannelBuilder
+import io.grpc.health.v1.{HealthCheckRequest, HealthCheckResponse, HealthGrpc}
+import io.grpc.stub.StreamObserver
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
@@ -259,6 +263,100 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     assert(SparkConnectService.stopped)
     // The listener should receive the `SparkListenerConnectServiceEnd` event
     endEventSignal.acquire()
+  }
+
+  test("The SparkConnectService exposes standard gRPC health checks") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+    sc = new SparkContext(conf)
+
+    withSparkEnvConfs((CONNECT_GRPC_BINDING_PORT.key, "0")) {
+      SparkConnectService.start(sc)
+    }
+
+    val channel = ManagedChannelBuilder
+      .forAddress("localhost", SparkConnectService.server.getPort)
+      .usePlaintext()
+      .build()
+    try {
+      val healthStub = HealthGrpc.newBlockingStub(channel)
+
+      def check(service: String): HealthCheckResponse.ServingStatus =
+        healthStub
+          .check(HealthCheckRequest.newBuilder().setService(service).build())
+          .getStatus
+
+      // `start` only brings up the gRPC server; until the SparkContext is fully initialized
+      // (signalled by `markServing`) both the overall and the SparkConnect service are
+      // NOT_SERVING.
+      assert(check("") == HealthCheckResponse.ServingStatus.NOT_SERVING)
+      assert(
+        check(SparkConnectServiceGrpc.SERVICE_NAME) ==
+          HealthCheckResponse.ServingStatus.NOT_SERVING)
+
+      SparkConnectService.markServing()
+
+      assert(check("") == HealthCheckResponse.ServingStatus.SERVING)
+      assert(
+        check(SparkConnectServiceGrpc.SERVICE_NAME) ==
+          HealthCheckResponse.ServingStatus.SERVING)
+
+      // Watch the overall status to observe the terminal transition on stop(): a unary Check
+      // would race with server shutdown, but the streaming Watch receives the NOT_SERVING push
+      // that stop() emits (via enterTerminalState) before the server is torn down.
+      val statuses = new LinkedBlockingQueue[HealthCheckResponse.ServingStatus]()
+      HealthGrpc
+        .newStub(channel)
+        .watch(
+          HealthCheckRequest.newBuilder().build(),
+          new StreamObserver[HealthCheckResponse] {
+            override def onNext(resp: HealthCheckResponse): Unit = statuses.add(resp.getStatus)
+            override def onError(t: Throwable): Unit = {}
+            override def onCompleted(): Unit = {}
+          })
+      // Watch first replays the current status.
+      assert(statuses.poll(10, TimeUnit.SECONDS) == HealthCheckResponse.ServingStatus.SERVING)
+
+      // Graceful stop so the terminal NOT_SERVING push reaches the watcher before teardown.
+      SparkConnectService.stop(Some(1L), Some(TimeUnit.SECONDS))
+      assert(statuses.poll(10, TimeUnit.SECONDS) == HealthCheckResponse.ServingStatus.NOT_SERVING)
+    } finally {
+      channel.shutdownNow()
+      channel.awaitTermination(10, TimeUnit.SECONDS)
+      if (SparkConnectService.started) {
+        SparkConnectService.stop()
+      }
+    }
+  }
+
+  test("The gRPC health check is deferred until the SparkContext is fully initialized " +
+    "when started from the plugin") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(PLUGINS, Seq(classOf[SparkConnectPlugin].getName()))
+      .set(CONNECT_GRPC_BINDING_PORT.key, "0")
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+
+    // The plugin starts the service from `DriverPlugin.init` (before the task scheduler is up)
+    // and flips it to SERVING from `DriverPlugin.registerMetrics`, which runs near the end of the
+    // SparkContext constructor. So by the time the constructor returns it must be SERVING.
+    sc = new SparkContext(conf)
+    assert(SparkConnectService.started)
+
+    val channel = ManagedChannelBuilder
+      .forAddress("localhost", SparkConnectService.server.getPort)
+      .usePlaintext()
+      .build()
+    try {
+      val healthStub = HealthGrpc.newBlockingStub(channel)
+      assert(
+        healthStub.check(HealthCheckRequest.newBuilder().build()).getStatus ==
+          HealthCheckResponse.ServingStatus.SERVING)
+    } finally {
+      channel.shutdownNow()
+      channel.awaitTermination(10, TimeUnit.SECONDS)
+    }
   }
 
   def withPortOccupied(startPort: Int, endPort: Int)(f: => Unit): Unit = {

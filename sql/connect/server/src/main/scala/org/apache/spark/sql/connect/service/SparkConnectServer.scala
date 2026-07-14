@@ -38,6 +38,9 @@ object SparkConnectServer extends Logging {
     try {
       try {
         SparkConnectService.start(session.sparkContext)
+        // The session above is created from a fully-initialized SparkContext, so the service
+        // can be advertised as SERVING right away.
+        SparkConnectService.markServing()
         val isa = SparkConnectService.bindingAddress
         val host = Utils.normalizeIpIfNeeded(isa.getAddress.getHostAddress)
         logInfo(
