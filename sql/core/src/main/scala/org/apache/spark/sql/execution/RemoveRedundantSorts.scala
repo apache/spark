@@ -28,12 +28,16 @@ import org.apache.spark.sql.internal.SQLConf
  *    rule differs from the Optimizer rule EliminateSorts in that this rule also checks if the
  *    child satisfies the required distribution so that it is safe to remove not only a local
  *    sort but also a global sort when its child already satisfies required sort orders; or
- *  - it is a local sort that is the direct child of a shuffle which does not require its child
- *    to be ordered. A shuffle does not preserve the child ordering, so such a local sort has no
- *    effect on the query result and is dead. This commonly happens in AQE after
- *    `OptimizeSkewedJoin` inserts an extra shuffle between two joins: the local sort that used
- *    to feed the upper join is left dangling right below the newly added shuffle and ends up
- *    being computed in the wrong stage for nothing.
+ *  - it is a local sort that is the direct child of a shuffle which neither requires its child
+ *    to be ordered (empty `requiredChildOrdering`) nor exposes an ordering itself (empty
+ *    `outputOrdering`). A regular shuffle does not preserve the child ordering, so such a local
+ *    sort has no effect on the query result and is dead. The `outputOrdering.isEmpty` guard is
+ *    what keeps this safe for a custom `ShuffleExchangeLike` that does preserve the child
+ *    ordering: such a shuffle reports a non-empty `outputOrdering`, its local sort is not dead
+ *    and must be kept. This commonly happens in AQE after `OptimizeSkewedJoin` inserts an extra
+ *    shuffle between two joins: the local sort that used to feed the upper join is left dangling
+ *    right below the newly added shuffle and ends up being computed in the wrong stage for
+ *    nothing.
  */
 object RemoveRedundantSorts extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {

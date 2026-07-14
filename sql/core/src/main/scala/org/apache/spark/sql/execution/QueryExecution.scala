@@ -767,11 +767,13 @@ object QueryExecution {
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
-      // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
-      // `EnsureRequirements` to guarantee the same number of partitions when instantiating
-      // PartitioningCollection.
+      // `RemoveRedundantWindowGroupLimits` needs to be added after `EnsureRequirements` to
+      // guarantee the same number of partitions when instantiating PartitioningCollection.
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
+      // `RemoveRedundantSorts` also needs to run after `EnsureRequirements` for the same reason,
+      // and it is placed after `DisableUnnecessaryBucketedScan` to mirror the AQE rule order
+      // (see `AdaptiveSparkPlanExec.queryStagePreparationRules`).
       RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),
