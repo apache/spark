@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.METADATA_COL_ATTR_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Delete, Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog, InMemoryTable, Insert, MetadataColumn, Operation, Reinsert, RowLevelOperationWithOptions, Table, TableInfo, Txn, TxnTable, Update, Write, WriteUpdate}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
@@ -48,6 +48,7 @@ abstract class RowLevelOperationSuiteBase
 
   before {
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)
+    InMemoryRowLevelOperationTable.resetLastScanSchema()
   }
 
   after {
@@ -267,13 +268,102 @@ abstract class RowLevelOperationSuiteBase
   protected def checkLastWriteInfo(
       expectedRowSchema: StructType = new StructType(),
       expectedRowIdSchema: Option[StructType] = None,
-      expectedMetadataSchema: Option[StructType] = None): Unit = {
+      expectedMetadataSchema: Option[StructType] = None,
+      expectedUpdateSchema: Option[StructType] = None): Unit = {
     val info = table.lastWriteInfo
     assert(info.schema == expectedRowSchema, "row schema must match")
     val actualRowIdSchema = Option(info.rowIdSchema.orElse(null))
     assert(actualRowIdSchema == expectedRowIdSchema, "row ID schema must match")
     val actualMetadataSchema = Option(info.metadataSchema.orElse(null))
     assert(actualMetadataSchema == expectedMetadataSchema, "metadata schema must match")
+    val actualUpdateSchema = Option(info.updateSchema.orElse(null))
+    assert(actualUpdateSchema == expectedUpdateSchema, "update schema must match")
+  }
+
+  // ---------------------------------------------------------------------------
+  // Write-summary metrics helpers (UPDATE and MERGE). Hoisted from the peer
+  // suites so column-update suites can assert on metrics without duplication.
+  // ---------------------------------------------------------------------------
+
+  protected def getUpdateSummary(): org.apache.spark.sql.connector.write.UpdateSummary = {
+    catalog.loadTable(ident).asInstanceOf[InMemoryTable]
+      .commits.last.writeSummary.get
+      .asInstanceOf[org.apache.spark.sql.connector.write.UpdateSummary]
+  }
+
+  /**
+   * Asserts the last UPDATE's write summary metrics. `deltaUpdate` controls the expected
+   * COPY count: MoR connectors emit only deltas (no COPY rows) so `numCopiedRows` is forced
+   * to 0; CoW connectors emit COPY rows for unchanged rows in matched groups.
+   */
+  protected def checkUpdateMetrics(
+      numUpdatedRows: Long,
+      numCopiedRows: Long,
+      deltaUpdate: Boolean = false): Unit = {
+    val summary = getUpdateSummary()
+    assert(summary.numUpdatedRows() === numUpdatedRows,
+      s"Expected numUpdatedRows=$numUpdatedRows, got ${summary.numUpdatedRows()}")
+    val expectedCopied = if (deltaUpdate) 0L else numCopiedRows
+    assert(summary.numCopiedRows() === expectedCopied,
+      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  }
+
+  /**
+   * Asserts that the column names in RowLevelOperationInfo.updatedColumns() received by the
+   * last operation match exactly the expected set.  Order is ignored.
+   */
+  protected def checkLastUpdatedColumns(expectedNames: String*): Unit = {
+    val actual = table.lastUpdatedColumns.map(_.describe()).toSet
+    val expected = expectedNames.toSet
+    assert(actual == expected,
+      s"updatedColumns mismatch: expected ${expected.mkString("[", ", ", "]")} " +
+        s"but got ${actual.mkString("[", ", ", "]")}")
+  }
+
+  /**
+   * Asserts the set of top-level column names present in the last connector scan schema.
+   * Metadata columns are filtered out so tests can focus on data-column narrowing without
+   * having to enumerate `_partition` / `index` on every assertion.
+   */
+  protected def checkLastScanDataColumns(expectedNames: String*): Unit = {
+    val schema = Option(table.lastScanSchema).getOrElse(StructType(Nil))
+    val actual = schema.fieldNames
+      .filterNot(name => name == "_partition" || name == "index")
+      .toSet
+    val expected = expectedNames.toSet
+    assert(actual == expected,
+      s"scan data-column mismatch: expected ${expected.mkString("[", ", ", "]")} " +
+        s"but got ${actual.mkString("[", ", ", "]")} " +
+        s"(full lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")})")
+  }
+
+  /**
+   * Asserts that the last connector scan schema does NOT contain any of the given columns.
+   * Useful for negative narrowing assertions -- proves that a column outside the analysis-time
+   * narrow set was pruned by the scan, without over-specifying what else is present (which
+   * ColumnPruning may further tighten in ways unrelated to the narrowing contract).
+   */
+  protected def checkLastScanExcludes(excludedNames: String*): Unit = {
+    val schema = Option(table.lastScanSchema).getOrElse(StructType(Nil))
+    val actual = schema.fieldNames.toSet
+    val leaked = excludedNames.toSet.intersect(actual)
+    assert(leaked.isEmpty,
+      s"scan should not include ${leaked.mkString("[", ", ", "]")} " +
+        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
+  }
+
+  /**
+   * Asserts that the last connector scan schema DOES contain all of the given columns.
+   * Positive narrowing assertion -- proves that a column referenced by the operation (via
+   * assignment RHS, condition, etc.) survived analysis-time narrowing and appeared in the scan.
+   */
+  protected def checkLastScanIncludes(includedNames: String*): Unit = {
+    val schema = Option(table.lastScanSchema).getOrElse(StructType(Nil))
+    val actual = schema.fieldNames.toSet
+    val missing = includedNames.toSet.diff(actual)
+    assert(missing.isEmpty,
+      s"scan must include ${missing.mkString("[", ", ", "]")} " +
+        s"but lastScanSchema=${schema.fieldNames.mkString("[", ", ", "]")}")
   }
 
   protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
@@ -313,6 +403,15 @@ abstract class RowLevelOperationSuiteBase
 
   protected def writeWithMetadataLogEntry(metadata: Row, data: Row): WriteLogEntry = {
     WriteLogEntry(operation = Write, metadata = Some(metadata), data = Some(data))
+  }
+
+  // SupportsColumnUpdates CoW path: UPDATE/COPY rows arrive via writer.writeUpdate(...).
+  protected def writeUpdateLogEntry(data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = WriteUpdate, data = Some(data))
+  }
+
+  protected def writeUpdateWithMetadataLogEntry(metadata: Row, data: Row): WriteLogEntry = {
+    WriteLogEntry(operation = WriteUpdate, metadata = Some(metadata), data = Some(data))
   }
 
   protected def deleteWriteLogEntry(id: Int, metadata: Row): WriteLogEntry = {

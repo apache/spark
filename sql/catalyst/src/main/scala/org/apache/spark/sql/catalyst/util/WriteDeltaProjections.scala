@@ -21,5 +21,6 @@ import org.apache.spark.sql.catalyst.ProjectingInternalRow
 
 case class WriteDeltaProjections(
     rowProjection: Option[ProjectingInternalRow],
+    updateRowProjection: Option[ProjectingInternalRow],
     rowIdProjection: ProjectingInternalRow,
     metadataProjection: Option[ProjectingInternalRow])
