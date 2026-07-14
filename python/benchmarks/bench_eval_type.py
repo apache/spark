@@ -2309,3 +2309,177 @@ class TransformWithStateRowUDFTimeBench(_TransformWithStateRowBenchMixin, _TimeB
 
 class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _PeakmemBenchBase):
     pass
+
+
+# -- SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF -----------------------
+# Stateful streaming with plain PySpark Rows plus an initial-state dataset. The
+# UDF signature is ``(api_client, mode, key, rows, init_rows)`` where both
+# ``rows`` and ``init_rows`` are iterators of ``Row`` objects; it returns
+# ``Iterator[Row]``.
+#
+# The wire stream matches the Pandas init-state variant: a single Arrow stream
+# whose top-level schema is ``struct<inputData: dataSchema, initState:
+# initStateSchema>`` (see ``TransformWithStateInPySparkPythonInitialStateRunner``).
+# Each batch carries either inputData or initState rows -- never both -- with the
+# inactive column written as an all-null struct. Matching the JVM ``initData ++
+# data`` ordering, all initial-state batches are emitted first, then all data
+# batches. ``TransformWithStateInPySparkRowInitStateSerializer`` walks each
+# batch row by row, materializing every column (key included) into a ``Row`` via
+# ``.as_py()``, then regroups consecutive rows by the leading key column so each
+# key surfaces as one ``(mode, key, (input_rows, init_rows))`` call. This is the
+# per-row Python object round trip the Row variant is built around, layered on
+# top of the nested-struct init-state deserialization, in contrast to the
+# columnar Pandas init-state variant above.
+
+
+class _TransformWithStateRowInitStateBenchMixin(_TransformWithStateRowBenchMixin):
+    """Provides ``_write_scenario`` for SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF.
+
+    Reuses the plain-Row scenario grid for the input data and seeds a small
+    initial-state dataset per group (``_INIT_ROWS_PER_GROUP`` rows sharing the
+    input schema). The per-row init-state materialization cost (nested-struct
+    flatten plus row-by-row ``.as_py()`` and per-key regrouping) is incurred
+    during ``load_stream`` regardless of whether the UDF reads ``init_rows``.
+    """
+
+    # Initial state is small relative to the streamed data (one seeded chunk per
+    # key), so data deserialization stays the dominant cost -- mirroring
+    # production where initial state loads once and input data streams per batch.
+    _INIT_ROWS_PER_GROUP = 100
+
+    @classmethod
+    def _build_init_batches(cls, name):
+        """Build the initial-state Arrow batches for a scenario.
+
+        Shares the input schema (same value columns) but with only
+        ``_INIT_ROWS_PER_GROUP`` rows per group, pre-sorted by the leading key.
+        """
+        np.random.seed(7)
+        num_groups, _, num_value_cols, value_pool = cls._scenario_configs[name]
+        total_rows = num_groups * cls._INIT_ROWS_PER_GROUP
+        key_array = pa.array(
+            np.repeat(np.arange(num_groups, dtype=np.int32), cls._INIT_ROWS_PER_GROUP),
+            type=pa.int32(),
+        )
+        value_arrays = [
+            value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
+        ]
+        names = ["col_0"] + [f"col_{i + 1}" for i in range(num_value_cols)]
+        full_batch = pa.RecordBatch.from_arrays([key_array] + value_arrays, names=names)
+        batch_size = MockDataFactory.MAX_RECORDS_PER_BATCH
+        return [
+            full_batch.slice(offset, min(batch_size, total_rows - offset))
+            for offset in range(0, total_rows, batch_size)
+        ]
+
+    @staticmethod
+    def _wrap_nested(flat_batch, struct_type, *, is_init):
+        """Wrap a flat batch into a ``struct<inputData, initState>`` batch.
+
+        The populated side carries ``flat_batch``'s columns; the inactive side is
+        an all-null struct array of the same length, so ``extract_rows`` in the
+        serializer treats it as empty.
+        """
+        n = flat_batch.num_rows
+        populated = pa.StructArray.from_arrays(
+            [flat_batch.column(i) for i in range(flat_batch.num_columns)],
+            names=flat_batch.schema.names,
+        )
+        null_struct = pa.array([None] * n, type=struct_type)
+        arrays = [null_struct, populated] if is_init else [populated, null_struct]
+        return pa.RecordBatch.from_arrays(arrays, names=["inputData", "initState"])
+
+    def _tws_row_init_identity(api_client, mode, key, rows, init_rows):
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            yield from rows
+
+    def _tws_row_init_rebuild(api_client, mode, key, rows, init_rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # Read every field and construct a fresh Row per input row. This is the
+        # per-row Python work the Row variant is built around (field access +
+        # object construction), and it is type-agnostic so it also covers the
+        # mixed / nested_struct scenarios.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            for row in rows:
+                yield Row(**row.asDict())
+
+    def _tws_row_init_count(api_client, mode, key, rows, init_rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # An aggregating UDF: consume both the input rows and the initial-state
+        # rows so both materialization paths are counted, then emit a single
+        # (key, count) Row reconstructing the grouping key from the ``key`` arg.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            total = sum(1 for _ in rows) + sum(1 for _ in init_rows)
+            yield Row(col_0=key[0], col_1=total)
+
+    # ret_type=None means "use the full input schema" (identity and rebuild are
+    # whole-row passthroughs, and the input Rows carry the key). count_udf
+    # re-emits only the key plus a count, so it declares an explicit output
+    # schema of (key, count).
+    _udfs = {
+        "identity_udf": (_tws_row_init_identity, None),
+        "rebuild_udf": (_tws_row_init_rebuild, None),
+        "count_udf": (
+            _tws_row_init_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", IntegerType())]),
+        ),
+    }
+    params = [list(_TransformWithStateRowBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        data_batches, schema = self._build_scenario(scenario)
+        init_batches = self._build_init_batches(scenario)
+        udf_func, ret_type = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema
+        n_value_cols = len(schema.fields) - self._NUM_KEY_COLS
+        # Two arg-offset groups -- one for input data, one for initial state.
+        # Both datasets share the schema, so each resolves to key=[0], values=[1..n].
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(
+            self._NUM_KEY_COLS, n_value_cols
+        ) + MockUDFFactory.make_grouped_arg_offsets(self._NUM_KEY_COLS, n_value_cols)
+        grouping_key_schema = StructType(schema.fields[: self._NUM_KEY_COLS])
+        # Wrap both datasets into the struct<inputData, initState> wire schema;
+        # the two structs share a type since the datasets share a schema.
+        struct_type = pa.StructArray.from_arrays(
+            [data_batches[0].column(i) for i in range(data_batches[0].num_columns)],
+            names=data_batches[0].schema.names,
+        ).type
+        nested_batches = [self._wrap_nested(b, struct_type, is_init=True) for b in init_batches] + [
+            self._wrap_nested(b, struct_type, is_init=False) for b in data_batches
+        ]
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(nested_batches), b),
+            buf,
+            eval_conf={
+                "state_server_socket_port": str(_StubStateServer.get_port()),
+                "grouping_key_schema": grouping_key_schema.json(),
+            },
+        )
+
+
+class TransformWithStateRowInitStateUDFTimeBench(
+    _TransformWithStateRowInitStateBenchMixin, _TimeBenchBase
+):
+    pass
+
+
+class TransformWithStateRowInitStateUDFPeakmemBench(
+    _TransformWithStateRowInitStateBenchMixin, _PeakmemBenchBase
+):
+    pass
