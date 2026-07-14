@@ -17,15 +17,39 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
   private boolean needTransform = false;
 
+  // TIME-specific lazy dictionary decode fields: micros->nanos + truncation.
+  private boolean isTimeTransform = false;
+  private boolean fileStoresNanos = false;
+  private int timePrecision = 0;
+
   public ParquetDictionary(org.apache.parquet.column.Dictionary dictionary, boolean needTransform) {
     this.dictionary = dictionary;
     this.needTransform = needTransform;
+  }
+
+  /**
+   * Constructs a ParquetDictionary with TIME transform support. When {@code isTimeTransform} is
+   * true, {@link #decodeToLong(int)} converts the raw dictionary value from the on-disk unit
+   * (micros or nanos) to internal nanos and truncates to the requested precision - the same
+   * transform the eager path ({@code TimeVectorUpdater.toTruncatedNanos}) applies per value.
+   */
+  public ParquetDictionary(
+      org.apache.parquet.column.Dictionary dictionary,
+      boolean needTransform,
+      boolean isTimeTransform,
+      boolean fileStoresNanos,
+      int timePrecision) {
+    this(dictionary, needTransform);
+    this.isTimeTransform = isTimeTransform;
+    this.fileStoresNanos = fileStoresNanos;
+    this.timePrecision = timePrecision;
   }
 
   @Override
@@ -39,7 +63,11 @@ public final class ParquetDictionary implements Dictionary {
 
   @Override
   public long decodeToLong(int id) {
-    if (needTransform) {
+    if (isTimeTransform) {
+      long raw = dictionary.decodeToLong(id);
+      long nanos = fileStoresNanos ? raw : DateTimeUtils.microsToNanos(raw);
+      return DateTimeUtils.truncateTimeToPrecision(nanos, timePrecision);
+    } else if (needTransform) {
       // For unsigned int32, it stores as dictionary encoded signed int32 in Parquet
       // whenever dictionary is available.
       // Here we lazily decode it to the original signed int value then convert to long(unit32).

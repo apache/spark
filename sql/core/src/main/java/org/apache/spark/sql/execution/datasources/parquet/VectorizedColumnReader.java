@@ -46,6 +46,7 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.types.TimeType;
 
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.BOOLEAN;
 import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
@@ -284,7 +285,21 @@ public class VectorizedColumnReader {
           boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
 
           boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
-          column.setDictionary(new ParquetDictionary(dictionary, needTransform));
+
+          // Detect TIME type: lazy decoding must apply micros->nanos + precision truncation.
+          DataType dt = column.dataType();
+          boolean isTimeTransform = dt instanceof TimeType;
+          boolean fileStoresNanos = false;
+          int timePrecision = 0;
+          if (isTimeTransform) {
+            timePrecision = ((TimeType) dt).precision();
+            fileStoresNanos =
+              typeAnnotation instanceof LogicalTypeAnnotation.TimeLogicalTypeAnnotation t
+                && t.getUnit() == TimeUnit.NANOS;
+          }
+
+          column.setDictionary(new ParquetDictionary(
+              dictionary, needTransform, isTimeTransform, fileStoresNanos, timePrecision));
         } else {
           updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
             dictionaryIds, dictionary);

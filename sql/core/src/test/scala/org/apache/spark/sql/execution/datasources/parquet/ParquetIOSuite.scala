@@ -2009,6 +2009,185 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57583: lazy dictionary decode for TIME(NANOS) with precision truncation") {
+    // Dictionary-encoded TIME(NANOS) file read at a lower precision via the lazy dictionary
+    // decode path. The vectorized reader's lazy path (ParquetDictionary.decodeToLong) must apply
+    // the same nanos->truncated-nanos transform as the eager updater path.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 t(TIME(NANOS,false));
+        |}""".stripMargin)
+
+    // Test at multiple precisions including full precision (no truncation).
+    val testCases = Seq(
+      (7, LocalTime.of(12, 30, 45, 123456700)),  // truncate to 100ns
+      (6, LocalTime.of(12, 30, 45, 123456000)),  // truncate to micros
+      (3, LocalTime.of(12, 30, 45, 123000000)),  // truncate to millis
+      (0, LocalTime.of(12, 30, 45, 0)),          // truncate to seconds
+      (9, LocalTime.of(12, 30, 45, 123456789))   // full precision (no truncation)
+    )
+
+    for ((precision, expected) <- testCases) {
+      val readSchema = new StructType().add("t", TimeType(precision))
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/time_nanos_dict.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = true)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(12, 30, 45, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        // Vectorized reader with dictionary encoding -> lazy dictionary decode path.
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(expected)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57583: lazy dictionary decode for TIME(MICROS) with precision truncation") {
+    // Dictionary-encoded TIME(MICROS) file read at various precisions. The lazy path must
+    // convert micros->nanos and then truncate, matching the eager updater path.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 t(TIME(MICROS,false));
+        |}""".stripMargin)
+
+    val testCases = Seq(
+      (6, LocalTime.of(12, 30, 45, 123456000)),  // full micro precision (no truncation)
+      (3, LocalTime.of(12, 30, 45, 123000000)),  // truncate to millis
+      (0, LocalTime.of(12, 30, 45, 0))           // truncate to seconds
+    )
+
+    for ((precision, expected) <- testCases) {
+      val readSchema = new StructType().add("t", TimeType(precision))
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/time_micros_dict.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = true)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(12, 30, 45, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(expected)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57583: lazy vs eager dictionary decode parity for TIME") {
+    // Verifies that the lazy dictionary decode path (vectorized + dict) produces identical
+    // results to the eager path (vectorized + plain encoding which always uses the updater).
+    // This ensures the ParquetDictionary TIME transform matches TimeVectorUpdater exactly.
+    val nanosSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 t(TIME(NANOS,false));
+        |}""".stripMargin)
+    val microsSchema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 t(TIME(MICROS,false));
+        |}""".stripMargin)
+
+    val cases = Seq(
+      (nanosSchema, localTime(23, 59, 59, 999999, 999), 7),
+      (nanosSchema, localTime(0, 0, 0, 0, 1), 9),
+      (microsSchema, localTime(23, 59, 59, 999999) / DateTimeConstants.NANOS_PER_MICROS, 3)
+    )
+
+    for ((schema, rawValue, precision) <- cases) {
+      val readSchema = new StructType().add("t", TimeType(precision))
+      withTempDir { dir =>
+        val dictPath = new Path(s"${dir.getCanonicalPath}/dict.parquet")
+        val plainPath = new Path(s"${dir.getCanonicalPath}/plain.parquet")
+        val numRecords = 50
+
+        // Write dict-encoded file (lazy decode path).
+        val dictWriter = createParquetWriter(schema, dictPath, dictionaryEnabled = true)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, rawValue)
+          dictWriter.write(record)
+        }
+        dictWriter.close
+
+        // Write plain-encoded file (eager updater path).
+        val plainWriter = createParquetWriter(schema, plainPath, dictionaryEnabled = false)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, rawValue)
+          plainWriter.write(record)
+        }
+        plainWriter.close
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+          val dictDf = spark.read.schema(readSchema).parquet(dictPath.toString)
+          val plainDf = spark.read.schema(readSchema).parquet(plainPath.toString)
+          checkAnswer(dictDf, plainDf.collect())
+        }
+      }
+    }
+  }
+
+  test("SPARK-57583: lazy dictionary decode for nullable TIME with multiple distinct values") {
+    // Nullable dict-encoded TIME column with multiple distinct values exercises the lazy path
+    // on each distinct dictionary entry independently.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 t(TIME(NANOS,false));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("t", TimeType(6))
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/nullable_dict.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = true)
+      // Write distinct values + nulls.
+      val values: Seq[Option[Long]] = Seq(
+        Some(localTime(1, 2, 3, 100000, 500)),   // 1:02:03.100000500 -> truncate to .100000
+        Some(localTime(23, 59, 59, 999999, 999)), // 23:59:59.999999999 -> .999999
+        None,
+        Some(localTime(0, 0, 0, 0, 1)),           // 0:00:00.000000001 -> .000000
+        None
+      )
+      // Repeat the pattern multiple times to ensure dictionary stays active.
+      (0 until 20).foreach { _ =>
+        values.foreach {
+          case Some(nanos) =>
+            val record = new SimpleGroup(schema)
+            record.add(0, nanos)
+            writer.write(record)
+          case None =>
+            val record = new SimpleGroup(schema)
+            writer.write(record) // null: no value added for optional field
+        }
+      }
+      writer.close
+
+      val expected = (0 until 20).flatMap { _ =>
+        Seq(
+          Row(LocalTime.of(1, 2, 3, 100000000)),
+          Row(LocalTime.of(23, 59, 59, 999999000)),
+          Row(null),
+          Row(LocalTime.of(0, 0, 0, 0)),
+          Row(null)
+        )
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   test("SPARK-55444: vectorized read rejects an incompatible encoding requested as TimeType") {
     // TimeTypeParquetOps.getVectorUpdater returns None for any encoding other than INT64
     // TIME(MICROS/NANOS), so the vectorized factory falls through to a clean
