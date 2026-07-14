@@ -83,6 +83,42 @@ public interface DataWriter<T> extends Closeable {
   }
 
   /**
+   * Writes one updated, copied, or reinserted record with metadata.
+   * <p>
+   * Connectors that mix in {@link SupportsColumnUpdates} receive records here in the schema
+   * declared by {@link LogicalWriteInfo#updateSchema()}. Implementations must
+   * override this method when mixing in {@link SupportsColumnUpdates}; the default delegates
+   * to {@link #write(Object, Object)} so existing connectors are unaffected.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.3.0
+   */
+  default void writeUpdate(T metadata, T record) throws IOException {
+    write(metadata, record);
+  }
+
+  /**
+   * Writes one updated, copied, or reinserted record without metadata.
+   * <p>
+   * Equivalent to {@link #writeUpdate(Object, Object)} for writers that do not require metadata.
+   * The default delegates to {@link #write(Object)}.
+   * <p>
+   * If this method fails (by throwing an exception), {@link #abort()} will be called and this
+   * data writer is considered to have been failed.
+   *
+   * @throws IOException if failure happens during disk/network IO like writing files.
+   *
+   * @since 4.3.0
+   */
+  default void writeUpdate(T record) throws IOException {
+    write(record);
+  }
+
+  /**
    * Writes one record.
    * <p>
    * If this method fails (by throwing an exception), {@link #abort()} will be called and this

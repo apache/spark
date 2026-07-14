@@ -24,9 +24,8 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.trees.TreePattern.WITH_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -37,20 +36,11 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def deltaUpdate: Boolean = false
 
-  protected def getUpdateSummary(): UpdateSummary = {
-    val t = catalog.loadTable(ident).asInstanceOf[InMemoryTable]
-    t.commits.last.writeSummary.get.asInstanceOf[UpdateSummary]
-  }
-
-  protected def checkUpdateMetrics(
-      numUpdatedRows: Long,
-      numCopiedRows: Long): Unit = {
-    val summary = getUpdateSummary()
-    assert(summary.numUpdatedRows() === numUpdatedRows,
-      s"Expected numUpdatedRows=$numUpdatedRows, got ${summary.numUpdatedRows()}")
-    val expectedCopied = if (deltaUpdate) 0L else numCopiedRows
-    assert(summary.numCopiedRows() === expectedCopied,
-      s"Expected numCopiedRows=$expectedCopied, got ${summary.numCopiedRows()}")
+  // getUpdateSummary and checkUpdateMetrics are inherited from RowLevelOperationSuiteBase
+  // so all row-level suites (including the column-update variants) share the same helpers.
+  // Forward to the base method with `deltaUpdate` resolved here.
+  protected def checkUpdateMetrics(numUpdatedRows: Long, numCopiedRows: Long): Unit = {
+    super.checkUpdateMetrics(numUpdatedRows, numCopiedRows, deltaUpdate)
   }
 
   test("update table containing added column with default value") {

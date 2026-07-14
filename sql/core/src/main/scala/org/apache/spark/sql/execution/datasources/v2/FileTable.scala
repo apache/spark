@@ -212,7 +212,8 @@ abstract class FileTable(
       writeInfo.schema(),
       mergedOptions(writeInfo.options()),
       writeInfo.rowIdSchema(),
-      writeInfo.metadataSchema())
+      writeInfo.metadataSchema(),
+      writeInfo.updateSchema())
   }
 }
 
