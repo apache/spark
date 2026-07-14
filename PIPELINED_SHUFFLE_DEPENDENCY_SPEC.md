@@ -41,6 +41,26 @@ output while the producer stage is still running.
     specify the incremental shuffle implementation used for pipelined shuffle dependencies, alongside
     the existing `spark.shuffle.manager` for the default.
 
+**What the subtype inherits vs. what the scheduler skips.** A pipelined shuffle dependency is modeled
+as a `ShuffleDependency` subtype, which cleanly divides `ShuffleDependency`'s behavior in two — an
+invariant every component that handles the type must preserve:
+- *Inherited — it is treated as a real shuffle dependency:* (1) **stage-boundary splitting** —
+  `getShuffleDependenciesAndResourceProfiles` matches `case shuffleDep: ShuffleDependency`
+  (`DAGScheduler.scala:882`), so the subtype splits producer and consumer into separate stages
+  automatically; this is what §3 ("introduces a shuffle boundary exactly as a regular one does")
+  relies on. (2) **transport** — `shuffleId`, `ShuffleWriter`/`ShuffleReader`, and `ShuffleManager`
+  registration, all from the base constructor.
+- *Scheduler-skipped — it must not be treated as a materialized shuffle for the post-boundary
+  lifecycle:* `MapOutputTracker` registration (§6), `shuffleIdToMapStage` reuse (§4), and
+  executor-loss output-removal-then-resubmit (§6). This is clean rather than "inherit then disable":
+  all three are `DAGScheduler`-driven at `createShuffleMapStage` (`DAGScheduler.scala:667-673`) and
+  gated per dependency, so a pipelined dependency is simply never opted into them.
+- *Match-site invariant:* a marker subtype relies on every existing `case _: ShuffleDependency` site
+  meaning "materialized" for the new type. The reuse/tracking/loss sites are safe because they are
+  scheduler-gated as above; the remaining sites were audited and treat a pipelined dependency as an
+  ordinary materialized shuffle wherever the subtype does not specifically diverge. Preserving this
+  is an invariant for implementers, not something to rediscover.
+
 A **regular shuffle dependency (RSD)** is an ordinary shuffle dependency: its output must be fully
 materialized before any consumer reads it.
 
@@ -62,12 +82,13 @@ stage DAG when only pipelined edges are considered.
 **External input of PG:** a regular shuffle dependency whose consumer is in the group and whose
 producer is not — i.e. a normal materialized parent of the group.
 
-**Outputs of PG:** a pipelined group need not contain a `ResultStage`. Its outputs to the rest of the
-DAG are regular (materialized) shuffle edges from its members to consumers outside the group, and
-there may be **more than one** — e.g. two members each feeding a distinct downstream stage. A PG may
-instead be an interior component whose materialized outputs feed downstream groups (§7); in that
-respect it behaves like a barrier stage embedded in a larger DAG — an interior unit with
-regular-shuffle edges in and out.
+**Outputs of PG:** a `ResultStage` **may** be a member of a pipelined group — a pipelined consumer
+that produces the job's result (its commit handling is §5) — but a PG **need not** contain one.
+When it does not, its outputs to the rest of the DAG are regular (materialized) shuffle edges from
+its members to consumers outside the group, and there may be **more than one** — e.g. two members
+each feeding a distinct downstream stage. Such a PG is an interior component whose materialized
+outputs feed downstream groups (§7); in that respect it behaves like a barrier stage embedded in a
+larger DAG — an interior unit with regular-shuffle edges in and out.
 
 **Example.** Take a job with stage DAG `Z -> A -> B -> C`, where `Z -> A` and `B -> C` are regular
 edges and `A -> B` is pipelined. Grouping over pipelined edges gives one non-singleton group
