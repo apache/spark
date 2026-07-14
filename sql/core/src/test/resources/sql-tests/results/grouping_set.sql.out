@@ -167,13 +167,269 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 74,
+    "fragment" : "GROUP BY GROUPING SETS (())"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query schema
+struct<c:bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100
+-- !query schema
+struct<c:bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query schema
+struct<c:bigint,g:bigint>
+-- !query output
+0	0
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (())
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY GROUPING SETS (())
+-- !query schema
+struct<total:bigint,mean:double,hi:int,c:bigint>
+-- !query output
+NULL	NULL	NULL	0
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100
+-- !query schema
+struct<total:bigint,mean:double,hi:int,c:bigint>
+-- !query output
+NULL	NULL	NULL	0
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) GROUP BY GROUPING SETS (())
+-- !query schema
+struct<total:bigint,mean:double,hi:int,c:bigint>
+-- !query output
+60	20.0	30	3
+
+
+-- !query
+SELECT v, count(*) AS c FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY v
+-- !query schema
+struct<v:int,c:bigint>
+-- !query output
+
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) HAVING grouping_id() = 0
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) ORDER BY grouping_id()
+-- !query schema
+struct<c:bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
   "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"c1\"",
-    "expressionAnyValue" : "\"any_value(c1)\""
+    "grouping" : "k#x",
+    "groupingColumns" : ""
   }
 }
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping_id() = 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping_id()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping(k) = 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 72,
+    "stopIndex" : 72,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping(k)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query schema
+struct<c:bigint,g:bigint>
+-- !query output
+3	0
+3	0
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "grouping" : "k#x",
+    "groupingColumns" : ""
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW grouping_grand_total AS
+  SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query schema
+struct<total:bigint,mean:double,hi:int,c:bigint>
+-- !query output
+NULL	NULL	NULL	0
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total GROUP BY GROUPING SETS (())
+-- !query schema
+struct<total:bigint,mean:double,hi:int,c:bigint>
+-- !query output
+60	20.0	30	3
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query schema
+struct<c:bigint,g:bigint>
+-- !query output
+0	0
+
+
+-- !query
+DROP VIEW grouping_grand_total
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

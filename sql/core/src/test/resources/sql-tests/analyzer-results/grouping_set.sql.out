@@ -189,13 +189,275 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "errorClass" : "MISSING_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 48,
+    "stopIndex" : 74,
+    "fragment" : "GROUP BY GROUPING SETS (())"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [count(1) AS c#xL]
++- Filter (k#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100
+-- !query analysis
+Aggregate [count(1) AS c#xL]
++- Filter (k#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [count(1) AS c#xL, 0 AS g#xL]
++- Filter (k#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [count(1) AS c#xL]
++- SubqueryAlias t
+   +- LocalRelation [k#x]
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [sum(v#x) AS total#xL, avg(v#x) AS mean#x, max(v#x) AS hi#x, count(1) AS c#xL]
++- Filter (v#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [v#x]
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100
+-- !query analysis
+Aggregate [sum(v#x) AS total#xL, avg(v#x) AS mean#x, max(v#x) AS hi#x, count(1) AS c#xL]
++- Filter (v#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [v#x]
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM VALUES (10), (20), (30) AS t(v) GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [sum(v#x) AS total#xL, avg(v#x) AS mean#x, max(v#x) AS hi#x, count(1) AS c#xL]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT v, count(*) AS c FROM VALUES (10), (20), (30) AS t(v) WHERE v > 100 GROUP BY v
+-- !query analysis
+Aggregate [v#x], [v#x, count(1) AS c#xL]
++- Filter (v#x > 100)
+   +- SubqueryAlias t
+      +- LocalRelation [v#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) HAVING grouping_id() = 0
+-- !query analysis
+Filter (0 = cast(0 as bigint))
++- Aggregate [count(1) AS c#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (()) ORDER BY grouping_id()
+-- !query analysis
+Sort [0 ASC NULLS FIRST], true
++- Aggregate [count(1) AS c#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [k#x]
+
+
+-- !query
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS (())
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
   "sqlState" : "42803",
   "messageParameters" : {
-    "expression" : "\"c1\"",
-    "expressionAnyValue" : "\"any_value(c1)\""
+    "grouping" : "k#x",
+    "groupingColumns" : ""
   }
 }
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping_id() = 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping_id()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) HAVING grouping(k) = 0
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`k`",
+    "proposal" : "`c`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 72,
+    "stopIndex" : 72,
+    "fragment" : "k"
+  } ]
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) ORDER BY grouping(k)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query analysis
+Aggregate [spark_grouping_id#xL, _gen_grouping_pos#x], [count(1) AS c#xL, spark_grouping_id#xL AS g#xL]
++- Expand [[k#x, 0, 0], [k#x, 0, 1]], [k#x, spark_grouping_id#xL, _gen_grouping_pos#x]
+   +- Project [k#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x]
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) HAVING grouping_id() = 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT count(*) AS c FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ()) ORDER BY grouping_id()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_GROUPING_EXPRESSION",
+  "sqlState" : "42K0E"
+}
+
+
+-- !query
+SELECT grouping(k) FROM VALUES (1), (2), (3) AS t(k) GROUP BY GROUPING SETS ((), ())
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "grouping" : "k#x",
+    "groupingColumns" : ""
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW grouping_grand_total AS
+  SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v)
+-- !query analysis
+CreateViewCommand `grouping_grand_total`, SELECT * FROM VALUES (1, 10), (2, 20), (3, 30) AS t(k, v), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [k#x, v#x]
+      +- SubqueryAlias t
+         +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [sum(v#x) AS total#xL, avg(v#x) AS mean#x, max(v#x) AS hi#x, count(1) AS c#xL]
++- Filter (k#x > 100)
+   +- SubqueryAlias grouping_grand_total
+      +- View (`grouping_grand_total`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT sum(v) AS total, avg(v) AS mean, max(v) AS hi, count(*) AS c
+FROM grouping_grand_total GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [sum(v#x) AS total#xL, avg(v#x) AS mean#x, max(v#x) AS hi#x, count(1) AS c#xL]
++- SubqueryAlias grouping_grand_total
+   +- View (`grouping_grand_total`, [k#x, v#x])
+      +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
+         +- Project [k#x, v#x]
+            +- SubqueryAlias t
+               +- LocalRelation [k#x, v#x]
+
+
+-- !query
+SELECT count(*) AS c, grouping_id() AS g
+FROM grouping_grand_total WHERE k > 100 GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [count(1) AS c#xL, 0 AS g#xL]
++- Filter (k#x > 100)
+   +- SubqueryAlias grouping_grand_total
+      +- View (`grouping_grand_total`, [k#x, v#x])
+         +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
+            +- Project [k#x, v#x]
+               +- SubqueryAlias t
+                  +- LocalRelation [k#x, v#x]
+
+
+-- !query
+DROP VIEW grouping_grand_total
+-- !query analysis
+DropTempViewCommand grouping_grand_total
 
 
 -- !query
