@@ -172,6 +172,7 @@ _docs = [
     "nbsphinx",
     "numpydoc",
     "jinja2",
+    "mkdocs",
 ]
 
 _devtools = [
