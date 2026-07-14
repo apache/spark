@@ -60,7 +60,7 @@ jobs:
           sparse-checkout: .github/problem-matchers
 
       - name: Download build logs
-        id: download
+        id: download-logs
         uses: actions/download-artifact@v8
         continue-on-error: true
         with:
@@ -69,19 +69,42 @@ jobs:
           pattern: "*-build-log"
           merge-multiple: true
 
+      - name: Download workspace root
+        id: download-root
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: "*-workspace-root"
+          merge-multiple: true
+
       - name: Replay logs through problem matchers
-        if: steps.download.outcome == 'success'
+        if: steps.download-logs.outcome == 'success'
         run: |
+          # Read the fork's workspace root so we can strip it from paths.
+          if [ -f workspace-root.txt ]; then
+            ws_root=$(cat workspace-root.txt | tr -d '\n')
+            echo "Stripping workspace root: $ws_root"
+          else
+            ws_root=""
+          fi
+
           # Register all available problem matchers.
           for matcher in .github/problem-matchers/*.json; do
             echo "::add-matcher::$matcher"
           done
 
-          # Replay each build log so the runner creates annotations.
+          # Replay each build log with the fork's workspace prefix stripped
+          # so paths are relative to the repo root.
           for log in *.log; do
             [ -f "$log" ] || continue
             echo "--- Replaying $log ---"
-            cat "$log"
+            if [ -n "$ws_root" ]; then
+              sed "s|${ws_root}/||g" "$log"
+            else
+              cat "$log"
+            fi
           done
 
           # Clean up matchers.

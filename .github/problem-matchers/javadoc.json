@@ -5,7 +5,7 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "(/\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(reference not found)",
+          "regexp": "([/a-zA-Z]\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(reference not found)",
           "file": 1,
           "line": 2,
           "column": 3,

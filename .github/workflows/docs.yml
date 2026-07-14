@@ -138,3 +138,13 @@ jobs:
           name: docs-build-log
           path: ${{ runner.temp }}/docs-build.log
           retention-days: 3
+
+      - name: Upload workspace root
+        if: always()
+        run: echo "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/workspace-root.txt"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docs-workspace-root
+          path: ${{ runner.temp }}/workspace-root.txt
+          retention-days: 3
