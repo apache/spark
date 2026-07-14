@@ -29,9 +29,30 @@ version, live pid, port accepting connections) and reconnect instead of starting
 server. Each client connection gets its own isolated server-side session, so session-local
 state (temp views, runtime SQL confs, session artifacts) does not leak between runs.
 
-``sbin/spark-daemon.sh`` owns the server process: its pid file and logs are kept next to the
-discovery file (``~/.spark`` by default; override with ``SPARK_LOCAL_CONNECT_DISCOVERY``). The
-server runs until stopped with::
+The module is built from three components:
+
+- :class:`LocalConnectServer` -- one persistent server: its ``url``, whether this client can
+  reuse it (:meth:`LocalConnectServer.is_reusable`) and stopping it
+  (:meth:`LocalConnectServer.stop`).
+- :class:`Discovery` -- the discovery file: where it lives, loading it back as a
+  ``LocalConnectServer``, atomically saving one, and the cross-process lock serializing
+  server start-up.
+- :class:`ServerLauncher` -- starting a fresh server through ``sbin/start-connect-server.sh``
+  (which daemonizes it via ``sbin/spark-daemon.sh``) and waiting until it accepts connections.
+
+The discovery file -- and with it the daemon's pid file and logs -- lives in a per-user
+directory under the system temp dir (``<tempdir>/spark-connect-<uid>``, mode ``0700``), so
+nothing accumulates in permanent directories and stale records do not survive a reboot. Set
+``SPARK_LOCAL_CONNECT_DISCOVERY`` to relocate the discovery file (and the rest with it).
+
+Threat model: this is a local development convenience, and the boundary drawn is *other
+users on the same machine*. The server binds ``localhost`` and requires the auth token; the
+token lives in the ``0600`` discovery file inside the ``0700`` per-user directory, whose
+ownership is verified before trusting anything read from it (the temp dir itself is
+world-writable). Processes of the same user are trusted -- they may reuse, reconfigure, or
+stop the shared server, which is the point of the feature.
+
+The server runs until stopped with::
 
     python -m pyspark.sql.connect.local_server --stop
 
@@ -60,65 +81,11 @@ _SERVER_CLASS = "org.apache.spark.sql.connect.service.SparkConnectServer"
 _SPARK_IDENT = "local-connect"
 
 
-# -- the discovery file --------------------------------------------------------------------------
-
-
-def _discovery_path() -> str:
-    """Location of the discovery file describing the running persistent local server."""
-    return os.environ.get(
-        "SPARK_LOCAL_CONNECT_DISCOVERY",
-        os.path.join(os.path.expanduser("~"), ".spark", "connect-local.json"),
+def _start_failed(reason: str) -> PySparkRuntimeError:
+    return PySparkRuntimeError(
+        errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
+        messageParameters={"reason": reason},
     )
-
-
-def _runtime_dir() -> str:
-    """Directory holding the discovery file, and with it the server's pid file and logs."""
-    return os.path.dirname(_discovery_path()) or os.getcwd()
-
-
-def _read_discovery() -> Optional[Dict[str, Any]]:
-    """Read and validate the discovery file, returning ``None`` if it is absent or malformed.
-
-    A returned dict always has string ``host``, ``token`` and ``spark_version`` values and int
-    ``port`` and ``pid`` values, so callers can index it without re-validating.
-    """
-    try:
-        with open(_discovery_path(), "r") as f:
-            disc = json.load(f)
-    except (OSError, ValueError):
-        return None
-    if not isinstance(disc, dict):
-        return None
-    try:
-        disc["port"] = int(disc["port"])
-        disc["pid"] = int(disc["pid"])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if not all(isinstance(disc.get(k), str) for k in ("host", "token", "spark_version")):
-        return None
-    return disc
-
-
-def _write_discovery(path: str, host: str, port: int, token: str, pid: int, version: str) -> None:
-    """Atomically write the discovery file with ``0600`` perms (it holds the auth token)."""
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    payload = {
-        "host": host,
-        "port": port,
-        "token": token,
-        "pid": pid,
-        "spark_version": version,
-    }
-    tmp = "{}.{}.tmp".format(path, os.getpid())
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(json.dumps(payload))
-    os.replace(tmp, path)
-
-
-# -- deciding between reusing the recorded server and starting a fresh one ------------------------
 
 
 def _pid_alive(pid: int) -> bool:
@@ -132,217 +99,339 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _server_is_reusable(disc: Dict[str, Any]) -> bool:
-    """Decide whether the server described by ``disc`` can be reused by this process.
-
-    Reuse requires that the recorded Spark version matches this client's, that the recorded
-    process is still alive, and that it is accepting connections on the recorded port. A version
-    mismatch, dead pid, or closed port means the caller must start its own server instead. The
-    pid probe runs only on POSIX: on Windows ``os.kill(pid, 0)`` *terminates* the target process
-    rather than testing it, so there the port probe is the only liveness signal.
-    """
-    from pyspark.version import __version__
-
-    if disc["spark_version"] != __version__:
-        return False
-    if os.name == "posix" and not _pid_alive(disc["pid"]):
-        return False
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        if sock.connect_ex((disc["host"], disc["port"])) != 0:
-            return False
-    return True
-
-
-def _reuse_from_discovery() -> Optional[str]:
-    """Return an endpoint for the recorded server if it is reusable, else ``None``.
-
-    On success it also sets ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates
-    against that server.
-    """
-    disc = _read_discovery()
-    if disc is not None and _server_is_reusable(disc):
-        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = disc["token"]
-        return "sc://{}:{}".format(disc["host"], disc["port"])
-    return None
-
-
-@contextlib.contextmanager
-def _start_lock() -> Iterator[None]:
-    """Exclusive cross-process file lock serializing persistent-server start-up.
-
-    On platforms without ``fcntl`` this is a no-op: racing callers may each start a server, and
-    the losers reconnect to the one that wins the discovery-file update.
-    """
+def _per_user_runtime_dir() -> str:
+    """Create (if needed) and return the per-user runtime directory under the temp dir."""
     try:
-        import fcntl
-    except ImportError:
-        yield
-        return
-    path = _discovery_path() + ".lock"
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        owner = str(os.getuid())
+    except AttributeError:  # Windows; the reuse path is rejected there anyway
+        import getpass
+
+        owner = getpass.getuser()
+    path = os.path.join(tempfile.gettempdir(), "spark-connect-{}".format(owner))
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        os.close(fd)  # closing the fd releases the flock
-
-
-# -- starting and stopping the server through sbin/start-connect-server.sh ------------------------
-
-
-def _pick_port(opts: Dict[str, Any]) -> int:
-    """Choose the port for a fresh server.
-
-    Tests always use an OS-assigned free port so suites can run in parallel. Otherwise the
-    configured/default port is honored unless it is already taken -- e.g. by a stale server just
-    rejected on version mismatch -- in which case an OS-assigned port is used instead. Unlike the
-    in-process path, the standalone script cannot report an ephemeral port back to us, so the
-    free port is picked (and released) here, subject to a small race until the server binds it.
-    """
-
-    def free_port() -> int:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind(("localhost", 0))
-            return sock.getsockname()[1]
-
-    if "SPARK_TESTING" in os.environ:
-        return free_port()
-    from pyspark.sql.connect.client import DefaultChannelBuilder
-
-    port = int(opts.get("spark.local.connect.server.port", DefaultChannelBuilder.default_port()))
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(("localhost", port))
-            return port
-        except OSError:
-            return free_port()
-
-
-def _seed_conf(opts: Dict[str, Any]) -> Dict[str, Any]:
-    """Start-up configs to seed a freshly started persistent server.
-
-    Mirrors the merge that the in-process ``SparkSession._start_connect_server`` applies to its
-    ``SparkConf`` so that first-run behavior matches (warehouse dir, app name, jars/packages,
-    catalog confs, etc.). Keys the launcher controls itself (master, port, token) and the
-    ``spark.local.connect.*`` opt-in keys are excluded. This only seeds the run that *starts*
-    the server; a later run reconnecting to an already-warm JVM cannot change its static
-    configs.
-    """
-    conf: Dict[str, Any] = {}
-    for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
-        conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
-    conf.update(opts)
-    for k in list(conf):
-        if k in (
-            "spark.remote",
-            "spark.api.mode",
-            "spark.master",
-            "spark.connect.authenticate.token",
-            "spark.connect.grpc.binding.port",
-        ) or k.startswith("spark.local.connect."):
-            conf.pop(k)
-    return conf
-
-
-def _write_seed_properties(opts: Dict[str, Any], runtime_dir: str) -> Optional[str]:
-    """Write the seed configs as a ``--properties-file`` for spark-submit, or return ``None``.
-
-    Written with ``0600`` perms since configs may hold sensitive values; passing a file keeps
-    them off the server's argv, where they would be visible in ``ps`` output.
-    """
-    seed = _seed_conf(opts)
-    if not seed:
-        return None
-    fd, path = tempfile.mkstemp(prefix="connect-local-conf-", suffix=".properties", dir=runtime_dir)
-    with os.fdopen(fd, "w") as f:
-        for key, value in seed.items():
-            escaped = str(value).replace("\\", "\\\\").replace("\n", "\\n")
-            f.write("{}={}\n".format(key, escaped))
-    os.chmod(path, 0o600)
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        # The temp dir is world-writable; never trust a directory someone else created.
+        if hasattr(os, "getuid") and os.stat(path).st_uid != os.getuid():
+            raise _start_failed("{} exists but is not owned by the current user".format(path))
+        os.chmod(path, 0o700)
     return path
 
 
-def _pid_file(runtime_dir: str) -> str:
-    """The pid file spark-daemon.sh maintains for the server started by this module."""
-    return os.path.join(runtime_dir, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
+class LocalConnectServer:
+    """One persistent local Spark Connect server, as recorded in the discovery file.
 
-
-def _read_pid(path: str) -> Optional[int]:
-    try:
-        with open(path, "r") as f:
-            return int(f.read().strip())
-    except (OSError, ValueError):
-        return None
-
-
-def _signal_server(pid: int, sig: int) -> bool:
-    """Best-effort signal to the recorded server pid (the JVM started by spark-daemon.sh)."""
-    try:
-        os.kill(pid, sig)
-        return True
-    except OSError:
-        return False
-
-
-def _launch_server(master: str, opts: Dict[str, Any]) -> str:
-    """Start a persistent local Connect server and wait until it is reachable.
-
-    Runs the standard ``sbin/start-connect-server.sh``, which daemonizes the server JVM through
-    ``sbin/spark-daemon.sh`` (pid file, logs). Once the server accepts connections, the
-    discovery file is written and the ``sc://host:port`` endpoint returned. Callers must hold
-    ``_start_lock`` (see ``reuse_or_start_local_connect_server``).
+    A plain record of how to reach the server (host, port, auth token) and identify it (pid,
+    Spark version), plus the operations scoped to it: the client ``url``, probing whether this
+    client can reuse it, and stopping it.
     """
-    from pyspark.find_spark_home import _find_spark_home
-    from pyspark.version import __version__
 
-    spark_home = os.environ.get("SPARK_HOME") or _find_spark_home()
-    script = os.path.join(spark_home, "sbin", "start-connect-server.sh")
-    if not os.path.isfile(script):
-        raise PySparkRuntimeError(
-            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-            messageParameters={"reason": "cannot find {}".format(script)},
+    def __init__(self, host: str, port: int, token: str, pid: int, spark_version: str):
+        self.host = host
+        self.port = port
+        self.token = token
+        self.pid = pid
+        self.spark_version = spark_version
+
+    @property
+    def url(self) -> str:
+        """The ``sc://host:port`` endpoint clients connect to."""
+        return "sc://{}:{}".format(self.host, self.port)
+
+    def is_listening(self) -> bool:
+        """Whether the server currently accepts TCP connections on its recorded port."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            return sock.connect_ex((self.host, self.port)) == 0
+
+    def is_reusable(self) -> bool:
+        """Decide whether this client process can reuse the server.
+
+        Reuse requires that the recorded Spark version matches this client's, that the
+        recorded process is still alive, and that it is accepting connections on the recorded
+        port. A version mismatch, dead pid, or closed port means the caller must start its own
+        server instead. The pid probe runs only on POSIX: on Windows ``os.kill(pid, 0)``
+        *terminates* the target process rather than testing it, so there the port probe is the
+        only liveness signal.
+        """
+        from pyspark.version import __version__
+
+        if self.spark_version != __version__:
+            return False
+        if os.name == "posix" and not _pid_alive(self.pid):
+            return False
+        return self.is_listening()
+
+    def stop(self) -> bool:
+        """Best-effort SIGTERM to the server JVM; ``False`` if it could not be signalled."""
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+            return True
+        except OSError:
+            return False
+
+
+class Discovery:
+    """The discovery file through which runs find the persistent local server.
+
+    Owns everything scoped to that file: its location, parsing it back into a
+    :class:`LocalConnectServer` (:meth:`load`), atomically writing one with ``0600`` perms
+    (:meth:`save`, the file holds the auth token), and the cross-process file lock that
+    serializes server start-up (:meth:`lock`). Its :attr:`directory` also hosts the daemon's
+    pid file and logs.
+
+    The default location is ``spark-connect-<uid>/connect-local.json`` under the system temp
+    dir -- per-user, mode ``0700``, and gone after a reboot -- and can be overridden with the
+    ``SPARK_LOCAL_CONNECT_DISCOVERY`` environment variable.
+    """
+
+    def __init__(self, path: Optional[str] = None):
+        self.path = (
+            path
+            or os.environ.get("SPARK_LOCAL_CONNECT_DISCOVERY")
+            or os.path.join(_per_user_runtime_dir(), "connect-local.json")
         )
 
-    discovery_path = _discovery_path()
-    runtime_dir = _runtime_dir()
-    os.makedirs(runtime_dir, exist_ok=True)
-    log_dir = os.path.join(runtime_dir, "logs")
-    pid_file = _pid_file(runtime_dir)
+    @property
+    def directory(self) -> str:
+        """Directory holding the discovery file, the daemon's pid file, and its logs."""
+        return os.path.dirname(self.path) or os.getcwd()
 
-    # Same token precedence as the in-process ``_start_connect_server``: an explicit env token,
-    # then one passed as a conf, then a fresh one. The token travels through the environment,
-    # never argv, where it would be visible in `ps` output.
-    token = (
-        os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
-        or opts.get("spark.connect.authenticate.token")
-        or str(uuid.uuid4())
-    )
-    port = _pick_port(opts)
-    conf_file = _write_seed_properties(opts, runtime_dir)
+    def load(self) -> Optional[LocalConnectServer]:
+        """Read the discovery file, returning ``None`` if it is absent or malformed."""
+        try:
+            with open(self.path, "r") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        try:
+            server = LocalConnectServer(
+                host=data["host"],
+                port=int(data["port"]),
+                token=data["token"],
+                pid=int(data["pid"]),
+                spark_version=data["spark_version"],
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not all(isinstance(v, str) for v in (server.host, server.token, server.spark_version)):
+            return None
+        return server
 
-    env = dict(os.environ)
-    for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
-        env.pop(var, None)
-    env["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
-    env["SPARK_PID_DIR"] = runtime_dir
-    env["SPARK_LOG_DIR"] = log_dir
-    env["SPARK_IDENT_STRING"] = _SPARK_IDENT
+    def save(self, server: LocalConnectServer) -> None:
+        """Atomically write the discovery file with ``0600`` perms (it holds the auth token)."""
+        parent = os.path.dirname(self.path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        payload = {
+            "host": server.host,
+            "port": server.port,
+            "token": server.token,
+            "pid": server.pid,
+            "spark_version": server.spark_version,
+        }
+        tmp = "{}.{}.tmp".format(self.path, os.getpid())
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(payload))
+        os.replace(tmp, self.path)
 
-    cmd = [
-        script,
-        "--master",
-        master,
-        "--conf",
-        "spark.connect.grpc.binding.port={}".format(port),
-    ]
-    if conf_file is not None:
-        cmd += ["--properties-file", conf_file]
+    def clear(self) -> None:
+        """Remove the discovery file, if present."""
+        with contextlib.suppress(OSError):
+            os.remove(self.path)
 
-    try:
+    @contextlib.contextmanager
+    def lock(self) -> Iterator[None]:
+        """Exclusive cross-process file lock serializing persistent-server start-up.
+
+        On platforms without ``fcntl`` this is a no-op: racing callers may each start a
+        server, and the losers reconnect to the one that wins the discovery-file update.
+        """
+        try:
+            import fcntl
+        except ImportError:
+            yield
+            return
+        path = self.path + ".lock"
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)  # closing the fd releases the flock
+
+
+def _daemon_pid_file(directory: str) -> str:
+    """The pid file spark-daemon.sh maintains for the server started by this module.
+
+    Shared knowledge between :class:`ServerLauncher` (reads it while waiting for start-up)
+    and :func:`stop_local_connect_server` (removes it so a fresh start is never refused).
+    """
+    return os.path.join(directory, "spark-{}-{}-1.pid".format(_SPARK_IDENT, _SERVER_CLASS))
+
+
+class ServerLauncher:
+    """Starts a persistent local Connect server through ``sbin/start-connect-server.sh``.
+
+    Owns the launch-time machinery: choosing the port, seeding start-up configs through a
+    ``--properties-file``, invoking the sbin script (which daemonizes the server JVM via
+    ``sbin/spark-daemon.sh``), and waiting until the server accepts connections -- at which
+    point the discovery file is written and the running :class:`LocalConnectServer` returned.
+    Callers must hold ``Discovery.lock`` (see :func:`reuse_or_start_local_connect_server`).
+    """
+
+    _READY_TIMEOUT = 120
+
+    def __init__(self, master: str, opts: Dict[str, Any], discovery: Discovery):
+        self._master = master
+        self._opts = opts
+        self._discovery = discovery
+        self._directory = discovery.directory
+        self._log_dir = os.path.join(self._directory, "logs")
+        self._pid_file = _daemon_pid_file(self._directory)
+
+    def launch(self) -> LocalConnectServer:
+        """Start the server, wait until it is reachable, and record it for later runs."""
+        os.makedirs(self._directory, exist_ok=True)
+        token = self._token()
+        port = self._pick_port()
+        conf_file = self._write_seed_properties()
+        try:
+            self._run_script(port, token, conf_file)
+            return self._await_ready(port, token)
+        finally:
+            if conf_file is not None:
+                with contextlib.suppress(OSError):
+                    os.remove(conf_file)
+
+    def _token(self) -> str:
+        """The auth token for the new server.
+
+        Same precedence as the in-process ``_start_connect_server``: an explicit env token,
+        then one passed as a conf, then a fresh one. The token travels through the
+        environment, never argv, where it would be visible in ``ps`` output.
+        """
+        return (
+            os.environ.get("SPARK_CONNECT_AUTHENTICATE_TOKEN")
+            or self._opts.get("spark.connect.authenticate.token")
+            or str(uuid.uuid4())
+        )
+
+    def _pick_port(self) -> int:
+        """Choose the port for the fresh server.
+
+        Tests always use an OS-assigned free port so suites can run in parallel. Otherwise
+        the configured/default port is honored unless it is already taken -- e.g. by a stale
+        server just rejected on version mismatch -- in which case an OS-assigned port is used
+        instead. Unlike the in-process path, the standalone script cannot report an ephemeral
+        port back to us, so the free port is picked (and released) here, subject to a small
+        race until the server binds it.
+        """
+
+        def free_port() -> int:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.bind(("localhost", 0))
+                return sock.getsockname()[1]
+
+        if "SPARK_TESTING" in os.environ:
+            return free_port()
+        from pyspark.sql.connect.client import DefaultChannelBuilder
+
+        port = int(
+            self._opts.get("spark.local.connect.server.port", DefaultChannelBuilder.default_port())
+        )
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("localhost", port))
+                return port
+            except OSError:
+                return free_port()
+
+    def _seed_conf(self) -> Dict[str, Any]:
+        """Start-up configs to seed the freshly started server with.
+
+        Mirrors the merge that the in-process ``SparkSession._start_connect_server`` applies
+        to its ``SparkConf`` so that first-run behavior matches (warehouse dir, app name,
+        jars/packages, catalog confs, etc.). Keys the launcher controls itself (master, port,
+        token) and the ``spark.local.connect.*`` opt-in keys are excluded. This only seeds
+        the run that *starts* the server; a later run reconnecting to an already-warm JVM
+        cannot change its static configs.
+        """
+        conf: Dict[str, Any] = {}
+        for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
+            conf = json.loads(os.environ["PYSPARK_REMOTE_INIT_CONF_{}".format(i)])
+        conf.update(self._opts)
+        for k in list(conf):
+            if k in (
+                "spark.remote",
+                "spark.api.mode",
+                "spark.master",
+                "spark.connect.authenticate.token",
+                "spark.connect.grpc.binding.port",
+            ) or k.startswith("spark.local.connect."):
+                conf.pop(k)
+        return conf
+
+    def _write_seed_properties(self) -> Optional[str]:
+        """Write the seed configs as a ``--properties-file`` for spark-submit, or ``None``.
+
+        Written with ``0600`` perms since configs may hold sensitive values; passing a file
+        keeps them off the server's argv, where they would be visible in ``ps`` output.
+        """
+        seed = self._seed_conf()
+        if not seed:
+            return None
+        fd, path = tempfile.mkstemp(
+            prefix="connect-local-conf-", suffix=".properties", dir=self._directory
+        )
+        with os.fdopen(fd, "w") as f:
+            for key, value in seed.items():
+                escaped = str(value).replace("\\", "\\\\").replace("\n", "\\n")
+                f.write("{}={}\n".format(key, escaped))
+        os.chmod(path, 0o600)
+        return path
+
+    def _daemon_pid(self) -> Optional[int]:
+        """The pid spark-daemon.sh recorded for the server it started, if any."""
+        try:
+            with open(self._pid_file, "r") as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return None
+
+    def _run_script(self, port: int, token: str, conf_file: Optional[str]) -> None:
+        """Run ``sbin/start-connect-server.sh``, which daemonizes the server JVM."""
+        from pyspark.find_spark_home import _find_spark_home
+
+        spark_home = os.environ.get("SPARK_HOME") or _find_spark_home()
+        script = os.path.join(spark_home, "sbin", "start-connect-server.sh")
+        if not os.path.isfile(script):
+            raise _start_failed("cannot find {}".format(script))
+
+        env = dict(os.environ)
+        for var in ("SPARK_REMOTE", "SPARK_LOCAL_REMOTE", "SPARK_CONNECT_MODE_ENABLED"):
+            env.pop(var, None)
+        env["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
+        env["SPARK_PID_DIR"] = self._directory
+        env["SPARK_LOG_DIR"] = self._log_dir
+        env["SPARK_IDENT_STRING"] = _SPARK_IDENT
+
+        cmd = [
+            script,
+            "--master",
+            self._master,
+            "--conf",
+            "spark.connect.grpc.binding.port={}".format(port),
+        ]
+        if conf_file is not None:
+            cmd += ["--properties-file", conf_file]
+
         result = subprocess.run(
             cmd,
             env=env,
@@ -352,96 +441,82 @@ def _launch_server(master: str, opts: Dict[str, Any]) -> str:
             timeout=120,
         )
         if result.returncode != 0:
-            stale_pid = _read_pid(pid_file)
+            stale_pid = self._daemon_pid()
             if stale_pid is not None and _pid_alive(stale_pid):
                 # spark-daemon.sh refuses to start while its pid file points at a live
                 # process -- here a server this client just rejected as not reusable
                 # (e.g. after a Spark upgrade).
-                reason = (
+                raise _start_failed(
                     "a local Connect server that is not reusable by this client is already "
                     "running (pid {}); stop it with "
                     "`python -m pyspark.sql.connect.local_server --stop`".format(stale_pid)
                 )
-            else:
-                output = (result.stderr or "") + (result.stdout or "")
-                last_line = output.strip().splitlines()[-1] if output.strip() else ""
-                reason = "start-connect-server.sh exited with code {}: {}".format(
+            output = (result.stderr or "") + (result.stdout or "")
+            last_line = output.strip().splitlines()[-1] if output.strip() else ""
+            raise _start_failed(
+                "start-connect-server.sh exited with code {}: {}".format(
                     result.returncode, last_line
                 )
-            raise PySparkRuntimeError(
-                errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-                messageParameters={"reason": reason},
             )
 
-        # The script has daemonized the server; wait for it to accept connections.
-        deadline = time.time() + 120
+    def _await_ready(self, port: int, token: str) -> LocalConnectServer:
+        """Wait for the daemonized server to accept connections, then record it."""
+        from pyspark.version import __version__
+
+        deadline = time.time() + self._READY_TIMEOUT
         while time.time() < deadline:
-            pid = _read_pid(pid_file)
+            pid = self._daemon_pid()
             if pid is not None:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(0.5)
-                    if sock.connect_ex(("localhost", port)) == 0:
-                        _write_discovery(discovery_path, "localhost", port, token, pid, __version__)
-                        os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = token
-                        return "sc://localhost:{}".format(port)
+                server = LocalConnectServer("localhost", port, token, pid, __version__)
+                if server.is_listening():
+                    self._discovery.save(server)
+                    return server
                 if not _pid_alive(pid):
-                    raise PySparkRuntimeError(
-                        errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-                        messageParameters={
-                            "reason": "the server exited during start-up; see logs under {}".format(
-                                log_dir
-                            )
-                        },
+                    raise _start_failed(
+                        "the server exited during start-up; see logs under {}".format(self._log_dir)
                     )
             time.sleep(0.25)
 
         # Timed out: best-effort stop of the server we just started, then fail.
-        pid = _read_pid(pid_file)
+        pid = self._daemon_pid()
         if pid is not None:
-            _signal_server(pid, signal.SIGTERM)
-        raise PySparkRuntimeError(
-            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-            messageParameters={
-                "reason": "the server did not become ready within 120 seconds; see logs "
-                "under {}".format(log_dir)
-            },
+            with contextlib.suppress(OSError):
+                os.kill(pid, signal.SIGTERM)
+        raise _start_failed(
+            "the server did not become ready within {} seconds; see logs under {}".format(
+                self._READY_TIMEOUT, self._log_dir
+            )
         )
-    finally:
-        if conf_file is not None:
-            try:
-                os.remove(conf_file)
-            except OSError:
-                pass
 
 
 def reuse_or_start_local_connect_server(master: str, opts: Dict[str, Any]) -> str:
     """Reuse a running persistent local Connect server, or start one if none is reusable.
 
-    Returns the ``sc://host:port`` endpoint to connect to. This is the opt-in counterpart of
-    ``SparkSession._start_connect_server`` and is only reached for a ``local`` master when
-    ``spark.local.connect.reuse`` / ``SPARK_LOCAL_CONNECT_REUSE`` is set.
+    Returns the ``sc://host:port`` endpoint to connect to, and sets
+    ``SPARK_CONNECT_AUTHENTICATE_TOKEN`` so the client authenticates against that server.
+    This is the opt-in counterpart of ``SparkSession._start_connect_server`` and is only
+    reached for a ``local`` master when ``spark.local.connect.reuse`` /
+    ``SPARK_LOCAL_CONNECT_REUSE`` is set.
     """
     if os.name != "posix":
-        raise PySparkRuntimeError(
-            errorClass="LOCAL_CONNECT_SERVER_START_FAILED",
-            messageParameters={
-                "reason": "spark.local.connect.reuse relies on the POSIX scripts under sbin/; "
-                "on this platform start a server manually (sbin/start-connect-server.sh) and "
-                'connect with .remote("sc://...")'
-            },
+        raise _start_failed(
+            "spark.local.connect.reuse relies on the POSIX scripts under sbin/; "
+            "on this platform start a server manually (sbin/start-connect-server.sh) and "
+            'connect with .remote("sc://...")'
         )
+    discovery = Discovery()
     # Fast path: reuse an already-running server without taking the cross-process lock.
-    endpoint = _reuse_from_discovery()
-    if endpoint is not None:
-        return endpoint
-    # No reusable server yet. Serialize start-up across processes when file locking is available.
-    # Without it, racing callers may each start a server; the winner writes the discovery file
-    # and the others reconnect to it.
-    with _start_lock():
-        endpoint = _reuse_from_discovery()
-        if endpoint is not None:
-            return endpoint
-        return _launch_server(master, opts)
+    server = discovery.load()
+    if server is None or not server.is_reusable():
+        # No reusable server yet. Serialize start-up across processes when file locking is
+        # available. Without it, racing callers may each start a server; the winner writes
+        # the discovery file and the others reconnect to it.
+        with discovery.lock():
+            server = discovery.load()
+            if server is None or not server.is_reusable():
+                server = ServerLauncher(master, opts, discovery).launch()
+    os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = server.token
+    return server.url
 
 
 def stop_local_connect_server() -> bool:
@@ -452,17 +527,20 @@ def stop_local_connect_server() -> bool:
 
         python -m pyspark.sql.connect.local_server --stop
     """
-    disc = _read_discovery()
-    stopped = False
-    if disc is not None and disc["pid"] != os.getpid():
-        stopped = _signal_server(disc["pid"], signal.SIGTERM)
-    # Also drop the spark-daemon.sh pid file so a fresh start is never refused on its account.
-    for path in (_discovery_path(), _pid_file(_runtime_dir())):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-    return stopped
+    discovery = Discovery()
+    # Hold the start-up lock so a stop racing a concurrent launch cannot signal or unlink the
+    # newcomer's record mid-start; the stop simply waits for the launch to finish first.
+    with discovery.lock():
+        server = discovery.load()
+        stopped = False
+        if server is not None and server.pid != os.getpid():
+            stopped = server.stop()
+        discovery.clear()
+        # Also drop the spark-daemon.sh pid file so a fresh start is never refused on its
+        # account.
+        with contextlib.suppress(OSError):
+            os.remove(_daemon_pid_file(discovery.directory))
+        return stopped
 
 
 def main() -> None:
