@@ -1438,7 +1438,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def invalidBucketNumberError(bucketingMaxBuckets: Int, numBuckets: Int): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_BUCKET_COUNT",
+      errorClass = "INVALID_BUCKET_COUNT.OUT_OF_RANGE",
       messageParameters = Map(
         "bucketingMaxBuckets" -> bucketingMaxBuckets.toString,
         "numBuckets" -> numBuckets.toString))
