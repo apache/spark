@@ -280,11 +280,6 @@ abstract class RowLevelOperationSuiteBase
     assert(actualUpdateSchema == expectedUpdateSchema, "update schema must match")
   }
 
-  // ---------------------------------------------------------------------------
-  // Write-summary metrics helpers (UPDATE and MERGE). Hoisted from the peer
-  // suites so column-update suites can assert on metrics without duplication.
-  // ---------------------------------------------------------------------------
-
   protected def getUpdateSummary(): org.apache.spark.sql.connector.write.UpdateSummary = {
     catalog.loadTable(ident).asInstanceOf[InMemoryTable]
       .commits.last.writeSummary.get

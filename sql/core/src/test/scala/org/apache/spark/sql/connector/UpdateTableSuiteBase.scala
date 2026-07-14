@@ -31,9 +31,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   protected def deltaUpdate: Boolean = false
 
-  // getUpdateSummary and checkUpdateMetrics are inherited from RowLevelOperationSuiteBase
-  // so all row-level suites (including the column-update variants) share the same helpers.
-  // Forward to the base method with `deltaUpdate` resolved here.
+  // Convenience overload that forwards `deltaUpdate` from the current suite to the base helper.
   protected def checkUpdateMetrics(numUpdatedRows: Long, numCopiedRows: Long): Unit = {
     super.checkUpdateMetrics(numUpdatedRows, numCopiedRows, deltaUpdate)
   }
