@@ -8176,8 +8176,8 @@
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
-      "A query operator contains one or more unsupported expressions.",
-      "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "The query operator <operator> contains one or more unsupported expressions.",
+      "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the <operator> operator.",
       "Invalid expressions: [<invalidExprSqls>]"
     ],
     "sqlState" : "42K0E"

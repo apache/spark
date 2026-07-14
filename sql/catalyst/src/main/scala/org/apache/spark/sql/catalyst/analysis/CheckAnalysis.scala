@@ -1129,6 +1129,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             other.failAnalysis(
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
+                "operator" -> other.nodeName,
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
