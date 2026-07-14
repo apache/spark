@@ -37,7 +37,7 @@ import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
  * `readArchiveEntries` (entry ordering, gzip handling, dir/dotfile skipping, lazy advance, the
  * non-closing entry stream, and cleanup). Nothing here touches local disk -- entries are streams.
  */
-class ArchiveReaderSuite extends SparkFunSuite {
+class SupportsArchiveFormatSuite extends SparkFunSuite {
 
   private case class Entry(name: String, data: Array[Byte], isDir: Boolean = false)
 

@@ -214,6 +214,7 @@ object SupportsArchiveFormat {
     name.endsWith(".tar") || name.endsWith(".tar.gz") || name.endsWith(".tgz") ||
       name.endsWith(".zip")
   }
+
   /**
    * Opens the archive at `path` as a commons-compress stream, selecting the container by extension.
    */
