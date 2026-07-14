@@ -112,13 +112,11 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: dev/requirements.txt
 
       - name: Install Python requirements
         run: |
-          python3 -m pip --version
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --group dev
+          python3 -m pip install --upgrade -r dev/requirements.txt
 
       - name: Register javadoc problem matcher
         run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
