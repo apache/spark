@@ -163,17 +163,14 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
       tableAttrs: Seq[Attribute],
       scanAttrs: Seq[Attribute]): AttributeMap[Attribute] = {
 
-    val attrMapping = tableAttrs.map { tableAttr =>
+    // Only map tableAttrs that have a matching scan attribute. Callers consume this map via
+    // `attrMap.contains(attr)`, so an entry is only useful when it actually exists; missing
+    // entries are legitimately absent from the (potentially narrowed) column-update scan and
+    // do not need to be mapped.
+    val attrMapping = tableAttrs.flatMap { tableAttr =>
       scanAttrs
         .find(scanAttr => conf.resolver(scanAttr.name, tableAttr.name))
         .map(scanAttr => tableAttr -> scanAttr)
-        .getOrElse {
-          throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_3075",
-            messageParameters = Map(
-              "tableAttr" -> tableAttr.toString,
-              "scanAttrs" -> scanAttrs.mkString(",")))
-        }
     }
     AttributeMap(attrMapping)
   }
