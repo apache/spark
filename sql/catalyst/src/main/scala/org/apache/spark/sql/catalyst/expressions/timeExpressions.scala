@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.DateTimeException
 import java.util.Locale
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, StringType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1022,4 +1023,111 @@ case class TimeToMicros(child: Expression) extends TimeToBase {
 
   override protected def withNewChildInternal(newChild: Expression): TimeToMicros =
     copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(time, format) - Converts a time to a value of string in the format specified by the time format given by the second argument.",
+  arguments = """
+    Arguments:
+      * time - A time value to be converted to string.
+      * format - Time format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+                 time format patterns. Note: Only time-related patterns (H, h, m, s, S, a) are meaningful for TIME values.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(TIME'14:30:45', 'HH:mm:ss');
+       14:30:45
+      > SELECT _FUNC_(TIME'14:30:45', 'hh:mm:ss a');
+       02:30:45 PM
+      > SELECT _FUNC_(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS');
+       14:30:45.123456
+      > SELECT _FUNC_(TIME'09:05:00', 'h:mm a');
+       9:05 AM
+  """,
+  group = "datetime_funcs",
+  since = "4.3.0")
+// scalastyle:on line.size.limit
+case class TimeFormat(left: Expression, right: Expression)
+  extends BinaryExpression
+  with ImplicitCastInputTypes {
+
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(AnyTimeType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = StringType
+
+  // Cache the formatter if the format string is a foldable expression
+  @transient private lazy val formatterOption: Option[TimeFormatter] =
+    if (right.foldable) {
+      Option(right.eval()).map { format =>
+        TimeFormatter(format.toString, TimeFormatter.defaultLocale, isParsing = false)
+      }
+    } else {
+      None
+    }
+
+  override protected def nullSafeEval(time: Any, format: Any): Any = {
+    val nanos = time.asInstanceOf[Long]
+    val pattern = if (right.foldable) right.eval().toString else format.toString
+    val formatter = formatterOption.getOrElse {
+      TimeFormatter(pattern, TimeFormatter.defaultLocale, isParsing = false)
+    }
+    TimeFormat.formatWithError(formatter, nanos, prettyName, pattern)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    formatterOption.map { tf =>
+      val timeFormatter = ctx.addReferenceObj("timeFormatter", tf)
+      val funcName = ctx.addReferenceObj("funcName", prettyName)
+      val fmtStr = ctx.addReferenceObj("fmtStr", right.eval().toString)
+      defineCodeGen(ctx, ev, (time, _) => {
+        s"""|((org.apache.spark.unsafe.types.UTF8String)
+            |org.apache.spark.sql.catalyst.expressions
+            |.TimeFormat.formatWithError(
+            |$timeFormatter, $time,
+            |$funcName, $fmtStr))""".stripMargin.replaceAll("\n", "")
+      })
+    }.getOrElse {
+      val tfClass = TimeFormatter.getClass.getName.stripSuffix("$")
+      val locale = ctx.addReferenceObj(
+        "locale", TimeFormatter.defaultLocale, classOf[Locale].getName)
+      val funcName = ctx.addReferenceObj("funcName", prettyName)
+      defineCodeGen(ctx, ev, (time, format) => {
+        s"""|((org.apache.spark.unsafe.types.UTF8String)
+            |org.apache.spark.sql.catalyst.expressions
+            |.TimeFormat.formatWithError(
+            |$tfClass$$.MODULE$$.apply(
+            |  $format.toString(), $locale, false),
+            |$time, $funcName,
+            |$format.toString()))""".stripMargin.replaceAll("\n", "")
+      })
+    }
+  }
+
+  override def prettyName: String = "time_format"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TimeFormat =
+    copy(left = newLeft, right = newRight)
+}
+
+object TimeFormat {
+  def formatWithError(
+      tf: TimeFormatter, nanos: Long, funcName: String, pattern: String): UTF8String = {
+    try {
+      UTF8String.fromString(tf.format(nanos))
+    } catch {
+      case e: DateTimeException =>
+        throw new SparkRuntimeException(
+          errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+          messageParameters = Map(
+            "parameter" -> toSQLId("format"),
+            "functionName" -> toSQLId(funcName),
+            "value" -> toSQLValue(pattern, StringType)),
+          cause = e)
+    }
+  }
 }

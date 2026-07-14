@@ -8726,6 +8726,25 @@ object functions {
   }
 
   /**
+   * Converts a time to a string in the specified format.
+   *
+   * @param time
+   *   A column of time values to be formatted.
+   * @param format
+   *   A time format string. See <a
+   *   href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime
+   *   Patterns</a> for valid patterns. Note: only time-related patterns (H, h, m, s, S, a) are
+   *   meaningful for TIME values; date fields (y, M, d, etc.) raise an error.
+   * @return
+   *   String representation of the time in the specified format.
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def time_format(time: Column, format: String): Column = {
+    Column.fn("time_format", time, lit(format))
+  }
+
+  /**
    * Returns `time` truncated to the `unit`.
    *
    * @param unit
