@@ -51,9 +51,10 @@ import org.apache.spark.annotation.Private;
  * multiple candidates produce an ambiguity error; no candidates produce {@code Optional.empty()}.
  * <p>
  * <b>Thread-safety:</b> This class uses synchronized access to the cached provider list and
- * initialization tracking. Callers may invoke {@link #providerFor(String, Map)} from multiple
- * threads. However, the returned {@link CredentialProvider} instances are not guaranteed to be
- * thread-safe; callers should synchronize on the provider or confine it to a single thread.
+ * initialization tracking, and callers may invoke {@link #providerFor(String, Map)} from
+ * multiple threads. A provider instance is cached and shared across callers; per the
+ * {@link CredentialProvider} contract, implementations must be thread-safe, so a returned
+ * instance may be used concurrently.
  *
  * @since 4.3.0
  */
