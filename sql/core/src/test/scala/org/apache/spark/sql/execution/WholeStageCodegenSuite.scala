@@ -83,7 +83,7 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(!df.queryExecution.executedPlan.exists(p =>
         p.isInstanceOf[WholeStageCodegenExec] &&
           p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
-        s"Expected a code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+        s"Expected no code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
       df.collect()
     }
     withSQLConf(

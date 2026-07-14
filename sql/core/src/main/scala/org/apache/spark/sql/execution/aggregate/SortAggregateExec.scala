@@ -116,7 +116,7 @@ case class SortAggregateExec(
   // default (no stop check) still applies there.
   override def needStopCheck: Boolean = groupingExpressions.nonEmpty
 
-  override protected def canCheckLimitNotReached: Boolean = false
+  override protected def canCheckLimitNotReached: Boolean = groupingExpressions.nonEmpty
 
   // The global UnsafeRow holding the grouping key of the group currently being aggregated.
   private var currentGroupingKeyTerm: String = _
