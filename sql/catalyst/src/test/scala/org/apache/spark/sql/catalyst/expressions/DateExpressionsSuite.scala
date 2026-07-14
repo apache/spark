@@ -1739,6 +1739,50 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(UnixMicros(Literal(timestampWithNanos)), 1000001L)
   }
 
+  test("SPARK-57814: unix_seconds / unix_millis / unix_micros over " +
+    "NTZ and nanosecond-precision timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+
+    // 2008-12-25 15:30:00.123456789 -> epochMicros 1230219000123456 (+789 ns remainder dropped).
+    // unix_* apply no zone shift, so the NTZ wall-clock value and the LTZ instant at the same UTC
+    // reading produce identical results.
+    val ntz = localDateTimeToNanosVal(timestampNTZ(2008, 12, 25, 15, 30, 0, 123456789))
+    val ltz = instantToNanosVal(Instant.parse("2008-12-25T15:30:00.123456789Z"))
+    foreachNanosPrecision { p =>
+      checkEvaluation(UnixSeconds(Literal.create(ntz, TimestampNTZNanosType(p))), 1230219000L)
+      checkEvaluation(UnixSeconds(Literal.create(ltz, TimestampLTZNanosType(p))), 1230219000L)
+      checkEvaluation(UnixMillis(Literal.create(ntz, TimestampNTZNanosType(p))), 1230219000123L)
+      checkEvaluation(UnixMillis(Literal.create(ltz, TimestampLTZNanosType(p))), 1230219000123L)
+      checkEvaluation(UnixMicros(Literal.create(ntz, TimestampNTZNanosType(p))), 1230219000123456L)
+      checkEvaluation(UnixMicros(Literal.create(ltz, TimestampLTZNanosType(p))), 1230219000123456L)
+    }
+
+    // Micro TIMESTAMP_NTZ is now accepted directly and read as a physical Long with no zone shift.
+    // It was NOT rejected before this change: implicit coercion silently cast it to TIMESTAMP_LTZ,
+    // which applies a session-zone shift. So under a non-UTC session zone the result changed. The
+    // direct reads below are zoneless (session-zone-independent); the equivalent old coercion (a
+    // Cast to TIMESTAMP_LTZ) under America/Los_Angeles shifts the same wall clock by +8h to a
+    // different value. The contrasting pair guards against silently reintroducing the old shift.
+    val microNtz =
+      Literal.create(LocalDateTime.parse("2008-12-25T15:30:00.123456"), TimestampNTZType)
+    checkEvaluation(UnixSeconds(microNtz), 1230219000L)
+    checkEvaluation(UnixMicros(microNtz), 1230219000123456L)
+    checkEvaluation(UnixSeconds(Cast(microNtz, TimestampType, Some(LA.getId))), 1230247800L)
+    checkEvaluation(UnixMicros(Cast(microNtz, TimestampType, Some(LA.getId))), 1230247800123456L)
+
+    // Pre-epoch sub-second value: 1969-12-31 23:59:59.5 has epochMicros -500000; Math.floorDiv
+    // floors toward -inf, so unix_seconds -> -1 (matching micro-timestamp behavior), NOT 0.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1969, 12, 31, 23, 59, 59, 500000000))
+    checkEvaluation(UnixSeconds(Literal.create(preEpoch, TimestampNTZNanosType(9))), -1L)
+    checkEvaluation(UnixMillis(Literal.create(preEpoch, TimestampNTZNanosType(9))), -500L)
+    checkEvaluation(UnixMicros(Literal.create(preEpoch, TimestampNTZNanosType(9))), -500000L)
+
+    // NULL input over each unit and each nanos family.
+    checkEvaluation(UnixSeconds(Literal.create(null, TimestampNTZNanosType(9))), null)
+    checkEvaluation(UnixMillis(Literal.create(null, TimestampLTZNanosType(9))), null)
+    checkEvaluation(UnixMicros(Literal.create(null, TimestampNTZNanosType(9))), null)
+  }
+
   test("SPARK-57527: unix_nanos over nanosecond-precision timestamps") {
     import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 

@@ -868,3 +868,45 @@ Sort [v#x ASC NULLS FIRST], true
                   :     +- OneRowRelation
                   +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500'#x]
                      +- OneRowRelation
+
+
+-- !query
+SELECT unix_seconds(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [unix_seconds(2020-01-01 13:24:35.123456789) AS unix_seconds(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_millis(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [unix_millis(2020-01-01 13:24:35.123456789) AS unix_millis(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_micros(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [unix_micros(2020-01-01 13:24:35.123456789) AS unix_micros(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_micros('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7))
+-- !query analysis
+Project [unix_micros(cast(2020-01-01 13:24:35.999999999 as timestamp_ntz(7))) AS unix_micros(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_NTZ(7)))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_seconds(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000')
+-- !query analysis
+Project [unix_seconds(1969-12-31 23:59:59.5) AS unix_seconds(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_seconds(NULL :: timestamp_ntz(9)), unix_millis(NULL :: timestamp_ntz(9)), unix_micros(NULL :: timestamp_ntz(9))
+-- !query analysis
+Project [unix_seconds(cast(null as timestamp_ntz(9))) AS unix_seconds(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL, unix_millis(cast(null as timestamp_ntz(9))) AS unix_millis(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL, unix_micros(cast(null as timestamp_ntz(9))) AS unix_micros(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL]
++- OneRowRelation

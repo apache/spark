@@ -328,3 +328,15 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900' AS v
     UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond-precision values. The result
+-- is a whole BIGINT count of the unit; sub-unit digits are dropped. Explicit-zone literals fix the
+-- instant directly, independent of the session time zone.
+SELECT unix_seconds(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+SELECT unix_millis(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+SELECT unix_micros(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+SELECT unix_micros('2020-01-01 13:24:35.999999999 UTC' :: timestamp_ltz(7));
+-- Pre-epoch value: floorDiv floors toward -inf, so unix_seconds -> -1 (not 0).
+SELECT unix_seconds(TIMESTAMP_LTZ '1969-12-31 23:59:59.500000000 UTC');
+-- NULL nanosecond timestamp.
+SELECT unix_seconds(NULL :: timestamp_ltz(9)), unix_millis(NULL :: timestamp_ltz(9)), unix_micros(NULL :: timestamp_ltz(9));

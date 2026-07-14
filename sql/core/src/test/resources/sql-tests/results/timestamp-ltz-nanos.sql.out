@@ -1125,3 +1125,51 @@ struct<v:timestamp_ltz(9),next_v:timestamp_ltz(9)>
 2020-01-01 00:00:00.0000001	2020-01-01 00:00:00.0000005
 2020-01-01 00:00:00.0000005	2020-01-01 00:00:00.0000009
 2020-01-01 00:00:00.0000009	NULL
+
+
+-- !query
+SELECT unix_seconds(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query schema
+struct<unix_seconds(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):bigint>
+-- !query output
+1577885075
+
+
+-- !query
+SELECT unix_millis(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query schema
+struct<unix_millis(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):bigint>
+-- !query output
+1577885075123
+
+
+-- !query
+SELECT unix_micros(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query schema
+struct<unix_micros(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):bigint>
+-- !query output
+1577885075123456
+
+
+-- !query
+SELECT unix_micros('2020-01-01 13:24:35.999999999 UTC' :: timestamp_ltz(7))
+-- !query schema
+struct<unix_micros(CAST(2020-01-01 13:24:35.999999999 UTC AS TIMESTAMP_LTZ(7))):bigint>
+-- !query output
+1577885075999999
+
+
+-- !query
+SELECT unix_seconds(TIMESTAMP_LTZ '1969-12-31 23:59:59.500000000 UTC')
+-- !query schema
+struct<unix_seconds(TIMESTAMP_LTZ '1969-12-31 15:59:59.500000000'):bigint>
+-- !query output
+-1
+
+
+-- !query
+SELECT unix_seconds(NULL :: timestamp_ltz(9)), unix_millis(NULL :: timestamp_ltz(9)), unix_micros(NULL :: timestamp_ltz(9))
+-- !query schema
+struct<unix_seconds(CAST(NULL AS TIMESTAMP_LTZ(9))):bigint,unix_millis(CAST(NULL AS TIMESTAMP_LTZ(9))):bigint,unix_micros(CAST(NULL AS TIMESTAMP_LTZ(9))):bigint>
+-- !query output
+NULL	NULL	NULL

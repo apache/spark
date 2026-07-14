@@ -268,3 +268,15 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57814: unix_seconds / unix_millis / unix_micros over nanosecond-precision values. The result
+-- is a whole BIGINT count of the unit; sub-unit digits (incl. the sub-microsecond remainder) are
+-- dropped and NTZ applies no zone shift, so the wall-clock value is read as the epoch instant.
+SELECT unix_seconds(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_millis(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_micros(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_micros('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7));
+-- Pre-epoch value: floorDiv floors toward -inf, so unix_seconds -> -1 (not 0).
+SELECT unix_seconds(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000');
+-- NULL nanosecond timestamp.
+SELECT unix_seconds(NULL :: timestamp_ntz(9)), unix_millis(NULL :: timestamp_ntz(9)), unix_micros(NULL :: timestamp_ntz(9));
