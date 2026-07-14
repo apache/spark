@@ -230,7 +230,7 @@ trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
       checkAnswer(spark.table(cachingTestTable), Seq(Row(1, 100)))
 
       val catalog =
-      getTableCatalog[CachingInMemoryTableCatalog](spark, "cachingcat")
+        getTableCatalog[CachingInMemoryTableCatalog](spark, "cachingcat")
       val originalTableId = catalog.loadTable(testIdent).id
 
       catalog.dropTable(testIdent)
