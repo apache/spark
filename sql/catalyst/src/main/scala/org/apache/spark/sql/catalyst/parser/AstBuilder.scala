@@ -2505,7 +2505,7 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      val joinPostfix = Option(ctx.asofJoinPostfix)
+      val joinPostfix = Option(ctx.joinPostfix)
       val joinCriteriaCtx = joinPostfix.flatMap(p => Option(p.joinCriteria))
       val nearestByClauseCtx = joinPostfix.flatMap(p => Option(p.nearestByClause))
 

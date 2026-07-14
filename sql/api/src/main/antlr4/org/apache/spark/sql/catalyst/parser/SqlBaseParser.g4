@@ -1104,7 +1104,7 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary asofJoinPostfix?
+    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
     ;
@@ -1114,7 +1114,7 @@ asofJoinType
     | LEFT OUTER?
     ;
 
-asofJoinPostfix
+joinPostfix
     : joinCriteria
     | nearestByClause
     ;
