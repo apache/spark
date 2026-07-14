@@ -2553,14 +2553,14 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC cannot be directly executed") {
-    withTable("src") {
-      sql("CREATE TABLE src AS SELECT 1 AS id, 1 AS ts")
+    withTable("cdc_src") {
+      sql("CREATE TABLE cdc_src AS SELECT 1 AS id, 1 AS ts")
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           sql(
             """CREATE STREAMING TABLE table1
               |FLOW AUTO CDC
-              |FROM STREAM(src)
+              |FROM STREAM(cdc_src)
               |KEYS (id)
               |SEQUENCE BY ts""".stripMargin)
         },
@@ -2585,13 +2585,13 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("CREATE FLOW AS AUTO CDC cannot be directly executed") {
-    withTable("src") {
-      sql("CREATE TABLE src AS SELECT 1 AS id, 1 AS ts")
+    withTable("cdc_src") {
+      sql("CREATE TABLE cdc_src AS SELECT 1 AS id, 1 AS ts")
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           sql(
             """CREATE FLOW f AS AUTO CDC INTO target
-              |FROM STREAM(src)
+              |FROM STREAM(cdc_src)
               |KEYS (id)
               |SEQUENCE BY ts""".stripMargin)
         },
