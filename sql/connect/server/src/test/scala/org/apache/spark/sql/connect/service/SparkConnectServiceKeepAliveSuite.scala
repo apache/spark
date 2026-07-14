@@ -168,6 +168,88 @@ class SparkConnectServiceKeepAliveSuite extends SparkConnectServerTest {
   }
 
   test(
+    "SPARK-58094: server tolerates a default-on client's PINGs even with its own keepalive " +
+      "detection disabled") {
+    // Exercises the scenario flagged in review: permitKeepAliveTime/permitKeepAliveWithoutCalls
+    // used to be set only inside `if (CONNECT_GRPC_KEEPALIVE_ENABLED)`, so disabling only the
+    // server's own dead-client detection reverted permit-tolerance to grpc-netty's defaults
+    // (permitKeepAliveTime=5min, permitKeepAliveWithoutCalls=false). With no outstanding calls,
+    // grpc's KeepAliveEnforcer then requires 2 hours (its IMPLICIT_PERMIT_TIME_NANOS grace
+    // period for permitWithoutCalls=false) between "acceptable" pings instead of the configured
+    // permit floor, so a still-default-on client's periodic without-calls PINGs would each
+    // strike, and the 3rd strike (io.grpc.internal.KeepAliveEnforcer.MAX_PING_STRIKES=2)
+    // forcefully closes the connection (ForcefulCloseCommand) as too_many_pings -- even though
+    // nothing was ever actually wrong with the connection. With the permit calls hoisted out of
+    // the `if`, the enforcer instead uses the fixed 10s permit floor regardless of
+    // CONNECT_GRPC_KEEPALIVE_ENABLED, comfortably tolerating an 11s client ping interval, so no
+    // strikes accrue and the connection is never closed.
+    //
+    // A test loop that issues real RPC calls between pings cannot observe this: every server
+    // write (response headers/data) resets the enforcer's strike counter
+    // (NettyServerHandler$WriteMonitoringFrameWriter), so pings are only ever checked against a
+    // truly idle connection -- hence one call to establish the transport, then real idle time
+    // (no further calls) spanning several ping intervals, then a connection-count check.
+    val clientKeepAliveMs = (SparkConnectService.GRPC_KEEPALIVE_PERMIT_TIME_SECONDS + 1) * 1000
+    SparkConnectService.stop()
+    withSparkEnvConfs(
+      Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
+      Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "false",
+      Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+      Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s") {
+      SparkConnectService.start(spark.sparkContext)
+    }
+    val relay = new FreezableTcpRelay(serverPort)
+    try {
+      val client = SparkConnectClient
+        .builder()
+        .port(relay.port)
+        .sessionId(defaultSessionId)
+        .userId(defaultUserId)
+        .grpcKeepAliveEnabled(true)
+        .grpcKeepAliveTimeMs(clientKeepAliveMs)
+        .grpcKeepAliveTimeoutMs(clientKeepAliveMs)
+        .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+        .build()
+      try {
+        def runOneCall(): Unit = {
+          val operationId = UUID.randomUUID().toString
+          val iter = client.execute(buildPlan("select 1 as s"), Some(operationId))
+          while (iter.hasNext) iter.next()
+        }
+
+        // Establishes the transport; this write resets the enforcer's strike counter, so the
+        // idle window below starts clean.
+        runOneCall()
+        val connectionsAfterFirstCall = relay.connectionCount
+
+        // Stay genuinely idle (no calls) for several client ping intervals, so at least 3
+        // without-calls PINGs land on the server with nothing resetting the strike counter in
+        // between -- enough to trip too_many_pings if the permit calls were re-gated.
+        Thread.sleep(clientKeepAliveMs * 4)
+
+        runOneCall()
+        assert(
+          relay.connectionCount == connectionsAfterFirstCall,
+          "server forcefully closed the connection under a default-on client's idle keepalive " +
+            "PINGs (too_many_pings) even though its own keepAlive.enabled was false -- the " +
+            "client had to open a new TCP connection to complete the second call")
+      } finally {
+        client.shutdown()
+      }
+    } finally {
+      relay.close()
+      SparkConnectService.stop()
+      withSparkEnvConfs(
+        Connect.CONNECT_GRPC_BINDING_PORT.key -> serverPort.toString,
+        Connect.CONNECT_GRPC_KEEPALIVE_ENABLED.key -> "true",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIME.key -> "1s",
+        Connect.CONNECT_GRPC_KEEPALIVE_TIMEOUT.key -> "1s") {
+        SparkConnectService.start(spark.sparkContext)
+      }
+    }
+  }
+
+  test(
     "SPARK-58094: disabling spark.connect.grpc.keepAlive.enabled reverts to the pre-fix hang") {
     // Restart the real service with keepalive fully disabled (not just given short/aggressive
     // timing) to prove the flag genuinely gates the fix rather than only tuning its timing.
@@ -262,11 +344,13 @@ private class FreezableTcpRelay(targetPort: Int) {
   private val listener = new java.net.ServerSocket(0)
   @volatile private var frozen = false
   private val sockets = mutable.ListBuffer[java.net.Socket]()
+  private val acceptedConnections = new java.util.concurrent.atomic.AtomicInteger(0)
 
   private val acceptThread = new Thread(() => {
     try {
       while (true) {
         val clientSocket = listener.accept()
+        acceptedConnections.incrementAndGet()
         val serverSocket = new java.net.Socket("127.0.0.1", targetPort)
         sockets.synchronized {
           sockets += clientSocket
@@ -283,6 +367,11 @@ private class FreezableTcpRelay(targetPort: Int) {
   acceptThread.start()
 
   def port: Int = listener.getLocalPort
+
+  // Number of distinct client TCP connections accepted so far -- useful to detect a
+  // client-transparent reconnect (e.g. after the server forcefully closes the connection)
+  // that wouldn't otherwise surface as a visible failure to the application.
+  def connectionCount: Int = acceptedConnections.get()
 
   // Once frozen, bytes read from either socket are dropped rather than forwarded: no data
   // (including keepalive PING/PONG frames) reaches the other side, but neither socket is

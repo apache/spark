@@ -94,7 +94,11 @@ object Connect {
           "silently-dead client connections (see spark.connect.grpc.keepAlive.time / " +
           ".timeout). Enabled by default; can be turned off as an escape hatch, e.g. if it " +
           "interacts badly with a particular network path, or a server environment is prone " +
-          "to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects.")
+          "to stalls (long GC pauses, etc.) long enough to trip false-positive disconnects. " +
+          "This only controls the server's own dead-client detection; the server's tolerance " +
+          "of client-initiated keepalive PINGs (see spark.connect.grpc.keepAlive.time) is " +
+          "independent and always in effect, so that a default-on client is never rejected " +
+          "with too_many_pings regardless of this setting.")
       .version("4.3.0")
       .booleanConf
       .createWithDefault(ConnectCommon.CONNECT_GRPC_KEEPALIVE_ENABLED)

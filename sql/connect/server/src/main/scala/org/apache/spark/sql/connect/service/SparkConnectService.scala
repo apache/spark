@@ -425,9 +425,15 @@ object SparkConnectService extends Logging {
         sb.keepAliveTimeout(
           SparkEnv.get.conf.get(CONNECT_GRPC_KEEPALIVE_TIMEOUT),
           TimeUnit.SECONDS)
-        sb.permitKeepAliveTime(GRPC_KEEPALIVE_PERMIT_TIME_SECONDS, TimeUnit.SECONDS)
-        sb.permitKeepAliveWithoutCalls(true)
       }
+      // Independent of the server's own dead-client detection above (gRFC A8: these are
+      // separate axes), this tolerates client-initiated keepalive PINGs so a default-on client
+      // (which pings regardless of this server's CONNECT_GRPC_KEEPALIVE_ENABLED setting) is
+      // never hit with a "too_many_pings" GOAWAY on an otherwise-healthy connection. Left
+      // ungated so disabling only this server's own keepalive detection cannot regress a
+      // healthy connection to the client into disruptive reconnects.
+      sb.permitKeepAliveTime(GRPC_KEEPALIVE_PERMIT_TIME_SECONDS, TimeUnit.SECONDS)
+      sb.permitKeepAliveWithoutCalls(true)
       sb.addService(sparkConnectService)
 
       getAuthenticateToken.foreach { token =>
