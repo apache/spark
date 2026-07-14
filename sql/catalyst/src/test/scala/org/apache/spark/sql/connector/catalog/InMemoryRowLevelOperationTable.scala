@@ -677,7 +677,8 @@ object InMemoryRowLevelOperationTable {
   private[catalog] val lastScanSchemaRef: java.util.concurrent.atomic.AtomicReference[StructType] =
     new java.util.concurrent.atomic.AtomicReference[StructType]()
 
-  /** Called by test-only scan builders on every scan build. Overwrites; tests reset between cases. */
+  /** Called by test-only scan builders on every scan build. Overwrites; tests reset between
+   * cases. */
   private[catalog] def recordLastScanSchema(schema: StructType): Unit = {
     lastScanSchemaRef.set(schema)
   }
