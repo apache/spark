@@ -371,7 +371,17 @@ class XmlInferSchema(private val options: XmlOptions, private val caseSensitive:
     // such values as null (see `StaxXmlParser`), so inference must skip them too; otherwise a
     // column that is entirely `nullValue`s (or mixes them with a typed value) would infer the
     // string content of the token instead of ignoring it.
-    if (value == null || value.isEmpty || value == options.nullValue) {
+    //
+    // Unlike `CSVInferSchema.inferField`, an empty value is intentionally NOT skipped here. The
+    // CSV datasource defaults `nullValue` to `""`, so an empty field is already read as null by
+    // the parser (`UnivocityParser.nullSafeDatum`) and its inference can safely skip it. XML's
+    // `nullValue` defaults to `null`, so an empty value is NOT read as null: `StaxXmlParser`
+    // would call `convertTo("", <numericType>)`, which throws `NumberFormatException`, and in
+    // PERMISSIVE mode the error recovery can silently drop sibling records. To keep inference
+    // consistent with the parser, an empty value falls through the cascade to `StringType`, so a
+    // field mixing empty and numeric values widens to `StringType` rather than to the numeric
+    // type. See SPARK-58133.
+    if (value == null || value == options.nullValue) {
       return typeSoFar
     }
 
