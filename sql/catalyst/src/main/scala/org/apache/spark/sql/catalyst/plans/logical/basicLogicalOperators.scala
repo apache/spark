@@ -2596,10 +2596,8 @@ object AsOfJoin {
       direction: AsOfJoinDirection): AsOfJoin = {
     val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
-    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftAsOf, rightAsOf)
     AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))),
-      leftSortExprs = leftSortExprs, rightSortExprs = rightSortExprs)
+      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
   }
 
   /**
