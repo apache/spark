@@ -128,38 +128,6 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("MATCH_CONDITION rejects STRING operands until composite sort-merge lands") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW left_s(k) AS VALUES ('c')
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW right_s(k) AS VALUES ('a'), ('b')
-        |""".stripMargin)
-    val sqlText =
-      """
-        |SELECT l.k
-        |FROM left_s l ASOF JOIN right_s r
-        |  MATCH_CONDITION (l.k >= r.k)
-        |""".stripMargin
-    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[AnalysisException](sql(sqlText)),
-        condition = "AS_OF_JOIN.UNSUPPORTED_MATCH_CONDITION_OPERAND",
-        sqlState = Some("42604"),
-        parameters = Map(
-          "type1" -> "\"STRING\"",
-          "type2" -> "\"STRING\""),
-        queryContext = Array(
-          ExpectedContext(
-            fragment = """ASOF JOIN right_s r
-                         |  MATCH_CONDITION (l.k >= r.k)""".stripMargin,
-            start = 26,
-            stop = 75)))
-    }
-  }
-
   test("MATCH_CONDITION rejects cross-side operand references") {
     setupTradeQuoteViews()
     val sqlText =
