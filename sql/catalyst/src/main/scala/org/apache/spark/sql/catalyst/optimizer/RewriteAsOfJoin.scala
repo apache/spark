@@ -58,7 +58,8 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
     if (conf.sortMergeAsOfJoinEnabled) return plan
 
     plan.transformUpWithNewOutput {
-      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
+      case j @ AsOfJoin(
+          left, right, asOfCondition, condition, joinType, orderExpression, _, _, _, _, _, _) =>
         val conditionWithOuterReference =
           condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
             case a: AttributeReference if left.outputSet.contains(a) =>
@@ -69,7 +70,7 @@ object RewriteAsOfJoin extends Rule[LogicalPlan] {
         val orderExpressionWithOuterReference = orderExpression.transformUp {
             case a: AttributeReference if left.outputSet.contains(a) =>
               OuterReference(a)
-          }
+        }
         val rightStruct = CreateStruct(right.output)
         val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
           .toAggregateExpression()

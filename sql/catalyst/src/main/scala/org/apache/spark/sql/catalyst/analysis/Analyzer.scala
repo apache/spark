@@ -636,7 +636,8 @@ class Analyzer(
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
-        ExtractDistributedSequenceID) ++
+        ExtractDistributedSequenceID,
+        ResolveAsOfJoin) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
@@ -1930,6 +1931,29 @@ class Analyzer(
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
+
+      case j @ AsOfJoin(left, right, _, condition, _, _, _, _, matchCmp, _, _, _)
+          if left.resolved && right.resolved &&
+            (matchCmp.exists(mc => !mc.left.resolved || !mc.right.resolved) ||
+              condition.exists(!_.resolved)) =>
+        var updated = j
+        matchCmp.foreach { mc =>
+          val resolvedLeft = resolveExpressionByPlanChildren(mc.left, j, includeLastResort = true)
+          val resolvedRight = resolveExpressionByPlanChildren(mc.right, j, includeLastResort = true)
+          if (!resolvedLeft.fastEquals(mc.left) || !resolvedRight.fastEquals(mc.right)) {
+            updated = updated.copy(
+              matchComparison = Some(AsOfMatchCondition(resolvedLeft, mc.operator, resolvedRight)))
+          }
+        }
+        condition.foreach { cond =>
+          if (!cond.resolved) {
+            val resolvedCond = resolveExpressionByPlanChildren(cond, j, includeLastResort = true)
+            if (!resolvedCond.fastEquals(cond)) {
+              updated = updated.copy(condition = Some(resolvedCond))
+            }
+          }
+        }
+        if (updated.fastEquals(j)) j else updated
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")

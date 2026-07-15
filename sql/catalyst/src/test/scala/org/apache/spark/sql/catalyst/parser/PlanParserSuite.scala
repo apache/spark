@@ -965,17 +965,102 @@ class PlanParserSuite extends AnalysisTest {
         stop = 73))
   }
 
+  test("asof join") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          Some($"t.b" === $"u.b"),
+          LeftOuter).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("b"))).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (u.a <= t.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"u.a",
+          LessThanOrEqualOp,
+          $"t.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - invalid match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      val sql =
+        "select * from t asof join u match_condition (t.a = u.a)"
+      checkError(
+        exception = parseException(sql),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = "42K0E",
+        parameters = Map("operator" -> "="))
+    }
+  }
+
+  test("asof join - compound match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a and t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = "42K0E",
+        parameters = Map("operator" -> "AND"))
+    }
+  }
+
+  test("asof join disabled by default") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException("select * from t asof join u match_condition (t.a >= u.a)"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(
+          fragment = "asof join u match_condition (t.a >= u.a)",
+          start = 16,
+          stop = 55))
+    }
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
-    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
-    // non-reserved so they can continue to be used as column or table identifiers.
-    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
+    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
     // All five together in a single SELECT list.
-    parsePlan("select approx, distance, exact, nearest, similarity from t")
+    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {

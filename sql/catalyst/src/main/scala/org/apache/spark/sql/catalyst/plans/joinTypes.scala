@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 
 object JoinType {
 
@@ -160,6 +160,41 @@ case object Forward extends AsOfJoinDirection
 case object Backward extends AsOfJoinDirection
 case object Nearest extends AsOfJoinDirection
 
+sealed abstract class MatchComparisonOperator {
+  def sql: String
+  def flip: MatchComparisonOperator
+}
+
+case object GreaterThanOrEqualOp extends MatchComparisonOperator {
+  override def sql: String = ">="
+  override def flip: MatchComparisonOperator = LessThanOrEqualOp
+}
+
+case object GreaterThanOp extends MatchComparisonOperator {
+  override def sql: String = ">"
+  override def flip: MatchComparisonOperator = LessThanOp
+}
+
+case object LessThanOrEqualOp extends MatchComparisonOperator {
+  override def sql: String = "<="
+  override def flip: MatchComparisonOperator = GreaterThanOrEqualOp
+}
+
+case object LessThanOp extends MatchComparisonOperator {
+  override def sql: String = "<"
+  override def flip: MatchComparisonOperator = GreaterThanOp
+}
+
+/**
+ * Parsed SQL `MATCH_CONDITION (left op right)` before analysis materializes it into
+ * [[org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.asOfCondition]].
+ * Must be a case class (not a tuple) so expression rewriting does not destroy the shape.
+ */
+case class AsOfMatchCondition(
+    left: Expression,
+    operator: MatchComparisonOperator,
+    right: Expression)
+
 object LateralJoinType {
 
   val supported = Seq(
@@ -224,6 +259,11 @@ object NearestByJoinType {
           "joinType" -> typ,
           "supported" -> supportedDisplay))
   }
+}
+
+object AsOfJoinType {
+
+  val supportedDisplay: String = "'INNER', 'LEFT OUTER'"
 }
 
 object NearestByJoinMode {
