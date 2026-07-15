@@ -147,6 +147,15 @@ class StreamingTestsMixin:
         except TypeError:
             pass
 
+        for arg_name in ("once", "availableNow"):
+            with self.assertRaises(PySparkValueError) as pe:
+                df.writeStream.trigger(**{arg_name: False})
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": arg_name, "allowed_values": "[True]"},
+            )
+
     def test_stream_real_time_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
         tmpPath = tempfile.mkdtemp()
