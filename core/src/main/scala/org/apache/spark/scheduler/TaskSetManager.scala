@@ -131,6 +131,7 @@ private[spark] class TaskSetManager(
   private val killedByOtherAttempt = new HashSet[Long]
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
+  val taskAttemptHosts = Array.ofDim[HashSet[String]](numTasks)
   private[scheduler] var tasksSuccessful = 0
 
   val weight = 1
@@ -354,7 +355,8 @@ private[spark] class TaskSetManager(
 
   /** Check whether a task once ran an attempt on a given host */
   private def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
-    taskAttempts(taskIndex).exists(_.host == host)
+    val hosts = taskAttemptHosts(taskIndex)
+    hosts != null && hosts.contains(host)
   }
 
   private def isTaskExcludededOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
@@ -545,6 +547,10 @@ private[spark] class TaskSetManager(
     taskInfos(taskId) = info
     executorIdToTaskIds.getOrElseUpdate(execId, new OpenHashSet[Long]).add(taskId)
     taskAttempts(index) = info :: taskAttempts(index)
+    if (taskAttemptHosts(index) == null) {
+      taskAttemptHosts(index) = new HashSet[String]
+    }
+    taskAttemptHosts(index) += host
     // Serialize and return the task
     val serializedTask: ByteBuffer = try {
       ser.serialize(task)
