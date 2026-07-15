@@ -765,6 +765,7 @@ jobs:
       if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
+        export PYSPARK_SESSION_TIMING=1
         if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
           export SKIP_SCALA_BUILD=true
           echo "Reusing precompiled artifact, skipping local SBT build."
