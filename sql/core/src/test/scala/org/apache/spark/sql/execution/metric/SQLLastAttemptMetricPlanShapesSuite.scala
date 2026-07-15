@@ -22,7 +22,7 @@ import scala.util.Random
 import org.scalatest.Tag
 
 import org.apache.spark.internal.config
-import org.apache.spark.sql.execution.{CollectLimitExec, RDDScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{CollectLimitExec, RDDScanExec, ReusedSubqueryExec, SparkPlan, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQETestHelper, DisableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
@@ -301,6 +301,31 @@ class SQLLastAttemptMetricPlanShapesSuite
          |   WHERE increment_metric())""".stripMargin,
     metricValueCheck = MetricValue.exactly(NUM_RECORDS)
   )
+
+  testPhysicalPlanShape(
+    // The inner `(SELECT MIN(id) FROM range(5))` subquery gets pushed into the outer subquery's
+    // scan DataFilters and duplicated, so subquery reuse turns one copy into a
+    // ReusedSubqueryExec. extractStageRDDScopes must handle that node instead of bailing out
+    // (which would make lastAttemptValueForDataset return None for the whole plan).
+    label = "subquery - scalar - reused",
+    sqlQuery =
+      s"""SELECT *
+         | FROM $TABLE_NAME
+         | WHERE id == (
+         |   SELECT MAX(low_cardinality_col)
+         |   FROM $TABLE_NAME
+         |   WHERE increment_metric()
+         |     AND low_cardinality_col >= (
+         |       SELECT MIN(id)
+         |       FROM range(5)))""".stripMargin,
+    metricValueCheck = MetricValue.exactly(NUM_RECORDS),
+    executedPlanCheck = PhysicalPlan.exists {
+      case _: ReusedSubqueryExec => true
+      // Forced AQE replans bypass subquery reuse, so the duplicated inner subquery stays as two
+      // separate SubqueryExec nodes instead of a ReusedSubqueryExec.
+      case _: SubqueryExec if PhysicalPlan.hasAQEReplans => true
+    }
+  )()
 
   testPhysicalPlanShape(
     label = "subquery - EXISTS",
