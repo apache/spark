@@ -431,7 +431,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case j @ AsOfJoin(left, right, asOfCondition, condition, joinType,
-          orderExpression, _, _, _, _, _) if conf.sortMergeAsOfJoinEnabled =>
+          orderExpression, _, _, _, _, _, _, _, _) if conf.sortMergeAsOfJoinEnabled =>
         val (leftKeys, rightKeys, residual) = condition match {
           case Some(cond) => extractEquiJoinKeys(cond, left, right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
