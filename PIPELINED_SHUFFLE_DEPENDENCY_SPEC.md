@@ -57,9 +57,9 @@ invariant every component that handles the type must preserve:
   than "inherit then disable". Two further behaviors follow from that skip rather than being gated
   separately: executor-loss output-removal-then-resubmit never acts on a pipelined shuffle because
   nothing was registered to remove (§6); and cross-job stage *reuse* is prevented not by withholding
-  the stage from `shuffleIdToMapStage` — the producer is enrolled there like any shuffle, since the
-  consumer and the failure paths resolve through it — but by rejecting a producer stage that would
-  accrue a second jobId (§4).
+  the stage from `shuffleIdToMapStage` — the producer is enrolled there (`DAGScheduler.scala:664`)
+  like any shuffle, since the consumer and the failure paths resolve through it — but by rejecting a
+  producer stage that would accrue a second jobId (§4).
 - *Match-site invariant:* a marker subtype relies on every existing `case _: ShuffleDependency` site
   meaning "materialized" for the new type. The reuse/tracking/loss sites are safe because they are
   scheduler-gated as above; the remaining sites were audited and treat a pipelined dependency as an
@@ -79,8 +79,10 @@ primitive is streaming-specific.
 The set of stages connected to one another through pipelined edges — the connected component of the
 stage DAG when only pipelined edges are considered.
 
-- A stage with no incident pipelined edge is a **singleton group** and behaves exactly as a normal
-  stage today.
+- A pipelined group has **two or more members by construction** — it is a connected component over
+  pipelined edges, and an edge has two endpoints. A stage with no incident pipelined edge is simply an
+  **ordinary stage, a member of no group**; it keeps today's per-stage behavior because it is a
+  non-member, not because a group-of-one exempts it.
 - The group — not the edge or the individual stage — is the unit of **admission**, **slot
   checking**, **completion**, and **failure**.
 
@@ -96,8 +98,8 @@ outputs feed downstream groups (§7); in that respect it behaves like a barrier 
 larger DAG — an interior unit with regular-shuffle edges in and out.
 
 **Example.** Take a job with stage DAG `Z -> A -> B -> C`, where `Z -> A` and `B -> C` are regular
-edges and `A -> B` is pipelined. Grouping over pipelined edges gives one non-singleton group
-`PG = {A, B}` (`Z` and `C` are singletons). `Z`'s output is the group's external input, which the
+edges and `A -> B` is pipelined. Grouping over pipelined edges gives one group
+`PG = {A, B}`; `Z` and `C` are ordinary (non-member) stages. `Z`'s output is the group's external input, which the
 group waits for; `A` and `B` run concurrently, `B` reading `A`'s output as `A` produces it; and
 `B`'s output to `C` is a materialized output of the group that `C` consumes by normal
 materialize-before-read sequencing.
@@ -110,10 +112,18 @@ materialize-before-read sequencing.
   as a regular one does; the set of stages and their partitioning are identical. The pipelined
   property changes only *when* stages run relative to one another, never *how the plan is cut into
   stages*.
-- **Group = connected component over pipelined edges.** As stages are created, two stages joined by a
-  pipelined edge are placed in the same group; the group is the transitive closure.
-- **Every stage belongs to exactly one group** (singletons included). Group membership is fixed at
-  stage-creation time.
+- **Group = connected component over pipelined edges.** Two stages joined by a pipelined edge are in
+  the same group; the group is the transitive closure over pipelined edges.
+- **Membership is derived, not stored.** Group membership is a function of the pipelined-edge
+  structure of the stage graph, recomputed on demand wherever a scheduling decision needs it
+  (admission, completion, failure) rather than stored in a group object at stage-creation time. It is
+  stable because that graph does not change after a stage is created. A stage with no incident
+  pipelined edge is a member of no group and follows the existing per-stage path.
+  - *Derived extent, but not zero state.* Deriving group extent from the graph means there is no group
+    object to populate at formation or tear down on abort. It does not mean the feature is entirely
+    stateless: the deferred-completion buffer (a member that finished ahead of its group, §5) is
+    per-stage state that still must be discarded on group failure / job cancellation. Deriving extent
+    narrows the state that can go stale to that buffer; it does not eliminate it.
 - **A DAG may contain multiple pipelined groups.** Disjoint sets of pipelined edges form distinct
   groups, and a group's materialized output may feed another group (§7). Independent groups (no
   dependency path between them) may be admitted and run concurrently, subject to the cross-group
@@ -134,10 +144,9 @@ materialize-before-read sequencing.
   run all tasks of all member stages **concurrently**; admission then submits every member stage at
   once. A pipelined group is never left with some members running while others wait on slots the
   running members occupy.
-  - *A non-pipelined (singleton) group is unaffected:* it is admitted exactly as a normal stage is
-    today — submitted when its parents are available, filling slots incrementally, with no all-at-once
-    requirement. Gang admission applies only to a group of two or more stages connected by pipelined
-    edges.
+  - *A non-member stage is unaffected:* it is admitted exactly as a normal stage is today — submitted
+    when its parents are available, filling slots incrementally, with no all-at-once requirement. Gang
+    admission applies only to a group (two or more stages connected by pipelined edges).
 - **Slot check.** The group's aggregate concurrent-task demand — the sum of `numTasks` over member
   stages — is compared against the number of **currently-free** slots: the cluster's total
   concurrent-task capacity minus the demand already committed to it — tasks already running **and
