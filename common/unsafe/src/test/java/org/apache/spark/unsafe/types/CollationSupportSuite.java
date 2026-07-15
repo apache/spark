@@ -3895,6 +3895,7 @@ public class CollationSupportSuite {
     assertStringTranslate("𝔸", "𝕒", "x", UTF8_BINARY, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UTF8_LCASE, "𝔸");
     assertStringTranslate("𝔸", "𝕒", "x", UNICODE, "𝔸");
+    assertStringTranslate("𝔸", "𝕒", "x", UNICODE_CI, "x");
     // Literal U+0000 in `to` is preserved as a one-character replacement, not a deletion.
     assertStringTranslate("A", "A", "\u0000", UTF8_BINARY, "\u0000");
     assertStringTranslate("A", "A", "\u0000", UTF8_LCASE, "\u0000");
