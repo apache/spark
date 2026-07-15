@@ -149,8 +149,9 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
-    // Framework types (e.g. TimeType) supply their own predicate-leaf type; a framework type that
-    // opts out of pushdown (predicateLeafType = None) falls through to the unsupported error.
+    // Framework types (e.g. TimeType) supply their own predicate-leaf type. A framework type whose
+    // predicateLeafType is None (like the nanos-timestamp types), or any other unmapped type,
+    // reaches the same unsupported-type error as before this change.
     case dt => OrcTypeOps(dt).flatMap(_.predicateLeafType)
       .getOrElse(throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dt))
   }

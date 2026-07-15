@@ -50,18 +50,32 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *     no per-type extension seam, so it stays inline. This mirrors Parquet, whose vectorized read
  *     is likewise not routed through ParquetTypeOps (it dispatches on the Spark type inline in
  *     ParquetVectorUpdaterFactory.getUpdater).
+ *
+ *     CAVEAT for a new type author: the vectorized reader is a SEPARATE registration you must
+ *     handle in addition to the ops class. OrcUtils.supportColumnarReads returns true for every
+ *     `AtomicType` and OrcAtomicColumnVector dispatches by `instanceof`, so a new framework
+ *     `AtomicType` wired only into this ops registry is still routed to the vectorized reader,
+ *     where it would be read as raw physical values (silently wrong) rather than failing loudly.
+ *     Add an OrcAtomicColumnVector arm (or exclude the type from supportColumnarReads) as well.
+ *     The current types are wired correctly; this note is so the "one ops class + one registry
+ *     arm" framing does not mislead.
  *   - supportDataType. OrcFileFormat.supportDataType / OrcTable.supportsDataType already admit
  *     every `AtomicType` via `case _: AtomicType => true`, so framework types are supported with
  *     no per-type arm; no gate method is needed (unlike Parquet, whose default differs).
  *
- * DISPATCH PATTERN: framework FIRST at each row-path integration site. Each ORC infrastructure
- * method wraps itself with:
- * {{{
- *   OrcTypeOps(dt).map(_.method(...)).getOrElse(methodDefault(dt, ...))
- * }}}
- * The original inline code is extracted to a *Default method unchanged. For a framework-managed
- * type the ops handles it; for any other type OrcTypeOps(dt) is None and the *Default fallback
- * executes the original path.
+ * DISPATCH PATTERN: each ORC integration site keeps its existing built-in-type arms unchanged and
+ * routes only framework types through the ops. The built-in types are matched first; framework
+ * types are handled by an added arm reached after them (i.e. framework types are dispatched last,
+ * not first), so this change never alters how a built-in type is handled. Two shapes are used:
+ *   - Inside a `dataType match` (OrcSerializer.newConverter, OrcDeserializer.newWriter,
+ *     OrcUtils.orcTypeDescription, OrcFilters.castLiteralValue): an added
+ *     `case OrcTypeOps(ops) => ops.method(...)` arm placed among the existing arms. The `unapply`
+ *     extractor binds the ops in a single registry lookup.
+ *   - In expression position (OrcUtils.getOrcSchemaString, OrcFilters.getPredicateLeafType): the
+ *     original fallback stays inline and framework types are folded in with
+ *     `OrcTypeOps(dt).map(_.method).getOrElse(<original fallback>)`.
+ * There are no extracted `*Default` methods; the original ORC code is left in place as the
+ * fallback arm/expression.
  *
  * DECOUPLING NOTE: makeDeserializer takes the Catalyst setter callbacks it needs
  * ((Int, Long) => Unit and (Int, Any) => Unit) rather than OrcDeserializer's CatalystDataUpdater,
@@ -70,7 +84,7 @@ import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZ
  *
  * @see TimeTypeOrcOps for a reference implementation (primitive Long-backed type)
  * @see TimestampLTZNanosOrcOps / TimestampNTZNanosOrcOps for OrcTimestamp-backed types
- * @since 4.4.0
+ * @since 5.0.0
  */
 private[orc] trait OrcTypeOps extends Serializable {
 
@@ -119,10 +133,21 @@ private[orc] trait OrcTypeOps extends Serializable {
   // ==================== Predicate Pushdown ====================
 
   /**
-   * The ORC PredicateLeaf.Type for this type (OrcFilters.getPredicateLeafType), or None to opt out
-   * of pushdown (the caller then treats the column as non-convertible). TimeType returns
-   * Some(LONG); the nanos-timestamp types return None (no pushdown today - the inline code never
-   * added a nanos arm to getPredicateLeafType).
+   * The ORC PredicateLeaf.Type for this type, consumed by OrcFilters.getPredicateLeafType. Return
+   * Some(type) to enable predicate pushdown for this type.
+   *
+   * A None keeps the pre-existing OrcFilters behavior for a type with no leaf mapping: it reaches
+   * getPredicateLeafType's final arm, which throws unsupportedOperationForDataTypeError. In
+   * practice that arm is only reached for a column already deemed pushdown-eligible upstream
+   * (OrcFiltersBase.getSearchableTypeMap admits any AtomicType), so a framework AtomicType that
+   * returns None and is used in a pushed filter would fail during planning. A future type that
+   * must be pushdown-eligible therefore has to return Some here (and, if its literal needs
+   * conversion, override castFilterLiteral); returning None is only safe for a type that can never
+   * reach getPredicateLeafType.
+   *
+   * TimeType returns Some(LONG). The nanosecond-timestamp types return None: they had no
+   * getPredicateLeafType arm before this change either, so the behavior (throw if ever reached) is
+   * preserved, not newly introduced.
    */
   def predicateLeafType: Option[PredicateLeaf.Type] = None
 
@@ -136,9 +161,9 @@ private[orc] trait OrcTypeOps extends Serializable {
 /**
  * Factory object for creating OrcTypeOps instances.
  *
- * Provides forward lookup (DataType -> ops) for framework-first dispatch at ORC integration
- * sites. apply() returns Some only for framework-managed types, so callers fall back to the legacy
- * inline path for everything else.
+ * Provides forward lookup (DataType -> ops) for the framework-type dispatch arms at ORC
+ * integration sites. apply() returns Some only for framework-managed types, so callers fall back
+ * to the original inline path for everything else.
  */
 private[orc] object OrcTypeOps {
 

@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{LongType, TimeType}
  *
  * @param t the TimeType (precision is unused on the ORC path; kept for symmetry with the other
  *          storage ops and possible future precision-aware behavior).
- * @since 4.4.0
+ * @since 5.0.0
  */
 case class TimeTypeOrcOps(t: TimeType) extends OrcTypeOps {
 

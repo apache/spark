@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * No predicate pushdown: the inline OrcFilters code never added a nanos arm, so predicateLeafType
  * stays None (inherited default).
  *
- * @since 4.4.0
+ * @since 5.0.0
  */
 case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps {
 
@@ -81,7 +81,7 @@ case class TimestampLTZNanosOrcOps(t: TimestampLTZNanosType) extends OrcTypeOps 
  *
  * No predicate pushdown (predicateLeafType stays None).
  *
- * @since 4.4.0
+ * @since 5.0.0
  */
 case class TimestampNTZNanosOrcOps(t: TimestampNTZNanosType) extends OrcTypeOps {
 
