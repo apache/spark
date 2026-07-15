@@ -13,22 +13,4 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Reference: https://setuptools.pypa.io/en/latest/userguide/miscellaneous.html
-
-recursive-include pyspark *.pyi py.typed *.json
-recursive-include pyspark/sql/tests/df_golden *.test *.py
-recursive-include deps/jars *.jar
-graft deps/bin
-recursive-include deps/sbin spark-config.sh spark-daemon.sh start-history-server.sh stop-history-server.sh
-recursive-include deps/data *.data *.txt
-graft deps/licenses
-recursive-include deps/examples *.py
-recursive-include lib *.zip
-include README.md
-include LICENSE
-include NOTICE
-
-# Note that these commands are processed in the order they appear, so keep
-# this exclude at the end.
-global-exclude *.py[cod] __pycache__ .DS_Store
+#
