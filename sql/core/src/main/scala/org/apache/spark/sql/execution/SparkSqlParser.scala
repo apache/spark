@@ -897,12 +897,12 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (ctx.METRICS(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
     }
 
     if (ctx.routineLanguage(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
     }
 
     val languageCtx = ctx.routineLanguage(0)
