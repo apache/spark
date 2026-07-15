@@ -5608,7 +5608,7 @@ class AstBuilder extends DataTypeAstBuilder
       case (null, storageHandler) =>
         invalidStatement("STORED BY", ctx)
       case _ =>
-        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError(ctx)
+        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError()
     }
   }
 

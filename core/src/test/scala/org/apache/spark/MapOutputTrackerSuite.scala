@@ -1167,6 +1167,84 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-57994: updateMapOutput buffers and replays a relocation that races registration") {
+    val newConf = new SparkConf
+    newConf.set(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS, true)
+    val hostname = "localhost"
+    val rpcEnv = createRpcEnv("spark", hostname, 0, new SecurityManager(newConf))
+    val masterTracker = newTrackerMaster(newConf)
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf))
+    val workerRpcEnv = createRpcEnv("spark-worker", hostname, 0, new SecurityManager(newConf))
+    val workerTracker = new MapOutputTrackerWorker(newConf)
+    workerTracker.trackerEndpoint =
+      workerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
+
+    try {
+      masterTracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val origin = BlockManagerId("exec-1", "hostA", 1000)
+      val peer = BlockManagerId("exec-2", "hostB", 1000)
+
+      // The migrated block is reported by the peer before the task-completion event registers the
+      // map output on the driver. The map is untracked, so the relocation is buffered rather than
+      // dropped.
+      masterTracker.updateMapOutput(10, 100, peer)
+      assert(masterTracker.getNumAvailableOutputs(10) == 0,
+        "Relocation before registration must not create an output on its own")
+
+      // Task completion registers the map output at the origin (decommissioning) executor. The
+      // buffered relocation is replayed, so the location becomes the peer.
+      masterTracker.registerMapOutput(10, 0, MapStatus(origin, Array(2L), 100))
+      assert(masterTracker.getNumAvailableOutputs(10) == 1)
+
+      // The origin executor is decommissioned and removed. Without the buffer-and-replay fix the
+      // output would still point at the origin and be nulled here, producing a null MapStatus /
+      // fetch failure downstream. With the fix it points at the peer, so removal is a no-op.
+      masterTracker.removeOutputsOnExecutor("exec-1")
+      assert(masterTracker.getNumAvailableOutputs(10) == 1,
+        "The replayed peer location should survive removal of the origin executor")
+
+      masterTracker.incrementEpoch()
+      workerTracker.updateEpoch(masterTracker.getEpoch)
+      val result = workerTracker.getMapSizesByExecutorId(10, 0).toSeq
+      assert(result.nonEmpty, "Reducer should find the migrated map output at the peer")
+      assert(result.head._1 == peer)
+    } finally {
+      masterTracker.stop()
+      workerTracker.stop()
+      rpcEnv.shutdown()
+      workerRpcEnv.shutdown()
+    }
+  }
+
+  test("SPARK-57994: updateMapOutput drops a racing relocation when buffering is disabled") {
+    val newConf = new SparkConf
+    newConf.set(STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS, false)
+    val rpcEnv = createRpcEnv("spark", "localhost", 0, new SecurityManager(newConf))
+    val masterTracker = newTrackerMaster(newConf)
+    masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf))
+
+    try {
+      masterTracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val origin = BlockManagerId("exec-1", "hostA", 1000)
+      val peer = BlockManagerId("exec-2", "hostB", 1000)
+
+      // With buffering off, a relocation for an untracked map output is dropped (legacy behavior),
+      // so the later registration keeps the origin location unchanged.
+      masterTracker.updateMapOutput(10, 100, peer)
+      masterTracker.registerMapOutput(10, 0, MapStatus(origin, Array(2L), 100))
+
+      masterTracker.incrementEpoch()
+      val result = masterTracker.getMapSizesByExecutorId(10, 0).toSeq
+      assert(result.head._1 == origin,
+        "With buffering disabled the dropped relocation leaves the origin location in place")
+    } finally {
+      masterTracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
   test("SPARK-57491: staleMapIndexes propagated from driver to worker via getStatuses") {
     val rpcEnv = createRpcEnv("test")
     val masterTracker = newTrackerMaster()

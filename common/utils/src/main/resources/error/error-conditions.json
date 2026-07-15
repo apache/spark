@@ -211,27 +211,32 @@
   },
   "AUTOCDC_INVALID_STATE" : {
     "message" : [
-      "AutoCDC flow <flowName> detected an invalid state:"
+      "Detected an invalid AutoCDC state for target table <tableName>:"
     ],
     "subClass" : {
       "AUXILIARY_TABLE_KEY_COLUMN_MISSING" : {
         "message" : [
-          "The auxiliary table <auxTableName> is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The internal auxiliary table is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "AUXILIARY_TABLE_PROPERTY_MALFORMED" : {
         "message" : [
-          "The auxiliary table <auxTableName> has a malformed <propertyName> property with raw value '<rawValue>'. The property must be a JSON array of strings (e.g. '[\"id\",\"region\"]'). The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The internal auxiliary table has a malformed <propertyName> property with raw value '<rawValue>'. The property must be a JSON array of strings (e.g. '[\"id\",\"region\"]'). The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "AUXILIARY_TABLE_PROPERTY_MISSING" : {
         "message" : [
-          "The auxiliary table <auxTableName> is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The internal auxiliary table is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "KEY_SCHEMA_DRIFT" : {
         "message" : [
-          "The AutoCDC flow's current key columns <expectedKeySchema> do not match the keys recorded in the auxiliary table <auxTableName> (recorded keys <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. To change keys, perform a full refresh of the target table."
+          "One or more AutoCDC flows writing to the target use key columns <expectedKeySchema>, which are inconsistent with the keys recorded for it (recorded <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
+        ]
+      },
+      "SCD_TYPE_DRIFT" : {
+        "message" : [
+          "One or more AutoCDC flows writing to the target use SCD type <expectedScdType>, which is inconsistent with the SCD type recorded for it (recorded <recordedScdType>). AutoCDC does not support changing a target's SCD type across incremental pipeline runs. Correct the conflicting flow(s) or perform a full refresh of the target table."
         ]
       }
     },
@@ -7317,6 +7322,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with async progress tracking. Async progress tracking persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable one of the two: set spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or set the option asyncProgressTrackingEnabled to false."
+        ]
+      },
       "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
         "message" : [
           "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
@@ -9366,11 +9376,6 @@
   "_LEGACY_ERROR_TEMP_0032" : {
     "message" : [
       "Duplicated table paths found: '<pathOne>' and '<pathTwo>'. LOCATION and the case insensitive key 'path' in OPTIONS are all used to indicate the custom table path, you can only specify one of them."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0033" : {
-    "message" : [
-      "Expected either STORED AS or STORED BY, not both."
     ]
   },
   "_LEGACY_ERROR_TEMP_0034" : {

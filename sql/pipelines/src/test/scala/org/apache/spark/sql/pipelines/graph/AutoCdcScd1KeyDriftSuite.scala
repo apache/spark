@@ -68,9 +68,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         // `region` is nullable here because Scala `String` is a reference type and the
         // [[MemoryStream]] tuple encoder treats reference types as nullable. Only Scala
         // primitives (`Int`, `Long`, ...) yield `NOT NULL` columns.
@@ -105,9 +104,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         "expectedKeySchema" -> "id INT NOT NULL",
         // `region` is nullable here because Scala `String` is a reference type; see the
         // analogous comment in the "adds a key column" test above.
@@ -144,9 +142,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         // `country` and `region` are nullable here because Scala `String` is a reference type;
         // see the analogous comment in the "adds a key column" test above.
         "expectedKeySchema" -> "id INT NOT NULL,country STRING",
@@ -176,9 +173,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         "expectedKeySchema" -> "id INT NOT NULL",
         "recordedKeySchema" -> "id BIGINT NOT NULL"
       )
@@ -302,9 +298,8 @@ class AutoCdcScd1KeyDriftSuite
         condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
         sqlState = Some("42000"),
         parameters = Map(
-          "flowName" ->
-            fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
-          "auxTableName" -> auxTableNameFor("target"),
+          "tableName" ->
+            fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
           "expectedKeySchema" -> "Id INT NOT NULL",
           "recordedKeySchema" -> "id INT NOT NULL"
         )
@@ -362,9 +357,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty
       )
     )
@@ -395,9 +389,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty,
         "rawValue" -> malformedKeysArray
       )
@@ -430,9 +423,8 @@ class AutoCdcScd1KeyDriftSuite
       condition = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_KEY_COLUMN_MISSING",
       sqlState = Some("42000"),
       parameters = Map(
-        "flowName" ->
-          fullyQualifiedIdentifier("flow", Some(catalog), Some(namespace)).unquotedString,
-        "auxTableName" -> auxTableNameFor("target"),
+        "tableName" ->
+          fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
         "keyColumnName" -> "region",
         "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty
       )

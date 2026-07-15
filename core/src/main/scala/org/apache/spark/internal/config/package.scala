@@ -586,6 +586,19 @@ package object config {
       .checkValue(_ > 0, "The maximum number of threads should be positive")
       .createWithDefault(8)
 
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_BUFFER_RACING_MIGRATIONS =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.bufferRacingMigrations")
+      .internal()
+      .doc("Whether to buffer a shuffle-migration relocation report that arrives before the " +
+        "map output it relocates has been registered on the driver, and replay it once " +
+        "registration happens. When false, such a relocation is dropped (legacy behavior), " +
+        "which can leave the map output pointing at the decommissioned origin executor and " +
+        "surface downstream as a fetch failure once that executor is removed.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED =
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
@@ -1805,6 +1818,42 @@ package object config {
       .internal()
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
+      .createWithDefault(32 << 20) // 32 MB
+
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferSize")
+      .doc("Target byte size for each network buffer sent from a streaming shuffle writer to a " +
+        "reader. Larger values reduce per-message overhead; smaller values reduce latency.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.networkBufferSize must be positive.")
+      .createWithDefault(32768) // 32 KB
+
+  private[spark] val STREAMING_SHUFFLE_NETWORK_BUFFER_MAX_WAIT_TIME_MS =
+    ConfigBuilder("spark.shuffle.streaming.networkBufferMaxWaitTimeMs")
+      .doc("Maximum time in milliseconds a partially-filled network buffer is held before " +
+        "being flushed to the reader. Lower values reduce latency at the cost of smaller, " +
+        "less efficient messages.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
+    ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
+      .doc("Best-effort memory limit in bytes for in-flight data buffers in a streaming " +
+        "shuffle writer task. Includes TCP send/receive buffers. The writer back-pressures " +
+        "the upstream iterator when this limit is reached. This is a best-effort bound: " +
+        "back-pressure is accounted per network buffer, so an individual serialized row that " +
+        "exceeds the network buffer size can push actual in-flight memory above this limit.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "spark.shuffle.streaming.writerMaxMemory must be positive.")
       .createWithDefault(32 << 20) // 32 MB
 
   private[spark] val SHUFFLE_DETECT_CORRUPT =

@@ -96,6 +96,10 @@ public class TransportServer implements Closeable {
     return port;
   }
 
+  public PooledByteBufAllocator getPooledByteBufAllocator() {
+    return pooledAllocator;
+  }
+
   private void init(String hostToBind, int portToBind) {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());

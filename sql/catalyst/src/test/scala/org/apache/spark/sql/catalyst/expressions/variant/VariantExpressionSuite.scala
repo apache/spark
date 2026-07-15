@@ -1329,11 +1329,48 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("variant_insert") {
     def checkInsert(input: String, path: String, value: Expression, expected: String): Unit = {
-      val expr = VariantInsert(
-        Literal(parseJson(input)), Literal.create(path, StringType), value)
+      Seq(true, false).foreach { failOnError =>
+        val expr = VariantInsert(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError)
+        checkEvaluation(
+          ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+          expected)
+      }
+    }
+
+    // A recoverable error: `variant_insert` throws, but `try_variant_insert` returns NULL.
+    def checkInsertRecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
+      checkErrorInExpression[SparkRuntimeException](
+        VariantInsert(Literal(parseJson(input)), Literal.create(path, StringType), value),
+        condition,
+        parameters)
       checkEvaluation(
-        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
-        expected)
+        VariantInsert(
+          Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError = false),
+        null)
+    }
+
+    // An unrecoverable error (a malformed path or a size overflow): both functions throw, and only
+    // the `functionName` in the error message differs.
+    def checkInsertUnrecoverableError(
+        input: String,
+        path: String,
+        value: Expression,
+        condition: String,
+        parameters: String => Map[String, String]): Unit = {
+      Seq("variant_insert" -> true, "try_variant_insert" -> false).foreach {
+        case (name, failOnError) =>
+          checkErrorInExpression[SparkRuntimeException](
+            VariantInsert(
+              Literal(parseJson(input)), Literal.create(path, StringType), value, failOnError),
+            condition,
+            parameters(name))
+      }
     }
 
     // Object inserts.
@@ -1385,55 +1422,48 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkInsert(
       "{}", "$.a", Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), """{"a":[1,2,3]}""")
 
-    // NULL-intolerant: any NULL argument yields NULL.
-    checkEvaluation(
-      VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1)),
-      null)
+    Seq(true, false).foreach { failOnError =>
+      checkEvaluation(
+        VariantInsert(Literal.create(null, VariantType), Literal("$.a"), Literal(1), failOnError),
+        null)
+    }
     checkInsert("""{"a": 1}""", null, Literal(1), null)
     checkInsert("""{"a": 1}""", "$.b", Literal.create(null, VariantType), null)
     checkInsert("""{"a": 1}""", "$.b", Literal.create(null, NullType), null)
 
-    val dynamic = VariantInsert(
-      Literal(parseJson("""{"a": 1}""")),
-      BoundReference(0, StringType, nullable = true),
-      Literal(2))
-    checkEvaluation(
-      ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
-      """{"a":1,"b":2}""",
-      InternalRow(UTF8String.fromString("$.b")))
+    Seq(true, false).foreach { failOnError =>
+      val dynamic = VariantInsert(
+        Literal(parseJson("""{"a": 1}""")),
+        BoundReference(0, StringType, nullable = true),
+        Literal(2),
+        failOnError)
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(dynamic, StringType)),
+        """{"a":1,"b":2}""",
+        InternalRow(UTF8String.fromString("$.b")))
+    }
 
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a"), Literal(2)),
+    // Recoverable errors: `variant_insert` throws; `try_variant_insert` returns NULL. A duplicate
+    // key and every shape of path type mismatch are all recoverable.
+    checkInsertRecoverableError("""{"a": 1}""", "$.a", Literal(2),
       "VARIANT_DUPLICATE_KEY",
       Map("key" -> "a"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$.a.b"), Literal(2)),
+    checkInsertRecoverableError("""{"a": 1}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a": 1}""")), Literal("$[0]"), Literal(2)),
+    checkInsertRecoverableError("""{"a": 1}""", "$[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$[0]", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a": [1, 2]}""")), Literal("$.a.b"), Literal(2)),
+    checkInsertRecoverableError("""{"a": [1, 2]}""", "$.a.b", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a.b", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a": 5}""")), Literal("$.a[0]"), Literal(2)),
+    checkInsertRecoverableError("""{"a": 5}""", "$.a[0]", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a[0]", "failedAt" -> "$.a", "functionName" -> "`variant_insert`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("5")), Literal("$.a"), Literal(2)),
+    checkInsertRecoverableError("5", "$.a", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$.a", "failedAt" -> "$", "functionName" -> "`variant_insert`"))
-
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("""{"a.b": 5}""")), Literal("""$['a.b'].c"""), Literal(2)),
+    checkInsertRecoverableError("""{"a.b": 5}""", """$['a.b'].c""", Literal(2),
       "VARIANT_PATH_TYPE_MISMATCH",
       Map("path" -> "$['a.b'].c", "failedAt" -> "$['a.b']", "functionName" -> "`variant_insert`"))
 
@@ -1442,27 +1472,27 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, MapType(StringType, IntegerType)),
       Literal.create(null, StructType(Seq(StructField("x", IntegerType))))
     ).foreach { v =>
-      assert(
-        VariantInsert(Literal(parseJson("{}")), Literal("$.a"), v).checkInputDataTypes().isFailure)
+      Seq(true, false).foreach { failOnError =>
+        assert(
+          VariantInsert(Literal(parseJson("{}")), Literal("$.a"), v, failOnError)
+            .checkInputDataTypes().isFailure)
+      }
     }
 
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("{}")), Literal("$"), Literal(1)),
+    // Unrecoverable errors: both functions throw.
+    checkInsertUnrecoverableError("{}", "$", Literal(1),
       "INVALID_VARIANT_PATH",
-      Map("path" -> "$", "functionName" -> "`variant_insert`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("{}")), Literal("abc"), Literal(1)),
+      name => Map("path" -> "$", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", "abc", Literal(1),
       "INVALID_VARIANT_PATH",
-      Map("path" -> "abc", "functionName" -> "`variant_insert`"))
+      name => Map("path" -> "abc", "functionName" -> s"`$name`"))
 
     val tooBig = "x".repeat(16 * 1024 * 1024)
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("{}")), Literal("$.a[2000000000]"), Literal(1)),
+    checkInsertUnrecoverableError("{}", "$.a[2000000000]", Literal(1),
       "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
-    checkErrorInExpression[SparkRuntimeException](
-      VariantInsert(Literal(parseJson("{}")), Literal("$.a"), Literal(tooBig)),
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
+    checkInsertUnrecoverableError("{}", "$.a", Literal(tooBig),
       "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`variant_insert`"))
+      name => Map("sizeLimit" -> "16.0 MiB", "functionName" -> s"`$name`"))
   }
 }
