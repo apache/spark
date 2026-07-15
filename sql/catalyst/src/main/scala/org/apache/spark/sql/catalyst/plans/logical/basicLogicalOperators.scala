@@ -2642,7 +2642,8 @@ object AsOfJoin {
   private[catalyst] def materializeMatchComparison(
       leftOperand: Expression,
       rightOperand: Expression,
-      normalizedOp: MatchComparisonOperator): (Expression, Expression, Seq[Expression], Seq[Expression]) = {
+      normalizedOp: MatchComparisonOperator)
+      : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
     val (asOfCondition, orderExpression) =
       buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
     val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
