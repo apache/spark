@@ -3494,7 +3494,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         )
         arrow_max_bytes_per_batch = runner_conf.arrow_max_bytes_per_batch
 
-        def transform_with_state_init_state_func(
+        def func(
             split_index: int,
             batches: Iterator[pa.RecordBatch],
         ) -> Iterator[pa.RecordBatch]:
@@ -3672,7 +3672,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
 
         # profiling is not supported for UDF
-        return transform_with_state_init_state_func, None, ser, ser
+        return func, None, ser, ser
 
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         # We assume there is only one UDF here because grouped map doesn't
