@@ -123,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
-  private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
+  def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
     executors.sortBy { e =>
@@ -158,7 +158,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    '${
                       e.removeReason.map { reason =>
                         s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                          Utility.escape(Utility.escape(reason.replace("\n", " "))))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
