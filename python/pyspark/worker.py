@@ -1492,7 +1492,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         # "_0" against this schema.
         output_schema = StructType([StructField("_0", return_type)])
 
-        def verify_result(result: "pd.DataFrame", method_name: str) -> "pd.DataFrame":
+        def verify_result(result: Any, method_name: str) -> Any:
             if not isinstance(result, pd.DataFrame):
                 raise PySparkTypeError(
                     errorClass="INVALID_ARROW_UDTF_RETURN_TYPE",
@@ -1560,7 +1560,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
             )
 
         def evaluate_rows(
-            method: Callable, *args: "pd.Series", num_rows: int = 1
+            method: Callable, *args: list, num_rows: int = 1
         ) -> Iterator["pa.RecordBatch"]:
             # Create tuples from the input pandas Series, each tuple represents a row
             # across all Series.
