@@ -1584,6 +1584,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.service.publishNotReadyAddresses</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, the driver service publishes DNS records for the driver pod even while the pod
+    is not ready, so executors can resolve the driver service during startup when a readiness
+    probe is configured on the driver pod. When enabled, the driver pod readiness wait before
+    executor allocation is skipped as well.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code></td>
   <td><code>false</code></td>
   <td>
