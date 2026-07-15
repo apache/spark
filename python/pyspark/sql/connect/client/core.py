@@ -75,7 +75,12 @@ from pyspark.sql.connect.client.artifact import ArtifactManager
 from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.profiler import ConnectProfilerCollector
 from pyspark.sql.connect.client.reattach import ExecutePlanResponseReattachableIterator
-from pyspark.sql.connect.client.retries import RetryPolicy, Retrying, DefaultPolicy
+from pyspark.sql.connect.client.retries import (
+    RetryPolicy,
+    Retrying,
+    DefaultPolicy,
+    DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+)
 from pyspark.sql.connect.conversion import (
     storage_level_to_proto,
     proto_to_storage_level,
@@ -814,6 +819,7 @@ class SparkConnectClient(object):
         allow_arrow_batch_chunking: bool = True,
         preferred_arrow_chunk_size: Optional[int] = None,
         rpc_deadlines: Optional[RpcDeadlines] = None,
+        max_retry_exception_elapsed_time: Optional[float] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -865,6 +871,13 @@ class SparkConnectClient(object):
             Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
             1 hour for analyze/addArtifacts, none for non-reattachable execute).
             Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
+        max_retry_exception_elapsed_time : float, optional
+            Maximum cumulative elapsed time in seconds the client will keep retrying a
+            RetryException (raised internally when a reattach attempt keeps hitting
+            DEADLINE_EXCEEDED, or when the initial ExecutePlan never reached the server) before
+            giving up and raising the underlying error. Defaults to
+            :data:`~pyspark.sql.connect.client.retries.DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME`
+            (1 hour).
         """
         self.thread_local = threading.local()
 
@@ -880,6 +893,12 @@ class SparkConnectClient(object):
         retry_policy_args = retry_policy or dict()
         default_policy = DefaultPolicy(**retry_policy_args)
         self.set_retry_policies([default_policy])
+
+        self._max_retry_exception_elapsed_time = (
+            max_retry_exception_elapsed_time
+            if max_retry_exception_elapsed_time is not None
+            else DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME
+        )
 
         if self._builder.session_id is None:
             # Generate a unique session ID for this client. This UUID must be unique to allow
@@ -984,7 +1003,10 @@ class SparkConnectClient(object):
         self._progress_handlers.remove(handler)
 
     def _retrying(self) -> "Retrying":
-        return Retrying(self._retry_policies)
+        return Retrying(
+            self._retry_policies,
+            max_retry_exception_elapsed_time=self._max_retry_exception_elapsed_time,
+        )
 
     def disable_reattachable_execute(self) -> "SparkConnectClient":
         self._use_reattachable_execute = False

@@ -48,6 +48,13 @@ class SparkConnectClientRetriesSuite extends ConnectFunSuite with Eventually {
     def totalSleep: Long = data.sum
   }
 
+  /** Injectable clock for testing elapsed-time bounds without real waits. */
+  private class FakeClock {
+    private var current: Long = 0L
+    def advanceMillis(ms: Long): Unit = current += ms * 1000000L
+    def nowNanos(): Long = current
+  }
+
   /** Helper function for creating a test exception with retry_delay */
   private def createTestExceptionWithDetails(
       msg: String,
@@ -293,6 +300,127 @@ class SparkConnectClientRetriesSuite extends ConnectFunSuite with Eventually {
       retryHandler.retry { dummyFn.fn() }
     }
     assert(dummyFn.counter == 1)
+  }
+
+  test("RetryException retries are bounded by elapsed time") {
+    // Each attempt simulates a full 10-min reattach deadline elapsing before RetryException is
+    // raised. The elapsed clock starts on the first RetryException, after that attempt already
+    // advanced the clock, so with a 1-hour bound and a 10-min-per-attempt advance the loop gives
+    // up after bound / increment + 1 = 7 attempts: attempts 1-6 leave elapsed < 1h, and attempt
+    // 7 leaves elapsed = 6 * 10min = 1h >= bound, tripping the throw.
+    val clock = new FakeClock()
+    val cause = new StatusRuntimeException(Status.DEADLINE_EXCEEDED)
+    var tries = 0
+    val retryHandler = new GrpcRetryHandler(
+      RetryPolicy.defaultPolicies(),
+      sleep = _ => {},
+      maxRetryExceptionElapsedTime = FiniteDuration(1, "hour"),
+      nowNanos = clock.nowNanos)
+
+    val thrown = intercept[StatusRuntimeException] {
+      retryHandler.retry {
+        tries += 1
+        clock.advanceMillis(10 * 60 * 1000)
+        val error = new GrpcRetryHandler.RetryException()
+        error.addSuppressed(cause)
+        throw error
+      }
+    }
+    assert(thrown eq cause)
+    assert(tries == 7)
+  }
+
+  test("RetryException below the elapsed bound keeps retrying") {
+    // Non-regression: well under the elapsed-time budget, RetryException retries should keep
+    // behaving as before (immediate retry, no policy consulted) until success.
+    val clock = new FakeClock()
+    var tries = 0
+    val retryHandler = new GrpcRetryHandler(
+      RetryPolicy.defaultPolicies(),
+      sleep = _ => {},
+      maxRetryExceptionElapsedTime = FiniteDuration(1, "hour"),
+      nowNanos = clock.nowNanos)
+
+    val result = retryHandler.retry {
+      tries += 1
+      if (tries <= 3) {
+        clock.advanceMillis(10 * 1000)
+        throw new GrpcRetryHandler.RetryException()
+      }
+      42
+    }
+    assert(result == 42)
+    assert(tries == 4)
+  }
+
+  test("RetryException with no suppressed cause throws itself once bound exceeded") {
+    val clock = new FakeClock()
+    val retryHandler = new GrpcRetryHandler(
+      RetryPolicy.defaultPolicies(),
+      sleep = _ => {},
+      maxRetryExceptionElapsedTime = FiniteDuration(100, "s"),
+      nowNanos = clock.nowNanos)
+
+    intercept[GrpcRetryHandler.RetryException] {
+      retryHandler.retry {
+        clock.advanceMillis(30 * 1000)
+        throw new GrpcRetryHandler.RetryException()
+      }
+    }
+  }
+
+  test("elapsed-time clock for RetryException starts only at first occurrence") {
+    // The elapsed-time clock should start only when the first RetryException is observed, not
+    // at Retrying construction, and should be unaffected by interleaved ordinary
+    // (policy-governed) retries that happen first.
+    val clock = new FakeClock()
+    val cause = new StatusRuntimeException(Status.DEADLINE_EXCEEDED)
+    val st = new SleepTimeTracker()
+    var tries = 0
+    val retryHandler = new GrpcRetryHandler(
+      RetryPolicy.defaultPolicies(),
+      sleep = st.sleep,
+      maxRetryExceptionElapsedTime = FiniteDuration(1, "hour"),
+      nowNanos = clock.nowNanos)
+
+    val thrown = intercept[StatusRuntimeException] {
+      retryHandler.retry {
+        tries += 1
+        if (tries <= 2) {
+          // Ordinary, policy-governed retries -- must not consume any of the RetryException
+          // elapsed-time budget.
+          throw new StatusRuntimeException(Status.UNAVAILABLE)
+        }
+        clock.advanceMillis(10 * 60 * 1000)
+        val error = new GrpcRetryHandler.RetryException()
+        error.addSuppressed(cause)
+        throw error
+      }
+    }
+    assert(thrown eq cause)
+    // 2 ordinary retries + 7 RetryException retries (same count as the isolated test above).
+    assert(tries == 2 + 7)
+  }
+
+  test("default maxRetryExceptionElapsedTime is 1 hour") {
+    // Uses the default maxRetryExceptionElapsedTime (not passed) -- if this default ever
+    // changes, update this assertion together with the doc comment on GrpcRetryHandler's
+    // constructor.
+    val clock = new FakeClock()
+    var tries = 0
+    val retryHandler = new GrpcRetryHandler(
+      RetryPolicy.defaultPolicies(),
+      sleep = _ => {},
+      nowNanos = clock.nowNanos)
+
+    intercept[GrpcRetryHandler.RetryException] {
+      retryHandler.retry {
+        tries += 1
+        clock.advanceMillis(10 * 60 * 1000)
+        throw new GrpcRetryHandler.RetryException()
+      }
+    }
+    assert(tries == 7)
   }
 
   test("RpcDeadlines.disabled creates an instance with all deadlines set to None") {

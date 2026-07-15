@@ -31,6 +31,8 @@ if should_test_connect:
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
+        RetryException,
+        DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
     )
     from pyspark.sql.tests.connect.client.test_client import (
         TestPolicy,
@@ -49,6 +51,18 @@ if should_test_connect:
         @property
         def times(self):
             return list(self._times)
+
+    class FakeClock:
+        """Injectable monotonic clock for testing elapsed-time bounds without real waits."""
+
+        def __init__(self):
+            self._t = 0.0
+
+        def advance(self, seconds: float):
+            self._t += seconds
+
+        def now(self) -> float:
+            return self._t
 
     def create_test_exception_with_details(
         msg: str,
@@ -255,6 +269,104 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
                     raise TestException("d", code=grpc.StatusCode.DEADLINE_EXCEEDED)
         self.assertEqual(tries, 1)
         self.assertEqual(len(sleep_tracker.times), 0)
+
+    def test_retry_exception_bounded_by_elapsed_time(self):
+        # Each attempt simulates a full 10-min reattach deadline elapsing before RetryException
+        # is raised. The elapsed clock starts on the first RetryException, after that attempt
+        # already advanced the clock, so with a 1-hour bound and a 10-min-per-attempt advance the
+        # loop gives up after bound // increment + 1 = 7 attempts: attempts 1-6 leave elapsed
+        # < 1h, and attempt 7 leaves elapsed = 6 * 10min = 1h >= bound, tripping the throw.
+        client = SparkConnectClient("sc://foo/;token=bar")
+        clock = FakeClock()
+        cause = TestException("deadline exceeded", code=grpc.StatusCode.DEADLINE_EXCEEDED)
+        tries = 0
+        with self.assertRaises(TestException) as cm:
+            for attempt in Retrying(
+                client._retry_policies,
+                sleep=lambda t: None,
+                now=clock.now,
+                max_retry_exception_elapsed_time=DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+            ):
+                with attempt:
+                    tries += 1
+                    clock.advance(10 * 60)
+                    raise RetryException() from cause
+        self.assertIs(cm.exception, cause)
+        self.assertEqual(tries, 7)
+
+    def test_retry_exception_below_bound_keeps_retrying(self):
+        # Non-regression: well under the elapsed-time budget, RetryException retries should
+        # keep behaving as before (immediate retry, no policy consulted) until success.
+        client = SparkConnectClient("sc://foo/;token=bar")
+        clock = FakeClock()
+        tries = 0
+        for attempt in Retrying(
+            client._retry_policies,
+            sleep=lambda t: None,
+            now=clock.now,
+            max_retry_exception_elapsed_time=DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+        ):
+            with attempt:
+                tries += 1
+                if tries <= 3:
+                    clock.advance(10)
+                    raise RetryException()
+        self.assertEqual(tries, 4)
+
+    def test_retry_exception_bare_no_cause_raises_self_when_bound_exceeded(self):
+        # If a RetryException has no attached cause (e.g. the OPERATION_NOT_FOUND/
+        # SESSION_NOT_FOUND path, which today raises a bare RetryException), falling back to
+        # raising the bare RetryException itself once the bound is exceeded.
+        client = SparkConnectClient("sc://foo/;token=bar")
+        clock = FakeClock()
+        with self.assertRaises(RetryException):
+            for attempt in Retrying(
+                client._retry_policies,
+                sleep=lambda t: None,
+                now=clock.now,
+                max_retry_exception_elapsed_time=100,
+            ):
+                with attempt:
+                    clock.advance(30)
+                    raise RetryException()
+
+    def test_retry_exception_elapsed_clock_starts_at_first_retry_exception(self):
+        # The elapsed-time clock should start only when the first RetryException is observed,
+        # not at Retrying construction, and should be unaffected by interleaved ordinary
+        # (policy-governed) retries that happen first.
+        client = SparkConnectClient("sc://foo/;token=bar")
+        clock = FakeClock()
+        cause = TestException("deadline exceeded", code=grpc.StatusCode.DEADLINE_EXCEEDED)
+        sleep_tracker = SleepTimeTracker()
+        tries = 0
+        with self.assertRaises(TestException) as cm:
+            for attempt in Retrying(
+                client._retry_policies,
+                sleep=sleep_tracker.sleep,
+                now=clock.now,
+                max_retry_exception_elapsed_time=DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+            ):
+                with attempt:
+                    tries += 1
+                    if tries <= 2:
+                        # Ordinary, policy-governed retries -- must not consume any of the
+                        # RetryException elapsed-time budget.
+                        raise TestException("Retryable error", grpc.StatusCode.UNAVAILABLE)
+                    clock.advance(10 * 60)
+                    raise RetryException() from cause
+        self.assertIs(cm.exception, cause)
+        # 2 ordinary retries + 7 RetryException retries (same count as the isolated test above).
+        self.assertEqual(tries, 2 + 7)
+
+    def test_default_max_retry_exception_elapsed_time(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        self.assertEqual(
+            client._max_retry_exception_elapsed_time, DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME
+        )
+
+        client2 = SparkConnectClient("sc://foo/;token=bar", max_retry_exception_elapsed_time=42)
+        self.assertEqual(client2._max_retry_exception_elapsed_time, 42)
+        self.assertEqual(client2._retrying()._max_retry_exception_elapsed_time, 42)
 
     def test_deadline_exceeded_is_not_retried_for_non_retryable_codes(self):
         # Sanity check: ABORTED is not retried by DefaultPolicy (unless matching cluster message)

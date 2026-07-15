@@ -198,6 +198,12 @@ class AttemptManager:
             return None
 
 
+# Default cumulative elapsed-time bound (in seconds) for RetryException-driven retries. Please
+# synchronize changes here with the Scala side's GrpcRetryHandler.maxRetryExceptionElapsedTime
+# default in org.apache.spark.sql.connect.client.GrpcRetryHandler.
+DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME = 60 * 60  # 1 hour
+
+
 class Retrying:
     """
     This class is a point of entry into the retry logic.
@@ -214,20 +220,32 @@ class Retrying:
     it will be raised if the retries limit would exceed.
 
     Exceptions not considered retriable will be passed through transparently.
+
+    RetryException is a special case: it bypasses policies entirely and is always retried
+    immediately, but only up to a cumulative elapsed-time bound (max_retry_exception_elapsed_time,
+    measured from the first RetryException seen by this instance) rather than being retried
+    unconditionally forever.
     """
 
     def __init__(
         self,
         policies: typing.Union[RetryPolicy, typing.Iterable[RetryPolicy]],
         sleep: Callable[[float], None] = time.sleep,
+        max_retry_exception_elapsed_time: float = DEFAULT_MAX_RETRY_EXCEPTION_ELAPSED_TIME,
+        now: Callable[[], float] = time.monotonic,
     ) -> None:
         if isinstance(policies, RetryPolicy):
             policies = [policies]
         self._policies: List[RetryPolicyState] = [policy.to_state() for policy in policies]
         self._sleep = sleep
+        self._max_retry_exception_elapsed_time = max_retry_exception_elapsed_time
+        self._now = now
 
         self._exception: Optional[BaseException] = None
         self._done = False
+        # Set to self._now() when the first RetryException is observed; used to bound the
+        # total time spent in RetryException-driven retries (see _wait below).
+        self._retry_exception_start_time: Optional[float] = None
 
     def can_retry(self, exception: BaseException) -> bool:
         if isinstance(exception, RetryException):
@@ -256,7 +274,19 @@ class Retrying:
         exception = self._last_exception()
 
         if isinstance(exception, RetryException):
-            # Considered immediately retriable
+            if self._retry_exception_start_time is None:
+                self._retry_exception_start_time = self._now()
+            elapsed = self._now() - self._retry_exception_start_time
+            if elapsed >= self._max_retry_exception_elapsed_time:
+                logger.debug(f"Given up on retrying. error: {repr(exception)}")
+                warnings.warn("[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.")
+                # Unwrap the underlying cause (both raise sites in
+                # ExecutePlanResponseReattachableIterator use `from e`) so the caller sees a
+                # real, actionable error instead of the bare RetryException marker.
+                cause = exception.__cause__ if exception.__cause__ is not None else exception
+                raise cause
+            # Considered immediately retriable, as long as the cumulative elapsed time above
+            # has not been exceeded.
             logger.debug(f"Got error: {repr(exception)}. Retrying.")
             return
 
@@ -301,7 +331,7 @@ class Retrying:
 class RetryException(Exception):
     """
     An exception that can be thrown upstream when inside retry and which is always retryable
-    even without policies
+    even without policies, bounded by Retrying's max_retry_exception_elapsed_time.
     """
 
 

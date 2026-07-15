@@ -1116,6 +1116,48 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     }
   }
 
+  test(
+    "SPARK-58162: maxRetryExceptionElapsedTime set via Builder bounds the " +
+      "RetryException retry loop end-to-end") {
+    // Every attempt (the initial ExecutePlan and every subsequent ReattachExecute) never
+    // responds at all, so the client's reattach deadline fires every time -- DEADLINE_EXCEEDED
+    // -> RetryException, on every attempt, forever -- unless the elapsed-time bound kicks in.
+    // The point of this test is that the bound is configured only through the real
+    // Builder -> Configuration -> SparkConnectStubState -> GrpcRetryHandler wiring (unlike
+    // SparkConnectClientRetriesSuite, which constructs GrpcRetryHandler directly), so it guards
+    // against a regression that silently drops the maxRetryExceptionElapsedTime passthrough in
+    // SparkConnectStubState.
+    val stallingService = new DummySparkConnectService {
+      override def executePlan(
+          request: ExecutePlanRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {}
+
+      override def reattachExecute(
+          request: proto.ReattachExecuteRequest,
+          responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {}
+    }
+    server = NettyServerBuilder.forPort(0).addService(stallingService).build().start()
+    service = stallingService
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .rpcDeadlines(
+        RpcDeadlines(
+          reattachableExecutePlan = Some(FiniteDuration(50, TimeUnit.MILLISECONDS)),
+          reattachExecute = Some(FiniteDuration(50, TimeUnit.MILLISECONDS))))
+      .maxRetryExceptionElapsedTime(FiniteDuration(200, TimeUnit.MILLISECONDS))
+      .enableReattachableExecute()
+      .build()
+
+    val ex = intercept[SparkException] {
+      val iter = client.execute(buildPlan("select 1"))
+      iter.foreach(_ => ())
+    }
+    assert(
+      ex.getCause.asInstanceOf[StatusRuntimeException].getStatus.getCode ==
+        Status.Code.DEADLINE_EXCEEDED)
+  }
+
   test("non-reattachable executePlan has no client-side deadline") {
     val latch = new CountDownLatch(1)
     val slowService = new DummySparkConnectService {
