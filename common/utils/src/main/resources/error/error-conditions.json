@@ -2187,12 +2187,6 @@
     ],
     "sqlState" : "0A000"
   },
-  "DISTRIBUTE_BY_UNSUPPORTED" : {
-    "message" : [
-      "DISTRIBUTE BY is not supported."
-    ],
-    "sqlState" : "0A000"
-  },
   "DIVIDE_BY_ZERO" : {
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
@@ -8310,6 +8304,11 @@
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
+        ]
+      },
+      "DISTRIBUTE_BY" : {
+        "message" : [
+          "DISTRIBUTE BY clause."
         ]
       },
       "DROP_DATABASE" : {

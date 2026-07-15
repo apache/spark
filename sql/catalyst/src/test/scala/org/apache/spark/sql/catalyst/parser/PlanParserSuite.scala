@@ -441,7 +441,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql = "select * from t distribute by a"
     checkError(
       exception = parseException(sql),
-      condition = "DISTRIBUTE_BY_UNSUPPORTED",
+      condition = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "distribute by a",
