@@ -444,54 +444,6 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
-    """
-    Serializer used by Python worker to evaluate Arrow-optimized Python UDTFs.
-    """
-
-    def __init__(
-        self,
-        *,
-        timezone,
-        safecheck,
-        input_type,
-        prefer_int_ext_dtype,
-        int_to_decimal_coercion_enabled,
-    ):
-        super().__init__(
-            timezone=timezone,
-            safecheck=safecheck,
-            # The output pandas DataFrame's columns are unnamed.
-            assign_cols_by_name=False,
-            # Set to 'False' to avoid converting struct type inputs into a pandas DataFrame.
-            df_for_struct=False,
-            # Defines how struct type inputs are converted. If set to "row", struct type inputs
-            # are converted into Rows. Without this setting, a struct type input would be treated
-            # as a dictionary. For example, for named_struct('name', 'Alice', 'age', 1),
-            # if struct_in_pandas="dict", it becomes {"name": "Alice", "age": 1}
-            # if struct_in_pandas="row", it becomes Row(name="Alice", age=1)
-            struct_in_pandas="row",
-            # When dealing with array type inputs, Arrow converts them into numpy.ndarrays.
-            # To ensure consistency across regular and arrow-optimized UDTFs, we further
-            # convert these numpy.ndarrays into Python lists.
-            ndarray_as_list=True,
-            prefer_int_ext_dtype=prefer_int_ext_dtype,
-            # Enables explicit casting for mismatched return types of Arrow Python UDTFs.
-            arrow_cast=True,
-            input_type=input_type,
-            # Enable additional coercions for UDTF serialization
-            int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
-            # UDTF-specific: ignore unexpected complex type values in converter
-            ignore_unexpected_complex_type_values=True,
-            # Legacy UDTF pandas conversion: enables broader Arrow exception
-            # handling to allow more implicit type coercions
-            is_legacy=True,
-        )
-
-    def __repr__(self):
-        return "ArrowStreamPandasUDTFSerializer"
-
-
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate UDF for applyInPandasWithState.
