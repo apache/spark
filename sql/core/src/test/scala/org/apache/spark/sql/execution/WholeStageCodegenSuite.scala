@@ -254,6 +254,27 @@ class WholeStageCodegenSuite extends SharedSparkSession
     checkSortAggregateCodegen(data)(_.groupBy("k").agg(sum(col("v"))).orderBy("k"))
   }
 
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - non-binary collated key") {
+    // A non-binary collation (e.g. UTF8_LCASE) is not binary-stable, so `supportCodegenWithKeys`
+    // returns false and the grouped SortAggregate must fall back to the interpreted path rather
+    // than being code-gen'd, while the collation-aware grouping result stays correct.
+    val data = Seq("a", "A", "b", "B", "c")
+      .toDF("k").selectExpr("k collate UTF8_LCASE as k")
+    withSQLConf(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN.key -> "true",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS.key -> "true") {
+      val df = data.groupBy("k").agg(count(lit(1)).as("cnt")).orderBy("cnt", "k")
+      assert(!df.queryExecution.executedPlan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
+        s"Expected no code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+      // Under UTF8_LCASE, 'a'/'A' and 'b'/'B' each collapse to one group of 2, 'c' stays alone.
+      checkAnswer(df.select("cnt"), Seq(Row(1), Row(2), Row(2)))
+    }
+  }
+
   testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
     " included in WholeStageCodegen") { codegenEnabled =>
     import testImplicits._

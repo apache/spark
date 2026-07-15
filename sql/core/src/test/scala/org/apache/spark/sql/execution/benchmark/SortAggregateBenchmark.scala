@@ -83,8 +83,11 @@ object SortAggregateBenchmark extends SqlBasedBenchmark {
     runBenchmark("sort aggregate with linear keys") {
       val N = 20 << 22
       val benchmark = new Benchmark("sort agg w linear keys", N, output = output)
-      // The child of a sort aggregate must be sorted by the grouping keys. Sorting the whole input
-      // dominates, so pre-sort once into a temp view and aggregate over the already-ordered rows.
+      // The child of a sort aggregate must be sorted by the grouping keys. The temp view is lazy,
+      // so the sort re-executes on every iteration (and without the explicit `sortWithinPartitions`
+      // the planner would insert an equivalent `SortExec` below the aggregate anyway); pinning the
+      // sort here just makes both cases pay the same sort cost, isolating the aggregate's own
+      // contribution. This means the reported speedup understates the aggregate-only gain.
       spark.range(N).selectExpr("id", "(id & 65535) as k")
         .sortWithinPartitions("k").createOrReplaceTempView("linear")
       addGroupingKeyCases(benchmark) { () =>

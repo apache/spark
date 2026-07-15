@@ -114,6 +114,13 @@ case class SortAggregateExec(
   // the single reused output row buffer. The with-keys path is thus not fully blocking. The
   // without-keys path produces its single result only after the scan completes, so the blocking
   // default (no stop check) still applies there.
+  //
+  // We keep the inherited `needCopyResult = false`, but its original justification ("blocking
+  // operators keep the data in some buffer") no longer applies once the with-keys path streams
+  // results out mid-scan. It stays safe for a different reason: the stop-check discipline above
+  // guarantees at most one output row is buffered before it is consumed, so the reused output row
+  // is never aliased across emitted rows, and any in-stage parent that multiplies rows (e.g. a
+  // join) declares `needCopyResult = true` itself.
   override def needStopCheck: Boolean = groupingExpressions.nonEmpty
 
   override protected def canCheckLimitNotReached: Boolean = groupingExpressions.nonEmpty
