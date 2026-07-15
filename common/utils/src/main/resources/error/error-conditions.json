@@ -6511,6 +6511,12 @@
     ],
     "sqlState" : "42K05"
   },
+  "RESERVED_DATABASE_NAME" : {
+    "message" : [
+      "Cannot create the database <database> because the name is reserved for system use."
+    ],
+    "sqlState" : "42939"
+  },
   "ROUTINE_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create the <newRoutineType> <routineName> because a <existingRoutineType> of that name already exists.",
@@ -9588,11 +9594,6 @@
   "_LEGACY_ERROR_TEMP_1060" : {
     "message" : [
       "<command> does not support nested column: <column>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1066" : {
-    "message" : [
-      "<database> is a system preserved database, you cannot create a database with this name."
     ]
   },
   "_LEGACY_ERROR_TEMP_1068" : {
