@@ -431,16 +431,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case j @ AsOfJoin(left, right, asOfCondition, condition, joinType,
-          orderExpression, _, _, _, _, _, _, _, _) if conf.sortMergeAsOfJoinEnabled =>
+          orderExpression, _, _, _, _, _, leftSortExprs, rightSortExprs, _)
+          if conf.sortMergeAsOfJoinEnabled =>
         val (leftKeys, rightKeys, residual) = condition match {
           case Some(cond) => extractEquiJoinKeys(cond, left, right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
-        val (leftAsOf, rightAsOf) = extractAsOfExprs(
-          asOfCondition, orderExpression, left, right)
+        val (leftSort, rightSort) =
+          if (leftSortExprs.nonEmpty && rightSortExprs.nonEmpty) {
+            (leftSortExprs, rightSortExprs)
+          } else {
+            val (leftAsOf, rightAsOf) = extractAsOfExprs(orderExpression, left, right)
+            (Seq(leftAsOf), Seq(rightAsOf))
+          }
 
         joins.SortMergeAsOfJoinExec(
-          leftKeys, rightKeys, leftAsOf, rightAsOf,
+          leftKeys, rightKeys, leftSort, rightSort,
           asOfCondition, orderExpression, joinType, residual,
           planLater(left), planLater(right)) :: Nil
       case _ => Nil
@@ -492,7 +498,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * allowExactMatches variations that complicate asOfCondition's shape.
      */
     private def extractAsOfExprs(
-        asOfCondition: Expression,
         orderExpression: Expression,
         left: LogicalPlan,
         right: LogicalPlan): (Expression, Expression) = {
