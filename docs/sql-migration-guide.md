@@ -27,6 +27,7 @@ license: |
 - Since Spark 4.3, zero-length files are skipped during Parquet schema inference instead of failing with a `FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER` error.
 - Since Spark 4.3, the configuration key `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled` has been renamed to `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` to reflect that it now applies to storage-partitioned joins, aggregates, and windows. The old key continues to work as an alias.
 - Since Spark 4.3, the Spark Thrift Server rejects setting JVM system properties through the `set:system:` session configuration overlay (for example, in a JDBC connection string). To restore the previous behavior, set `spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties` to `true`.
+- Since Spark 4.3, the exact `percentile`, `percentile_cont`, and `median` aggregate functions (including their `WITHIN GROUP (ORDER BY ...)` forms) compute the linear interpolation between two neighboring values as `lower + fraction * (higher - lower)` instead of `(1 - fraction) * lower + fraction * higher`. The two are equal in exact arithmetic, but the new form is monotonically non-decreasing in the requested percentage and avoids a rounding error the old form could introduce. As a result these functions may return a value that differs from earlier releases in the last ULP. `percentile_disc` and `percentile_approx` are unaffected.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
