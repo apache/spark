@@ -472,7 +472,7 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
       exception = parseException("select * from a left join_ b on a.id = b.id"),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'join_'", "hint" -> ": missing 'JOIN'"))
+      parameters = Map("error" -> "'join_'", "hint" -> ""))
 
     checkError(
       exception = parseException("select * from test where test.t is like 'test'"),

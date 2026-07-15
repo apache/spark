@@ -600,8 +600,8 @@ class DataStreamWriter:
         elif once is not None:
             if once is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "once", "arg_value": str(once)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "once", "allowed_values": "[True]"},
                 )
             self._write_proto.once = True
 
@@ -624,8 +624,8 @@ class DataStreamWriter:
         else:
             if availableNow is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "availableNow", "allowed_values": "[True]"},
                 )
             self._write_proto.available_now = True
 

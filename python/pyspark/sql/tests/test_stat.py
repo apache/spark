@@ -134,8 +134,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="VALUE_NOT_ANY_OR_ALL",
-            messageParameters={"arg_name": "how", "arg_value": "foo"},
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
         )
 
     def test_fillna(self):

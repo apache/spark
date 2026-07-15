@@ -177,7 +177,9 @@ class ResolveSubquerySuite extends AnalysisTest {
     assertAnalysisErrorCondition(
       plan,
       expectedErrorCondition = "UNSUPPORTED_EXPR_FOR_OPERATOR",
-      expectedMessageParameters = Map("invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
+      expectedMessageParameters = Map(
+        "operator" -> "LateralJoin",
+        "invalidExprSqls" -> "\"sum(a)\", \"sum(c)\"")
     )
   }
 
