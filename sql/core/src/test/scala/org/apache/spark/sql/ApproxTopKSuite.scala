@@ -610,6 +610,24 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58095: approx_top_k_combine on empty input returns an empty sketch") {
+    // The inner aggregate produces a single sketch row, which WHERE false filters out, so
+    // approx_top_k_combine sees zero input rows. It must return a single empty sketch that
+    // estimates to an empty top-k result, instead of failing the query with a MatchError,
+    // whether or not the combine size is specified.
+    Seq("approx_top_k_combine(sketch, 5)", "approx_top_k_combine(sketch)").foreach { combine =>
+      withView("combined") {
+        sql(
+          s"SELECT $combine AS com " +
+            "FROM (SELECT approx_top_k_accumulate(expr) AS sketch " +
+            "      FROM VALUES (1), (2) AS t(expr)) " +
+            "WHERE false")
+          .createOrReplaceTempView("combined")
+        checkAnswer(sql("SELECT approx_top_k_estimate(com) FROM combined"), Row(Seq.empty))
+      }
+    }
+  }
+
   test("SPARK-52798: same type, different size, unspecified combine size - fail") {
     withView("accumulation1", "accumulation2", "unioned") {
       setupMixedSizeAccumulations(10, 20)

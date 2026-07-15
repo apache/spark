@@ -876,10 +876,20 @@ case class ApproxTopKCombine(
     buffer
   }
 
+  private def resolveEmptyBufferItemDataType(buffer: CombineInternal[Any]): Unit = {
+    if (buffer.getItemDataType == null) {
+      buffer.updateItemDataType(uncheckedItemDataType)
+    }
+  }
+
   override def eval(buffer: CombineInternal[Any]): Any = {
+    resolveEmptyBufferItemDataType(buffer)
     val sketchBytes = buffer.getSketchWithNullCount
       .serialize(ApproxTopK.genSketchSerDe(buffer.getItemDataType))
-    val maxItemsTracked = buffer.getMaxItemsTracked
+    val maxItemsTracked = buffer.getMaxItemsTracked match {
+      case ApproxTopK.VOID_MAX_ITEMS_TRACKED => ApproxTopK.DEFAULT_MAX_ITEMS_TRACKED
+      case other => other
+    }
     val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(buffer.getItemDataType)
     InternalRow.apply(
       sketchBytes,
@@ -889,6 +899,7 @@ case class ApproxTopKCombine(
   }
 
   override def serialize(buffer: CombineInternal[Any]): Array[Byte] = {
+    resolveEmptyBufferItemDataType(buffer)
     buffer.serialize()
   }
 
