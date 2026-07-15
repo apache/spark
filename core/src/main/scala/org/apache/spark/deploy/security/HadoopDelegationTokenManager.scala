@@ -274,6 +274,7 @@ private[spark] class HadoopDelegationTokenManager(
       (new Credentials(), Long.MaxValue)
     }
 
+    // Scheduling does not require a privileged context (only token acquisition does).
     val now = System.currentTimeMillis
     val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
     val delay = (ratio * (nextRenewal - now)).toLong
