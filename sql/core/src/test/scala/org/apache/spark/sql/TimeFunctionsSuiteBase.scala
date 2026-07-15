@@ -183,28 +183,37 @@ abstract class TimeFunctionsSuiteBase extends SharedSparkSession {
     val result2 = df.select(try_make_time(col("hour"), col("minute"), col("second")))
     checkAnswer(result1, result2)
 
-    val expected = Seq(
-      "00:00:00",
-      "01:02:03.4",
-      "23:59:59.999999"
-    ).toDF("timeString").select(col("timeString").cast("time"))
-    checkAnswer(result1, expected)
+    // For valid inputs, try_make_time should produce the same result as make_time.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val makeResult = df.select(make_time(col("hour"), col("minute"), col("second")))
+      checkAnswer(result1, makeResult)
+    }
 
     // Test invalid inputs return null instead of throwing.
-    val invalidSchema = StructType(Seq(
-      StructField("hour", IntegerType, nullable = false),
-      StructField("minute", IntegerType, nullable = false),
-      StructField("second", DecimalType(16, 6), nullable = false)
-    ))
     val invalidData = Seq(
       Row(25, 0, BigDecimal(0.0)),
       Row(1, 60, BigDecimal(0.0)),
       Row(1, 2, BigDecimal(60.0))
     )
     val invalidDf = spark.createDataFrame(
-      spark.sparkContext.parallelize(invalidData), invalidSchema)
+      spark.sparkContext.parallelize(invalidData), schema)
     val invalidResult = invalidDf.selectExpr("try_make_time(hour, minute, second)")
     checkAnswer(invalidResult, Seq(Row(null), Row(null), Row(null)))
+
+    // Test NULL inputs return null through the DataFrame API.
+    val nullSchema = StructType(Seq(
+      StructField("hour", IntegerType, nullable = true),
+      StructField("minute", IntegerType, nullable = true),
+      StructField("second", DecimalType(16, 6), nullable = true)
+    ))
+    val nullData = Seq(
+      Row(null, 0, BigDecimal(0.0)),
+      Row(1, null, BigDecimal(0.0)),
+      Row(1, 2, null)
+    )
+    val nullDf = spark.createDataFrame(spark.sparkContext.parallelize(nullData), nullSchema)
+    val nullResult = nullDf.select(try_make_time(col("hour"), col("minute"), col("second")))
+    checkAnswer(nullResult, Seq(Row(null), Row(null), Row(null)))
   }
 
   test("SPARK-53929: make_timestamp function") {
