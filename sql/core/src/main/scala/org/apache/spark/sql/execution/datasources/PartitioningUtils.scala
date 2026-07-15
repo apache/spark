@@ -644,11 +644,12 @@ object PartitioningUtils extends SQLConfHelper {
    * Given a collection of [[Literal]]s, resolves possible type conflicts by
    * [[findWiderTypeForPartitionColumn]].
    */
-  private def resolveTypeConflicts(typedValues: Seq[TypedPartValue]): Seq[TypedPartValue] = {
+  private def resolveTypeConflicts(typedValues: Seq[TypedPartValue]): IndexedSeq[TypedPartValue] = {
     val dataTypes = typedValues.map(_.dataType)
     val desiredType = dataTypes.reduce(findWiderTypeForPartitionColumn)
 
-    typedValues.map(tv => tv.copy(dataType = desiredType))
+    // IndexedSeq guarantees O(1) apply at the call site; a List would make the loop O(n^2).
+    typedValues.view.map(tv => tv.copy(dataType = desiredType)).toIndexedSeq
   }
 
   /**
