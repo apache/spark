@@ -22,7 +22,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HASH_JOIN_KEYS, JOIN_CONDITION}
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, ExtractSingleColumnNullAwareAntiJoin}
@@ -288,7 +287,7 @@ case object BuildRight extends BuildSide
 
 case object BuildLeft extends BuildSide
 
-trait JoinSelectionHelper extends SQLConfHelper with Logging {
+trait JoinSelectionHelper extends Logging {
 
   def getBroadcastBuildSide(
       join: Join,

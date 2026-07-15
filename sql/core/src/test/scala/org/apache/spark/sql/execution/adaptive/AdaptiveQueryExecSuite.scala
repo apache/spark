@@ -2621,6 +2621,39 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-58084: Widening factor uses the input shuffle's row width, not the join child's") {
+    withTempView("t1", "t2") {
+      spark.sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString)), 10)
+        .toDF("c1", "c2").createOrReplaceTempView("t1")
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 5)
+        .toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      // The aggregate widens each build row through a size-bounded `cast(count(*) AS string)`:
+      // the input shuffle row is (c1: int, count: long) = 20 bytes/row, while the build output is
+      // (c1: int, s: string) = 32 bytes/row, so the true widening factor is 32/20 = 1.6. The build
+      // side's largest shuffle partition is 372 bytes; scaled by 1.6 it is ~595, above the 500-byte
+      // local-map threshold, so the conversion must be rejected. If `wideningFactor` were computed
+      // against the join child's own output (factor 1.0), the unscaled 372 would fit and the join
+      // would wrongly convert -- this test pins that the input shuffle's width is used.
+      val query =
+        "SELECT t1.c1, x.s FROM t1 JOIN " +
+          "(SELECT c1, cast(count(*) AS string) AS s FROM t2 GROUP BY c1) x ON t1.c1 = x.c1"
+
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "500",
+        lookThroughOperatorsKey -> "true") {
+        val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelShuffledHashJoin(adaptive).isEmpty,
+          "the widened build side exceeds the threshold, so the join must stay a sort merge join")
+        assert(findTopLevelSortMergeJoin(adaptive).size === 1)
+      }
+    }
+  }
+
   test("SPARK-58084: Convert sort merge join keeps required ordering valid") {
     withTempView("small1", "small2", "big") {
       spark.sparkContext.parallelize(
@@ -2840,10 +2873,12 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-58084: Convert still fires when DemoteBroadcastHashJoin adds NO_BROADCAST_HASH") {
     withTempView("t1", "t2") {
-      // t1 (the build candidate) has many empty partitions, so DemoteBroadcastHashJoin demotes
-      // broadcast on it with a NO_BROADCAST_HASH hint. That hint only forbids broadcasting and must
-      // not block converting the sort merge join to a shuffled hash join. DemoteBroadcastHashJoin
-      // is left enabled (unlike the other conversion tests) so the interaction is exercised.
+      // Both inputs have empty partitions. DemoteBroadcastHashJoin only matches a direct
+      // LogicalQueryStage child, so it cannot demote the t1 side (behind the aggregate) and
+      // instead tags the t2 side with a NO_BROADCAST_HASH hint. That hint only forbids
+      // broadcasting and must not block converting the sort merge join to a shuffled hash join.
+      // DemoteBroadcastHashJoin is left enabled (unlike the other conversion tests) so the
+      // interaction is exercised.
       spark.sparkContext.parallelize(
         (1 to 2).map(i => TestData(i, i.toString)), 5)
         .toDF("c1", "c2").createOrReplaceTempView("t1")
