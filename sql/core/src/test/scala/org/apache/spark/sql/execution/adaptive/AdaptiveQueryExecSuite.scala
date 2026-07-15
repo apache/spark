@@ -831,6 +831,75 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-58099: Remove local sort dangling below the shuffle added by skew join") {
+    // A ShuffledHashJoin feeding a SortMergeJoin in the same stage. When the SHJ is skewed and
+    // skew-join optimization is force-applied, an extra shuffle is inserted between the two joins.
+    // The local sort that used to feed the SMJ is then left dangling right below that new shuffle,
+    // computed in the wrong stage for nothing. `RemoveRedundantSorts` should strip it.
+
+    // Collect local sorts sitting directly below a shuffle. In the final plan the sort may be
+    // wrapped in a WholeStageCodegenExec, so unwrap it before matching.
+    def collectDanglingSorts(plan: SparkPlan): Seq[SortExec] = {
+      def unwrap(p: SparkPlan): SparkPlan = p match {
+        case w: WholeStageCodegenExec => unwrap(w.child)
+        case other => other
+      }
+      collect(plan) {
+        case sh: ShuffleExchangeLike if unwrap(sh.child).isInstanceOf[SortExec] &&
+          !unwrap(sh.child).asInstanceOf[SortExec].global =>
+          unwrap(sh.child).asInstanceOf[SortExec]
+      }
+    }
+
+    def runQuery(): SparkPlan = {
+      val q =
+        """
+          |SELECT /*+ SHUFFLE_HASH(skewData2), MERGE(data3) */ skewData1.key1
+          |FROM skewData1 JOIN skewData2 ON skewData1.key1 = skewData2.key2 - 100
+          |JOIN data3 ON skewData1.key1 = data3.key3 - 200
+          |""".stripMargin
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(q)
+      adaptivePlan
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+      withTempView("skewData1", "skewData2", "data3") {
+        spark.range(0, 300, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1").createOrReplaceTempView("skewData1")
+        spark.range(0, 300, 1, 10)
+          .selectExpr("(id % 3) + 100 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        spark.range(0, 300, 1, 10)
+          .selectExpr("(id % 3) + 200 as key3", "id as value3")
+          .createOrReplaceTempView("data3")
+
+        // Both joins should be optimized as skew joins so that the extra shuffle is introduced.
+        val disabledPlan = withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
+          runQuery()
+        }
+        assert(collect(disabledPlan) { case j: ShuffledHashJoinExec => j }.exists(_.isSkewJoin))
+        assert(collect(disabledPlan) { case j: SortMergeJoinExec => j }.exists(_.isSkewJoin))
+        // Without the rule, a local sort dangles right below the shuffle added on top of the SHJ.
+        assert(collectDanglingSorts(disabledPlan).nonEmpty)
+
+        val enabledPlan = withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
+          runQuery()
+        }
+        assert(collect(enabledPlan) { case j: ShuffledHashJoinExec => j }.exists(_.isSkewJoin))
+        assert(collect(enabledPlan) { case j: SortMergeJoinExec => j }.exists(_.isSkewJoin))
+        // With the rule, the dangling local sort below the shuffle is removed.
+        assert(collectDanglingSorts(enabledPlan).isEmpty)
+      }
+    }
+  }
+
   test("SPARK-29544: adaptive skew join with different join types") {
     Seq("SHUFFLE_MERGE", "SHUFFLE_HASH").foreach { joinHint =>
       def getJoinNode(plan: SparkPlan): Seq[ShuffledJoin] = if (joinHint == "SHUFFLE_MERGE") {
