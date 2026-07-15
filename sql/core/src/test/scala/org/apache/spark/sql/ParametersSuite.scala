@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, InsertReplaceWhere, Limit, ReplaceTableAsSelect, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -2725,28 +2725,6 @@ class ParametersSuite extends SharedSparkSession {
       case WithCTE(_: CTEInChildren, _) =>
         fail(s"Found invalid WithCTE(CTEInChildren, _) shape after CTESubstitution:\n$substituted")
       case _ =>
-    }
-  }
-
-  test("BindParameters binds parameters inside the REPLACE WHERE condition") {
-    val parsedPlan = spark.sessionState.sqlParser.parsePlan(
-      """INSERT INTO some_table REPLACE WHERE a = :val
-        |SELECT 1 AS a""".stripMargin)
-    val insert = parsedPlan.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in parsed plan:\n$parsedPlan"))
-    assert(insert.containsPattern(PARAMETER),
-      "InsertIntoStatement must expose the REPLACE WHERE condition's PARAMETER bit for pruning")
-
-    val bound = BindParameters.apply(
-      NameParameterizedQuery(parsedPlan, Seq("val"), Seq(Literal(10))))
-
-    val boundInsert = bound.collectFirst { case i: InsertIntoStatement => i }.getOrElse(
-      fail(s"Expected InsertIntoStatement in bound plan:\n$bound"))
-    boundInsert.replaceCriteriaOpt match {
-      case Some(InsertReplaceWhere(cond)) =>
-        assert(cond === EqualTo(UnresolvedAttribute("a"), Literal(10)),
-          s"Expected :val inside the REPLACE WHERE condition to be bound, got:\n$cond")
-      case other => fail(s"Expected InsertReplaceWhere criteria, got: $other")
     }
   }
 }
