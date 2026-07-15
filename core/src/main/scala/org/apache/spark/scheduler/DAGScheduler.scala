@@ -1461,23 +1461,39 @@ private[spark] class DAGScheduler(
 
   /**
    * Best-effort admission check for a pipelined group: all its member stages must run concurrently,
-   * so the cluster must have enough task slots for the whole group at once. If the group's total
-   * demand exceeds the cluster's total concurrent-task capacity it can never be co-resident and,
-   * lacking an out-of-band slot reservation, would deadlock -- so we fail fast with a clear error.
+   * so the cluster must have enough task slots for the whole group at once. If the group's demand
+   * exceeds what is currently available it can never be co-resident and, lacking an out-of-band slot
+   * reservation, would deadlock -- so we fail fast with a clear error.
    *
-   * This is deliberately best-effort, not the atomic gang reservation deferred to a later hardening
-   * step: it compares the whole group's demand against TOTAL capacity (not free slots), checked once
-   * when the group is first co-scheduled. That catches the common under-provisioned case (a group
-   * that can never fit) as a clear error rather than a hang; races against other concurrently
-   * admitting work are left to the future atomic version.
+   * Demand is compared against FREE slots, not total capacity (spec S4.1): free = total capacity
+   * minus the tasks already running for OTHER work (other groups and regular jobs) in the SAME
+   * resource profile. Comparing against total capacity would admit a group that fits the cluster in
+   * principle but cannot co-fit right now beside a busy neighbor, then hang. Occupancy excludes the
+   * group's OWN already-running members (e.g. a producer submitted just before its consumer is
+   * admitted) -- otherwise the group would be charged for its own slots and could fail a check it
+   * actually fits.
    *
-   * Returns Some((demand, totalSlots)) when the group does not fit, else None.
+   * Occupancy is resource-profile-scoped to match `totalSlots` (which is per-profile): counting
+   * other profiles' running tasks against one profile's capacity would spuriously reject a fitting
+   * group whenever an unrelated profile is busy. v1 requires a group to be single-profile (spec S9),
+   * so the whole group shares `stage`'s profile.
+   *
+   * This is best-effort, checked once when the group is first co-scheduled; it is NOT the atomic
+   * gang reservation deferred to a later hardening step. Without that reservation a race between two
+   * groups admitting concurrently can still transiently over-admit (each sees the other's slots as
+   * free before either's tasks register as running); the reservation closes that race later. What
+   * this does guarantee now is that a group is never admitted against slots a busy neighbor already
+   * holds, which is the common single-group-on-a-busy-cluster hang.
+   *
+   * Returns Some((demand, freeSlots)) when the group does not fit, else None.
    */
   private def pipelinedGroupExceedsCapacity(stage: Stage): Option[(Int, Int)] = {
     val group = pipelinedGroupOf(stage)
     val demand = group.toSeq.map(_.numTasks).sum
     val totalSlots = maxConcurrentTasksForStage(stage)
-    if (demand > totalSlots) Some((demand, totalSlots)) else None
+    val occupiedByOthers = runningTasksForOtherWork(stage, group)
+    val freeSlots = math.max(0, totalSlots - occupiedByOthers)
+    if (demand > freeSlots) Some((demand, freeSlots)) else None
   }
 
   /**
@@ -1489,6 +1505,19 @@ private[spark] class DAGScheduler(
     val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
     sc.maxNumConcurrentTasks(rp)
   }
+
+  /**
+   * Tasks currently running, in `stage`'s resource profile, for work OTHER than the given pipelined
+   * `group` (whose own already-running members must not be charged against the group's admission).
+   * Resource-profile-scoped to match `maxConcurrentTasksForStage`. Extracted as a seam so tests can
+   * control occupancy without launching real tasks; returns 0 for a non-TaskSchedulerImpl backend.
+   */
+  protected def runningTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
+    taskScheduler match {
+      case impl: TaskSchedulerImpl =>
+        impl.runningTasksForOtherWorkInProfile(stage.resourceProfileId, group.map(_.id))
+      case _ => 0
+    }
 
   /**
    * Whether `stage` is a member of a pipelined group -- i.e. it is connected to another stage by a
@@ -1865,17 +1894,18 @@ private[spark] class DAGScheduler(
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
-              // Best-effort slot check: the whole pipelined group must run at once, so it must fit
-              // in the cluster's total concurrent-task capacity. If it cannot, fail fast with a
-              // clear error rather than deadlock (there is no out-of-band slot reservation in v1).
+              // Best-effort slot check: the whole pipelined group must run at once, so its demand
+              // must fit in the currently-FREE slots (total capacity minus what other work is
+              // already running; spec S4.1). If it cannot, fail fast with a clear error rather than
+              // deadlock (there is no out-of-band slot reservation in v1).
               pipelinedGroupExceedsCapacity(stage) match {
-                case Some((demand, totalSlots)) =>
+                case Some((demand, freeSlots)) =>
                   abortStage(stage, s"Cannot co-schedule pipelined stage group: needs $demand " +
-                    s"concurrent task slots but the cluster has only $totalSlots.",
+                    s"concurrent task slots but only $freeSlots are currently free.",
                     Some(new SparkException(
                       errorClass = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
                       messageParameters = scala.collection.immutable.Map(
-                        "numTasks" -> demand.toString, "numSlots" -> totalSlots.toString),
+                        "numTasks" -> demand.toString, "numSlots" -> freeSlots.toString),
                       cause = null)))
                 case None =>
                   logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +

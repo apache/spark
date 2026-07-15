@@ -387,6 +387,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     @volatile var maxConcurrentTasksForTest: Int = 1000
     override protected def maxConcurrentTasksForStage(stage: Stage): Int = maxConcurrentTasksForTest
 
+    // Seam for the free-slot admission check (spec S4.1): occupancy by OTHER work. Default 0 so
+    // existing tests see a fully-free cluster; a test can set it to model a busy neighbor.
+    @volatile var runningTasksForOtherWorkForTest: (Stage, Set[Stage]) => Int = (_, _) => 0
+    override protected def runningTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
+      runningTasksForOtherWorkForTest(stage, group)
+
     /**
      * Schedules shuffle merge finalize.
      */
@@ -6271,7 +6277,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: a pipelined producer behind a regular shuffle is NOT co-scheduled early") {
+  test("pipelined shuffle: a pipelined producer behind a regular shuffle is NOT co-scheduled " +
+      "early") {
     // A --regular--> B --pipelined--> C. B cannot run until A materializes, so C must NOT be
     // co-scheduled with B while B is still parked. (Regression: the naive check co-scheduled C
     // against a not-yet-running B, stranding C -- a hang under slot pressure.)
@@ -6455,7 +6462,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val idR = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddR).get.stageId
     completeShuffleMapStageSuccessfully(idR, 0, 2)
     // C co-scheduled exactly once via reconsideration.
-    def cTaskSets = taskSets.count(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC)
+    def cTaskSets: Int = taskSets.count(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddC)
     assert(cTaskSets === 1, "C should be submitted once by reconsideration")
 
     // B completes -> submitWaitingChildStages(B) fires, but C is already running, not waiting.
@@ -6516,7 +6523,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
   test("pipelined shuffle: submitting a pipelined dependency as a map-stage job is rejected") {
     // A map-stage job (SparkContext.submitMapStage, e.g. AQE's ShuffleExchangeExec) materializes a
-    // shuffle to produce map-output statistics. A PipelinedShuffleDependency cannot serve that -- it
+    // shuffle to produce map-output statistics. A PipelinedShuffleDependency cannot serve that --
+    // it
     // is transient with no durable map output (getStatistics would return all-zero stats), and its
     // producer/consumer co-scheduling makes speculation unsafe. It is rejected outright, regardless
     // of speculation. No partial scheduler state is left behind.
@@ -6545,7 +6553,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val regularDep = new ShuffleDependency(producerRdd, new HashPartitioner(2))
       submitMapStage(regularDep)
       // Not rejected: the map stage is submitted and runs normally.
-      assert(taskSets.nonEmpty, "regular-shuffle map-stage job must not be rejected under speculation")
+      assert(taskSets.nonEmpty,
+        "regular-shuffle map-stage job must not be rejected under speculation")
       completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
       assertDataStructuresEmpty()
     } finally {
@@ -6588,9 +6597,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // into submitStage(B), whose group slot-check covers the whole component {A,B,C} and aborts the
     // job from that nested frame (cleaning up A/B/C). Control then unwinds to the outer
     // submitStage(C) frame; without the "was I removed during recursion?" guard, its else branch
-    // would re-park the already-removed C into waitingStages -- a job-less scheduler-state leak. The
-    // 2-stage over-capacity test does not exercise this (there the abort fires in the consumer's own
-    // frame). Assert the abort leaves NO stage behind (assertDataStructuresEmpty checks waitingStages).
+    // would re-park the already-removed C into waitingStages -- a job-less scheduler-state leak.
+    // The
+    // 2-stage over-capacity test does not exercise this (there the abort fires in the consumer's
+    // own
+    // frame). Assert the abort leaves NO stage behind (assertDataStructuresEmpty checks
+    // waitingStages).
     val rddA = new MyRDD(sc, 2, Nil) // touch sc first so `scheduler` is initialized
     scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = 3
     try {
@@ -6627,6 +6639,67 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()
+  }
+
+  test("pipelined shuffle: a group that fits total capacity but not FREE slots fails fast (S4.1)") {
+    // Spec S4.1: admission is decided against currently-FREE slots, not total capacity. A group of
+    // producer(2) + consumer(2) = 4 tasks fits a 10-slot cluster in principle, but if 8 slots are
+    // already occupied by OTHER work only 2 are free -- the group cannot co-fit right now and must
+    // fail fast rather than queue forever. Under the old total-capacity check this would wrongly be
+    // admitted (4 <= 10) and then hang. runningTasksForOtherWork already excludes the group's own
+    // members, so we report 8 directly.
+    val producerRdd = new MyRDD(sc, 2, Nil) // touch sc first so `scheduler` is initialized
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 10
+    // 8 of 10 slots busy elsewhere -> 2 free
+    myScheduler.runningTasksForOtherWorkForTest = (_, _) => 8
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(consumerRdd, Array(0, 1), listener = failListener)
+
+      assert(failure.get() != null,
+        "a group that fits total but not free slots must fail the job (S4.1 free-slot check)")
+      assert(failure.get().getMessage.contains("CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT") ||
+        failure.get().getMessage.contains("currently free"),
+        s"expected a free-slot insufficient-slot error, got: ${failure.get().getMessage}")
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0
+    }
+  }
+
+  test("pipelined shuffle: the group's own running members are not charged against its admission") {
+    // Occupancy for the free-slot check counts only OTHER work: the group's own already-running
+    // producer must not be charged, or a group that exactly fills free capacity would be wrongly
+    // rejected. Model a full cluster where the ONLY running tasks are this group's own: 4 total
+    // slots, other-work occupancy = 0 (the seam excludes the group) -> free = 4 >= demand 4 ->
+    // admitted. The exclusion itself is unit-tested against TaskSchedulerImpl separately; here we
+    // assert the DAGScheduler admits a demand==capacity group when nothing else is running.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 4
+    myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0 // only the group's own work runs
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      submit(consumerRdd, Array(0, 1))
+      assert(taskSets.size === 2,
+        "a group whose demand equals free capacity must be co-scheduled, not rejected")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0
+    }
   }
 }
 

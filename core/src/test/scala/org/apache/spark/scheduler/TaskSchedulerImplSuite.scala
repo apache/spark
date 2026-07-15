@@ -2752,4 +2752,33 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
   }
 
+  test("runningTasksForOtherWorkInProfile excludes given stages and is resource-profile-scoped") {
+    // Backs the pipelined-group free-slot admission check (DAGScheduler): it must report tasks
+    // running for OTHER work in a given resource profile, excluding the group's own member stages.
+    val taskScheduler = setupScheduler()
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", 4),
+      new WorkerOffer("executor1", "host1", 4))
+
+    // Stage 0 and stage 1 both in the DEFAULT profile; launch 2 tasks of each so both have running
+    // tasks. Distinct stageIds let us exclude one and count the other.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 1, stageAttemptId = 0))
+    val launched = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(launched.length === 4, "all four tasks should launch (4 cores per executor)")
+
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    // Nothing excluded: both stages' 4 tasks count.
+    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set.empty) === 4)
+    // Exclude stage 0 (as if it were the group's own member): only stage 1's 2 tasks remain.
+    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set(0)) === 2)
+    // Exclude both: zero "other" tasks.
+    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set(0, 1)) === 0)
+    // A DIFFERENT (non-existent here) resource profile has no running tasks -- other-profile load
+    // must not be charged against this profile (finding A: RP-scoping).
+    val otherRpId = defaultRp + 12345
+    assert(taskScheduler.runningTasksForOtherWorkInProfile(otherRpId, Set.empty) === 0,
+      "tasks in the default profile must not be counted against a different profile")
+  }
+
 }
