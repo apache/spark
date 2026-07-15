@@ -4685,6 +4685,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER" : {
+    "message" : [
+      "The first parameter for <hintName> must be a positive byte-size literal, but got <advisoryPartitionSize>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
       "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
