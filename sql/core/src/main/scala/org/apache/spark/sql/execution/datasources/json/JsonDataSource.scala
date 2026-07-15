@@ -51,7 +51,7 @@ import org.apache.spark.util.Utils
 /**
  * Common functions for parsing JSON files
  */
-abstract class JsonDataSource extends Serializable with Logging {
+abstract class JsonDataSource extends Serializable with Logging with SupportsArchiveFormat {
   def isSplitable: Boolean
 
   /**
@@ -91,7 +91,7 @@ abstract class JsonDataSource extends Serializable with Logging {
       file: PartitionedFile,
       parser: () => JacksonParser,
       schema: StructType): Iterator[InternalRow] =
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+    SupportsArchiveFormat.readArchiveEntries(file.toPath, conf) { (_, in) =>
       readStream(in, parser(), schema)
     }
 
@@ -104,7 +104,7 @@ abstract class JsonDataSource extends Serializable with Logging {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
         val hasArchive = parsedOptions.archiveFormatEnabled &&
-          inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))
+          inputPaths.exists(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         if (hasArchive && supportsArchiveScan) {
           // Archives (and any loose files alongside them) are inferred in a single JsonInferSchema
           // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
@@ -130,9 +130,10 @@ abstract class JsonDataSource extends Serializable with Logging {
 
   /**
    * Infers a JSON schema when at least one input is a tar archive. Every archive entry (streamed
-   * via `ArchiveReader`, never unpacked to disk) and every loose file is read as JSON records --
-   * each line is a record, or the whole input is one document in multi-line mode -- and all of them
-   * feed a single [[JsonInferSchema]] pass, exactly as a directory of the same files would infer.
+   * via `SupportsArchiveFormat`, never unpacked to disk) and every loose file is read as JSON
+   * records -- each line is a record, or the whole input is one document in multi-line mode -- and
+   * all of them feed a single [[JsonInferSchema]] pass, exactly as a directory of the same files
+   * would infer.
    * Because [[JsonInferSchema]] already merges every record's type by field name across all inputs,
    * one pass is itself the union: a field empty in one input but typed in another widens to the
    * real type, and a `NullType` field survives to the single final canonicalization rather than
@@ -166,8 +167,10 @@ abstract class JsonDataSource extends Serializable with Logging {
       stream =>
         val path = new Path(stream.getPath())
         try {
-          if (ArchiveReader.isArchivePath(path)) {
-            ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) => perEntry(in) }
+          if (SupportsArchiveFormat.isArchivePath(path)) {
+            SupportsArchiveFormat.readArchiveEntries(path, stream.getConfiguration) { (_, in) =>
+              perEntry(in)
+            }
           } else {
             perEntry(
               CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
@@ -201,7 +204,7 @@ abstract class JsonDataSource extends Serializable with Logging {
       } else {
         // Line-delimited: each line is a record, copied off the reused line buffer and parsed from
         // its bytes (`CreateJacksonParser.bytes`, matching TextInputJsonDataSource).
-        val lines = perInput(in => ArchiveReader.lineIterator(in, lineSeparator).map(_.copyBytes()))
+        val lines = perInput(in => lineIterator(in, lineSeparator).map(_.copyBytes()))
         val lineParser: (JsonFactory, Array[Byte]) => JsonParser = encoding
           .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
           .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
@@ -324,7 +327,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    ArchiveReader.lineIterator(in, parser.options.lineSeparatorInRead).flatMap(safeParser.parse)
+    lineIterator(in, parser.options.lineSeparatorInRead).flatMap(safeParser.parse)
   }
 
   private def textToUTF8String(value: Text): UTF8String = {

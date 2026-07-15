@@ -38,7 +38,7 @@ import org.apache.spark.sql.avro.AvroCompressionCodec._
 import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.{ArchiveReader, DataSourceUtils, OutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, OutputWriterFactory, SupportsArchiveFormat}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -91,7 +91,7 @@ private[sql] object AvroUtils extends Logging {
         // (streamed, never unpacked to disk), then any loose files. Avro has no DSv2 reader and
         // does not merge schemas, so this is V1-only and uses the first readable writer schema.
         val (archives, nonArchives) = if (fileSourceOptions.archiveFormatEnabled) {
-          files.partition(f => ArchiveReader.isArchivePath(f.getPath))
+          files.partition(f => SupportsArchiveFormat.isArchivePath(f.getPath))
         } else {
           (Seq.empty[FileStatus], files)
         }
@@ -276,9 +276,9 @@ private[sql] object AvroUtils extends Logging {
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean): Option[Schema] = {
     try {
-      // `readEntries` returns a Closeable iterator; take the first entry's schema and close it so
-      // the archive stream is released without draining the remaining entries.
-      val entries = ArchiveReader(path).readEntries(conf) { (_, in) =>
+      // `readArchiveEntries` returns a Closeable iterator; take the first entry's schema and close
+      // it so the archive stream is released without draining the remaining entries.
+      val entries = SupportsArchiveFormat.readArchiveEntries(path, conf) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
         try {
           Iterator.single(stream.getSchema)
