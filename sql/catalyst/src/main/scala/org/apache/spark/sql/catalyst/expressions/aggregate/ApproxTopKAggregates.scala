@@ -383,7 +383,7 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
           if (UnsafeRowUtils.isBinaryStable(st)) {
             sketch.asInstanceOf[ItemsSketch[String]].update(orig.toString)
           } else {
-            val cKey = CollationFactory.getCollationKey(orig, st.collationId).toString
+            val cKey = CollationFactory.getCollationKeyBytes(orig, st.collationId)
             sketch.asInstanceOf[ItemsSketch[CollatedString]]
               .update(new CollatedString(cKey, orig.toString))
           }

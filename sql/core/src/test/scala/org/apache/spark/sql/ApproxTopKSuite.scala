@@ -310,6 +310,23 @@ class ApproxTopKSuite extends SharedSparkSession {
     }
   }
 
+  // scalastyle:off nonascii
+  test("SPARK-58096: approx_top_k keys on raw sort-key bytes, not a lossy-decoded String, " +
+    "so ICU-collation-distinct non-ASCII values are not over-merged") {
+    // U+4E14, U+4E15 and U+4E16 are distinct under UNICODE_CI, but their ICU sort keys are
+    // arbitrary bytes that decode to the same String via a lossy UTF-8 conversion. Keying the
+    // sketch on that decoded String would collapse them into a single item with an inflated
+    // count; keying on the raw sort-key bytes keeps them separate.
+    val res = sql(
+      s"""SELECT approx_top_k(c, 3)
+         |FROM (SELECT CAST(col AS STRING COLLATE UNICODE_CI) AS c
+         |      FROM VALUES ('且'), ('且'), ('且'),
+         |                  ('丕'), ('丕'), ('世') AS t(col))
+         |""".stripMargin)
+    checkAnswer(res, Row(Seq(Row("且", 3), Row("丕", 2), Row("世", 1))))
+  }
+  // scalastyle:on nonascii
+
   test("SPARK-52588: accumulate and estimate of Decimal(4, 1)") {
     val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 10)) " +
       "FROM VALUES CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +
