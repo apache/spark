@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
@@ -2367,5 +2368,80 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
       functions.from_protobuf($"value", messageName, testFileDesc, options) as Symbol("sample"))
     assert(expectedDf.schema === fromProtoDf.schema)
     checkAnswer(fromProtoDf, expectedDf)
+  }
+
+  test("descriptor cache: repeated builds on the same bytes share the cached parse") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    val first = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    val second = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    // Same descriptor instance (from the shared parse), not a rebuilt copy.
+    assert(first.descriptor eq second.descriptor)
+    val repeated = ProtobufUtils.buildDescriptor("RepeatedMessage", Some(testFileDesc))
+    assert(repeated.descriptor ne first.descriptor)
+    // Distinct message names on the same bytes still share one parse.
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: distinct bytes are parsed and cached separately") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    val basic = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    val proto2 = ProtobufUtils.buildDescriptor("FoobarWithRequiredFieldBar", Some(proto2FileDesc))
+    assert(proto2.descriptor ne basic.descriptor)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 2)
+  }
+
+  test("descriptor cache: buildTypeRegistry shares the parse with buildDescriptor") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+    // The other entry point reuses the same parse rather than adding an entry.
+    ProtobufUtils.buildTypeRegistry(testFileDesc)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: the extensions-enabled flag is honored per call") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    val extConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED
+    // The flag is read per build, so a shared cached parse still yields the flag-correct result.
+    withSQLConf(extConf.key -> "false") {
+      val disabled = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      assert(disabled.extensionRegistry eq com.google.protobuf.ExtensionRegistry.getEmptyRegistry)
+    }
+    withSQLConf(extConf.key -> "true") {
+      val enabled = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      assert(enabled.extensionRegistry ne com.google.protobuf.ExtensionRegistry.getEmptyRegistry)
+    }
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: disabled (size 0) reparses every time and caches nothing") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    withSQLConf(SQLConf.PROTOBUF_DESCRIPTOR_CACHE_SIZE.key -> "0") {
+      val first = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      val second = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      // Each call reparses, so the descriptors come from different graphs.
+      assert(first.descriptor ne second.descriptor)
+      assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 0)
+    }
+  }
+
+  test("descriptor cache: an unknown message name surfaces the domain exception") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    // The parse succeeds; only the message lookup fails, so the parse stays cached below.
+    intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor("NoSuchMessage", Some(testFileDesc))
+    }
+    val good = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    assert(good.descriptor != null)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: a failed parse is not cached") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    intercept[AnalysisException] {
+      ProtobufUtils.buildTypeRegistry(Array[Byte](1, 2, 3, 4))
+    }
+    // A failed parse leaves the cache empty.
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 0)
   }
 }

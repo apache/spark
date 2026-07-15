@@ -18,11 +18,14 @@
 package org.apache.spark.sql.protobuf.utils
 
 import java.util.Locale
+import java.util.concurrent.{ExecutionException, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import com.google.common.hash.Hashing
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import com.google.protobuf.{DescriptorProtos, Descriptors, DynamicMessage, ExtensionRegistry, InvalidProtocolBufferException, Message}
 import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
@@ -33,7 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] object ProtobufUtils extends Logging {
 
@@ -238,10 +241,37 @@ private[sql] object ProtobufUtils extends Logging {
     DescriptorWithExtensions(descriptor, ExtensionRegistry.getEmptyRegistry, Map.empty)
   }
 
+  // Parsing a FileDescriptorSet materializes a potentially-large FileDescriptor graph, and each
+  // task instance would otherwise parse the same bytes independently.
+
+  // Read fresh each call so size 0 is an immediate kill-switch; the built cache's bound is fixed.
+  private def isDescriptorCacheEnabled: Boolean =
+    SQLConf.get.getConf(SQLConf.PROTOBUF_DESCRIPTOR_CACHE_SIZE) > 0
+
+  private def descriptorCacheMaxSize: Long =
+    SQLConf.get.getConf(SQLConf.PROTOBUF_DESCRIPTOR_CACHE_SIZE).toLong
+
+  private type FileDescriptors = List[Descriptors.FileDescriptor]
+
+  // Keyed on a content hash rather than the bytes, to avoid pinning the descriptor arrays.
+  // NonFateSharingCache (SPARK-43300) prevents a cancelled task's failed load from failing the
+  // other tasks blocked on the same key. The loader is passed per get() rather than as a
+  // CacheLoader because the key is the hash, not the bytes needed to parse; this overload also
+  // keeps the shaded Guava Cache type out of the signature (SPARK-44064).
+  private lazy val fileDescriptorCache: NonFateSharingCache[String, FileDescriptors] =
+    NonFateSharingCache(descriptorCacheMaxSize, 0, TimeUnit.SECONDS)
+
+  private[protobuf] def clearDescriptorCacheForTesting(): Unit =
+    fileDescriptorCache.invalidateAll()
+
+  private[protobuf] def fileDescriptorCacheSizeForTesting(): Long = fileDescriptorCache.size()
+
+  private def contentHash(bytes: Array[Byte]): String =
+    Hashing.sha256().hashBytes(bytes).toString
+
   def buildDescriptorFromFDS(
       messageName: String,
       binaryFileDescriptorSet: Array[Byte]): DescriptorWithExtensions = {
-    // Find the first message descriptor that matches the name.
     val fileDescriptors = parseFileDescriptorSet(binaryFileDescriptorSet)
     val descriptor = fileDescriptors
       .flatMap { fileDesc =>
@@ -262,7 +292,22 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
+  private def parseFileDescriptorSet(bytes: Array[Byte]): FileDescriptors = {
+    if (!isDescriptorCacheEnabled) {
+      return doParseFileDescriptorSet(bytes)
+    }
+    try {
+      fileDescriptorCache.get(contentHash(bytes), () => doParseFileDescriptorSet(bytes))
+    } catch {
+      // Unwrap Guava's loader wrapper so callers keep their domain exception (e.g.
+      // descriptorParseError). A failed load is not cached.
+      case e: UncheckedExecutionException if e.getCause != null => throw e.getCause
+      case e: ExecutionException if e.getCause != null => throw e.getCause
+      case e: ExecutionError if e.getCause != null => throw e.getCause
+    }
+  }
+
+  private def doParseFileDescriptorSet(bytes: Array[Byte]): FileDescriptors = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(bytes)
