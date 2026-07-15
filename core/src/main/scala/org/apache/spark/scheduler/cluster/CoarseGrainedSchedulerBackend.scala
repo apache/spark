@@ -620,6 +620,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     setupTokenManager()
   }
 
+  override protected def tokenManagerRequired(): Boolean = {
+    super.tokenManagerRequired() || conf.get(CREDENTIALS_DIRECT_PROVIDERS_ENABLED)
+  }
+
   protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
 
   def stopExecutors(): Unit = {
