@@ -31,7 +31,20 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.types.{ArrayType, DataType, DatetimeType, StringType, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType,
+  CalendarIntervalType,
+  DataType,
+  DateType,
+  DatetimeType,
+  DayTimeIntervalType,
+  NumericType,
+  StringType,
+  StructType,
+  TimestampNTZType,
+  TimestampType,
+  YearMonthIntervalType
+}
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into `asOfCondition` and
@@ -78,8 +91,12 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
             joinBase, left, right, leftExpr, rightExpr)
           if (leftExpr.resolved && rightExpr.resolved) {
             AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
+            val (leftOperand, rightOperand, normalizedOp) =
+              AsOfJoin.normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
+            AsOfJoinValidation.validateMatchConditionPlannerSupport(
+              joinBase, leftOperand, rightOperand)
             val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
-              AsOfJoin.resolveMatchComparison(left, right, leftExpr, operator, rightExpr)
+              AsOfJoin.materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
             joinBase.copy(
               asOfCondition = asOfCondition,
               orderExpression = orderExpression,
@@ -153,6 +170,40 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
         messageParameters = Map(
           "type1" -> toSQLType(leftExpr.dataType),
           "type2" -> toSQLType(rightExpr.dataType)))
+    }
+  }
+
+  def validateMatchConditionPlannerSupport(
+      join: AsOfJoin,
+      leftOperand: Expression,
+      rightOperand: Expression): Unit = {
+    if (!areScalarSubtractBasedOperands(leftOperand, rightOperand)) {
+      join.failAnalysis(
+        errorClass = "AS_OF_JOIN.UNSUPPORTED_MATCH_CONDITION_OPERAND",
+        messageParameters = Map(
+          "type1" -> toSQLType(leftOperand.dataType),
+          "type2" -> toSQLType(rightOperand.dataType)))
+    }
+  }
+
+  /**
+   * Until multi-column sort-merge ASOF execution lands (SPARK-58124), the planner can only
+   * consume MATCH_CONDITION plans whose `orderExpression` is a scalar `Subtract`. STRING and
+   * composite operands use other distance expressions that `findFromOrder` cannot parse.
+   */
+  private def areScalarSubtractBasedOperands(
+      leftExpr: Expression,
+      rightExpr: Expression): Boolean = {
+    supportsSubtractForPlanner(leftExpr.dataType) && supportsSubtractForPlanner(rightExpr.dataType)
+  }
+
+  private def supportsSubtractForPlanner(dataType: DataType): Boolean = {
+    dataType match {
+      case _: NumericType | _: DayTimeIntervalType | _: YearMonthIntervalType |
+           _: CalendarIntervalType | _: TimestampType | _: TimestampNTZType | _: DateType =>
+        true
+      case _ =>
+        false
     }
   }
 

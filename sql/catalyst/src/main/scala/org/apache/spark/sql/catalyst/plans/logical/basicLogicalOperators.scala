@@ -2566,8 +2566,6 @@ case class AsOfJoin(
       matchOperator.isEmpty &&
       matchRightOperand.isEmpty &&
       expressions.forall(_.resolved) &&
-      leftSortExprs.forall(_.resolved) &&
-      rightSortExprs.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
       condition.forall(_.dataType == BooleanType) &&
@@ -2638,6 +2636,13 @@ object AsOfJoin {
       rightExpr: Expression): (Expression, Expression, Seq[Expression], Seq[Expression]) = {
     val (leftOperand, rightOperand, normalizedOp) =
       normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
+    materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
+  }
+
+  private[catalyst] def materializeMatchComparison(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      normalizedOp: MatchComparisonOperator): (Expression, Expression, Seq[Expression], Seq[Expression]) = {
     val (asOfCondition, orderExpression) =
       buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
     val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
@@ -2672,7 +2677,7 @@ object AsOfJoin {
   private def isSqlTupleStructOperand(operand: Expression): Boolean =
     operand.isInstanceOf[CreateNamedStruct]
 
-  private def normalizeMatchOperands(
+  private[catalyst] def normalizeMatchOperands(
       left: LogicalPlan,
       right: LogicalPlan,
       expr1: Expression,
