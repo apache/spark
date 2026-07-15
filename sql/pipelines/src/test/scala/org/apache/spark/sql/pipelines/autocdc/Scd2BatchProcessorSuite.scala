@@ -2531,4 +2531,71 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  test("reconcileStartAndEndAt: a closed upsert absorbed as a no-op continuation has its " +
+    "endAt cleared and becomes open") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 20] is immediately followed by a tracked-equal upsert at
+    // recordStartAt=20. The closed upsert ends exactly where the next event begins - not
+    // strictly before it - so it is absorbed into the run as a no-op continuation: its
+    // endAt is reset to null (becoming open) and it keeps the run head's startAt. The
+    // successor inherits the same run start. This is the documented "closed upsert becomes
+    // open" transition, which every other no-op-continuation test leaves as a no-op by
+    // starting from an already-open row.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, 20L, Row(5L)),
+      Row(1, "alice", 20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(20L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: tracked-equal upserts separated by a gap do not coalesce; " +
+    "the closed run head keeps its endAt and the successor opens a new run") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [5, 10] is followed by an open upsert at recordStartAt=15. Although
+    // the two rows are tracked-equal, the closed run head ends at 10 - strictly before the
+    // successor begins at 15 - so the gap prevents coalescing. The closed row is its own
+    // run head and keeps its endAt; the successor is a fresh window-local run head anchored
+    // at its own recordStartAt. This exercises run-head startAt propagation for a closed
+    // upsert, which the other run-head tests only cover with open rows.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, 10L, Row(5L)),
+      Row(1, "alice", 15L, null, Row(15L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, 10L, Row(5L)),
+        Row(1, "alice", 15L, null, Row(15L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt returns an empty DataFrame for empty input") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val df = targetTableOf(userSchema)()
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    assert(result.collect().isEmpty)
+    assert(result.columns.toSeq == df.columns.toSeq)
+  }
 }
