@@ -4436,7 +4436,7 @@ object functions {
    * @group conditional_funcs
    * @since 1.5.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column of the same type as the first input.
    */
   def nanvl(col1: Column, col2: Column): Column = Column.fn("nanvl", col1, col2)
 
@@ -8534,7 +8534,7 @@ object functions {
    *   binary.
    * @param format
    *   The format to use to convert the value. A column that evaluates to a string. Must be a
-   *   constant.
+   *   constant when `e` is a numeric or binary value.
    * @group string_funcs
    * @since 3.5.0
    * @return
@@ -8572,7 +8572,7 @@ object functions {
    *   binary.
    * @param format
    *   The format to use to convert the value. A column that evaluates to a string. Must be a
-   *   constant.
+   *   constant when `e` is a numeric or binary value.
    * @group string_funcs
    * @since 3.5.0
    * @return
@@ -8614,12 +8614,12 @@ object functions {
    * Replaces all occurrences of `search` with `replace`.
    *
    * @param src
-   *   A column of string to be replaced. A column that evaluates to a string.
+   *   A column of strings to be replaced. A column that evaluates to a string.
    * @param search
-   *   A column of string, If `search` is not found in `str`, `str` is returned unchanged. A
+   *   A column of strings. If `search` is not found in `str`, `str` is returned unchanged. A
    *   column that evaluates to a string.
    * @param replace
-   *   A column of string, If `replace` is not specified or is an empty string, nothing replaces
+   *   A column of strings. If `replace` is not specified or is an empty string, nothing replaces
    *   the string that is removed from `str`. A column that evaluates to a string.
    *
    * @group string_funcs
@@ -8634,9 +8634,9 @@ object functions {
    * Replaces all occurrences of `search` with `replace`.
    *
    * @param src
-   *   A column of string to be replaced
+   *   A column of strings to be replaced.
    * @param search
-   *   A column of string, If `search` is not found in `src`, `src` is returned unchanged.
+   *   A column of strings. If `search` is not found in `src`, `src` is returned unchanged.
    *
    * @group string_funcs
    * @since 3.5.0
@@ -8652,7 +8652,7 @@ object functions {
    * from the end of the string. If the `delimiter` is an empty string, the `str` is not split.
    *
    * @param str
-   *   A column of string to be split. A column that evaluates to a string.
+   *   A column of strings to be split. A column that evaluates to a string.
    * @param delimiter
    *   The delimiter used for split. A column that evaluates to a string.
    * @param partNum
@@ -11097,7 +11097,7 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a long.
+   *   Returns a column that evaluates to a long, or an array of longs when `rank` is an array.
    */
   def kll_sketch_get_quantile_bigint(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_bigint", sketch, rank)
@@ -11114,7 +11114,7 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a float.
+   *   Returns a column that evaluates to a float, or an array of floats when `rank` is an array.
    */
   def kll_sketch_get_quantile_float(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_float", sketch, rank)
@@ -11131,7 +11131,8 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column that evaluates to a double, or an array of doubles when `rank` is an
+   *   array.
    */
   def kll_sketch_get_quantile_double(sketch: Column, rank: Column): Column =
     Column.fn("kll_sketch_get_quantile_double", sketch, rank)
@@ -11147,7 +11148,8 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column that evaluates to a double, or an array of doubles when `quantile` is an
+   *   array.
    */
   def kll_sketch_get_rank_bigint(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_bigint", sketch, quantile)
@@ -11163,7 +11165,8 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column that evaluates to a double, or an array of doubles when `quantile` is an
+   *   array.
    */
   def kll_sketch_get_rank_float(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_float", sketch, quantile)
@@ -11180,7 +11183,8 @@ object functions {
    * @group sketch_funcs
    * @since 4.1.0
    * @return
-   *   Returns a column that evaluates to a double.
+   *   Returns a column that evaluates to a double, or an array of doubles when `quantile` is an
+   *   array.
    */
   def kll_sketch_get_rank_double(sketch: Column, quantile: Column): Column =
     Column.fn("kll_sketch_get_rank_double", sketch, quantile)
@@ -13629,6 +13633,9 @@ object functions {
    *   the target column to explode. A column that evaluates to an array or a map.
    * @group generator_funcs
    * @since 2.1.0
+   * @return
+   *   Returns the position column and a column of the element type of the input array, or the
+   *   position column and the key and value columns of the input map.
    */
   def posexplode(e: Column): Column = Column.fn("posexplode", e)
 
@@ -13642,6 +13649,9 @@ object functions {
    *   the target column to explode. A column that evaluates to an array or a map.
    * @group generator_funcs
    * @since 2.2.0
+   * @return
+   *   Returns the position column and a column of the element type of the input array, or the
+   *   position column and the key and value columns of the input map.
    */
   def posexplode_outer(e: Column): Column = Column.fn("posexplode_outer", e)
 
@@ -13747,7 +13757,7 @@ object functions {
    * @group json_funcs
    * @since 2.2.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
@@ -13797,7 +13807,7 @@ object functions {
    * @group json_funcs
    * @since 2.2.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: java.util.Map[String, String]): Column = {
@@ -13834,7 +13844,7 @@ object functions {
    * @group json_funcs
    * @since 2.2.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   def from_json(e: Column, schema: DataType): Column =
     from_json(e, schema, Map.empty[String, String])
@@ -13858,7 +13868,7 @@ object functions {
    * @group json_funcs
    * @since 2.1.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: java.util.Map[String, String]): Column = {
@@ -13884,7 +13894,7 @@ object functions {
    * @group json_funcs
    * @since 2.3.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: String, options: Map[String, String]): Column = {
@@ -13904,7 +13914,7 @@ object functions {
    * @group json_funcs
    * @since 2.4.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   def from_json(e: Column, schema: Column): Column = {
     from_json(e, schema, Map.empty[String, String].asJava)
@@ -13929,7 +13939,7 @@ object functions {
    * @group json_funcs
    * @since 2.4.0
    * @return
-   *   Returns a column that evaluates to a struct.
+   *   Returns a column of the type given by the schema (a struct, array, or map).
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: Column, options: java.util.Map[String, String]): Column = {
