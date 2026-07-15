@@ -988,6 +988,7 @@ object FunctionRegistry {
     expression[VariantDelete]("variant_delete"),
     expressionBuilder("variant_insert", VariantInsertExpressionBuilder),
     expressionBuilder("try_variant_insert", TryVariantInsertExpressionBuilder),
+    expressionBuilder("variant_set", VariantSetExpressionBuilder),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),
