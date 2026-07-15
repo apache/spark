@@ -8331,6 +8331,11 @@
           "DESC TABLE COLUMN for a specific partition."
         ]
       },
+      "DISTRIBUTE_BY" : {
+        "message" : [
+          "DISTRIBUTE BY clause."
+        ]
+      },
       "DROP_DATABASE" : {
         "message" : [
           "Drop the default database <database>."
@@ -9346,11 +9351,6 @@
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0012" : {
-    "message" : [
-      "DISTRIBUTE BY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0014" : {
