@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet, BindReferences, BoundReference, Cast, Expression, GenericInternalRow, JoinedRow, Literal, Multiply, NamedExpression, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -48,7 +48,7 @@ case class BinByExec(
     appendedAttributes: Seq[Attribute],
     timeZoneId: Option[String],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PartitioningPreservingUnaryExecNode {
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -65,6 +65,11 @@ case class BinByExec(
 
   override def producedAttributes: AttributeSet =
     AttributeSet(scaledDistributeColumns ++ appendedAttributes)
+
+  // The trait keeps a child partitioning only when its keys are in the output: a partitioning keyed
+  // on a pass-through column survives; one keyed on a scaled DISTRIBUTE column (fresh ExprId) does
+  // not, because that column is absent from the output.
+  override protected def outputExpressions: Seq[NamedExpression] = output
 
   override protected def withNewChildInternal(newChild: SparkPlan): BinByExec =
     copy(child = newChild)
