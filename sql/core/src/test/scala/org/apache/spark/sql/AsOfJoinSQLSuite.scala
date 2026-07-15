@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * SQL ASOF JOIN surface tests (parser and feature gating).
  * Execution semantics and complex MATCH_CONDITION types are covered by
- * [[AsOfJoinSortMergeSQLSuite]], which requires sort-merge ASOF join.
+ * `AsOfJoinSortMergeSQLSuite`, which requires sort-merge ASOF join.
  */
 class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
 

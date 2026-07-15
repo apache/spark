@@ -2580,7 +2580,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: JoinRelationContext,
       base: LogicalPlan,
       criteria: AsofJoinCriteriaContext): AsOfJoin = {
-    if (!conf.getConf(SQLConf.SQL_ASOF_JOIN_ENABLED)) {
+    if (!conf.sqlAsOfJoinEnabled) {
       throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
     }
     val joinType = Option(ctx.asofJoinType) match {

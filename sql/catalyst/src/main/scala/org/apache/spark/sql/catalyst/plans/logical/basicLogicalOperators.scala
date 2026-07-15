@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, ShufflePartitionIdPassThrough, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -36,8 +35,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.BestEffortLazyVal
-import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.Utils
 import org.apache.spark.util.random.RandomSampler
 
@@ -2538,7 +2535,9 @@ case class AsOfJoin(
     orderExpression: Expression,
     toleranceAssertion: Option[Expression],
     usingColumns: Option[Seq[String]] = None,
-    matchComparison: Option[AsOfMatchCondition] = None)
+    matchLeftOperand: Option[Expression] = None,
+    matchOperator: Option[MatchComparisonOperator] = None,
+    matchRightOperand: Option[Expression] = None)
     extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
@@ -2557,22 +2556,12 @@ case class AsOfJoin(
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
-  private val _asOfJoinTreePatternBits = new BestEffortLazyVal[BitSet](() => {
-    val bits = new BitSet(TreePattern.maxId)
-    bits.union(super.treePatternBits)
-    matchComparison.foreach { mc =>
-      bits.union(mc.left.treePatternBits)
-      bits.union(mc.right.treePatternBits)
-    }
-    bits
-  })
-
-  override def treePatternBits: BitSet = _asOfJoinTreePatternBits()
-
   override lazy val resolved: Boolean = {
     childrenResolved &&
       usingColumns.isEmpty &&
-      matchComparison.isEmpty &&
+      matchLeftOperand.isEmpty &&
+      matchOperator.isEmpty &&
+      matchRightOperand.isEmpty &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
@@ -2583,27 +2572,6 @@ case class AsOfJoin(
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(AS_OF_JOIN)
-
-  /**
-   * [[AsOfMatchCondition]] is not an [[Expression]], so the default [[mapExpressions]] path does
-   * not rewrite its operand trees. Analysis rules must still reach those operands once
-   * [[org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin]] is introduced.
-   */
-  override def mapExpressions(f: Expression => Expression): this.type = {
-    val mapped = super.mapExpressions(f)
-    matchComparison match {
-      case Some(mc) =>
-        val newLeft = f(mc.left)
-        val newRight = f(mc.right)
-        if (newLeft.fastEquals(mc.left) && newRight.fastEquals(mc.right)) {
-          mapped.asInstanceOf[this.type]
-        } else {
-          mapped.copy(matchComparison = Some(mc.copy(left = newLeft, right = newRight)))
-            .asInstanceOf[this.type]
-        }
-      case None => mapped.asInstanceOf[this.type]
-    }
-  }
 
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): AsOfJoin = {
@@ -2651,7 +2619,9 @@ object AsOfJoin {
       orderExpression = Literal(0),
       toleranceAssertion = None,
       usingColumns = usingColumns,
-      matchComparison = Some(AsOfMatchCondition(leftExpr, operator, rightExpr)))
+      matchLeftOperand = Some(leftExpr),
+      matchOperator = Some(operator),
+      matchRightOperand = Some(rightExpr))
   }
 
   private def makeAsOfCond(
