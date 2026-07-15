@@ -2999,6 +2999,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val COMBINE_ADJACENT_AGGREGATION_ENABLED =
+    buildConf("spark.sql.execution.combineAdjacentAggregation")
+      .internal()
+      .doc("When true, combine adjacent aggregation with `Partial` and `Final` to `Complete` " +
+        "mode. This defaults to the value of `spark.sql.execution.replaceHashWithSortAgg` since " +
+        "combining adjacent aggregation subsumes the partial-and-final merge that " +
+        "`replaceHashWithSortAgg` used to perform on its own.")
+      .version("4.3.0")
+      .fallbackConf(REPLACE_HASH_WITH_SORT_AGG_ENABLED)
+
   val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
     .internal()
     .doc("When true, use PartitionEvaluator to execute SQL operators.")
