@@ -23,7 +23,7 @@ import difflib
 import faulthandler
 import functools
 from decimal import Decimal
-from time import time, sleep
+from time import monotonic, time, sleep
 import signal
 from typing import (
     Any,
@@ -44,6 +44,16 @@ from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
+
+
+def log_session_timing(test_id: str, phase: str, elapsed_seconds: float) -> None:
+    """Emit an opt-in timing marker for Spark test fixture lifecycle operations."""
+    if os.environ.get("PYSPARK_SESSION_TIMING") == "1":
+        print(
+            f"PYSPARK_SESSION_TIMING test={test_id} phase={phase} "
+            f"seconds={elapsed_seconds:.6f}",
+            flush=True,
+        )
 
 
 def have_package(name: str) -> bool:
@@ -309,11 +319,17 @@ class PySparkTestCase(PySparkBaseTestCase):
 
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
+        start_time = monotonic()
         self.sc = SparkContext("local[4]", class_name)
+        log_session_timing(self.id(), "spark_context_setup", monotonic() - start_time)
 
     def tearDown(self):
-        self.sc.stop()
-        sys.path = self._old_sys_path
+        start_time = monotonic()
+        try:
+            self.sc.stop()
+        finally:
+            log_session_timing(self.id(), "spark_context_teardown", monotonic() - start_time)
+            sys.path = self._old_sys_path
 
 
 class ReusedPySparkTestCase(PySparkBaseTestCase):
@@ -330,7 +346,9 @@ class ReusedPySparkTestCase(PySparkBaseTestCase):
 
         from pyspark import SparkContext
 
+        start_time = monotonic()
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
+        log_session_timing(cls.__name__, "spark_context_setup", monotonic() - start_time)
 
     @classmethod
     def master(cls):
@@ -338,9 +356,11 @@ class ReusedPySparkTestCase(PySparkBaseTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        start_time = monotonic()
         try:
             cls.sc.stop()
         finally:
+            log_session_timing(cls.__name__, "spark_context_teardown", monotonic() - start_time)
             super().tearDownClass()
 
     def test_assert_classic_mode(self):

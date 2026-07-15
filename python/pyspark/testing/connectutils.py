@@ -21,6 +21,7 @@ import functools
 import unittest
 import uuid
 import contextlib
+from time import monotonic
 from typing import Callable, Optional
 
 from pyspark import Row, SparkConf
@@ -29,6 +30,7 @@ from pyspark.util import is_remote_only
 from pyspark.testing.utils import (
     have_pandas,
     connect_requirement_message,
+    log_session_timing,
     should_test_connect,
     PySparkErrorTestUtils,
 )
@@ -172,12 +174,14 @@ class ReusedConnectTestCase(PySparkBaseTestCase, SQLTestUtils, PySparkErrorTestU
         # This environment variable is for interrupting hanging ML-handler and making the
         # tests fail fast.
         os.environ["SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES"] = "5"
+        start_time = monotonic()
         cls.spark = (
             PySparkSession.builder.config(conf=cls.conf())
             .appName(cls.__name__)
             .remote(cls.master())
             .getOrCreate()
         )
+        log_session_timing(cls.__name__, "connect_session_setup", monotonic() - start_time)
         cls._client = cls.spark.client
         cls._legacy_sc = None
         if not is_remote_only():
@@ -189,10 +193,12 @@ class ReusedConnectTestCase(PySparkBaseTestCase, SQLTestUtils, PySparkErrorTestU
 
     @classmethod
     def tearDownClass(cls):
+        start_time = monotonic()
         try:
             shutil.rmtree(cls.tempdir.name, ignore_errors=True)
             cls.spark.stop()
         finally:
+            log_session_timing(cls.__name__, "connect_session_teardown", monotonic() - start_time)
             super().tearDownClass()
 
     def setUp(self) -> None:
