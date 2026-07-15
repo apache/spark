@@ -1502,7 +1502,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "''my_table''",
+    "error" : "'('",
     "hint" : ""
   }
 }
@@ -1809,7 +1809,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "''schema.table''",
+    "error" : "'('",
     "hint" : ""
   }
 }
@@ -2382,8 +2382,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "':'",
-    "hint" : ": extra input ':'"
+    "error" : "'('",
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
@@ -2566,8 +2566,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "':'",
-    "hint" : ": extra input ':'"
+    "error" : "'('",
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
