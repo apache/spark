@@ -803,7 +803,7 @@ case class CreateStreamingTableAsSelect(
 
 /**
  * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
- * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
+ * representation of the matching SQL syntax and cannot be executed. It is instead interpreted by
  * the pipeline submodule during a pipeline execution.
  *
  * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
@@ -826,9 +826,9 @@ case class CreateStreamingTable(
 
 /**
  * Command parsed from `CREATE STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
- * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot be
- * executed directly. It will be interpreted by the pipeline submodule once execution support
- * is added (SPARK-57402).
+ * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot
+ * be executed directly. It is instead interpreted by the pipeline submodule during a pipeline
+ * execution.
  *
  * The target of the CDC operation is the streaming table itself (given by [[name]]).
  *

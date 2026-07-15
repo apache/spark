@@ -1369,11 +1369,11 @@ class AstBuilder extends DataTypeAstBuilder
       withSchemaEvolution)
   }
 
-  protected def buildAutoCdcIntoCommand(ctx: AutoCdcCommandContext): AutoCdcIntoCommand =
+  protected def buildAutoCdcInto(ctx: AutoCdcCommandContext): AutoCdcInto =
     withOrigin(ctx) {
       val target = UnresolvedIdentifier(visitMultipartIdentifier(ctx.target))
       val params = parseAutoCdcParams(ctx.autoCdcParameters())
-      AutoCdcIntoCommand(
+      AutoCdcInto(
         targetTable = target,
         source = params.source,
         keys = params.keys,
@@ -5608,7 +5608,7 @@ class AstBuilder extends DataTypeAstBuilder
       case (null, storageHandler) =>
         invalidStatement("STORED BY", ctx)
       case _ =>
-        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError(ctx)
+        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError()
     }
   }
 

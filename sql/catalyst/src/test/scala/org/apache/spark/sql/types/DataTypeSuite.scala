@@ -22,7 +22,8 @@ import java.util.Locale
 import com.fasterxml.jackson.core.JsonParseException
 import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFunSuite}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -253,6 +254,19 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
           parameters = Map("udtClass" -> gadget))
       }
     }
+  }
+
+  test("UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS when UDT class is not on classpath") {
+    val fakeUdtClass = "org.apache.spark.sql.types.NonExistentUDT"
+    val udtJson =
+      s"""{"class":"$fakeUdtClass","pyClass":"","sqlType":"integer","type":"udt"}"""
+    checkError(
+      exception = intercept[SparkClassNotFoundException] {
+        DataType.fromJson(udtJson)
+      },
+      condition = "UDT_CLASS_NOT_FOUND.WITHOUT_USER_CLASS",
+      sqlState = Some("38000"),
+      parameters = Map("udtClass" -> fakeUdtClass))
   }
 
   def checkDataTypeFromJson(dataType: DataType): Unit = {

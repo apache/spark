@@ -85,6 +85,17 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
+  // Per-replica content checksum of RDD blocks, recorded alongside `blockLocations` when RDD block
+  // checksums are enabled. Used to detect a block materialized inconsistently by more than one
+  // task attempt (divergent bytes => different checksum across replicas). Kept in lock-step with
+  // `blockLocations` on add/remove.
+  private val blockChecksums = new JHashMap[BlockId, mutable.HashMap[BlockManagerId, Long]]
+
+  // The authoritative sealed checksum per finalized block. Once present, only a copy with this
+  // checksum is admitted to `blockLocations`; divergent copies are rejected, and reads self-check
+  // against it. Kept in lock-step with `blockLocations` on block/rdd/BM removal.
+  private val sealedChecksums = new JHashMap[BlockId, Long]
+
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
   // Record the RDD blocks which are not visible yet, a block will be removed from this collection
@@ -141,7 +152,7 @@ class BlockManagerMasterEndpoint(
         register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, endpoint, isReRegister))
 
     case _updateBlockInfo @
-        UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+        UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, checksum) =>
 
       @inline def handleResult(success: Boolean): Unit = {
         // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
@@ -155,7 +166,8 @@ class BlockManagerMasterEndpoint(
       if (blockId.isShuffle) {
         updateShuffleBlockInfo(blockId, blockManagerId).foreach(handleResult)
       } else {
-        handleResult(updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size))
+        handleResult(
+          updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, checksum))
       }
 
     case GetLocations(blockId) =>
@@ -240,6 +252,12 @@ class BlockManagerMasterEndpoint(
     case GetRDDBlockVisibility(blockId) =>
       // Get the visibility status of a specific rdd block.
       context.reply(isRDDBlockVisible(blockId))
+
+    case GetSealedChecksum(blockId) =>
+      context.reply(Option(sealedChecksums.get(blockId)).map(_.longValue))
+
+    case SealRddChecksums(rddId) =>
+      context.reply(sealRddChecksums(rddId))
 
     case UpdateRDDBlockVisibility(taskId, visible) =>
       // This is to report the information that whether rdd blocks computed by task(with `taskId`)
@@ -360,6 +378,8 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
+      blockChecksums.remove(blockId)
+      sealedChecksums.remove(blockId)
       if (trackingCacheVisibility) {
         invisibleRDDBlocks.remove(blockId)
       }
@@ -512,6 +532,7 @@ class BlockManagerMasterEndpoint(
       val blockId = iterator.next
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
+      Option(blockChecksums.get(blockId)).foreach(_.remove(blockManagerId))
       // De-register the block if none of the block managers have it. Otherwise, if pro-active
       // replication is enabled, and a block is either an RDD or a test block (the latter is used
       // for unit testing), we send a message to a randomly chosen executor location to replicate
@@ -519,6 +540,8 @@ class BlockManagerMasterEndpoint(
       // etc.) as replication doesn't make much sense in that context.
       if (locations.isEmpty) {
         blockLocations.remove(blockId)
+        blockChecksums.remove(blockId)
+        sealedChecksums.remove(blockId)
         logWarning(log"No more replicas available for ${MDC(BLOCK_ID, blockId)}!")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
         // As a heuristic, assume single executor failure to find out the number of replicas that
@@ -797,7 +820,8 @@ class BlockManagerMasterEndpoint(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): Boolean = {
+      diskSize: Long,
+      checksum: Option[Long] = None): Boolean = {
     logDebug(s"Updating block info on master ${blockId} for ${blockManagerId}")
 
     if (!blockManagerInfo.contains(blockManagerId)) {
@@ -826,8 +850,30 @@ class BlockManagerMasterEndpoint(
     }
 
     if (storageLevel.isValid) {
+      // A sealed block admits only a copy matching its sealed checksum (see
+      // `checksumSealRejectsUpdate`). On reject, acknowledge the report but drop the divergent copy
+      // and ask its executor to reclaim the local copy.
+      if (checksumSealRejectsUpdate(blockId, checksum)) {
+        evictReplica(blockId, blockManagerId)
+        // Return true (report accepted), not false: false means "re-register", which would
+        // re-report this same block and hit this reject again, looping. The copy is intentionally
+        // left out of the directory and reclaimed above; the read-side self-check keeps reads
+        // correct meanwhile.
+        return true
+      }
       val firstBlock = locations.isEmpty
       locations.add(blockManagerId)
+      // Record this replica's content checksum (only present when one was computed).
+      if (blockId.isRDD) {
+        checksum.foreach { c =>
+          var m = blockChecksums.get(blockId)
+          if (m == null) {
+            m = new mutable.HashMap[BlockManagerId, Long]
+            blockChecksums.put(blockId, m)
+          }
+          m.put(blockManagerId, c)
+        }
+      }
 
       blockId.asRDDId.foreach { rddBlockId =>
         (trackingCacheVisibility, firstBlock) match {
@@ -844,6 +890,7 @@ class BlockManagerMasterEndpoint(
       }
     } else {
       locations.remove(blockManagerId)
+      Option(blockChecksums.get(blockId)).foreach(_.remove(blockManagerId))
     }
 
     if (blockId.isRDD && storageLevel.useDisk && externalShuffleServiceRddFetchEnabled) {
@@ -858,8 +905,72 @@ class BlockManagerMasterEndpoint(
     // Remove the block from master tracking if it has been removed on all endpoints.
     if (locations.isEmpty) {
       blockLocations.remove(blockId)
+      blockChecksums.remove(blockId)
+      sealedChecksums.remove(blockId)
     }
     true
+  }
+
+  /**
+   * Whether a report of `blockId` carrying content checksum `checksum` must be kept out of the
+   * directory: the block is sealed and this copy does not match the sealed value. A `None` report
+   * of a sealed block also fails (a sealable block always carries a checksum, so `None` is
+   * anomalous and must not enter the directory unverified).
+   */
+  private def checksumSealRejectsUpdate(blockId: BlockId, checksum: Option[Long]): Boolean =
+    sealedChecksums.containsKey(blockId) &&
+      !checksum.contains(sealedChecksums.get(blockId).longValue)
+
+  /**
+   * Ask an executor to drop its local copy of a block, fire-and-forget: the reply is discarded
+   * because correctness comes from the directory (this block manager is already removed from
+   * `blockLocations`) plus the read-side self-check, not from the eviction landing. Used by the
+   * seal to reclaim divergent replicas (`sealRddChecksums` losers and the reject path).
+   */
+  private def evictReplica(blockId: BlockId, bmId: BlockManagerId): Unit = {
+    blockManagerInfo.get(bmId).foreach { bm =>
+      bm.storageEndpoint.ask[Boolean](RemoveBlock(blockId))
+      ()
+    }
+  }
+
+  /**
+   * Seal an RDD's per-block content checksums: for each of its blocks with recorded per-replica
+   * checksums, pick one checksum value as authoritative, evict the replicas that disagree with it
+   * (drop them from the directory and ask their executors to remove the local copy), and record the
+   * authoritative value so later divergent registrations are rejected and reads can self-check.
+   *
+   * Runs on the message-handler thread, so it is atomic w.r.t. other `updateBlockInfo` for these
+   * blocks. The per-executor removals are fire-and-forget (best-effort space reclamation); reads
+   * of an orphan that has not been removed yet are caught by the read-side self-check.
+   *
+   * Returns the number of present blocks that had no recorded checksum and so could not be sealed.
+   */
+  private def sealRddChecksums(rddId: Int): Int = {
+    val rddBlocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId).toSeq
+    var unchecksummed = 0
+    rddBlocks.foreach { blockId =>
+      val perReplica = blockChecksums.get(blockId)
+      if (perReplica != null && perReplica.nonEmpty) {
+        // Any surviving version is a valid snapshot, so correctness does not require a particular
+        // winner. We keep the plurality checksum (ties broken arbitrarily) so the survivor is the
+        // best-replicated version - the one most resilient to replica loss, which matters here
+        // because a lost local-checkpoint block cannot be recomputed.
+        val winner = perReplica.values.groupBy(identity).maxBy(_._2.size)._1
+        sealedChecksums.put(blockId, winner)
+        val losers = perReplica.collect { case (bmId, c) if c != winner => bmId }.toSeq
+        losers.foreach { bmId =>
+          perReplica.remove(bmId)
+          Option(blockLocations.get(blockId)).foreach(_.remove(bmId))
+          evictReplica(blockId, bmId)
+        }
+      } else {
+        // Present but with no recorded content checksum, so it cannot be sealed. The caller
+        // decides what to make of it (e.g. a coverage warning).
+        unchecksummed += 1
+      }
+    }
+    unchecksummed
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {

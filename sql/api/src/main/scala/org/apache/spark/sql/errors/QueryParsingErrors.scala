@@ -161,7 +161,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY", ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
@@ -550,8 +550,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def storedAsAndStoredByBothSpecifiedError(ctx: CreateFileFormatContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0033", ctx)
+  def storedAsAndStoredByBothSpecifiedError(): Throwable = {
+    SparkException.internalError("Expected either STORED AS or STORED BY, not both.")
   }
 
   def operationInHiveStyleCommandUnsupportedError(

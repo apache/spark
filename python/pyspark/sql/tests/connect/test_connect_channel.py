@@ -129,6 +129,79 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = DefaultChannelBuilder("sc://host/")
         self.assertIsNone(chan.session_id)
 
+    def test_keepalive_defaults(self):
+        # SPARK-58094
+        chan = DefaultChannelBuilder("sc://host")
+        self.assertTrue(chan.keepalive_enabled)
+        self.assertEqual(60 * 1000, chan.keepalive_time_ms)
+        self.assertEqual(20 * 1000, chan.keepalive_timeout_ms)
+        self.assertTrue(chan.keepalive_without_calls)
+
+        options = dict(chan._effective_channel_options())
+        self.assertEqual(60 * 1000, options["grpc.keepalive_time_ms"])
+        self.assertEqual(20 * 1000, options["grpc.keepalive_timeout_ms"])
+        self.assertEqual(1, options["grpc.keepalive_permit_without_calls"])
+
+    def test_keepalive_connection_string_overrides(self):
+        # SPARK-58094
+        chan = DefaultChannelBuilder(
+            "sc://host/;grpc_keepalive_enabled=false;grpc_keepalive_time_ms=12345;"
+            "grpc_keepalive_timeout_ms=6789;grpc_keepalive_without_calls=false"
+        )
+        self.assertFalse(chan.keepalive_enabled)
+        self.assertEqual(12345, chan.keepalive_time_ms)
+        self.assertEqual(6789, chan.keepalive_timeout_ms)
+        self.assertFalse(chan.keepalive_without_calls)
+
+        # Disabled entirely: none of the keepalive options are applied to the channel.
+        options = dict(chan._effective_channel_options())
+        self.assertNotIn("grpc.keepalive_time_ms", options)
+        self.assertNotIn("grpc.keepalive_timeout_ms", options)
+        self.assertNotIn("grpc.keepalive_permit_without_calls", options)
+
+    def test_keepalive_enabled_with_custom_values(self):
+        # SPARK-58094
+        chan = DefaultChannelBuilder(
+            "sc://host/;grpc_keepalive_enabled=true;grpc_keepalive_time_ms=1000;"
+            "grpc_keepalive_timeout_ms=500;grpc_keepalive_without_calls=false"
+        )
+        self.assertTrue(chan.keepalive_enabled)
+        options = dict(chan._effective_channel_options())
+        self.assertEqual(1000, options["grpc.keepalive_time_ms"])
+        self.assertEqual(500, options["grpc.keepalive_timeout_ms"])
+        self.assertEqual(0, options["grpc.keepalive_permit_without_calls"])
+
+    def test_keepalive_explicit_channel_option_wins(self):
+        # SPARK-58094: an explicitly-provided channel option for one of the keepalive keys is
+        # not overwritten/duplicated by the default-derived value.
+        chan = DefaultChannelBuilder("sc://host", [("grpc.keepalive_time_ms", 999)])
+        options = chan._effective_channel_options()
+        self.assertEqual(
+            [k for k, _ in options].count("grpc.keepalive_time_ms"),
+            1,
+            "only one occurrence, no duplicate",
+        )
+        self.assertEqual(
+            next(v for k, v in options if k == "grpc.keepalive_time_ms"),
+            999,
+            "explicit value is not overwritten by the default",
+        )
+        # The other keepalive keys are still applied normally.
+        self.assertIn("grpc.keepalive_timeout_ms", dict(options))
+
+    def test_keepalive_params_excluded_from_metadata(self):
+        # SPARK-58094
+        chan = DefaultChannelBuilder(
+            "sc://host/;grpc_keepalive_enabled=false;grpc_keepalive_time_ms=1000;"
+            "grpc_keepalive_timeout_ms=500;grpc_keepalive_without_calls=false;param1=abc"
+        )
+        md = dict(chan.metadata())
+        self.assertNotIn(ChannelBuilder.PARAM_GRPC_KEEPALIVE_ENABLED, md)
+        self.assertNotIn(ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIME_MS, md)
+        self.assertNotIn(ChannelBuilder.PARAM_GRPC_KEEPALIVE_TIMEOUT_MS, md)
+        self.assertNotIn(ChannelBuilder.PARAM_GRPC_KEEPALIVE_WITHOUT_CALLS, md)
+        self.assertIn("param1", md)
+
     def test_channel_options(self):
         # SPARK-47694
         chan = DefaultChannelBuilder(

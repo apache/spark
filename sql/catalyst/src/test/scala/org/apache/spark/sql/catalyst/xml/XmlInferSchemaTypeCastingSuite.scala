@@ -104,12 +104,28 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     val inferSchema = newInferSchema(Map.empty[String, String])
 
     // A genuinely empty/null value carries no type information, so `typeSoFar` is preserved.
-    // (Unlike CSV, XML inference does not treat the `nullValue` option as null here; a value
-    // equal to `nullValue` is inferred by its content, matching the pre-existing behavior.)
     assert(inferSchema.inferFrom("", NullType) == NullType)
     assert(inferSchema.inferFrom("", LongType) == LongType)
     assert(inferSchema.inferFrom(null, DoubleType) == DoubleType)
     assert(inferSchema.inferFrom(null, TimestampType) == TimestampType)
+  }
+
+  test("A value matching the nullValue option keeps the type inferred so far") {
+    // A token equal to the `nullValue` option is read as null by the parser, so inference must
+    // ignore it and preserve `typeSoFar` -- matching `CSVInferSchema.inferField`. Otherwise a
+    // `nullValue` token would be inferred by its string content and (incorrectly) widen the field.
+    val inferSchema = newInferSchema(Map("nullValue" -> "NA"))
+    assert(inferSchema.inferFrom("NA", NullType) == NullType)
+    assert(inferSchema.inferFrom("NA", LongType) == LongType)
+    assert(inferSchema.inferFrom("NA", TimestampType) == TimestampType)
+    // A non-null value is still inferred by content as usual.
+    assert(inferSchema.inferFrom("5", NullType) == LongType)
+
+    // The nullValue token itself, when it happens to look like another type, is still treated as
+    // null rather than inferred as that type.
+    val inferSchemaNumericNull = newInferSchema(Map("nullValue" -> "0"))
+    assert(inferSchemaNumericNull.inferFrom("0", NullType) == NullType)
+    assert(inferSchemaNumericNull.inferFrom("1", NullType) == LongType)
   }
 
   test("Refining from a wider type never narrows and is consistent with fresh inference") {
