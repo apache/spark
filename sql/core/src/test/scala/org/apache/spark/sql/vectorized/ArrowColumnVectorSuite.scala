@@ -394,6 +394,34 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("string_view with multiple data buffers") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("string_view", 0, Long.MaxValue)
+    val vector = new ViewVarCharVector("stringView", allocator)
+    // Keep the variadic data buffers small (16 * 8 = 128 bytes each) so the long values below
+    // spill into multiple buffers, exercising the non-zero buffer-index branch of the accessor.
+    vector.setInitialCapacity(16, 8)
+    vector.allocateNew()
+
+    val values = (0 until 16).map(i => s"a-long-string-value-spilling-over-$i")
+    values.zipWithIndex.foreach { case (s, i) =>
+      val utf8 = s.getBytes("utf8")
+      vector.setSafe(i, utf8, 0, utf8.length)
+    }
+    vector.setValueCount(16)
+    // The values must not fit in a single data buffer, otherwise this test exercises nothing
+    // beyond the plain string_view test.
+    assert(vector.getDataBuffers.size() > 1)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === StringType)
+    values.zipWithIndex.foreach { case (s, i) =>
+      assert(columnVector.getUTF8String(i) === UTF8String.fromString(s))
+    }
+
+    columnVector.close()
+    allocator.close()
+  }
+
   test("array") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("array", 0, Long.MaxValue)
     val vector = ArrowUtils.toArrowField("array", ArrayType(IntegerType), nullable = true, null)
