@@ -55,9 +55,6 @@ public class JsonExpressionUtils {
   }
 
   public static Boolean isJsonValid(UTF8String json) {
-    if (json == null) {
-      return null;
-    }
     try (JsonParser jsonParser =
         CreateJacksonParser.utf8String(SharedFactory.jsonFactory(), json)) {
       // An empty or whitespace-only input is not valid JSON.

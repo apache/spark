@@ -702,7 +702,9 @@ case class JsonObjectKeys(child: Expression)
     "false otherwise. Returns null if the input is null.",
   arguments = """
     Arguments:
-      * jsonString - A string to be validated as JSON.
+      * jsonString - A string to be validated as JSON. Parsing follows the same lenient rules as
+          the other JSON functions (e.g. `get_json_object`), so single-quoted strings and
+          unescaped control characters are accepted.
   """,
   examples = """
     Examples:

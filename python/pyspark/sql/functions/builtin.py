@@ -22172,7 +22172,9 @@ def json_object_keys(col: "ColumnOrName") -> Column:
 def json_valid(col: "ColumnOrName") -> Column:
     """
     Returns true if the input is a valid JSON string, false otherwise. Returns null if the
-    input is null.
+    input is null. Parsing follows the same lenient rules as the other JSON functions
+    (e.g. :func:`get_json_object`), so single-quoted strings and unescaped control characters
+    are accepted.
 
     .. versionadded:: 4.3.0
 

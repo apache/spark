@@ -923,6 +923,8 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ("123", true),
       ("true", true),
       ("null", true),
+      // Lenient parsing (shared with the other JSON functions): single quotes are accepted.
+      ("{'a':1}", true),
       // invalid JSON values
       ("", false),
       ("   ", false),
