@@ -700,15 +700,24 @@ class _ArrowTableUDFBenchMixin:
         "filter_udtf": (_ArrowTableUDFFilter, None, [0]),
         "stringify_udtf": (_ArrowTableUDFStringify, StringType(), [0]),
     }
-    params = [list(_scenario_configs), list(_udtfs)]
-    param_names = ["scenario", "udtf"]
+    # "arrow": non-legacy pure Arrow path; "legacy_pandas": legacy pandas
+    # conversion path (flag on), which goes through pandas Series/DataFrame.
+    _conversions = ["arrow", "legacy_pandas"]
+    params = [list(_scenario_configs), list(_udtfs), list(_conversions)]
+    param_names = ["scenario", "udtf", "conversion"]
 
-    def _write_scenario(self, scenario, udtf_name, buf):
+    def _write_scenario(self, scenario, udtf_name, conversion, buf):
         batches, schema = self._build_scenario(scenario)
         handler, ret_type, arg_offsets = self._udtfs[udtf_name]
         if ret_type is None:
             ret_type = schema.fields[0].dataType
         return_type = StructType([StructField("c0", ret_type)])
+
+        runner_conf = None
+        if conversion == "legacy_pandas":
+            runner_conf = {
+                "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled": "true"
+            }
 
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_ARROW_TABLE_UDF,
@@ -717,6 +726,7 @@ class _ArrowTableUDFBenchMixin:
             ),
             lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
             buf,
+            runner_conf=runner_conf,
             eval_conf={"input_type": schema.json()},
         )
 
