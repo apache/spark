@@ -37,7 +37,9 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
   test("String field types are inferred correctly from null types") {
     val inferSchema = newInferSchema(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"))
 
-    assert(inferSchema.inferFrom("", NullType) == NullType)
+    // An empty value carries no numeric/temporal content, so it falls through the cascade to
+    // StringType (see `inferFrom`); only a genuinely null value preserves `typeSoFar`.
+    assert(inferSchema.inferFrom("", NullType) == StringType)
     assert(inferSchema.inferFrom(null, NullType) == NullType)
     assert(inferSchema.inferFrom("100000000000", NullType) == LongType)
     // XML infers integral values as LongType (there is no IntegerType narrowing).
@@ -100,14 +102,17 @@ class XmlInferSchemaTypeCastingSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferFrom("TRUEe", DoubleType) == StringType)
   }
 
-  test("Empty and null values keep the type inferred so far") {
+  test("Null values keep the type inferred so far; empty values widen to String") {
     val inferSchema = newInferSchema(Map.empty[String, String])
 
-    // A genuinely empty/null value carries no type information, so `typeSoFar` is preserved.
-    assert(inferSchema.inferFrom("", NullType) == NullType)
-    assert(inferSchema.inferFrom("", LongType) == LongType)
+    // A genuinely null value carries no type information, so `typeSoFar` is preserved.
     assert(inferSchema.inferFrom(null, DoubleType) == DoubleType)
     assert(inferSchema.inferFrom(null, TimestampType) == TimestampType)
+    // Unlike CSV, XML inference does NOT skip empty values (see `inferFrom` and SPARK-58133): the
+    // parser does not read "" as null under the default `nullValue`, so an empty value falls
+    // through the cascade to StringType, widening any prior numeric/temporal type to String.
+    assert(inferSchema.inferFrom("", NullType) == StringType)
+    assert(inferSchema.inferFrom("", LongType) == StringType)
   }
 
   test("A value matching the nullValue option keeps the type inferred so far") {
