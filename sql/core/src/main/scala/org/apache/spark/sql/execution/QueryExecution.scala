@@ -771,9 +771,11 @@ object QueryExecution {
       // guarantee the same number of partitions when instantiating PartitioningCollection.
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      // `RemoveRedundantSorts` also needs to run after `EnsureRequirements` for the same reason,
-      // and it is placed after `DisableUnnecessaryBucketedScan` to mirror the AQE rule order
-      // (see `AdaptiveSparkPlanExec.queryStagePreparationRules`).
+      // `RemoveRedundantSorts` also needs to run after `EnsureRequirements` for the same reason.
+      // It must run after `DisableUnnecessaryBucketedScan`: disabling a bucketed scan drops its
+      // output ordering, so running sort-removal first could strip a sort that the scan appeared
+      // to satisfy and then silently lose that ordering. (This also matches the AQE rule order,
+      // see `AdaptiveSparkPlanExec.queryStagePreparationRules`.)
       RemoveRedundantSorts,
       ApplyColumnarRulesAndInsertTransitions(
         sparkSession.sessionState.columnarRules, outputsColumnar = false),

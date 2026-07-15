@@ -143,29 +143,27 @@ abstract class RemoveRedundantSortsSuiteBase
   }
 
   test("SPARK-58099: remove local sort dangling below a shuffle that does not require ordering") {
-    // This dangling-sort shape only appears in the physical plan, e.g. when a shuffle is inserted
-    // on top of an existing local sort (skew join optimization does this). It cannot be produced
-    // from SQL/DataFrame directly because the logical `EliminateSorts` strips a local sort sitting
-    // below a repartition before physical planning, so the rule is exercised on a physical plan.
+    // A local sort directly below a round-robin repartition survives logical optimization
+    // (`EliminateSorts` only recurses through Sort/Join/order-irrelevant-Aggregate parents, and
+    // `CollapseRepartition` removes only a global sort under `RepartitionByExpression` or any sort
+    // under `RebalancePartitions` -- never a sort under a round-robin `Repartition`), so it reaches
+    // the physical plan as `Shuffle(RoundRobin) <- Sort(local)` and is removed by the new branch.
+    // The source must be unsorted so the local sort is not itself elided as redundant.
+    withTempView("t") {
+      Seq(3, 1, 2, 5, 4).toDF("key").createOrReplaceTempView("t")
+      val query = "SELECT /*+ REPARTITION(3) */ * FROM (SELECT key FROM t SORT BY key)"
+      checkSorts(query, 0, 1)
+    }
+
+    // A global sort below such a shuffle must be kept: it carries its own distribution requirement
+    // and is not the dead within-partition sort this rule targets. This shape is not reachable via
+    // SQL/DataFrame, so the rule is applied directly to a physical plan.
     val attr = AttributeReference("key", IntegerType)()
     val scan = LocalTableScanExec(Seq(attr), Nil, None)
-    val localSort = SortExec(SortOrder(attr, Ascending) :: Nil, global = false, scan)
     val globalSort = SortExec(SortOrder(attr, Ascending) :: Nil, global = true, scan)
     withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
-      // A local sort directly below a shuffle that neither requires nor exposes an ordering
-      // is dead and should be removed.
-      val danglingLocal = ShuffleExchangeExec(HashPartitioning(Seq(attr), 5), localSort)
-      assert(RemoveRedundantSorts(danglingLocal).find(_.isInstanceOf[SortExec]).isEmpty)
-
-      // A global sort below such a shuffle must be kept: it carries its own distribution
-      // requirement and is not the dead within-partition sort this rule targets.
       val danglingGlobal = ShuffleExchangeExec(HashPartitioning(Seq(attr), 5), globalSort)
       assert(RemoveRedundantSorts(danglingGlobal).find(_.isInstanceOf[SortExec]).isDefined)
-    }
-    // With the rule disabled the local sort is preserved.
-    withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "false") {
-      val danglingLocal = ShuffleExchangeExec(HashPartitioning(Seq(attr), 5), localSort)
-      assert(RemoveRedundantSorts(danglingLocal).find(_.isInstanceOf[SortExec]).isDefined)
     }
   }
 
