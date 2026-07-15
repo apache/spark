@@ -52,13 +52,12 @@ import org.apache.spark.udf.worker.grpc.GrpcWorkerSession._
  * dispatcher-side cleanup on close.
  *
  * '''Driving model.''' Consumption-driven (Volcano / pull): the thread that
- * consumes the [[doProcess]] result iterator is the one that pulls the next
- * input batch and sends its `DataRequest`. Nothing is sent until the iterator
- * is consumed, and the gRPC callback thread only receives output. Note this is
- * pull-driven, not strictly one-input-per-output: `advance` sends the next input
- * batch whenever the output queue is momentarily empty, so under asynchronous
- * delivery it can push several input batches before any output is read (bounded
- * only by HTTP/2 flow control), rather than lock-stepping one input per output.
+ * consumes the [[doProcess]] result iterator is the one that pulls input and
+ * sends each `DataRequest`; the gRPC callback thread only receives output. It is
+ * pull-driven but not one-input-per-output -- `advance` sends the next input
+ * whenever the output queue is momentarily empty, so under async delivery it may
+ * push several input batches before any output is read (bounded by HTTP/2 flow
+ * control).
  *
  * '''State machine.''' This class does not keep its own state machine: it
  * drives the single [[WorkerSession.SessionState]] owned by the base. The base
@@ -125,11 +124,10 @@ class GrpcWorkerSession(
 
   // Output batches from the worker, drained by the process() iterator.
   // Intentionally unbounded: a bounded queue would block the gRPC callback
-  // (Netty event-loop) thread when full, stalling control-message and
-  // terminator delivery on the whole channel. HTTP/2 flow control bounds the
-  // wire and the consumer normally drains promptly, so it stays small. A
-  // stalled downstream can still grow it; the real fix is protocol-level
-  // back-pressure (out of scope here), not bounding the queue.
+  // (Netty event-loop) thread when full, stalling terminator/control delivery on
+  // the whole channel. HTTP/2 flow control bounds the wire and the consumer
+  // normally drains promptly; a stalled downstream can still grow it, but the fix
+  // is protocol-level back-pressure (out of scope), not bounding the queue.
   //
   // TODO [SPARK-57324]: expose queue depth as a metric (early warning for a
   // stalled consumer).
@@ -139,9 +137,15 @@ class GrpcWorkerSession(
   // init() blocks on. Fires when the InitResponse arrives (`complete`) or when a
   // terminal settles first without one -- transport error, half-close, or a
   // premature terminator (`signalWithoutValue`). Until it fires we have no proof
-  // the worker accepted the session. Bundling the value and the latch in one
-  // object keeps the "publish then release" ordering in a single place rather
-  // than leaving callers to remember to count down after setting the reference.
+  // the worker accepted the session.
+  //
+  // Settle-before-release rule (referenced from every callback that both settles
+  // a terminal and fires this latch): settle the terminal FIRST, then complete /
+  // signal. init() blocks on the latch, and only latch await/release establish a
+  // happens-before edge, so a woken init() is guaranteed to observe the terminal
+  // rather than a transient state. OneShotValue keeps that publish-then-release
+  // in one place instead of every caller remembering to count down after setting
+  // the reference.
   private val initValue = new OneShotValue[InitResponse]
 
   // Fired when the session reaches a terminal [[SessionState]]. doClose() and
@@ -153,9 +157,12 @@ class GrpcWorkerSession(
   // user / worker / protocol error rather than reporting a bare "Cancelled".
   private val executionError = new AtomicReference[Option[ExecutionError]](None)
 
-  // Cancellation intent. Kept outside the [[SessionState]] machine because a
-  // cancel can be requested before the stream exists (pre-init), where there is
-  // no wire transition to make yet -- only an intent to record. Used to (a)
+  // Cancellation INTENT -- distinct from the `Cancelling` state, which is reached
+  // only once a Cancel is actually written to the wire ([[sendCancelInternal]]).
+  // Intent is set first and can outrun (or never reach) that write, so
+  // `cancelRequested` does NOT imply state `Cancelling`. Kept outside the
+  // [[SessionState]] machine because a cancel can be requested before the stream
+  // exists (pre-init), where there is no wire transition to make yet. Used to (a)
   // make cancel idempotent across all call sites, (b) fast-fail ProcessIterator
   // on a pre-init cancel, and (c) suppress any Data/Finish that would otherwise
   // race a Cancel onto the wire (re-read inside [[requestLock]]).
@@ -172,12 +179,9 @@ class GrpcWorkerSession(
     override def onNext(response: UdfResponse): Unit = {
       response.getResponseCase match {
         case UdfResponse.ResponseCase.DATA =>
-          // A DataResponse before InitResponse violates the protocol
-          // (InitResponse must precede any DataResponse). Enqueuing it would
-          // leave init() blocked on initValue until initResponseTimeoutMs, then
-          // fail with a misleading "timed out" instead of the real protocol
-          // fault. Settle a transport-failure terminal and release init(), the
-          // same fast-fail discipline the malformed / terminator branches use.
+          // A DataResponse before InitResponse violates the protocol (InitResponse
+          // must precede any DataResponse): fast-fail rather than enqueue it and let
+          // init() block to its timeout. Settle-before-release (see initValue).
           if (!initResolved) {
             Transitions.transportFailed(new IllegalStateException(
               "worker sent a DataResponse before InitResponse"))
@@ -190,12 +194,8 @@ class GrpcWorkerSession(
           handleControl(response.getControl)
 
         case other =>
-          // A malformed response (empty / unknown oneof) is a terminal
-          // transport failure. Release initValue like every other
-          // terminal-settling path here (onError / onCompleted / each
-          // handleControl branch): if this arrives before InitResponse, doInit
-          // must fail fast with this cause rather than block until
-          // initResponseTimeoutMs and report a misleading "timed out" error.
+          // A malformed response (empty / unknown oneof) is a terminal transport
+          // failure; fast-fail init the same way. Settle-before-release (see initValue).
           Transitions.transportFailed(new IllegalStateException(
             s"unexpected response oneof: $other"))
           initValue.signalWithoutValue()
@@ -203,15 +203,9 @@ class GrpcWorkerSession(
     }
 
     override def onError(t: Throwable): Unit = {
-      // Transport-level failure: the stream is dead. No further writes are
-      // possible (reaching a terminal state closes the write side). Settle the
-      // terminal BEFORE releasing initValue: init() blocks on that latch, and
-      // only await/release establish a happens-before edge, so a thread woken by
-      // the release must already be able to observe the terminal. That lets
-      // init() surface the transport cause instead of timing out after
-      // initResponseTimeoutMs with a misleading "timed out" message -- or, if it
-      // saw a transient non-terminal state, the defensive "init latch fired
-      // without an InitResponse or terminal" error.
+      // Transport-level failure: the stream is dead, no further writes possible.
+      // Settle-before-release (see initValue) so init() surfaces the transport
+      // cause instead of the initResponseTimeoutMs "timed out" error.
       Transitions.transportFailed(t)
       initValue.signalWithoutValue()
     }
@@ -247,52 +241,37 @@ class GrpcWorkerSession(
         // Attribute a subsequent close()'s terminator to the init error rather
         // than a bare Cancelled, mirroring the data-phase ERROR branch.
         executionError.compareAndSet(None, Some(resp.getError))
-        // Settle the terminal as Failed(err) BEFORE attempting Cancel so close()
-        // reports the init error (Termination.Failed) instead of the empty
-        // Cancelled the worker's CancelResponse would otherwise leave. The
-        // terminal is sticky, so the Cancel we send next is purely for worker
-        // cleanup and its CancelResponse is a no-op; if the Cancel cannot be
-        // written (e.g. a directExecutor worker delivered InitResponse
-        // reentrantly, before doInit published requestObserver), the terminal is
-        // already set, so doInit does not wait the full terminalTimeoutMs for a
-        // CancelResponse that can never arrive.
+        // Settle Failed(err) before the Cancel below (not after its CancelResponse):
+        // the sticky terminal makes close() report the init error, and the Cancel
+        // becomes best-effort worker cleanup -- so if it can't be written (a
+        // directExecutor worker delivered this reentrantly, before doInit published
+        // requestObserver), doInit still doesn't wait terminalTimeoutMs for a
+        // CancelResponse that can never arrive. Settle-before-release (see initValue).
         Transitions.failed(resp.getError)
-        // Publish the InitResponse + release init() only after the terminal is
-        // settled: init() blocks on this latch and only await/release establish
-        // happens-before, so a woken init() must be able to observe the terminal.
         initValue.complete(resp)
         sendCancelInternal(() => cancelWithReason("init failed"))
       } else {
-        // InitResponse OK: init succeeded. A terminal that arrived first (e.g. a
-        // racing transport error) must win, so only advance from the expected
-        // Initializing state; process() then opens the data phase (Streaming).
+        // InitResponse OK. Only advance from Initializing so a terminal that raced
+        // in (e.g. a transport error) still wins; process() then opens the data
+        // phase. Settle-before-release (see initValue): publish after the CAS.
         Transitions.initAccepted()
-        // Publish + release only after the CAS so a woken init() observes
-        // Initialized rather than the transient Initializing state.
         initValue.complete(resp)
       }
 
     case UdfControlResponse.ControlCase.ERROR =>
       val err = ctrl.getError.getError
       executionError.compareAndSet(None, Some(err))
-      // ERROR before InitResponse is special: under directExecutor or with
-      // a fast worker, sendCancelInternal may run while requestObserver is
-      // still null (we're inside stream.onNext(initRequest) and have not
-      // yet published the field), so no Cancel reaches the wire and no
-      // CancelResponse will follow to settle the terminal. Settle it here
-      // (as Failed, since there is no proto terminator to carry) so doInit
-      // doesn't return as if init succeeded. "Init not yet resolved" is exactly
-      // "the stream has not reached Initialized"; completeTerminal is idempotent,
-      // so the data-phase ERROR -> Cancel -> CancelResponse path is unaffected.
+      // Before init resolves, settle Failed here rather than rely on the Cancel
+      // below: sendCancelInternal may find requestObserver still null (reentrant
+      // delivery inside stream.onNext, before doInit published it), so no Cancel --
+      // hence no CancelResponse -- would settle the terminal, and doInit would
+      // return as if init succeeded. completeTerminal is idempotent, so the
+      // data-phase ERROR -> Cancel -> CancelResponse path is unaffected.
       if (!initResolved) {
         Transitions.failed(err)
       }
-      // Surface the error to doInit. Release AFTER settling the terminal above:
-      // init() blocks on this latch and only await/release establish
-      // happens-before, so a woken doInit must be able to observe the terminal
-      // rather than a transient non-terminal state. Idempotent, so the normal
-      // data-phase path (latch already fired during init) is unaffected. No value
-      // to publish -- an ERROR is not an InitResponse.
+      // Settle-before-release (see initValue). No value to publish -- ERROR is not
+      // an InitResponse; on the data-phase path the latch already fired in init.
       initValue.signalWithoutValue()
       sendCancelInternal(() => cancelWithReason("aborting after ErrorResponse"))
 
@@ -320,7 +299,10 @@ class GrpcWorkerSession(
       initValue.signalWithoutValue()
   }
 
-  /** True once init has resolved (Initialized or beyond). */
+  /**
+   * True once init is no longer pending -- i.e. the stream is past `Initializing`.
+   * Not "init succeeded": a terminal (including a failure) also counts as resolved.
+   */
   private def initResolved: Boolean = currentState match {
     case SessionState.Created | SessionState.Initializing => false
     case _ => true
@@ -330,16 +312,28 @@ class GrpcWorkerSession(
     Cancel.newBuilder().setReason(reason).build()
 
   /**
-   * The protocol transition graph in one place. Every edge acts on the single
+   * The protocol transition graph in one place: names for the edges, not a
+   * second source of truth. Every edge acts on the single
    * [[WorkerSession.SessionState]] owned by the base via [[compareAndSetState]]
-   * (non-terminal edges) or [[completeTerminal]] (terminals) -- this adds names
-   * for the edges, not a second source of truth or any new synchronization. Each
-   * method is driven by whichever thread reaches that point (the gRPC callback
-   * thread for worker-event edges, the engine/consumer thread for the
-   * `Finish`/`Cancel` edges); atomicity is the base's CAS, and a terminal that
-   * arrived first still wins (the non-terminal CASes fail against it, and
-   * [[completeTerminal]] is first-wins). Reading these five non-terminal edges
-   * and four terminals together is the transition diagram in the class scaladoc.
+   * (non-terminal) or [[completeTerminal]] (terminal), so the base's CAS is the
+   * only synchronization and a terminal that arrived first always wins (the
+   * non-terminal CASes fail against it; [[completeTerminal]] is first-wins).
+   *
+   * Edges this class drives -- edge, method, then driver site(s) / thread (the
+   * base drives the API-call edges: `Created -> Initializing` in `init`,
+   * `Initialized -> Streaming` in `process`):
+   * {{{
+   *   Initializing -> Initialized     initAccepted    handleControl INIT-ok  [gRPC cb]
+   *   Streaming -> Finishing          finishSent      advance branch 3       [engine]
+   *   non-terminal -> Cancelling      cancelSentFrom  sendCancelInternal, iff a Cancel
+   *                                     reaches the wire  [gRPC cb | engine | init | close]
+   *   non-terminal -> Terminal        finished/cancelled/failed/transportFailed
+   *                                     handleControl / doInit / doClose / advance / onError
+   * }}}
+   * `Cancelling` is reached only if a Cancel is actually written; a pre-stream or
+   * raced cancel goes straight to a `Cancelled`/`TransportFailed` terminal (see
+   * [[sendCancelInternal]], [[doClose]], `ProcessIterator`) or nowhere -- so
+   * `cancelRequested` (intent) does not imply state `Cancelling`.
    */
   private object Transitions {
     /** `InitResponse` OK: `Initializing -> Initialized`. */
@@ -394,9 +388,14 @@ class GrpcWorkerSession(
       .build()
     try {
       requestLock.synchronized {
-        // The base advanced Created -> Initializing before calling doInit, so a
-        // directExecutor worker's InitResponse -- delivered reentrantly inside
-        // onNext -- finds Initializing and advances to Initialized.
+        // Reentrant delivery: a directExecutor worker (one whose gRPC callbacks run
+        // synchronously on the caller's thread) can deliver InitResponse -- and thus
+        // run responseObserver/handleControl -- from *inside* this stream.onNext,
+        // before requestObserver below is published. The base advanced
+        // Created -> Initializing before calling doInit, so that reentrant
+        // InitResponse still finds Initializing and advances to Initialized; the
+        // handleControl error paths guard the still-null requestObserver. This is
+        // the scenario the "before doInit published requestObserver" comments mean.
         stream.onNext(initRequest)
         requestObserver = stream
       }
@@ -557,9 +556,9 @@ class GrpcWorkerSession(
       }
       // Suppress the write when a cancel has been (or is about to be) flushed
       // through this lock; that preserves the proto ordering invariant (no
-      // Data/Finish after Cancel). We test the flag rather than `return`-ing
-      // from the block: a non-local return out of this by-name `synchronized`
-      // body compiles to a thrown NonLocalReturnControl, which is brittle.
+      // Data/Finish after Cancel). Test the flag rather than `return`-ing from
+      // this by-name `synchronized` body: a non-local return compiles to a thrown
+      // NonLocalReturnControl, which is brittle (also relied on in sendCancelInternal).
       if (!cancelRequested.get()) {
         requestObserver.onNext(req)
       }
@@ -583,11 +582,9 @@ class GrpcWorkerSession(
     if (currentState.isTerminal) return false
     try {
       requestLock.synchronized {
-        // A terminal that arrived first must win; bail without writing. We
-        // compute the block's value rather than `return`-ing from this by-name
-        // `synchronized` body, whose non-local return would compile to a thrown
-        // NonLocalReturnControl that the surrounding NonFatal catch must not
-        // swallow -- brittle to rely on. Reads naturally as the block result.
+        // A terminal that arrived first must win; bail without writing. Compute
+        // the block's value rather than `return` (see sendRequest on why non-local
+        // return is avoided -- here it would also escape the NonFatal catch below).
         val cur = currentState
         if (cur.isTerminal) {
           false
@@ -694,11 +691,13 @@ class GrpcWorkerSession(
     }
 
     /**
-     * Single loop that, each iteration, tries in order: (1) drain queued output
-     * (a batch, or the terminator sentinel); (2) while `Streaming`, send the next
-     * input batch; (3) once input is exhausted, send `Finish` (CAS `Streaming ->
-     * Finishing`, once); (4) otherwise block for late output or the terminator.
-     * Each branch is commented inline below.
+     * Fills [[prefetched]] with the next output batch, or leaves it null at the
+     * terminator (which also sets [[exhausted]], so `hasNext` reads null as "done").
+     * Each loop iteration tries in order: (1) drain queued output -- a batch (fill
+     * and return) or the terminator sentinel (return); (2) while `Streaming`, send
+     * the next input batch and loop; (3) once input is exhausted, send `Finish`
+     * (CAS `Streaming -> Finishing`, once) and loop; (4) otherwise block for late
+     * output or the terminator, then return. Branches 2-3 loop; 1 and 4 return.
      *
      * '''Per-poll timeout.''' Branch 4 waits up to [[terminalTimeoutMs]] per
      * poll, reset by every worker event -- the contract is "emit at least one
