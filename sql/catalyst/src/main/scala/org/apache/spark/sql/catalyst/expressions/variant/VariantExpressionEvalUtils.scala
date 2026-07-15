@@ -175,6 +175,47 @@ object VariantExpressionEvalUtils {
     insertAtPath(input, javaSegments, pathStr, value, valueDataType, functionName, failOnError)
   }
 
+  /**
+   * Set `input` at `javaSegments` to `value`. `path` is the source string used in error messages.
+   * The cast and set share one try, so any size overflow maps to `VARIANT_SIZE_LIMIT` and a type
+   * mismatch maps to `VARIANT_PATH_TYPE_MISMATCH`. When `createIfMissing` is false, a missing
+   * key/index leaves the variant unchanged.
+   */
+  def setAtPath(
+      input: VariantVal,
+      javaSegments: Array[VariantBuilder.PathSegment],
+      path: String,
+      value: Any,
+      valueDataType: DataType,
+      createIfMissing: Boolean,
+      functionName: String): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    try {
+      val valVal = castToVariant(value, valueDataType)
+      val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
+      val out = VariantBuilder.setAtPath(v, javaSegments, valVariant, createIfMissing)
+      new VariantVal(out.getValue, out.getMetadata)
+    } catch {
+      case e: VariantPathTypeMismatchException =>
+        throw QueryExecutionErrors.variantPathTypeMismatch(
+          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+    }
+  }
+
+  def setAtPath(
+      input: VariantVal,
+      path: UTF8String,
+      value: Any,
+      valueDataType: DataType,
+      createIfMissing: Boolean,
+      functionName: String): VariantVal = {
+    val pathStr = path.toString
+    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
+    setAtPath(input, javaSegments, pathStr, value, valueDataType, createIfMissing, functionName)
+  }
+
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {
     // Enforce strict check because it is illegal for input struct/map/variant to contain duplicate
