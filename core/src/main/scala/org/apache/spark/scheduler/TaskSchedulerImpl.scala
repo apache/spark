@@ -160,6 +160,30 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.toMap.transform((_, v) => v.size)
   }
 
+  /**
+   * The number of tasks currently running for the given resource profile that belong to work
+   * OTHER than the stages in `excludeStageIds`. Used by the pipelined-group free-slot admission
+   * check (see DAGScheduler): it must compare the group's demand against the slots left free by
+   * everything else running in the SAME resource profile, so it excludes the group's own already-
+   * running members (whose tasks would otherwise be charged against the group's own admission).
+   *
+   * Computed from the TaskSetManagers so it is resource-profile-scoped and consistently filters
+   * zombie attempts, and taken under a single lock so the count is one consistent snapshot (both
+   * the per-profile total and the excluded members are read together).
+   */
+  def runningTasksForOtherWorkInProfile(
+      resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
+    taskSetsByStageIdAndAttempt.iterator.flatMap { case (stageId, attempts) =>
+      if (excludeStageIds.contains(stageId)) {
+        Iterator.empty
+      } else {
+        attempts.valuesIterator
+          .filter(tsm => !tsm.isZombie && tsm.taskSet.resourceProfileId == resourceProfileId)
+          .map(_.runningTasks)
+      }
+    }.sum
+  }
+
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
