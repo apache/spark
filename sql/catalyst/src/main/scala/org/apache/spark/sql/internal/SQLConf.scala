@@ -945,6 +945,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_ASOF_JOIN_ENABLED =
+    buildConf("spark.sql.join.asofJoin.enabled")
+      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION. When false, " +
+        "ASOF JOIN fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()
@@ -8561,6 +8570,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
+
+  def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
