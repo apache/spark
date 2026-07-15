@@ -17,11 +17,12 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io.{File, FileOutputStream, IOException, OutputStream, PrintStream}
 import java.net.URI
-import java.util.jar.{JarFile, Manifest}
+import java.nio.charset.StandardCharsets
+import java.util.jar.{JarFile, JarOutputStream, Manifest}
 import java.util.jar.Attributes.Name
-import java.util.zip.ZipFile
+import java.util.zip.{ZipEntry, ZipFile}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -138,6 +139,28 @@ class RPackageUtilsSuite
         assert(jarFile.getManifest == null, "jar file should have null manifest")
         assert(!RPackageUtils.checkManifestForR(jarFile), "null manifest should return false")
       }
+    }
+  }
+
+  test("SPARK-58153: jar entries escaping the extraction directory are rejected") {
+    val tempDir = Utils.createTempDir()
+    Utils.tryWithSafeFinally {
+      val manifest = new Manifest
+      val attr = manifest.getMainAttributes
+      attr.put(Name.MANIFEST_VERSION, "1.0")
+      attr.put(new Name("Spark-HasRPackage"), "true")
+      val jar = new File(tempDir, "malicious.jar")
+      Utils.tryWithResource(new JarOutputStream(new FileOutputStream(jar), manifest)) { out =>
+        out.putNextEntry(new ZipEntry("R/pkg/../../../../evil.txt"))
+        out.write("evil".getBytes(StandardCharsets.UTF_8))
+        out.closeEntry()
+      }
+      val e = intercept[IOException] {
+        RPackageUtils.checkAndBuildRPackage(jar.getAbsolutePath, new BufferPrintStream)
+      }
+      assert(e.getMessage.contains("Malicious zip entry"))
+    } {
+      Utils.deleteRecursively(tempDir)
     }
   }
 
