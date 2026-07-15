@@ -218,6 +218,7 @@ jobs:
       - name: Checkout and sync Spark repository
         uses: ./.github/actions/checkout-and-sync
         with:
+          # Fall back to the branch when the precompile job failed before resolving the SHA.
           ref: ${{ needs.precompile-maven.outputs.head_sha || inputs.branch }}
       # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
       - name: Cache SBT and Maven
