@@ -140,6 +140,13 @@ ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
 testCommitLog
 .*\.har
+.*\.test
 spark-logo.svg
 spark-logo-rev.svg
 .nojekyll
+# PySpark DataFrame golden test fixture scripts
+# (python/pyspark/sql/tests/df_golden/scripts/<group>/). These are executable
+# test fixtures, not source, so they are excluded like the SQL golden inputs
+# (see .*\.sql above). Add one directory name per golden group below. RAT matches
+# path components, so each name must be unique across the whole repository.
+group_by
