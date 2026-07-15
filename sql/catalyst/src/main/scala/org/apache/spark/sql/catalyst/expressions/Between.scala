@@ -36,6 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
         An expression that evaluates to a boolean, numeric, string, binary, date, timestamp, time,
         interval, array, or struct.
       * upper - Upper bound of the between check.
+        An expression that evaluates to a boolean, numeric, string, binary, date, timestamp, time,
+        interval, array, or struct.
   """,
   since = "1.0.0",
   group = "conditional_funcs")

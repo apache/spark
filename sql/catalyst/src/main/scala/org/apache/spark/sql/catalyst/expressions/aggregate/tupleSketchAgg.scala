@@ -485,8 +485,10 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
       * summary - The double value to be aggregated as the summary.
         An expression that evaluates to a double.
       * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
-      TupleSketch.
+        TupleSketch.
+        An expression that evaluates to an integer. Must be a constant.
       * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -527,8 +529,10 @@ object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
       * summary - The integer value to be aggregated as the summary.
         An expression that evaluates to an integer.
       * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
-      TupleSketch.
+        TupleSketch.
+        An expression that evaluates to an integer. Must be a constant.
       * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:

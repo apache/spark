@@ -362,7 +362,9 @@ abstract class TupleUnionAggBase[S <: Summary]
       * child - The binary TupleSketch representation, created with a double type summary, to union.
         An expression that evaluates to a binary.
       * lgNomEntries - The log-base-2 of nominal entries for the union operation.
+        An expression that evaluates to an integer. Must be a constant.
       * mode - The aggregation mode for numeric summaries during union (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -396,10 +398,12 @@ object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
   arguments = """
     Arguments:
       * child - The binary TupleSketch representation, created with an integer type summary, to
-      union.
+        union.
         An expression that evaluates to a binary.
       * lgNomEntries - The log-base-2 of nominal entries for the union operation.
+        An expression that evaluates to an integer. Must be a constant.
       * mode - The aggregation mode for numeric summaries during union (sum, min, max, alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:

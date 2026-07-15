@@ -242,7 +242,8 @@ case class TryToNumber(left: Expression, right: Expression)
       * expr - The expression to convert to a string.
         An expression that evaluates to a numeric, date, timestamp, time, or binary.
       * format - The format that specifies how to render the value as a string.
-        An expression that evaluates to a string. Must be a constant.
+        An expression that evaluates to a string. Must be a constant when `expr` is numeric or
+        binary.
   """,
   examples = """
     Examples:

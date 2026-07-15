@@ -2267,6 +2267,7 @@ case class StringRPad(
       * strfmt - The printf-style format string.
         An expression that evaluates to a string.
       * obj - The value to be formatted into the string.
+        An expression of any type.
   """,
   examples = """
     Examples:

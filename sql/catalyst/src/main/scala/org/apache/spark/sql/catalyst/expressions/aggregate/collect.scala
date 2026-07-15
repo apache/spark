@@ -393,6 +393,7 @@ private[aggregate] object CollectTopK {
         An expression that evaluates to a string, binary, or null. Must be a constant.
       * key - an optional expression for ordering the input values. Multiple keys can be specified.
         If none are specified, the order of the rows in the result is non-deterministic.
+        An expression of any type.
   """,
   examples = """
     Examples:

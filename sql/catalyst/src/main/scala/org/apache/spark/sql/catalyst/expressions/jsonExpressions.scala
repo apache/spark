@@ -461,6 +461,7 @@ object JsonToStructs {
       * expr - The struct value to convert to a JSON string.
         An expression that evaluates to a struct, array, map, or variant.
       * options - Options controlling how the JSON string is produced.
+        An expression that evaluates to a map. Must be a constant.
   """,
   examples = """
     Examples:

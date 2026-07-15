@@ -57,10 +57,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
   arguments = """
     Arguments:
       * child - The binary TupleSketch representation, created with a double type summary, to
-      intersect.
+        intersect.
         An expression that evaluates to a binary.
       * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
-      alwaysone).
+        alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -154,10 +155,11 @@ case class TupleIntersectionAggDouble(
   arguments = """
     Arguments:
       * child - The binary TupleSketch representation, created with an integer type summary, to
-      intersect.
+        intersect.
         An expression that evaluates to a binary.
       * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
-      alwaysone).
+        alwaysone).
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:

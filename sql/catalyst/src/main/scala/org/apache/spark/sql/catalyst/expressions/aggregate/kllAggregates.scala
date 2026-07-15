@@ -59,6 +59,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataT
       * expr - The expression to aggregate into the KLL sketch.
         An expression that evaluates to an integral.
       * k - The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:
@@ -348,6 +349,7 @@ case class KllSketchAggFloat(
       * expr - The expression to aggregate into the KLL sketch.
         An expression that evaluates to a float or double.
       * k - The parameter controlling the size and accuracy of the sketch.
+        An expression that evaluates to an integer. Must be a constant.
   """,
   examples = """
     Examples:

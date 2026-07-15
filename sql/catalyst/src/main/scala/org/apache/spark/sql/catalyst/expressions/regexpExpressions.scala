@@ -145,6 +145,7 @@ private[catalyst] object StringRegexExpression {
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:
@@ -271,6 +272,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       * escape - an character added since Spark 3.0. The default escape character is the '\'.
           If an escape character precedes a special symbol or another escape character, the
           following character is matched literally. It is invalid to escape any other character.
+        An expression that evaluates to a string. Must be a constant.
   """,
   examples = """
     Examples:

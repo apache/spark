@@ -565,8 +565,8 @@ trait GetDateField extends UnaryExpression with ImplicitCastInputTypes {
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the day of year from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the day of year from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1156,8 +1156,8 @@ case class UnixNanos(child: Expression)
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the year from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the year from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1190,8 +1190,8 @@ case class YearOfWeek(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the quarter of the year for date, in the range 1 to 4.",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the quarter from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the quarter from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1217,8 +1217,8 @@ case class Quarter(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the month component of the date/timestamp.",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the month from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the month from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1243,8 +1243,8 @@ case class Month(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the day of month of the date/timestamp.",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the day of month from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the day of month from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1270,8 +1270,8 @@ case class DayOfMonth(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the day of the week from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the day of the week from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1297,8 +1297,8 @@ case class DayOfWeek(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).",
   arguments = """
     Arguments:
-      * date - The date or timestamp to extract the day of the week from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the day of the week from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1324,8 +1324,8 @@ case class WeekDay(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the week of the year of the given date. A week is considered to start on a Monday and week 1 is the first week with >3 days.",
   arguments = """
     Arguments:
-      * date - The date to extract the week of the year from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the week of the year from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1351,8 +1351,8 @@ case class WeekOfYear(child: Expression) extends GetDateField {
   usage = "_FUNC_(date) - Returns the three-letter abbreviated month name from the given date.",
   arguments = """
     Arguments:
-      * date - The date to extract the abbreviated month name from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the abbreviated month name from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1378,8 +1378,8 @@ case class MonthName(child: Expression) extends GetDateField with DefaultStringP
   usage = "_FUNC_(date) - Returns the three-letter abbreviated day name from the given date.",
   arguments = """
     Arguments:
-      * date - The date to extract the abbreviated day name from.
-        An expression that evaluates to a date.
+      * date - The date, timestamp or string to extract the abbreviated day name from.
+        An expression that evaluates to a date, timestamp or string.
   """,
   examples = """
     Examples:
@@ -1828,6 +1828,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
         An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -1867,6 +1868,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
         An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -2968,6 +2970,7 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
         An expression that evaluates to a string, date, timestamp, or numeric.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -3563,7 +3566,9 @@ case class MakeTimestampLTZNanos(
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3623,7 +3628,9 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3686,8 +3693,11 @@ object TryMakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+        An expression that evaluates to a string.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -3759,8 +3769,11 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
+        An expression that evaluates to a string.
       * date - a date to represent, from 0001-01-01 to 9999-12-31
+        An expression that evaluates to a date.
       * time - a local time to represent, from 00:00:00 to 23:59:59.999999
+        An expression that evaluates to a time.
   """,
   examples = """
     Examples:
@@ -4038,8 +4051,11 @@ case class TryMakeTimestamp(
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * date - a date expression
+        An expression that evaluates to a date.
       * time - a time expression (optional). Default is 00:00:00.
+        An expression that evaluates to a time.
       * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -4193,8 +4209,11 @@ case class MakeTimestampFromDateTime(
               to 0 and 1 minute is added to the final timestamp.
         An expression that evaluates to a decimal.
       * date - a date expression
+        An expression that evaluates to a date.
       * time - a time expression (optional). Default is 00:00:00.
+        An expression that evaluates to a time.
       * timezone - the time zone identifier (optional). For example, CET, UTC and etc.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:

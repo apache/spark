@@ -235,11 +235,17 @@ case class DivideInterval(
       * years - the number of years, positive or negative
         An expression that evaluates to an integer.
       * months - the number of months, positive or negative
+        An expression that evaluates to an integer.
       * weeks - the number of weeks, positive or negative
+        An expression that evaluates to an integer.
       * days - the number of days, positive or negative
+        An expression that evaluates to an integer.
       * hours - the number of hours, positive or negative
+        An expression that evaluates to an integer.
       * mins - the number of minutes, positive or negative
+        An expression that evaluates to an integer.
       * secs - the number of seconds with the fractional part in microsecond precision.
+        An expression that evaluates to a decimal.
   """,
   examples = """
     Examples:
@@ -319,11 +325,17 @@ case class TryMakeInterval(
       * years - the number of years, positive or negative
         An expression that evaluates to an integer.
       * months - the number of months, positive or negative
+        An expression that evaluates to an integer.
       * weeks - the number of weeks, positive or negative
+        An expression that evaluates to an integer.
       * days - the number of days, positive or negative
+        An expression that evaluates to an integer.
       * hours - the number of hours, positive or negative
+        An expression that evaluates to an integer.
       * mins - the number of minutes, positive or negative
+        An expression that evaluates to an integer.
       * secs - the number of seconds with the fractional part in microsecond precision.
+        An expression that evaluates to a decimal.
   """,
   examples = """
     Examples:

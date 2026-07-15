@@ -294,6 +294,7 @@ case class MapContainsKey(left: Expression, right: Expression)
       * a1 - The first array to merge.
         An expression that evaluates to an array.
       * a2 - The second array to merge.
+        An expression that evaluates to an array.
   """,
   examples = """
     Examples:
