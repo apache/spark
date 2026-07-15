@@ -2537,6 +2537,32 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-57993: Use specified advisory partition size in REBALANCE_BY_SIZE") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10000") {
+
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        val (_, adaptive) =
+          runAdaptiveAndVerifyResult("SELECT /*+ REBALANCE_BY_SIZE('150b', c1) */ * FROM v")
+        val read = collect(adaptive) {
+          case read: AQEShuffleReadExec => read
+        }
+        assert(read.size == 1)
+        assert(read.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) == 2)
+        assert(read.head.partitionSpecs.size == 4)
+      }
+    }
+  }
+
   test("SPARK-35888: join with a 0-partition table") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
