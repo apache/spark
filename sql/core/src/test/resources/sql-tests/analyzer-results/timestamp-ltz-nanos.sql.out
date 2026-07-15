@@ -1034,3 +1034,66 @@ Sort [v#x ASC NULLS FIRST], true
                   :     +- OneRowRelation
                   +- Project [2020-01-01 00:00:00.0000005 AS TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500'#x]
                      +- OneRowRelation
+
+
+-- !query
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ltz(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ltz(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 21:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_char(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ltz(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(2020-01-01 13:24:35.123456789 as timestamp_ltz(8)), HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(8)), HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(1960-01-01 05:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(TIMESTAMP_LTZ '1960-01-01 05:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_format(NULL :: timestamp_ltz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [date_format(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS, Some(America/Los_Angeles)) AS date_format(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation

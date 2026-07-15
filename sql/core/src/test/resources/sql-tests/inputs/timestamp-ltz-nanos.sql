@@ -328,3 +328,22 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000900' AS v
     UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision values. The pattern's
+-- fractional-second placeholders render up to nanosecond digits; a 9-`S` field is fixed width, so
+-- digits below the type's precision floor to zeros rather than being dropped. LTZ renders in the
+-- session time zone (America/Los_Angeles, UTC-08:00), so a bare literal round-trips while an
+-- explicit-zone literal shifts the rendered wall clock. to_char / to_varchar route through the
+-- same code path.
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+-- An explicit-zone literal (UTC) is shifted into the session zone before rendering.
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 21:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_char(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'HH:mm:ss.SSSSSSSSS');
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT date_format(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+-- NULL nanosecond timestamp.
+SELECT date_format(NULL :: timestamp_ltz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');

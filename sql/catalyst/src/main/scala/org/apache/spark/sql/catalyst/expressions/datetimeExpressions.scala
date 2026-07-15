@@ -1321,7 +1321,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimestampType, AnyTimeType),
+    Seq(TypeCollection(TimestampType, AnyTimeType, AnyTimestampNanoType),
       StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -1334,6 +1334,20 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           TimeFormatter(format.toString, isParsing = false))
         DateFormatClass.formatTimeWithError(
           tf, timestamp.asInstanceOf[Long], prettyName, format.toString)
+      case t: TimestampNTZNanosType =>
+        // NTZ is zone-independent: render the UTC-grid wall clock, ignoring the session zone.
+        val formatter = formatterOption.getOrElse(getFormatter(format.toString))
+        UTF8String.fromString(formatter.formatWithoutTimeZoneNanos(
+          timestamp.asInstanceOf[TimestampNanosVal], t.precision))
+      case t: TimestampLTZNanosType =>
+        // LTZ renders in the formatter's session zone.
+        val formatter = formatterOption.getOrElse(getFormatter(format.toString))
+        UTF8String.fromString(formatter.formatNanos(
+          timestamp.asInstanceOf[TimestampNanosVal], t.precision))
+      case other: AnyTimestampNanoType =>
+        // AnyTimestampNanoType is not sealed; a future subtype would otherwise fall through to
+        // the micros branch below and fail with a cryptic ClassCastException. Mirror doGenCode.
+        throw SparkException.internalError(s"Unexpected nanosecond timestamp type: $other")
       case _ =>
         val formatter = formatterOption.getOrElse(getFormatter(format.toString))
         UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
@@ -1372,6 +1386,41 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
                 |$format.toString()))""".stripMargin.replaceAll("\n", "")
           })
         }
+      case t @ (_: TimestampNTZNanosType | _: TimestampLTZNanosType) =>
+        // Object carrier: `$timestamp` is the boxed `TimestampNanosVal` reference (no unbox).
+        // NTZ renders zone-independently; LTZ renders in the formatter's session zone.
+        val (method, precision) = t match {
+          case ntz: TimestampNTZNanosType => ("formatWithoutTimeZoneNanos", ntz.precision)
+          case ltz: TimestampLTZNanosType => ("formatNanos", ltz.precision)
+          // Compiler exhaustiveness only: `t` is statically DataType, so scalac cannot see that
+          // the outer case restricts it to the two concrete types. A genuine future subtype is
+          // caught by the outer `case other: AnyTimestampNanoType` guard before reaching here.
+          case other => throw SparkException.internalError(
+            s"Unexpected nanosecond timestamp type: $other")
+        }
+        formatterOption.map { tf =>
+          val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
+          defineCodeGen(ctx, ev, (timestamp, _) => {
+            s"""UTF8String.fromString($timestampFormatter.$method($timestamp, $precision))"""
+          })
+        }.getOrElse {
+          val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+          val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+          val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+          defineCodeGen(ctx, ev, (timestamp, format) => {
+            s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
+                |  $format.toString(),
+                |  $zid,
+                |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+                |  false)
+                |.$method($timestamp, $precision))""".stripMargin
+          })
+        }
+      case other: AnyTimestampNanoType =>
+        // AnyTimestampNanoType is not sealed; a future subtype would otherwise fall through to
+        // the micros branch below and emit `format($timestamp)`, treating the boxed
+        // TimestampNanosVal as a Long. Mirror nullSafeEval's outer guard.
+        throw SparkException.internalError(s"Unexpected nanosecond timestamp type: $other")
       case _ =>
         formatterOption.map { tf =>
           val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)

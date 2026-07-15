@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -663,6 +663,96 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
             "orderingExpr" -> "\"ts\""
           )
         )
+      }
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
+    // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
+    // precision `p` zeros the low digits (floor); it does not drop them. The session zone is
+    // America/Los_Angeles: TIMESTAMP_NTZ renders its wall clock zone-independently, while the
+    // TIMESTAMP_LTZ instant (21:24:35 UTC) shifts to 13:24:35 in the session zone (UTC-8 in Jan).
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val ntzStr = "2020-01-01T13:24:35.123456789"
+    val ltzStr = "2020-01-01T21:24:35.987654321Z"
+    Seq(
+      9 -> ("2020-01-01 13:24:35.123456789", "2020-01-01 13:24:35.987654321"),
+      8 -> ("2020-01-01 13:24:35.123456780", "2020-01-01 13:24:35.987654320"),
+      7 -> ("2020-01-01 13:24:35.123456700", "2020-01-01 13:24:35.987654300")
+    ).foreach { case (p, (ntzExpected, ltzExpected)) =>
+      val ntz = ntzNanos(ntzStr, p)
+      // SQL path: date_format, to_char, to_varchar all render sub-microsecond digits.
+      checkAnswer(
+        ntz.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(ntzExpected, ntzExpected, ntzExpected))
+      // Column API agrees with the SQL path.
+      checkAnswer(
+        ntz.select(date_format(col("c"), fmt), to_char(col("c"), lit(fmt)),
+          to_varchar(col("c"), lit(fmt))),
+        Row(ntzExpected, ntzExpected, ntzExpected))
+
+      val ltz = ltzNanos(ltzStr, p)
+      checkAnswer(
+        ltz.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(ltzExpected, ltzExpected, ltzExpected))
+      checkAnswer(
+        ltz.select(date_format(col("c"), fmt), to_char(col("c"), lit(fmt)),
+          to_varchar(col("c"), lit(fmt))),
+        Row(ltzExpected, ltzExpected, ltzExpected))
+    }
+
+    // NULL nanosecond input renders NULL for all three functions.
+    Seq(7, 8, 9).foreach { p =>
+      val ntzNull = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltzNull = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(
+        ntzNull.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(null, null, null))
+      checkAnswer(
+        ltzNull.selectExpr(
+          s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')"),
+        Row(null, null, null))
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over nanos reject the LEGACY " +
+    "time parser policy") {
+    // date_format never sets forTimestampNTZ, so under LEGACY it builds a legacy formatter for
+    // both NTZ and LTZ nanos, whose nanos format methods raise
+    // TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER (a micros value would format fine). Mirrors the
+    // JSON-path LEGACY coverage (SPARK-57456) at the expression level.
+    def rootNanosError(e: Throwable): SparkUnsupportedOperationException = {
+      var cause = e
+      while (cause != null && !cause.isInstanceOf[SparkUnsupportedOperationException]) {
+        cause = cause.getCause
+      }
+      assert(cause != null, s"Expected TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER, but got: $e")
+      cause.asInstanceOf[SparkUnsupportedOperationException]
+    }
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+      val expectedParameters =
+        Map("config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+      val dfs = Seq(
+        ntzNanos("2020-01-01T13:24:35.123456789", 9),
+        ltzNanos("2020-01-01T21:24:35.987654321Z", 9))
+      dfs.foreach { df =>
+        Seq(s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')")
+          .foreach { expr =>
+            checkError(
+              exception = rootNanosError(intercept[Exception] {
+                df.selectExpr(expr).collect()
+              }),
+              condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+              parameters = expectedParameters)
+          }
       }
     }
   }

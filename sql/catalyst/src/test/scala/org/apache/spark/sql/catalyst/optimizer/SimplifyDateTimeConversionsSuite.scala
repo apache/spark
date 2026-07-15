@@ -91,4 +91,31 @@ class SimplifyDateTimeConversionsSuite extends PlanTest {
     // Should NOT be simplified - optimized plan should equal original (no rewrite)
     comparePlans(optimized, originalQuery)
   }
+
+  test("SPARK-57816: SimplifyDateTimeConversions skips nanosecond timestamp child") {
+    val pattern = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { nanosType =>
+      val nanosAttr = AttributeReference("t", nanosType)()
+      val nanosRelation = LocalRelation(nanosAttr)
+
+      val df = DateFormatClass(nanosAttr, pattern)
+
+      // date_format(to_timestamp(date_format(nanos_col, p), p), p) should NOT simplify because
+      // the round trip through micro TimestampType truncates sub-microsecond precision.
+      val originalQuery = nanosRelation
+        .select(
+          DateFormatClass(
+            GetTimestamp(
+              df,
+              pattern,
+              TimestampType),
+            pattern) as "c1")
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      // Should NOT be simplified - optimized plan should equal original (no rewrite)
+      comparePlans(optimized, originalQuery)
+    }
+  }
 }

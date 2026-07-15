@@ -922,3 +922,67 @@ struct<v:timestamp_ntz(9),next_v:timestamp_ntz(9)>
 2020-01-01 00:00:00.0000001	2020-01-01 00:00:00.0000005
 2020-01-01 00:00:00.0000005	2020-01-01 00:00:00.0000009
 2020-01-01 00:00:00.0000009	NULL
+
+
+-- !query
+SELECT date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456780
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456700
+
+
+-- !query
+SELECT to_char(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456700
+
+
+-- !query
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8), 'HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_NTZ(8)), HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+13:24:35.123456780
+
+
+-- !query
+SELECT date_format(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+1960-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT date_format(NULL :: timestamp_ntz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+NULL
