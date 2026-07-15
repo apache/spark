@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.plans.LeftExistence
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, JOIN, SORT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.VariantType
 
@@ -103,6 +104,21 @@ import org.apache.spark.sql.types.VariantType
  * [[SQLConf.PUSH_VARIANT_INTO_SCAN_PULL_OUT_EXTRACTIONS]] (and is a no-op unless
  * [[SQLConf.PUSH_VARIANT_INTO_SCAN]] is also enabled) and only fires when a hoistable extraction is
  * present, so non-variant plans are untouched.
+ *
+ * Cast-error surface: relocating a strict extraction (`variant_get(..., failOnError = true)` or a
+ * strict `Cast`) below a `Join` means it is evaluated at the scan on rows the join later eliminates
+ * -- so a cast failure can surface for a row the un-hoisted plan would never have cast (here the
+ * eliminating rows come from the *other* joined table). This is the same pre-existing trade-off as
+ * [[PushVariantIntoScan]] pushing casts below a `Filter`, not a new error class: in both, the
+ * strict cast runs before the operator that would have discarded the failing row. This rule only
+ * relocates the extraction into a `Project`; [[PushVariantIntoScan]] still does the scan-level
+ * materialization and, when [[SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR]] is set (default
+ * false), wraps the cast with a per-row cast-error companion slot so the error is only raised when
+ * the original expression consumes the failing row. That deferral is provenance-agnostic -- it acts
+ * on the relocated extraction regardless of how it reached the `Project` -- so enabling the flag
+ * suppresses the join-eliminated-row error exactly as it does the filter-eliminated-row case. With
+ * the flag off (the default), the strict cast raises immediately on any failing scanned row, as
+ * documented for below-`Filter` pushdown.
  */
 object PullOutVariantExtractions extends Rule[LogicalPlan] {
 
@@ -115,8 +131,11 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
     } else {
       // First pass: handle operators where a narrowing Project above the barrier tells us which
       // columns remain live. `transformUp` so inner operators are rewritten before their parents.
-      // Sort/Join are matched together with the Project above them (see class doc).
-      val afterProjectCases = plan.transformUp {
+      // Sort/Join are matched together with the Project above them (see class doc). Prune to
+      // subtrees that actually contain one of the matched operators so plans with none (and the
+      // Once-batch idempotence re-run) skip the traversal.
+      val afterProjectCases = plan.transformUpWithPruning(
+        _.containsAnyPattern(AGGREGATE, SORT, JOIN)) {
         case agg: Aggregate => rewriteAggregate(agg)
         case p @ Project(projectList, s: Sort) => rewriteSortUnderProject(p, projectList, s)
         case p @ Project(projectList, j: Join) => rewriteJoinUnderProject(p, projectList, j)
@@ -127,8 +146,9 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
       // so a bare-Sort arm would fire on the inner Sort of a `Project(_, Sort)` shape before the
       // parent Project is visited, keeping v raw and pre-empting `rewriteSortUnderProject`. After
       // the first pass, any Sort that was under a Project has its order rewritten to non-hoistable
-      // `_ve` attribute references, so `rewriteBareSort` is a no-op on it (idempotent).
-      afterProjectCases.transformUp {
+      // `_ve` attribute references, so `rewriteBareSort` is a no-op on it (idempotent). Prune to
+      // Sort-bearing subtrees so Sort-free plans skip this pass entirely.
+      afterProjectCases.transformUpWithPruning(_.containsPattern(SORT)) {
         case s: Sort => rewriteBareSort(s)
       }
     }
@@ -201,9 +221,10 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
         case join: Join =>
           val leftOutput = join.left.outputSet
           val rightOutput = join.right.outputSet
-          // For LeftSemi/LeftAnti the right side is not in the join output, so a right-side alias
-          // could never be referenced above the join. Route only left-side aliases there; leave any
-          // right-side alias in place (it will not have been produced for such joins in practice).
+          // For LeftSemi/LeftAnti/ExistenceJoin (all matched by `LeftExistence`) the right side is
+          // not in the join output, so a right-side alias could never be referenced above the join.
+          // Route only left-side aliases there; leave any right-side alias in place (it will not
+          // have been produced for such joins in practice).
           val rightEligible = join.joinType match {
             case LeftExistence(_) => false
             case _ => true
@@ -262,52 +283,6 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
           val keep = other.output.filter(needed.contains)
           Project(keep ++ aliases, other)
       }
-    }
-  }
-
-  // Pushes hoisted extraction aliases into a `Join` child: routes each alias to the join side whose
-  // output owns its referenced attribute and recurses via `pushSideAliases` so it lands in a
-  // `Project` directly above that side's scan (descending nested joins). The join propagates the
-  // `_ve` aliases up through its output, where the parent operator (Aggregate/Sort) references
-  // them.
-  // A `Project` wrapper above the join would leave the aliases invisible to the pushdown
-  // (`PhysicalOperation` stops at the join) and would not be revisited by the outer `transformUp`,
-  // so we push down instead.
-  //
-  // `needed` is the set of attributes that must remain live above the join (what the parent
-  // references). The join condition's references are added so join keys are never dropped. If any
-  // alias cannot be routed to exactly one pushable side -- a right-side alias on a `LeftExistence`
-  // join, or one that straddles both sides -- we fall back to wrapping a `Project` of the live
-  // columns plus every alias above the join, which keeps the parent's `_ve` references resolved (at
-  // the cost of reading that side's variant raw).
-  private def pushAliasesIntoJoin(
-      join: Join,
-      aliases: Seq[NamedExpression],
-      needed: AttributeSet): LogicalPlan = {
-    val leftOutput = join.left.outputSet
-    val rightOutput = join.right.outputSet
-    // For LeftSemi/LeftAnti/ExistenceJoin the right side is not in the join output, so a right-side
-    // alias could never be referenced above the join; only the left side is pushable.
-    val rightEligible = join.joinType match {
-      case LeftExistence(_) => false
-      case _ => true
-    }
-    val leftAliases = aliases.filter(_.references.subsetOf(leftOutput))
-    val rightAliases =
-      if (rightEligible) {
-        aliases.filter(a =>
-          !a.references.subsetOf(leftOutput) && a.references.subsetOf(rightOutput))
-      } else {
-        Seq.empty[NamedExpression]
-      }
-    if (leftAliases.size + rightAliases.size != aliases.size) {
-      val keep = join.output.filter(needed.contains)
-      Project(keep ++ aliases, join)
-    } else {
-      val neededHere = needed ++ join.condition.map(_.references).getOrElse(AttributeSet.empty)
-      join.copy(
-        left = pushSideAliases(join.left, leftAliases, neededHere),
-        right = pushSideAliases(join.right, rightAliases, neededHere))
     }
   }
 
@@ -377,11 +352,14 @@ object PullOutVariantExtractions extends Rule[LogicalPlan] {
         // No fusable child Project. Only the still-referenced columns plus the hoisted aliases
         // reach the child, so a variant used solely via a hoisted extraction is dropped.
         case join: Join =>
-          // The Aggregate's child is a Join. Push the hoisted aliases down through the join tree
-          // onto the owning side(s), where they land directly above the scan; the Aggregate
-          // references the `_ve` aliases, which the join propagates up through its output. Any
-          // variant still needed raw (in `referenced`) stays live. See `pushAliasesIntoJoin`.
-          pushAliasesIntoJoin(join, hoister.aliases, referenced)
+          // The Aggregate's child is a Join. `pushSideAliases` pushes the hoisted aliases down
+          // through the join tree onto the owning side(s), where they land directly above the scan;
+          // the Aggregate references the `_ve` aliases, which the join propagates up through its
+          // output. Any variant still needed raw (in `referenced`) stays live. A `Project` wrapper
+          // above the join would leave the aliases invisible to the pushdown (`PhysicalOperation`
+          // stops at the join) and would not be revisited by the outer `transformUp`, so we push
+          // down instead.
+          pushSideAliases(join, hoister.aliases, referenced)
         case other =>
           val passthrough = other.output.filter(referenced.contains)
           Project(passthrough ++ hoister.aliases, other)

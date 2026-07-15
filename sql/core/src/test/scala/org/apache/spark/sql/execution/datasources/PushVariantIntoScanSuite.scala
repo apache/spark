@@ -812,6 +812,43 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("strict cast pushed through a join: cast-error deferral covers join-eliminated rows") {
+    // SS has a row whose data is a non-castable type; that row is eliminated by the join (its k
+    // has no match in DIM). The aggregate-argument extraction `cast(ss.data as int)` is hoisted
+    // onto the SS side and pushed through the join to the scan.
+    // - With deferral OFF: the strict cast is evaluated at the scan on the eliminated row and
+    //   raises INVALID_VARIANT_CAST (the same trade-off as below-Filter pushdown).
+    // - With deferral ON: the cast-error companion slot carries the error instead; the join
+    //   eliminates the row before its error is consumed; the query returns correct values.
+    // Data: SS has k=1 (string data, bad for cast) and k=2 (int data, good); DIM has k=2 only.
+    // Result: only the k=2 row survives the join and is included in the aggregate.
+    withVariantParquetTables(
+      VariantTable(
+        "SS", "k int, data variant",
+        Seq("(1, parse_json('\"hello\"'))", "(2, parse_json('42'))")),
+      VariantTable(
+        "DIM", "k int, name string",
+        Seq("(2, 'match')"))) {
+      val query = "select avg(cast(ss.data as int)) as avg_val from SS ss join DIM d on ss.k = d.k"
+
+      // Without deferral, the strict cast pushed into the scan raises on the k=1 row (malformed)
+      // even though that row is eliminated by the join condition ss.k = d.k (no k=1 in DIM).
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
+        val ex = intercept[Exception](sql(query).collect())
+        assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
+      }
+
+      // With deferral, the cast error is deferred and not raised because the failing row is
+      // eliminated before its error is consumed. The query returns the correct average.
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        val rows = sql(query).collect()
+        assert(rows.length == 1, s"Expected 1 row, got ${rows.length}")
+        val avgVal = rows(0).getDouble(0)
+        assert(avgVal == 42.0, s"Expected avg=42.0 (only k=2 row survives), got $avgVal")
+      }
+    }
+  }
+
   test("left semi join with a right-side variant_get in the condition: right side shredded") {
     // The join condition extracts from the RIGHT (DIM) variant. For a LEFT SEMI join the right side
     // is not in the join output, but the condition is still evaluated over both children, so the
