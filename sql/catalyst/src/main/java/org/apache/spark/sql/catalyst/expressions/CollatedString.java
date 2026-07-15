@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.util.Arrays;
+
 /**
  * A DataSketches ItemsSketch item for non-binary collated strings (SPARK-58069).
  * <p>
@@ -24,18 +26,19 @@ package org.apache.spark.sql.catalyst.expressions;
  * strings (e.g. {@code 'HELLO'} and {@code 'hello'} under {@code UTF8_LCASE}) are counted as a
  * single item. The {@code original} field retains an actual input value to return in the result,
  * mirroring how {@code mode()} returns a real value rather than the normalized collation key.
+ * <p>
+ * The {@code key} is the raw collation sort-key bytes (SPARK-58096). ICU sort keys are arbitrary
+ * bytes, not valid UTF-8, so decoding them to a {@code String} is lossy: two collation-distinct
+ * values whose keys differ only within invalid-byte regions would decode to the same {@code String}
+ * and be incorrectly merged. Keying on the bytes directly avoids that over-merge.
  */
 public class CollatedString {
-    private final String key;
+    private final byte[] key;
     private final String original;
 
-    public CollatedString(String key, String original) {
+    public CollatedString(byte[] key, String original) {
         this.key = key;
         this.original = original;
-    }
-
-    public String key() {
-        return key;
     }
 
     public String original() {
@@ -44,7 +47,7 @@ public class CollatedString {
 
     @Override
     public int hashCode() {
-        return key.hashCode();
+        return Arrays.hashCode(key);
     }
 
     @Override
@@ -55,6 +58,6 @@ public class CollatedString {
         if (!(obj instanceof CollatedString)) {
             return false;
         }
-        return key.equals(((CollatedString) obj).key);
+        return Arrays.equals(key, ((CollatedString) obj).key);
     }
 }
