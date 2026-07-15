@@ -86,4 +86,17 @@ class UDTRegistrationSuite extends SparkFunSuite {
     assert(!UDTRegistration.exists(classOf[TestUserClass3].getName))
     assert(UDTRegistration.getUDTFor(classOf[TestUserClass3].getName).isEmpty)
   }
+
+  test("UDT_CLASS_NOT_FOUND.FOR_USER_CLASS when UDT class is not loadable") {
+    val userClass = classOf[TestUserClass3].getName
+    val fakeUdtClass = "org.apache.spark.sql.NonExistentUDT"
+    UDTRegistration.register(userClass, fakeUdtClass)
+    checkError(
+      exception = intercept[SparkException] {
+        UDTRegistration.getUDTFor(userClass)
+      },
+      condition = "UDT_CLASS_NOT_FOUND.FOR_USER_CLASS",
+      sqlState = Some("38000"),
+      parameters = Map("udtClass" -> fakeUdtClass, "userClass" -> userClass))
+  }
 }
