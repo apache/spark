@@ -24,6 +24,7 @@ import warnings
 from collections.abc import Callable, Sized
 import functools
 from threading import RLock
+from types import TracebackType
 from typing import (
     Optional,
     Any,
@@ -32,6 +33,7 @@ from typing import (
     Dict,
     List,
     Tuple,
+    Type,
     Set,
     cast,
     overload,
@@ -988,6 +990,55 @@ class SparkSession:
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
+
+    def __enter__(self) -> "SparkSession":
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 4.3.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.remote("local[*]").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 4.3.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.remote("local[*]").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        self.stop()
 
     @property
     def is_stopped(self) -> bool:
