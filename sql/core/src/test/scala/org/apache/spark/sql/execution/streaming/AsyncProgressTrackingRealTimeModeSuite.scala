@@ -192,6 +192,53 @@ class AsyncProgressTrackingRealTimeModeSuite
     )
   }
 
+  test("restart a sync-checkpoint RTM query with async progress tracking on by default") {
+    // Enabling APT by default for stateless RTM means an existing query that previously ran on
+    // the synchronous MicroBatchExecution will silently switch to
+    // AsyncProgressTrackingMicroBatchExecution on its next restart. This verifies the async engine
+    // can resume from a checkpoint written by the sync engine, and the reverse direction, without
+    // reprocessing or skipping data. A fresh sink is used per run so each assertion sees only that
+    // run's output.
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    val inputData = LowLatencyMemoryStream[Int]
+    val df = inputData.toDF()
+
+    // Run 1: force the synchronous engine by disabling APT explicitly.
+    testStream(df, outputMode = OutputMode.Update(), sink = new ContinuousMemorySink(),
+      extraOptions = Map(ASYNC_PROGRESS_TRACKING_ENABLED -> "false"))(
+      StartStream(checkpointLocation = checkpointLocation),
+      AssertOnQuery(_.getClass == classOf[MicroBatchExecution]),
+      AddData(inputData, 0 until 10: _*),
+      CheckAnswerWithTimeout(60000, 0 until 10: _*),
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(0),
+      StopStream
+    )
+
+    // Run 2: same checkpoint, default settings -> APT is now enabled. Must resume, not replay.
+    testStream(df, outputMode = OutputMode.Update(), sink = new ContinuousMemorySink())(
+      StartStream(checkpointLocation = checkpointLocation),
+      AssertOnQuery(_.getClass == classOf[AsyncProgressTrackingMicroBatchExecution]),
+      AddData(inputData, 10 until 20: _*),
+      CheckAnswerWithTimeout(60000, 10 until 20: _*), // Only new data; 0..9 must not reprocess.
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(1),
+      StopStream
+    )
+
+    // Run 3: restart again with APT explicitly disabled to confirm the reverse direction
+    // (APT-written checkpoint resumed by the sync engine) also resumes cleanly.
+    testStream(df, outputMode = OutputMode.Update(), sink = new ContinuousMemorySink(),
+      extraOptions = Map(ASYNC_PROGRESS_TRACKING_ENABLED -> "false"))(
+      StartStream(checkpointLocation = checkpointLocation),
+      AssertOnQuery(_.getClass == classOf[MicroBatchExecution]),
+      AddData(inputData, 20 until 30: _*),
+      CheckAnswerWithTimeout(60000, 20 until 30: _*), // Only new data; nothing reprocessed.
+      advanceRealTimeClock,
+      StopStream
+    )
+  }
+
   test("current batch wait for the previous batch to commit") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->

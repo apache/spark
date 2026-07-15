@@ -85,6 +85,12 @@ Choosing the batch duration is a trade-off:
 The duration is set on the Real-time trigger, as shown under
 [Enabling Real-time Mode](#enabling-real-time-mode).
 
+Progress is committed using **asynchronous progress tracking**: the offset and commit logs are
+written off the record-processing path so that checkpointing does not stall processing. This is
+enabled automatically for Real-time Mode queries and every batch is checkpointed (the async
+progress tracking checkpoint interval is fixed at 0 in Real-time Mode). It can be turned off with
+the `asyncProgressTrackingEnabled` writer option, in which case progress is committed synchronously.
+
 ## Comparison with Other Modes
 
 The table below summarizes how Real-time Mode relates to the default micro-batch engine and to the

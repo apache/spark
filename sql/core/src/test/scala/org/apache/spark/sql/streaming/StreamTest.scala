@@ -299,7 +299,8 @@ trait StreamTest extends SharedSparkSession with TimeLimits {
       typeIsSuperClass: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
     override def toString(): String =
-      s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError]"
+      s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError, " +
+        s"typeIsSuperClass: $typeIsSuperClass]"
   }
 
   /**
