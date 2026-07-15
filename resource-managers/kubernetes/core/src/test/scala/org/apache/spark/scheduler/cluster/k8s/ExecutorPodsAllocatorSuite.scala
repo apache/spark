@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
@@ -893,6 +893,23 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock))
     assert(e.getMessage.contains("No pod was found named i-do-not-exist in the cluster in the" +
       " namespace default"))
+  }
+
+  test("SPARK-58113: wait for driver readiness by default") {
+    // The allocator in `before` was started with the default conf.
+    verify(driverPodOperations, times(1)).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58113: skip driver readiness wait when publishNotReadyAddresses is enabled") {
+    clearInvocations(driverPodOperations)
+    val confWithPublishNotReady = conf.clone()
+      .set(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES, true)
+    val podsAllocator = new ExecutorPodsAllocator(
+      confWithPublishNotReady, secMgr, executorBuilder, kubernetesClient, snapshotsStore,
+      waitForExecutorPodsClock)
+    podsAllocator.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    verify(driverPodOperations, never()).waitUntilReady(any(), any())
   }
 
   test("SPARK-39688: getReusablePVCs should handle accounts with no PVC permission") {
