@@ -997,18 +997,18 @@ class GroupedAggArrowUDFTestsMixin:
     def test_arrow_batch_slicing(self):
         import pyarrow as pa
 
-        df = self.spark.range(10000000).select(
+        df = self.spark.range(1000000).select(
             (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
         )
 
         @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
         def arrow_max(v):
-            assert len(v) == 10000000 / 2, len(v)
+            assert len(v) == 1000000 / 2, len(v)
             return pa.compute.max(v)
 
         expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
 
-        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+        for maxRecords, maxBytes in [(100, 2**31 - 1), (0, 104858), (100, 104858)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
