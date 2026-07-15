@@ -9913,7 +9913,7 @@ def year(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10006,7 +10006,7 @@ def quarter(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10099,7 +10099,7 @@ def month(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10194,7 +10194,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10282,7 +10282,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     See Also
     --------
@@ -10367,7 +10367,7 @@ def day(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10465,7 +10465,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10808,7 +10808,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10893,7 +10893,7 @@ def weekday(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -10979,7 +10979,7 @@ def monthname(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -11062,7 +11062,7 @@ def dayname(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
-        A column that evaluates to a date.
+        A column that evaluates to a date, timestamp or string.
 
     Returns
     -------
@@ -17820,7 +17820,8 @@ def to_char(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         A column that evaluates to a numeric, date, timestamp, time, or binary.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert char values.
-        A column that evaluates to a string. Must be a constant.
+        A column that evaluates to a string. Must be a constant when ``col`` is numeric
+        or binary.
 
     Examples
     --------
@@ -17868,7 +17869,8 @@ def to_varchar(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         A column that evaluates to a numeric, date, timestamp, time, or binary.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert char values.
-        A column that evaluates to a string. Must be a constant.
+        A column that evaluates to a string. Must be a constant when ``col`` is numeric
+        or binary.
 
     Examples
     --------
@@ -26196,16 +26198,22 @@ def try_make_interval(
         A column that evaluates to an integer.
     months : :class:`~pyspark.sql.Column` or column name, optional
         The number of months, positive or negative.
+        A column that evaluates to an integer.
     weeks : :class:`~pyspark.sql.Column` or column name, optional
         The number of weeks, positive or negative.
+        A column that evaluates to an integer.
     days : :class:`~pyspark.sql.Column` or column name, optional
         The number of days, positive or negative.
+        A column that evaluates to an integer.
     hours : :class:`~pyspark.sql.Column` or column name, optional
         The number of hours, positive or negative.
+        A column that evaluates to an integer.
     mins : :class:`~pyspark.sql.Column` or column name, optional
         The number of minutes, positive or negative.
+        A column that evaluates to an integer.
     secs : :class:`~pyspark.sql.Column` or column name, optional
         The number of seconds with the fractional part in microsecond precision.
+        A column that evaluates to a decimal.
 
     Returns
     -------
@@ -26365,16 +26373,22 @@ def make_interval(
         A column that evaluates to an integer.
     months : :class:`~pyspark.sql.Column` or column name, optional
         The number of months, positive or negative.
+        A column that evaluates to an integer.
     weeks : :class:`~pyspark.sql.Column` or column name, optional
         The number of weeks, positive or negative.
+        A column that evaluates to an integer.
     days : :class:`~pyspark.sql.Column` or column name, optional
         The number of days, positive or negative.
+        A column that evaluates to an integer.
     hours : :class:`~pyspark.sql.Column` or column name, optional
         The number of hours, positive or negative.
+        A column that evaluates to an integer.
     mins : :class:`~pyspark.sql.Column` or column name, optional
         The number of minutes, positive or negative.
+        A column that evaluates to an integer.
     secs : :class:`~pyspark.sql.Column` or column name, optional
         The number of seconds with the fractional part in microsecond precision.
+        A column that evaluates to a decimal.
 
     Returns
     -------
@@ -29474,7 +29488,8 @@ def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName")
     -------
     :class:`~pyspark.sql.Column`
         The quantile value(s).
-        Returns a column that evaluates to a long.
+        Returns a column that evaluates to a long, or an array of longs if the rank
+        argument is an array.
 
     Examples
     --------
@@ -29513,7 +29528,8 @@ def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") 
     -------
     :class:`~pyspark.sql.Column`
         The quantile value(s).
-        Returns a column that evaluates to a float.
+        Returns a column that evaluates to a float, or an array of floats if the rank
+        argument is an array.
 
     Examples
     --------
@@ -29552,7 +29568,8 @@ def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName")
     -------
     :class:`~pyspark.sql.Column`
         The quantile value(s).
-        Returns a column that evaluates to a double.
+        Returns a column that evaluates to a double, or an array of doubles if the rank
+        argument is an array.
 
     Examples
     --------
@@ -29591,7 +29608,8 @@ def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName")
     -------
     :class:`~pyspark.sql.Column`
         The rank value(s) (between 0.0 and 1.0).
-        Returns a column that evaluates to a double.
+        Returns a column that evaluates to a double, or an array of doubles if the quantile
+        argument is an array.
 
     Examples
     --------
@@ -29630,7 +29648,8 @@ def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") 
     -------
     :class:`~pyspark.sql.Column`
         The rank value(s) (between 0.0 and 1.0).
-        Returns a column that evaluates to a double.
+        Returns a column that evaluates to a double, or an array of doubles if the quantile
+        argument is an array.
 
     Examples
     --------
@@ -29669,7 +29688,8 @@ def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName")
     -------
     :class:`~pyspark.sql.Column`
         The rank value(s) (between 0.0 and 1.0).
-        Returns a column that evaluates to a double.
+        Returns a column that evaluates to a double, or an array of doubles if the quantile
+        argument is an array.
 
     Examples
     --------
