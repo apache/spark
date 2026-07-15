@@ -105,6 +105,7 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   private def assertSchemaIncompatible(graph: DataflowGraph): Unit = {
     val ex = intercept[AnalysisException](graph.validate())
     assert(ex.getCondition == "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE")
+    assert(ex.getMessage.contains(targetIdentifier.unquotedString))
   }
 
   // Plain flows: the inferred schema is exactly the source's data columns.
