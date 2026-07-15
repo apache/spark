@@ -161,12 +161,12 @@ object ScdType {
  * @param storedAsScdType        The SCD strategy these args should be applied to.
  * @param columnSelection        Which source columns to select in the target table. None means
  *                               all columns.
- * @param trackHistorySelection  SCD2 only. Selects the user-data columns whose values define a
- *                               run: two consecutive upsert events for the same key are
+ * @param trackHistorySelection  SCD2 only. Selects the selected user-data columns whose values
+ *                               define a run: two consecutive upsert events for the same key are
  *                               coalesced into the same run iff they agree on every selected
- *                               column. None means every eligible user column (i.e. every
- *                               source column that is neither a key nor a framework column) is
- *                               considered tracked. Ignored under SCD1.
+ *                               tracking column. None means every eligible selected user column
+ *                               (i.e. every selected source column that is neither a key nor a
+ *                               framework column) is considered tracked. Ignored under SCD1.
  */
 case class ChangeArgs(
     keys: Seq[UnqualifiedColumnName],

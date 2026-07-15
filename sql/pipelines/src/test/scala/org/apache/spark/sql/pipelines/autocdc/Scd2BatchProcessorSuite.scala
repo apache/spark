@@ -98,6 +98,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
   private def processorWithKeys(
       keys: Seq[String],
       deleteCondition: Option[Column] = None,
+      columnSelection: Option[ColumnSelection] = None,
       trackHistorySelection: Option[ColumnSelection] = None
   ): Scd2BatchProcessor =
     Scd2BatchProcessor(
@@ -106,6 +107,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         sequencing = F.col("seq"),
         storedAsScdType = ScdType.Type2,
         deleteCondition = deleteCondition,
+        columnSelection = columnSelection,
         trackHistorySelection = trackHistorySelection
       ),
       resolvedSequencingType = LongType
@@ -2013,16 +2015,17 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("reconcileStartAndEndAt: default tracking treats every non-key user column as tracked") {
+  test("reconcileStartAndEndAt: default tracking treats every non-key selected user column " +
+    "as tracked") {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType()
       .add("id", IntegerType)
       .add("name", StringType)
       .add("status", StringType)
 
-    // Default `trackHistorySelection` (None) is documented to treat every eligible user
-    // column as tracked. The two rows agree on `name` but disagree on `status`, which
-    // should therefore start a new run.
+    // Default `trackHistorySelection` (None) treats every eligible selected user column
+    // as tracked. With no columnSelection, both `name` and `status` are selected. The
+    // two rows agree on `name` but disagree on `status`, so they start distinct runs.
     val df = targetTableOf(userSchema)(
       Row(1, "alice", "active", 5L, null, Row(5L)),
       Row(1, "alice", "inactive", 10L, null, Row(10L))
@@ -2037,6 +2040,68 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Row(1, "alice", "inactive", 10L, null, Row(10L))
       )
     )
+  }
+
+  test("reconcileStartAndEndAt: default tracking ignores columns excluded by columnSelection") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("name"))
+        )
+      )
+    )
+    val sourceSchema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // `status` differs but is excluded from the selected target schema. Default tracking
+    // therefore considers only the selected non-key user column (`name`), and the rows
+    // collapse into one no-op run.
+    val df = microbatchOf(sourceSchema)(
+      Row(1, 5L, "alice", "active"),
+      Row(1, 10L, "alice", "inactive")
+    )
+
+    val result = processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L))
+      )
+    )
+  }
+
+  test("reconcileStartAndEndAt: trackHistorySelection cannot include a column excluded by " +
+    "columnSelection") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("name"))
+        )
+      ),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("status")))
+      )
+    )
+    val sourceSchema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("name", StringType)
+      .add("status", StringType)
+    val df = microbatchOf(sourceSchema)(
+      Row(1, 5L, "alice", "active")
+    )
+
+    val ex = intercept[AnalysisException] {
+      processor.reconcileStartAndEndAt(processor.preprocessMicrobatch(df))
+    }
+    assert(ex.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
   }
 
   test("reconcileStartAndEndAt: ExcludeColumns excludes only the listed columns from " +
