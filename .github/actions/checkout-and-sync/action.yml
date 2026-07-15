@@ -19,10 +19,10 @@
 
 name: 'Checkout and Sync'
 description: >-
-  Check out apache/spark at a pinned ref and, on forks, squash-merge
-  the fork branch on top so the build tests the combined result.
-  Callers must add a bare 'actions/checkout@v6' step before invoking
-  this action so that the latest action definition is present in the workspace.
+  Check out apache/spark at a pinned ref and, on forks, squash-merge the fork
+  branch on top so the build tests the combined result. Callers must add a
+  bare 'actions/checkout' step before invoking this action so that the latest
+  action definition is present in the workspace.
 inputs:
   ref:
     description: 'Git ref to check out from apache/spark'
@@ -58,5 +58,11 @@ runs:
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        git \
+          -c user.name='Apache Spark Test Account' \
+          -c user.email='sparktestacc@gmail.com' \
+          merge --no-commit --progress --squash FETCH_HEAD
+        git \
+          -c user.name='Apache Spark Test Account' \
+          -c user.email='sparktestacc@gmail.com' \
+          commit -m "Merged commit" --allow-empty
