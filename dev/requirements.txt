@@ -55,9 +55,6 @@ markupsafe
 jira>=3.5.2
 PyGithub
 
-# pandas API on Spark Code formatter.
-black==26.3.1
-
 # Spark Connect (required)
 grpcio>=1.76.0
 grpcio-status>=1.76.0
