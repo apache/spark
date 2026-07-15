@@ -1223,11 +1223,6 @@
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
     ]
   },
-  "VALUE_NOT_TRUE": {
-    "message": [
-      "Value for `<arg_name>` must be True, got '<arg_value>'."
-    ]
-  },
   "VALUE_OUT_OF_BOUNDS": {
     "message": [
       "Value for `<arg_name>` must be between <lower_bound> and <upper_bound> (inclusive), got <actual>"
