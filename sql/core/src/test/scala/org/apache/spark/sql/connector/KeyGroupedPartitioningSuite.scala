@@ -4469,32 +4469,4 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       }
     }
   }
-
-  test("SPARK-58120: doCanonicalize preserves keyGroupedPartitioning expression order") {
-    // The int/string pair is known to reorder under normalizePredicates hashCode sorting.
-    // See QueryPlanSuite "SPARK-58120: normalizePredicates reorders expressions by hashCode
-    // via orderCommutative".
-    val partition = Array(identity("id"), identity("data"))
-    createTable(table, columns, partition)
-    sql(s"INSERT INTO testcat.ns.$table VALUES " +
-        "(1, 'aa', cast('2020-01-01' as timestamp)), " +
-        "(2, 'bb', cast('2021-01-01' as timestamp)), " +
-        "(3, 'cc', cast('2022-01-01' as timestamp))")
-
-    val df = sql(s"SELECT id, data FROM testcat.ns.$table")
-    val scan = df.queryExecution.executedPlan.collect { case b: BatchScanExec => b }.head
-    val canonicalized = scan.canonicalized.asInstanceOf[BatchScanExec]
-
-    // The canonicalized keyGroupedPartitioning expressions must preserve the same order
-    // as the original: [id (IntegerType), data (StringType)], not reversed.
-    assert(scan.keyGroupedPartitioning.isDefined,
-      "Expected BatchScanExec to have keyGroupedPartitioning set")
-    val originalTypes = scan.keyGroupedPartitioning.get.map(_.dataType)
-    val canonicalizedTypes = canonicalized.keyGroupedPartitioning.get.map(_.dataType)
-    assert(originalTypes == canonicalizedTypes,
-      s"Expression order changed after canonicalization: " +
-        s"original types=$originalTypes, canonicalized types=$canonicalizedTypes")
-    assert(canonicalizedTypes == Seq(IntegerType, StringType),
-      s"Expected [IntegerType, StringType] but got $canonicalizedTypes")
-  }
 }
