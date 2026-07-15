@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -1098,6 +1098,17 @@ class QueryCompilationErrorsSuite
         parameters = Map("format" -> "JSON")
       )
     }
+  }
+
+  test("RESERVED_DATABASE_NAME: cannot create a database with a system-preserved name") {
+    val globalTempDB = spark.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"CREATE DATABASE $globalTempDB")
+      },
+      condition = "RESERVED_DATABASE_NAME",
+      parameters = Map("database" -> s"`$globalTempDB`")
+    )
   }
 }
 
