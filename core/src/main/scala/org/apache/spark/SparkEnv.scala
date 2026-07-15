@@ -399,31 +399,40 @@ class SparkEnv (
 
     // The tracker is also needed when a StreamingShuffleManager is configured as the incremental
     // manager (spark.shuffle.manager.incremental) to serve pipelined shuffle dependencies.
-    val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
-    val incrementalManagerName =
-      conf.get(config.SHUFFLE_MANAGER_INCREMENTAL).map(ShuffleManager.resolveShortName)
-    if (shuffleManagerName == classOf[StreamingShuffleManager].getName
-        || shuffleManagerName == classOf[MultiShuffleManager].getName
-        || incrementalManagerName.contains(classOf[StreamingShuffleManager].getName)) {
-      val tracker = if (SparkContext.isDriver(executorId)) {
-        new StreamingShuffleOutputTrackerMaster(conf)
-      } else {
-        new StreamingShuffleOutputTrackerWorker(conf)
-      }
-
-      if (SparkContext.isDriver(executorId)) {
-        tracker.trackerEndpoint = rpcEnv.setupEndpoint(
-          StreamingShuffleOutputTracker.ENDPOINT_NAME,
-          new StreamingShuffleOutputTrackerMasterEndpoint(
-            rpcEnv,
-            tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster],
-            conf))
-      } else {
-        tracker.trackerEndpoint = RpcUtils.makeDriverRef(
-          StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
-      }
-      _streamingShuffleOutputTracker = Some(tracker)
+    val incrementalIsStreaming = conf.get(config.SHUFFLE_MANAGER_INCREMENTAL)
+      .map(ShuffleManager.resolveShortName)
+      .contains(classOf[StreamingShuffleManager].getName)
+    if (incrementalIsStreaming) {
+      createStreamingShuffleOutputTracker()
+      return
     }
+
+    val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
+    if (shuffleManagerName == classOf[StreamingShuffleManager].getName
+        || shuffleManagerName == classOf[MultiShuffleManager].getName) {
+      createStreamingShuffleOutputTracker()
+    }
+  }
+
+  private def createStreamingShuffleOutputTracker(): Unit = {
+    val tracker = if (SparkContext.isDriver(executorId)) {
+      new StreamingShuffleOutputTrackerMaster(conf)
+    } else {
+      new StreamingShuffleOutputTrackerWorker(conf)
+    }
+
+    if (SparkContext.isDriver(executorId)) {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(
+        StreamingShuffleOutputTracker.ENDPOINT_NAME,
+        new StreamingShuffleOutputTrackerMasterEndpoint(
+          rpcEnv,
+          tracker.asInstanceOf[StreamingShuffleOutputTrackerMaster],
+          conf))
+    } else {
+      tracker.trackerEndpoint = RpcUtils.makeDriverRef(
+        StreamingShuffleOutputTracker.ENDPOINT_NAME, conf, rpcEnv)
+    }
+    _streamingShuffleOutputTracker = Some(tracker)
   }
 
   private[spark] def initializeMemoryManager(
