@@ -24,3 +24,5 @@ recursive-include deps/examples *.py
 recursive-include lib *.zip
 recursive-include pyspark *.pyi py.typed
 include README.md
+include LICENSE
+include NOTICE

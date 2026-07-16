@@ -40,9 +40,12 @@ fi
 
 if [ -d "$SPARK_JARS_DIR" ]; then
   # Build a zip file containing the source package with vignettes
+  cp "$FWDIR/../LICENSE" "$FWDIR/pkg/LICENSE"
+  cp "$FWDIR/../NOTICE" "$FWDIR/pkg/NOTICE"
   SPARK_HOME="${SPARK_HOME}" "$R_SCRIPT_PATH/R" CMD build "$FWDIR/pkg"
 
   find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
+  rm "$FWDIR/pkg/LICENSE" "$FWDIR/pkg/NOTICE"
 else
   echo "Error Spark JARs not found in '$SPARK_HOME'"
   exit 1

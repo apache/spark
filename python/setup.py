@@ -172,6 +172,10 @@ class InstallCommand(install):
 
 
 try:
+    if in_spark:
+        copyfile("../LICENSE", "LICENSE")
+        copyfile("../NOTICE", "NOTICE")
+
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
     # find it where expected. The rest of the files aren't copied because they are accessed
     # using Python imports instead which will be resolved correctly.
@@ -348,6 +352,10 @@ finally:
     # We only cleanup the symlink farm if we were in Spark, otherwise we are installing rather than
     # packaging.
     if in_spark:
+        for license_file in ["LICENSE", "NOTICE"]:
+            if os.path.exists(license_file):
+                os.remove(license_file)
+
         # Depending on cleaning up the symlink farm or copied version
         if _supports_symlinks():
             os.remove(os.path.join(TEMP_PATH, "jars"))
