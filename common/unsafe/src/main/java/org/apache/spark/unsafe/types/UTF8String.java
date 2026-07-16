@@ -1724,9 +1724,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       charCount = Character.charCount(codePoint);
       String subStr = srcStr.substring(k, k + charCount);
       String translated = dict.get(subStr);
-      if (null == translated) {
+      if (translated == null) {
+        // No mapping for this character: keep the original.
         sb.append(subStr);
-      } else if (!"\0".equals(translated)) {
+      } else if (!translated.isEmpty()) {
         sb.append(translated);
       }
     }
