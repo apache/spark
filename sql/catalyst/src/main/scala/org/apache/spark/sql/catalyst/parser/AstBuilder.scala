@@ -7286,6 +7286,42 @@ class AstBuilder extends DataTypeAstBuilder
     CommentOnTable(createUnresolvedTable(ctx.identifierReference, "COMMENT ON TABLE"), comment)
   }
 
+  override def visitCommentColumn(ctx: CommentColumnContext): LogicalPlan = withOrigin(ctx) {
+    val (tableId, columnComments, commandName) = if (ctx.columnComment != null) {
+      // COMMENT ON COLUMN table.column IS 'comment'
+      val identifiers = visitMultipartIdentifier(ctx.columnComment.column)
+      if (identifiers.size < 2) {
+        throw new ParseException("INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER", ctx)
+      }
+      val tableId = identifiers.dropRight(1)
+      val columnId = identifiers.takeRight(1)
+      (tableId, Seq((columnId, visitComment(ctx.columnComment.comment))), "COMMENT ON COLUMN")
+    } else {
+      // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
+      val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+      val columns = ctx.columns.columnComment.asScala.map { c =>
+        (visitMultipartIdentifier(c.column), visitComment(c.comment))
+      }.toSeq
+      (tableId, columns, "COMMENT ON TABLE ... COLUMN")
+    }
+
+    // Only tables are supported: downstream rules (ResolveFieldNameAndPosition, CheckAnalysis,
+    // DataSourceV2Strategy) all expect a ResolvedTable, so a view target must be rejected during
+    // resolution. UnresolvedTable resolves only to a table and reports EXPECT_TABLE_NOT_VIEW
+    // otherwise, matching COMMENT ON TABLE and ALTER TABLE ... ALTER COLUMN.
+    val table = UnresolvedTable(tableId, commandName)
+    val specs = columnComments.map { case (column, comment) =>
+      AlterColumnSpec(
+        UnresolvedFieldName(column),
+        newDataType = None,
+        newNullability = None,
+        newComment = Some(comment),
+        newPosition = None,
+        newDefaultExpression = None)
+    }
+    AlterColumns(table, specs)
+  }
+
   override def visitComment (ctx: CommentContext): String = {
     Option(ctx.stringLit()).map(s => string(visitStringLit(s))).getOrElse("")
   }

@@ -4890,6 +4890,11 @@
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
         ]
       },
+      "COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER" : {
+        "message" : [
+          "COMMENT ON COLUMN requires an identifier with at least two parts. Please qualify the column with the table name (e.g. `table.column`, `database.table.column`, or `catalog.database.table.column`)."
+        ]
+      },
       "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
         "message" : [
           "CREATE FUNCTION with constraints on parameters is not allowed."

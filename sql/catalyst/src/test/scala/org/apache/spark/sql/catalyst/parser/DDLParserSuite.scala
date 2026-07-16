@@ -3093,6 +3093,76 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
+
+    def alterColumnComment(
+        tableIdent: Seq[String],
+        columnComments: Seq[(Seq[String], String)],
+        commandName: String): AlterColumns = {
+      AlterColumns(
+        UnresolvedTable(tableIdent, commandName),
+        columnComments.map { case (column, comment) =>
+          AlterColumnSpec(
+            UnresolvedFieldName(column),
+            newDataType = None,
+            newNullability = None,
+            newComment = Some(comment),
+            newPosition = None,
+            newDefaultExpression = None)
+        })
+    }
+
+    // COMMENT ON COLUMN: last identifier part is the column name
+    Seq(
+      ("a.b", Seq("a"), Seq("b")),
+      ("a.b.c", Seq("a", "b"), Seq("c")),
+      ("a.b.c.d", Seq("a", "b", "c"), Seq("d"))
+    ).foreach { case (columnIdentifier, tableIdent, columnIdent) =>
+      comparePlans(
+        parsePlan(s"COMMENT ON COLUMN $columnIdentifier IS 'comment'"),
+        alterColumnComment(tableIdent, Seq((columnIdent, "comment")), "COMMENT ON COLUMN"))
+    }
+
+    // COMMENT ON COLUMN: IS NULL and empty string both produce empty comment
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS NULL"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "")), "COMMENT ON COLUMN"))
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS ''"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "")), "COMMENT ON COLUMN"))
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS 'NULL'"),
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "NULL")), "COMMENT ON COLUMN"))
+
+    // COMMENT ON COLUMN requires at least two identifier parts.
+    checkError(
+      exception = parseException("COMMENT ON COLUMN a IS 'comment'"),
+      condition = "INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "COMMENT ON COLUMN a IS 'comment'",
+        start = 0,
+        stop = 31))
+
+    // COMMENT ON TABLE ... COLUMN (...) supports multiple columns and nested fields.
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b COLUMN (c IS 'comment')"),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq((Seq("c"), "comment")),
+        "COMMENT ON TABLE ... COLUMN"))
+    comparePlans(
+      parsePlan(
+        """COMMENT ON TABLE a.b COLUMN (
+          | c IS 'comment 1',
+          | c.d IS 'comment 2',
+          | c.d.e IS 'comment 3')""".stripMargin),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq(
+          (Seq("c"), "comment 1"),
+          (Seq("c", "d"), "comment 2"),
+          (Seq("c", "d", "e"), "comment 3")),
+        "COMMENT ON TABLE ... COLUMN"))
   }
 
   test("create table - without using") {
