@@ -29,6 +29,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * SQL ASOF JOIN uses sort-merge implicitly; only `spark.sql.join.asofJoin.enabled`
  * needs to be set (unlike the DataFrame API, which still requires
  * `spark.sql.join.sortMergeAsOfJoin.enabled`).
+ *
+ * Parser and analysis negative paths live in `AsOfJoinSQLSuite`.
  */
 class AsOfJoinSortMergeSQLSuite extends QueryTest
   with SharedSparkSession
@@ -422,6 +424,104 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  ON t.symbol = q.symbol
           |""".stripMargin),
       Row(3L) :: Nil)
+  }
+
+  test("non-equi ON filters right rows before closest match") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.symbol, q.bid_price
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol AND q.bid_price > 200
+          |ORDER BY t.symbol
+          |""".stripMargin),
+      Row("MSFT", 420.50) :: Nil)
+  }
+
+  test("non-equi range predicate in ON") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.symbol, q.bid_price
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON abs(unix_timestamp(t.trade_time) - unix_timestamp(q.quote_time)) < 30
+          |ORDER BY t.symbol, t.trade_time
+          |""".stripMargin),
+      Seq(
+        Row("AAPL", 180.10),
+        Row("AAPL", 180.20),
+        Row("MSFT", 180.20)))
+  }
+
+  test("disjunction in ON") {
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT count(*) AS cnt
+          |FROM VALUES
+          |  (CAST(NULL AS STRING), TIMESTAMP '2026-06-29 10:00:00') AS t(symbol, trade_time)
+          |ASOF JOIN VALUES
+          |  (CAST(NULL AS STRING), TIMESTAMP '2026-06-29 09:00:00') AS q(symbol, quote_time)
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol OR (t.symbol IS NULL AND q.symbol IS NULL)
+          |""".stripMargin),
+      Row(1L) :: Nil)
+  }
+
+  test("ON predicate with expression over both tables") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.symbol, q.bid_price
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON substr(t.symbol, 1, 1) = substr(q.symbol, 1, 1)
+          |ORDER BY t.symbol, t.trade_time
+          |""".stripMargin),
+      Seq(
+        Row("AAPL", 180.10),
+        Row("AAPL", 180.20),
+        Row("MSFT", 420.50)))
+  }
+
+  test("ON TRUE matches whole right side") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT count(*) AS cnt
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON TRUE
+          |""".stripMargin),
+      Row(3L) :: Nil)
+  }
+
+  test("ON FALSE empties right search space") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT count(*) AS inner_cnt
+          |FROM trades t ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON FALSE
+          |""".stripMargin),
+      Row(0L) :: Nil)
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT count(*) AS left_cnt
+          |FROM trades t LEFT ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON FALSE
+          |""".stripMargin),
+      Row(4L) :: Nil)
   }
 
   test("LEFT ASOF JOIN null-pads NOT NULL right catalog columns") {
