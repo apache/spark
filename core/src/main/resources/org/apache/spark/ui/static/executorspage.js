@@ -39,9 +39,21 @@ function getHeapHistogramEnabled() {
   return heapHistogramEnabled;
 }
 
+/* escape XSS  */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function formatLossReason(removeReason) {
   if (removeReason) {
-    return removeReason
+    // The reason originates outside the driver and DataTables renders this cell as HTML.
+    return escapeHtml(removeReason)
   } else {
     return ""
   }
