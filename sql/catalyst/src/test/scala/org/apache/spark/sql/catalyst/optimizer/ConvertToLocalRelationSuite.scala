@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, LessThan, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualNullSafe, EqualTo, Expression,
+  GenericInternalRow, IsNull, LessThan, Literal, Not, Or, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, JoinHint, LeafNode, LocalRelation,
+  LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -87,7 +89,82 @@ class ConvertToLocalRelationSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("left anti join with a single-row LocalRelation should be turned into a Filter") {
+    val left = NonLocalRelation(Seq($"a".int))
+    val right = LocalRelation(Seq($"b".int), Seq(InternalRow(2)))
+    val condition = EqualTo(left.output.head, right.output.head)
+
+    val optimized = Optimize.execute(
+      Join(left, right, LeftAnti, Some(condition), JoinHint.NONE))
+    val correctAnswer = Filter(
+      Not(EqualNullSafe(EqualTo(left.output.head, Literal(2)), Literal.TrueLiteral)),
+      left)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("left anti join conversion should preserve null semantics") {
+    val left = LocalRelation(
+      Seq($"a".int),
+      Seq(InternalRow(1), InternalRow(2), InternalRow(null)))
+    val right = LocalRelation(Seq($"b".int), Seq(InternalRow(2)))
+    val condition = EqualTo(left.output.head, right.output.head)
+
+    val optimized = Optimize.execute(
+      Join(left, right, LeftAnti, Some(condition), JoinHint.NONE))
+    val correctAnswer = LocalRelation(
+      left.output,
+      Seq(InternalRow(1), InternalRow(null)))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("left anti join conversion should preserve a null value on the right side") {
+    val left = LocalRelation(
+      Seq($"a".int),
+      Seq(InternalRow(1), InternalRow(null)))
+    val right = LocalRelation(Seq($"b".int), Seq(InternalRow(null)))
+    val condition = EqualTo(left.output.head, right.output.head)
+
+    val optimized = Optimize.execute(
+      Join(left, right, LeftAnti, Some(condition), JoinHint.NONE))
+
+    comparePlans(optimized, left)
+  }
+
+  test("left anti join conversion should preserve null-aware anti join semantics") {
+    val left = LocalRelation(
+      Seq($"a".int),
+      Seq(InternalRow(1), InternalRow(null)))
+    val right = LocalRelation(Seq($"b".int), Seq(InternalRow(null)))
+    val equality = EqualTo(left.output.head, right.output.head)
+    val nullAwareCondition = Or(equality, IsNull(equality))
+
+    val optimized = Optimize.execute(
+      Join(left, right, LeftAnti, Some(nullAwareCondition), JoinHint.NONE))
+    val correctAnswer = LocalRelation(left.output, Seq.empty)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("left anti join with a multi-row LocalRelation should not be converted") {
+    val left = NonLocalRelation(Seq($"a".int))
+    val right = LocalRelation(
+      Seq($"b".int),
+      Seq(InternalRow(1), InternalRow(2)))
+    val join = Join(
+      left,
+      right,
+      LeftAnti,
+      Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+
+    comparePlans(Optimize.execute(join), join)
+  }
 }
+
+case class NonLocalRelation(output: Seq[Attribute]) extends LeafNode
 
 
 // Dummy expression used for testing. It reuses output row. Assumes child expr outputs an integer.

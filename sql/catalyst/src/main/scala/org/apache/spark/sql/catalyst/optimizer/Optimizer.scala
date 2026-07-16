@@ -2615,6 +2615,20 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       val predicate = Predicate.create(condition, output)
       predicate.initialize(0)
       LocalRelation(output, data.filter(row => predicate.eval(row)), isStreaming, stream)
+
+    // A left anti join only keeps a row from the left side when the join condition does not
+    // evaluate to true for any row on the right side. When the right side is a single-row local
+    // relation, replace its attributes with literals and express that existence check as a filter.
+    case Join(left, LocalRelation(output, data, false, _), LeftAnti, Some(condition), JoinHint.NONE)
+        if data.length == 1 && !hasUnevaluableExpr(condition) =>
+      val row = data.head
+      val literalMap = AttributeMap(output.zipWithIndex.map { case (attr, index) =>
+        attr -> Literal.create(row.get(index, attr.dataType), attr.dataType)
+      })
+      val rewrittenCondition = condition.transform {
+        case attr: Attribute => literalMap.getOrElse(attr, attr)
+      }
+      Filter(Not(EqualNullSafe(rewrittenCondition, Literal.TrueLiteral)), left)
   }
 
   def hasUnevaluableExpr(expr: Expression): Boolean = {
