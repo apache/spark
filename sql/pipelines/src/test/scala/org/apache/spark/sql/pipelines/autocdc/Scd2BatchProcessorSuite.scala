@@ -2015,6 +2015,39 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("reconcileStartAndEndAt: a chain of three no-op continuations collapses then closes " +
+    "at a trailing transition") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Four open upserts: three tracked-equal rows (`alice`) that must all collapse into one
+    // run, followed by a tracked-different row (`bob`) that opens a new run. This exercises
+    // the interaction the classifier is easy to get wrong across a multi-row collapse:
+    //  - none of the two interior `alice` rows may be misclassified as a run head (the
+    //    LAG-side comparison must absorb each into its predecessor's run),
+    //  - all three `alice` rows must inherit the head's startAt (5),
+    //  - the last `alice` row (the run tail) must close at bob's recordStartAt (20), not stay
+    //    open and not close at any interior sequence.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", 10L, null, Row(10L)),
+      Row(1, "alice", 15L, null, Row(15L)),
+      Row(1, "bob", 20L, null, Row(20L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L)),
+        Row(1, "alice", 5L, 20L, Row(15L)),
+        Row(1, "bob", 20L, null, Row(20L))
+      )
+    )
+  }
+
   test("reconcileStartAndEndAt: default tracking treats every non-key selected user column " +
     "as tracked") {
     val processor = processorWithKeys(Seq("id"))

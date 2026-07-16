@@ -715,7 +715,7 @@ case class Scd2BatchProcessor(
       RowClassifier.isNoOpUpsertContinuation(
         row = previous,
         next = current,
-        areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInPreviousRow
+        areTrackedColumnsEqual = areTrackedColumnsEqualInPreviousRow
       )
 
     // "Window-local run head" means the current row begins a new run within the affected
@@ -752,7 +752,7 @@ case class Scd2BatchProcessor(
       RowClassifier.isNoOpUpsertContinuation(
         row = current,
         next = next,
-        areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInNextRow
+        areTrackedColumnsEqual = areTrackedColumnsEqualInNextRow
       )
 
     val finalStartAt =
@@ -1185,8 +1185,8 @@ object RowClassifier {
    * Whether `row` carries no new information beyond its immediate successor `next` and so
    * collapses into that successor's run instead of standing as its own visible interval. It is
    * the caller's responsibility to pass `row` and `next` as successive rows in chronological
-   * order, and `areTrackedColumnsEqualInNextRow` as true iff the two rows hold equal values for
-   * every tracked-history column.
+   * order, and `areTrackedColumnsEqual` as true iff the two rows hold equal values for every
+   * tracked-history column.
    *
    * Returns true iff `row` and `next` are both upsert-representing, `row`'s interval reaches
    * `next` without leaving a gap, and the two are tracked-history equal. It is false whenever
@@ -1195,10 +1195,10 @@ object RowClassifier {
   private[autocdc] def isNoOpUpsertContinuation(
       row: Scd2IntervalColumns,
       next: Scd2IntervalColumns,
-      areTrackedColumnsEqualInNextRow: Column
+      areTrackedColumnsEqual: Column
   ): Column =
     isUpsertRepresentingRow(row) &&
       isUpsertRepresentingRow(next) &&
       !rowClosesStrictlyBeforeNextRow(row.endAt, next.effectiveRecordStartAt) &&
-      areTrackedColumnsEqualInNextRow
+      areTrackedColumnsEqual
 }
