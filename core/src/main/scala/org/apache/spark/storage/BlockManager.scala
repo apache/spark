@@ -200,8 +200,9 @@ private[spark] class BlockManager(
   // The resolver used for block-by-id resolution (reads, push-merge, decommission migration). Only
   // a BlockingShuffle serves block-manager-addressed blocks; a pipelined shuffle is served
   // out-of-band and produces none, so these paths only ever resolve regular shuffles. Prefer this
-  // over reaching through a ShuffleManager at the call site.
-  private def shuffleBlockResolver: ShuffleBlockResolver = {
+  // over reaching through a ShuffleManager at the call site. Cached as a lazy val so the
+  // init-wait and type match happen once, not on every (hot-path) block access.
+  private lazy val shuffleBlockResolver: ShuffleBlockResolver = {
     val resolver = Option(_shuffleManager) match {
       case Some(blocking: BlockingShuffle) => Some(blocking.shuffleBlockResolver)
       case Some(_) => None

@@ -47,7 +47,15 @@ object MultiShuffleManager {
 and normal queries that depends on sort shuffle to coexist in a cluster. Right now, we only
 allows configuration of shuffle manager at cluster level, so consider using this shuffle
 manager if you want to run batch and real time queries at the same time.
+
+Deprecated: this cluster-level single-slot approach is superseded by per-dependency routing --
+configure spark.shuffle.manager (regular/blocking) and spark.shuffle.manager.incremental
+(pipelined) so each shuffle is routed by its dependency type. As a plain ShuffleManager (not a
+BlockingShuffle), MultiShuffleManager no longer participates in block-by-id resolution, ESS
+cleanup, or push-based merge when set as the default manager.
  */
+@deprecated("Use per-dependency routing via spark.shuffle.manager and " +
+  "spark.shuffle.manager.incremental instead", "4.3.0")
 class MultiShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
   // To make sure the type of shuffle manager used for a shuffle is the same during its lifetime
   private val shuffleIdToManager = new ConcurrentHashMap[Int, ShuffleManager]()
