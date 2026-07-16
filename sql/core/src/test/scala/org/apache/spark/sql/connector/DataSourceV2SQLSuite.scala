@@ -4193,6 +4193,66 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Selective Overwrite: REPLACE WHERE with column list - too few data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, data) REPLACE WHERE id = 1 SELECT 1"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`, `data`",
+          "dataColumns" -> "`1`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - too many data columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "tableColumns" -> "`id`",
+          "dataColumns" -> "`1`, `a`"))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - unknown target column") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1 SELECT 1, 'a'"),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`nonexistent`",
+          "proposal" -> "`id`, `data`"),
+        context = ExpectedContext(
+          fragment = s"INSERT INTO $t (id, nonexistent) REPLACE WHERE id = 1",
+          start = 0,
+          stop = 50 + t.length))
+    }
+  }
+
+  test("Selective Overwrite: REPLACE WHERE with column list - duplicate columns") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      checkError(
+        exception = analysisException(
+          s"INSERT INTO $t (id, id) REPLACE WHERE id = 1 SELECT 1, 2"),
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`id`"))
+    }
+  }
+
   test("Overwrite: REPLACE WHERE without BY NAME - positional matching") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
