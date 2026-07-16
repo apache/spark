@@ -4940,6 +4940,11 @@
           "The function <prettyName> does not support <syntax>."
         ]
       },
+      "INVALID_BUCKET_NUMBER" : {
+        "message" : [
+          "Invalid number of buckets: <describe>."
+        ]
+      },
       "INVALID_COLUMN_REFERENCE" : {
         "message" : [
           "Expected a column reference for transform <transform>: <expr>."
@@ -9425,11 +9430,6 @@
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0031" : {
-    "message" : [
-      "Invalid number of buckets: <describe>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0032" : {

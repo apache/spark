@@ -515,6 +515,20 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
         stop = 83))
   }
 
+  test("INVALID_SQL_SYNTAX.INVALID_BUCKET_NUMBER: " +
+    "the number of buckets is not an integer literal") {
+    checkError(
+      exception = parseException("CREATE TABLE my_tab(a INT, b STRING) " +
+        "USING parquet PARTITIONED BY (bucket('12', b))"),
+      condition = "INVALID_SQL_SYNTAX.INVALID_BUCKET_NUMBER",
+      sqlState = "42000",
+      parameters = Map("describe" -> "'12'"),
+      context = ExpectedContext(
+        fragment = "bucket('12', b)",
+        start = 67,
+        stop = 81))
+  }
+
   test("UNSUPPORTED_FEATURE: DESC TABLE COLUMN for a specific partition") {
     val sqlText = "DESCRIBE TABLE EXTENDED customer PARTITION (grade = 'A') customer.age"
     checkError(
