@@ -162,7 +162,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
 
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
-        tableName, expected.map(_.name).map(toSQLId).mkString(", "))
+        tableName, expected.map(col => toSQLId(Seq(col.name))).mkString(", "))
     }
 
     val plan = if (resolved == query.output) {
@@ -457,7 +457,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val output = if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
+          .map(col => toSQLId(Seq(col.name))).mkString(", ")
         if (colPath.isEmpty) {
           throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
             extraCols)
@@ -471,7 +471,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else if (enforceFullOutput) {
       val colName =
         if (colPath.nonEmpty) colPath.quoted
-        else expectedCols.map(_.name).map(toSQLId).mkString(", ")
+        else expectedCols.map(col => toSQLId(Seq(col.name))).mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     } else {
       Nil
@@ -495,7 +495,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
     if (inputCols.size > actualExpectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
@@ -508,7 +508,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else if (inputCols.size < actualExpectedCols.size && !fillDefaultValue) {
       val missingCols = actualExpectedCols.drop(inputCols.size)
       val missingColsStr = missingCols
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
@@ -577,7 +577,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     if (result.length != actualExpectedCols.size) {
       val colName =
         if (colPath.nonEmpty) colPath.quoted
-        else actualExpectedCols.map(_.name).map(toSQLId).mkString(", ")
+        else actualExpectedCols.map(col => toSQLId(Seq(col.name))).mkString(", ")
       throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(tableName, colName)
     }
     (result, autoFilledGenCols.toSet)

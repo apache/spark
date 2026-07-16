@@ -100,7 +100,9 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
     val conn = getConnection()
     val stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
-    val outputs: Seq[QueryTestOutput] = queries.map { sql =>
+    val outputs: Seq[QueryTestOutput] = queries.zipWithIndex.map { case (sql, queryIdx) =>
+      log.debug(s"[${testCase.name}] Executing query #$queryIdx against $DATABASE_NAME: " +
+        s"${sql.take(120).replace('\n', ' ')}${if (sql.length > 120) "..." else ""}")
       val output = {
         try {
           val sparkDf = localSparkSession.sql(sql)
@@ -122,6 +124,8 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
             }
           }
           val output = rows.map(_.mkString("\t")).toSeq
+          log.debug(s"[${testCase.name}] Query #$queryIdx returned ${output.size} rows from " +
+            s"$DATABASE_NAME")
           if (isSemanticallySorted(sparkDf.queryExecution.analyzed)) {
             output
           } else {
@@ -129,7 +133,10 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
             output.sorted
           }
         } catch {
-          case NonFatal(e) => Seq(e.getClass.getName, e.getMessage)
+          case NonFatal(e) =>
+            log.warn(s"[${testCase.name}] Query #$queryIdx threw ${e.getClass.getName} " +
+              s"against $DATABASE_NAME: ${Option(e.getMessage).getOrElse("(no message)")}")
+            Seq(e.getClass.getName, e.getMessage)
         }
       }
 
@@ -164,8 +171,18 @@ trait CrossDbmsQueryTestSuite extends DockerJDBCIntegrationSuite with SQLQueryTe
     }
 
     outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+      if (output.sql != expected.sql) {
+        log.error(s"[${testCase.name}] SQL text mismatch for query #$i:\n" +
+          s"  Expected (golden): ${expected.sql.take(200)}\n" +
+          s"  Actual (input):    ${output.sql.take(200)}")
+      }
       assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
         output.sql
+      }
+      if (output.output != expected.output) {
+        log.error(s"[${testCase.name}] Output mismatch for query #$i (${output.sql.take(80)}):\n" +
+          s"  Expected (Spark golden):\n${expected.output.take(500)}\n" +
+          s"  Actual ($DATABASE_NAME):\n${output.output.take(500)}")
       }
       assertResult(expected.output, s"Result did not match" +
         s" for query #$i\n${expected.sql}") {

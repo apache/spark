@@ -80,7 +80,10 @@ private[spark] object BlockManagerMessages {
       var blockId: BlockId,
       var storageLevel: StorageLevel,
       var memSize: Long,
-      var diskSize: Long)
+      var diskSize: Long,
+      // Per-replica content checksum of the serialized (pre-encryption) block bytes, or None when
+      // RDD block checksums are disabled.
+      var checksum: Option[Long] = None)
     extends ToBlockManagerMaster
     with Externalizable {
 
@@ -92,6 +95,8 @@ private[spark] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
+      out.writeBoolean(checksum.isDefined)
+      checksum.foreach(out.writeLong)
     }
 
     override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -100,6 +105,7 @@ private[spark] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
+      checksum = if (in.readBoolean()) Some(in.readLong()) else None
     }
   }
 
@@ -108,6 +114,13 @@ private[spark] object BlockManagerMessages {
   case class UpdateRDDBlockVisibility(taskId: Long, visible: Boolean) extends ToBlockManagerMaster
 
   case class GetRDDBlockVisibility(blockId: RDDBlockId) extends ToBlockManagerMaster
+
+  // The authoritative sealed checksum for an RDD block, or None if it is not sealed.
+  case class GetSealedChecksum(blockId: RDDBlockId) extends ToBlockManagerMaster
+
+  // Seal an RDD's per-block content checksums: per block keep the plurality checksum, evict
+  // divergent copies, and reject future divergent registrations.
+  case class SealRddChecksums(rddId: Int) extends ToBlockManagerMaster
 
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
 

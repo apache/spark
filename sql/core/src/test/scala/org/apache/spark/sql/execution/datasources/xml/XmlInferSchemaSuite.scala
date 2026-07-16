@@ -36,6 +36,7 @@ import org.apache.spark.sql.types.{
   StringType,
   StructField,
   StructType,
+  TimestampLTZNanosType,
   TimestampType,
   TimeType
 }
@@ -640,12 +641,13 @@ class XmlInferSchemaSuite
   }
 
   test("value tag - equals to null value") {
-    // we don't consider options.nullValue during schema inference
+    // A value tag equal to the nullValue option is treated as null during inference (matching
+    // CSVInferSchema and the parser, which reads it as null), so it carries no type and the
+    // all-null field canonicalizes to StringType rather than being inferred as LongType.
     val xmlDF = readData(valueTagIsNullValue, Map("nullValue" -> "1"))
     val expectedSchema = new StructType()
-      .add(valueTagName, LongType)
+      .add(valueTagName, StringType)
     val expectedAns = Seq(Row(null))
-    // nullValue option is used during parsing
     assert(xmlDF.schema === expectedSchema)
     checkAnswer(xmlDF, expectedAns)
   }
@@ -722,14 +724,15 @@ class XmlInferSchemaSuite
     assert(readData(doubleThenLong).schema.fields.head.dataType === DoubleType)
   }
 
-  test("date is inferred regardless of preferDate") {
+  test("preferDate gates date inference (consistent with CSV)") {
     val xmlDate = Seq("""<ROW><d>2024-01-15</d></ROW>""")
-    // preferDate governs which date formatter is used, not whether date inference is attempted.
-    Seq("true", "false").foreach { preferDate =>
-      val df = readData(xmlDate, Map("preferDate" -> preferDate))
-      assert(df.schema.fields.head.dataType === DateType,
-        s"expected DateType with preferDate=$preferDate")
-    }
+    // preferDate controls whether date inference is attempted, matching CSVInferSchema: when true
+    // a bare date infers as DateType; when false date inference is skipped and the value falls
+    // through to timestamp inference.
+    assert(readData(xmlDate, Map("preferDate" -> "true"))
+      .schema.fields.head.dataType === DateType)
+    assert(readData(xmlDate, Map("preferDate" -> "false"))
+      .schema.fields.head.dataType === TimestampType)
   }
 
   test("incremental type casting yields the same schema as the legacy batch path") {
@@ -782,6 +785,90 @@ class XmlInferSchemaSuite
         readOnePartition(xml, options)
       }
       assert(incremental === batch, s"incremental and batch schemas differ for: $xml")
+    }
+  }
+
+  test("SPARK-57810: XML infers nanosecond LTZ timestamps from sub-microsecond fractional digits") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      // A timestamp with >6 fractional digits and timezone info should infer as
+      // TimestampLTZNanosType(9) when nanos types are enabled.
+      val xmlNanos = Seq(
+        """<ROW><ts>2025-06-15T12:30:45.123456789+00:00</ts></ROW>""")
+      val df = readData(xmlNanos)
+      assert(df.schema("ts").dataType === TimestampLTZNanosType(9),
+        s"Expected TimestampLTZNanosType(9), got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: XML infers TimestampType for <=6 fractional digits even with nanos enabled") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      // A timestamp with exactly 6 fractional digits (microsecond precision) should still
+      // infer as TimestampType, not nanos type.
+      val xmlMicros = Seq(
+        """<ROW><ts>2025-06-15T12:30:45.123456+00:00</ts></ROW>""")
+      val df = readData(xmlMicros)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType, got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: XML inferred type is TimestampType for mixed nano/micro LTZ rows") {
+    // When some rows have >6 fractional digits (nano) and others have <=6 (micro), the inferred
+    // type must widen to TimestampType since compatibleType merges LTZ nanos + LTZ to LTZ.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlMixed = Seq(
+        """<ROW><ts>2025-06-15T12:30:45.123456789+00:00</ts></ROW>""",
+        """<ROW><ts>2025-06-15T12:30:45.123456+00:00</ts></ROW>""")
+      val df = readData(xmlMixed)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType for mixed nano/micro, got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: LTZ nano timestamp + non-datetime field widens to StringType") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlNanoAndString = Seq(
+        """<ROW><ts>2025-06-15T12:30:45.123456789+00:00</ts></ROW>""",
+        """<ROW><ts>not-a-timestamp</ts></ROW>""")
+      val df = readData(xmlNanoAndString)
+      assert(df.schema("ts").dataType === StringType,
+        s"Expected StringType for nano + non-datetime, got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: nanosecond-precision timestamp infers as TimestampType when config is off") {
+    // Production default: TIMESTAMP_NANOS_TYPES_ENABLED = false.
+    // A nano-precision value must still infer as plain TimestampType (micros).
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlNanos = Seq(
+        """<ROW><ts>2020-01-01T12:00:00.123456789+00:00</ts></ROW>""")
+      val df = readData(xmlNanos)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType with config off, got ${df.schema("ts").dataType}")
+    }
+  }
+
+  test("SPARK-57810: 7-digit trailing-zero fractional seconds infers as TimestampType not nanos") {
+    // .1234560 has 7 fractional digits but nanosWithinMicro == 0.
+    // Must infer as TimestampType, not nanos -- semantics are 'nonzero sub-microsecond value'.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ") {
+      val xmlTrailingZero = Seq(
+        """<ROW><ts>2020-01-01T12:00:00.1234560+00:00</ts></ROW>""")
+      val df = readData(xmlTrailingZero)
+      assert(df.schema("ts").dataType === TimestampType,
+        s"Expected TimestampType for trailing-zero 7 digits, got ${df.schema("ts").dataType}")
     }
   }
 }

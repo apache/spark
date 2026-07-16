@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNes
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType}
 
 // Disable AQE because the WholeStageCodegenExec is added when running QueryStageExec
 class WholeStageCodegenSuite extends SharedSparkSession
@@ -65,6 +65,213 @@ class WholeStageCodegenSuite extends SharedSparkSession
         p.isInstanceOf[WholeStageCodegenExec] &&
           p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]))
       assert(df.collect() === Array(Row(9, 4.5)))
+    }
+  }
+
+  // Runs `query` on `data` with sort aggregate forced and its code-gen enabled, asserts the plan
+  // actually uses a code-gen'd SortAggregateExec, and checks the result matches the interpreted
+  // (code-gen disabled) result.
+  private def checkSortAggregateCodegen(
+      data: Dataset[Row])(query: Dataset[Row] => Dataset[Row]): Unit = {
+    // Disable both hash-based aggregate operators so the planner always picks SortAggregateExec.
+    val forceSortAggregate = Seq(
+      SQLConf.USE_HASH_AGG.key -> "false",
+      SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
+    val expected = withSQLConf(
+        (forceSortAggregate :+ (SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN.key -> "false")): _*) {
+      val df = query(data)
+      assert(!df.queryExecution.executedPlan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
+        s"Expected no code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+      df.collect()
+    }
+    withSQLConf(
+        (forceSortAggregate :+ (SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN.key -> "true")): _*) {
+      val df = query(data)
+      assert(df.queryExecution.executedPlan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
+        s"Expected a code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys") {
+    val data = spark.range(200).selectExpr(
+      "id",
+      "id % 7 as k1",
+      "id % 3 as k2",
+      "case when id % 5 = 0 then null else id end as v",
+      "case when id % 4 = 0 then null else cast(id % 11 as string) end as s")
+
+    // Exercise a variety of shapes: multiple/numeric/string grouping keys, null keys and values,
+    // single-row groups, a single all-rows group, and a downstream limit (which exercises the
+    // resumable `shouldStop` path in the generated produce loop).
+    checkSortAggregateCodegen(data) {
+      _.groupBy("k1", "k2")
+        .agg(count(col("v")), sum(col("v")), max(col("v")), min(col("v")))
+        .orderBy("k1", "k2")
+    }
+    // expression grouping keys, aggregates over expressions, and arithmetic on the results
+    checkSortAggregateCodegen(data) {
+      _.groupBy((col("k1") + col("k2")).as("k"))
+        .agg(
+          (sum(col("v") * lit(2)) + lit(1)).as("weighted"),
+          (max(col("v")) - min(col("v"))).as("spread"),
+          count(col("v")).as("cnt"))
+        .orderBy("k")
+    }
+    // aggregates with FILTER (WHERE) clauses
+    checkSortAggregateCodegen(data) {
+      _.groupBy("k1")
+        .agg(
+          expr("sum(v) FILTER (WHERE v > 50)"),
+          expr("count(v) FILTER (WHERE s IS NOT NULL)"),
+          avg(col("v")))
+        .orderBy("k1")
+    }
+    // string grouping key with nulls, followed by a HAVING-style filter on the aggregate
+    checkSortAggregateCodegen(data) {
+      _.groupBy("s").agg(count(col("v")).as("cnt"), sum(col("v")).as("total"))
+        .where(col("cnt") > 2)
+        .orderBy("s")
+    }
+    // count(distinct ...): rewritten to a two-round aggregation, both of which are sort aggregates
+    checkSortAggregateCodegen(data) {
+      _.groupBy("k2").agg(countDistinct(col("v")), sum(col("v"))).orderBy("k2")
+    }
+    // every row is its own group
+    checkSortAggregateCodegen(data)(_.groupBy("id").agg(max(col("v"))).orderBy("id"))
+    // a single group covering all rows
+    checkSortAggregateCodegen(data)(_.groupBy(lit(1)).agg(sum(col("v")), avg(col("v"))))
+    // downstream limit on top of the aggregate
+    checkSortAggregateCodegen(data)(_.groupBy("k1").agg(sum(col("v"))).orderBy("k1").limit(3))
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - empty input") {
+    // No rows: a grouped aggregate over empty input must produce no output rows.
+    val data = spark.range(0).selectExpr("id", "id % 3 as k", "id as v")
+    checkSortAggregateCodegen(data)(_.groupBy("k").agg(sum(col("v")), count(col("v"))).orderBy("k"))
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - single partition") {
+    // Force a single partition so all groups are produced within one task's scan.
+    val data = spark.range(50).repartition(1).selectExpr("id", "id % 4 as k", "id as v")
+    checkSortAggregateCodegen(data) {
+      _.groupBy((col("k") + lit(1)).as("k"))
+        .agg(
+          (sum(col("v")) + max(col("v"))).as("mixed"),
+          avg(col("v") * col("v")).as("avg_sq"),
+          expr("count(v) FILTER (WHERE v % 2 = 0)").as("evens"))
+        .orderBy("k")
+    }
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with float/double grouping keys") {
+    // Float/double are binary-stable so they take the with-keys code-gen path, and group
+    // boundaries are detected via UnsafeRow.equals. Cover -0.0 (which must group with 0.0) and
+    // NaN (all NaNs must group together), whose canonicalization relies on the planner's
+    // NormalizeFloatingNumbers rule running before the keys reach UnsafeRow.
+    val rows = Seq(
+      Row(0.0d, 0.0f, 1L),
+      Row(-0.0d, -0.0f, 2L),
+      Row(Double.NaN, Float.NaN, 3L),
+      Row(java.lang.Double.longBitsToDouble(0x7ff8000000000001L),
+        java.lang.Float.intBitsToFloat(0x7fc00001), 4L),
+      Row(1.5d, 1.5f, 5L),
+      Row(1.5d, 1.5f, 6L),
+      Row(null, null, 7L))
+    val schema = StructType(Seq(
+      StructField("d", DoubleType),
+      StructField("f", FloatType),
+      StructField("v", LongType)))
+    val data = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    checkSortAggregateCodegen(data) {
+      _.groupBy("d").agg(sum(col("v")), count(col("v"))).orderBy("d")
+    }
+    checkSortAggregateCodegen(data) {
+      _.groupBy("f").agg(sum(col("v")), count(col("v"))).orderBy("f")
+    }
+    checkSortAggregateCodegen(data) {
+      _.groupBy("d", "f").agg(sum(col("v"))).orderBy("d", "f")
+    }
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with decimal grouping keys") {
+    // Decimal is binary-stable and takes the with-keys code-gen path. Include nulls.
+    val data = spark.range(200).selectExpr(
+      "id",
+      "cast(id % 5 as decimal(10, 2)) as k",
+      "case when id % 6 = 0 then null else cast(id as decimal(20, 4)) end as v")
+    checkSortAggregateCodegen(data) {
+      _.groupBy("k").agg(sum(col("v")), count(col("v")), max(col("v"))).orderBy("k")
+    }
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - no aggregate functions") {
+    // Grouping-only aggregate (DISTINCT lowers to a grouping aggregate with no aggregate
+    // functions), exercising the empty-buffer branch of the result code generation.
+    val data = spark.range(200).selectExpr("id % 7 as k1", "id % 3 as k2")
+    checkSortAggregateCodegen(data)(_.select("k1").distinct().orderBy("k1"))
+    checkSortAggregateCodegen(data)(_.select("k1", "k2").distinct().orderBy("k1", "k2"))
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - split aggregate functions") {
+    // Force the aggregate functions into separate split methods so the with-keys path is
+    // exercised with split buffer-update code.
+    val data = spark.range(200).selectExpr("id", "id % 7 as k", "id as v")
+    withSQLConf(
+        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
+      checkSortAggregateCodegen(data) {
+        _.groupBy("k")
+          .agg(sum(col("v")), count(col("v")), max(col("v")), min(col("v")), avg(col("v")))
+          .orderBy("k")
+      }
+    }
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - config gate") {
+    // When the with-keys config is disabled, the grouped SortAggregate must not be code-gen'd,
+    // while the result stays correct.
+    val data = spark.range(200).selectExpr("id % 7 as k", "id as v")
+    withSQLConf(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN.key -> "true",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS.key -> "false") {
+      val df = data.groupBy("k").agg(sum(col("v"))).orderBy("k")
+      assert(!df.queryExecution.executedPlan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
+        s"Expected no code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+      checkAnswer(df, Seq(0, 1, 2, 3, 4, 5, 6).map { k =>
+        Row(k, (k until 200 by 7).map(_.toLong).sum)
+      })
+    }
+    // With the gate enabled it is code-gen'd (baseline for the assertion above).
+    checkSortAggregateCodegen(data)(_.groupBy("k").agg(sum(col("v"))).orderBy("k"))
+  }
+
+  test("SPARK-32750: SortAggregate code-gen with grouping keys - non-binary collated key") {
+    // A non-binary collation (e.g. UTF8_LCASE) is not binary-stable, so `supportCodegenWithKeys`
+    // returns false and the grouped SortAggregate must fall back to the interpreted path rather
+    // than being code-gen'd, while the collation-aware grouping result stays correct.
+    val data = Seq("a", "A", "b", "B", "c")
+      .toDF("k").selectExpr("k collate UTF8_LCASE as k")
+    withSQLConf(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN.key -> "true",
+        SQLConf.ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS.key -> "true") {
+      val df = data.groupBy("k").agg(count(lit(1)).as("cnt")).orderBy("cnt", "k")
+      assert(!df.queryExecution.executedPlan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortAggregateExec]),
+        s"Expected no code-gen'd SortAggregateExec in:\n${df.queryExecution.executedPlan}")
+      // Under UTF8_LCASE, 'a'/'A' and 'b'/'B' each collapse to one group of 2, 'c' stays alone.
+      checkAnswer(df.select("cnt"), Seq(Row(1), Row(2), Row(2)))
     }
   }
 

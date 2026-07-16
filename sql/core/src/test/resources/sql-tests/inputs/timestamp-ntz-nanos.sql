@@ -268,3 +268,13 @@ SELECT v, lead(v) OVER (ORDER BY v) AS next_v FROM (
     SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000900' AS v
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000100'
     UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500') ORDER BY v;
+
+-- SPARK-57821: date_trunc keeps the nanosecond type/family and zeroes the whole fraction (including
+-- the sub-microsecond digits); MICROSECOND keeps epochMicros and only drops nanosWithinMicro. NTZ
+-- is zone-independent, so DAY/HOUR read the wall clock and never shift.
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9));
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7));
+-- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');

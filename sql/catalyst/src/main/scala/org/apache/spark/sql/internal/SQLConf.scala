@@ -251,6 +251,30 @@ object SQLConf {
     }
   }
 
+  val ALLOW_CREATING_UDT_FROM_STRING =
+    buildConf(SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING)
+      .doc("When true, Spark loads and instantiates the UserDefinedType class named in a schema " +
+        "string (for example the schema stored in Parquet/ORC file metadata) while inferring or " +
+        "parsing a schema. Because the class name is taken from the data being read, a crafted " +
+        "file can make Spark load an arbitrary class from the classpath. Set this to false to " +
+        "block loading UDT classes by name, optionally allowing specific classes via " +
+        s"'${SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES}'.")
+      .version("4.1.3")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ALLOWED_DYNAMIC_UDT_CLASSES =
+    buildConf(SqlApiConfHelper.ALLOWED_DYNAMIC_UDT_CLASSES)
+      .doc(s"When '${SqlApiConfHelper.ALLOW_CREATING_UDT_FROM_STRING}' is false, UserDefinedType " +
+        "classes listed here (by fully qualified class name) may still be loaded and " +
+        "instantiated from a schema string. Has no effect when UDT loading is enabled.")
+      .version("4.1.3")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
     buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
       .internal()
@@ -289,6 +313,19 @@ object SQLConf {
         "When true, Expand tags pass-through child attributes that share a name with a " +
         "grouping attribute using __is_duplicate metadata, so that name-based resolution " +
         "against the Expand output does not produce AMBIGUOUS_REFERENCE errors.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val LOWER_EMPTY_GROUPING_SET_TO_GLOBAL_AGGREGATE =
+    buildConf("spark.sql.analyzer.lowerEmptyGroupingSetToGlobalAggregate.enabled")
+      .internal()
+      .version("4.2.0")
+      .doc(
+        "When true, a grand-total GROUP BY GROUPING SETS (()) (and the equivalent empty " +
+        "CUBE() / ROLLUP()) is lowered to a global aggregate during analysis, so it returns " +
+        "one row over empty input, matching an aggregation with no GROUP BY clause. When false, " +
+        "falls back to the legacy Expand-based lowering that returns no rows over empty input.")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -908,6 +945,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_ASOF_JOIN_ENABLED =
+    buildConf("spark.sql.join.asofJoin.enabled")
+      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION. When false, " +
+        "ASOF JOIN fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()
@@ -1145,6 +1191,17 @@ object SQLConf {
       .checkValue(_ > 0, "minPartitionSize must be positive")
       .createWithDefaultString("1MB")
 
+  val COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK =
+    buildConf("spark.sql.adaptive.coalescePartitions.maxReducerPartitionsPerTask")
+      .doc("The maximum number of contiguous reducer partitions that may be coalesced into a " +
+        "single task. This puts a hard limit on the reducer-partition fan-in of a coalesced " +
+        "shuffle task, independent of the advisory partition size.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The maximum number of reducer partitions per task must be positive.")
+      .createWithDefault(Int.MaxValue)
+
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
       .internal()
@@ -1312,6 +1369,65 @@ object SQLConf {
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled")
+      .doc("When true, Spark converts a sort merge join to a shuffled hash join during adaptive " +
+        "execution when the build side's materialized per-partition sizes are all within " +
+        s"${ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key} (which additionally requires " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} to not be larger than it). This is the master " +
+        "switch for the conversion. By default it only looks through the join's own required " +
+        "sort to reach a direct input shuffle; set " +
+        "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled " +
+        "to true to also look through non-shuffle operators (aggregate, project, filter, " +
+        "window, etc.) sitting between the join and its input shuffle.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED =
+    buildConf(
+      "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled")
+      .doc("When true, the sort merge join to shuffled hash join conversion (see " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key}) additionally " +
+        "looks through non-shuffle operators (aggregate, project, filter, window, etc.) sitting " +
+        "between the join and its input shuffle, instead of only the join's own required sort. " +
+        s"Has no effect unless " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} is true.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.minWideningFactor")
+      .doc("The lower bound applied to the row-widening factor used when the sort-merge-join to " +
+        "shuffled-hash-join conversion bounds a build side's shuffled hash map size. The factor " +
+        "scales the input shuffle bytes by the estimated per-row size growth of the operators " +
+        "between the join and its shuffle; a larger lower bound is more conservative and makes " +
+        "the conversion less likely when statistics may under-estimate the build size. Must be " +
+        "positive.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(_ > 0, "The minimum widening factor must be positive.")
+      .createWithDefault(1.0)
+
+  val ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED =
+    buildConf("spark.sql.adaptive.costEvaluator.countLocalSort.enabled")
+      .doc("When true, the default AQE cost evaluator also counts the number of local sorts as a " +
+        "lower-priority tiebreaker below the number of shuffles. This lets adaptive execution " +
+        "prefer a plan with fewer local sorts among plans with the same number of shuffles, for " +
+        "example a shuffled hash join that " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} produced from a " +
+        "sort merge join when the conversion does not push extra sorts elsewhere. Defaults to " +
+        "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled " +
+        "so that it is enabled together with the look-through conversion.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .fallbackConf(
+        ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED)
 
   val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
@@ -2048,6 +2164,21 @@ object SQLConf {
     .version("1.4.0")
     .intConf
     .createWithDefault(200)
+
+  val THRIFTSERVER_CATALOG_METADATA_ENABLED =
+    buildConf("spark.sql.thriftServer.catalogMetadata.enabled")
+      .doc("When true, JDBC metadata operations (getCatalogs, getSchemas, getTables, " +
+        "getColumns) are DataSource V2 catalog-aware: getCatalogs returns all loaded catalogs, " +
+        "and TABLE_CAT is populated with the real catalog name. When false, the legacy behavior " +
+        "is preserved (empty TABLE_CAT and getCatalogs returns no rows). " +
+        "Known limitation: when the current catalog is a DSv2 catalog and this conf is enabled, " +
+        "getSchemas lists the DSv2 catalog's namespaces while getTables/getColumns still " +
+        "enumerate session catalog (spark_catalog) objects until DSv2 routing for those " +
+        "operations lands in a follow-up.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
@@ -3675,6 +3806,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.withKeys.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate with grouping keys. Takes effect only " +
+        s"when ${ENABLE_SORT_AGGREGATE_CODEGEN.key} is enabled.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   val ENABLE_FULL_OUTER_SHUFFLED_HASH_JOIN_CODEGEN =
     buildConf("spark.sql.codegen.join.fullOuterShuffledHashJoin.enabled")
       .internal()
@@ -3869,6 +4010,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BYPASS_PARTIAL_AGGREGATION = buildConf("spark.sql.execution.bypassPartialAggregation")
+    .doc("When true, skips the pre-shuffle partial aggregation and runs a single Complete-mode " +
+      "aggregation after the shuffle. Bypassing partial aggregation can improve performance " +
+      "when group cardinality is high and the pre-shuffle reduction ratio is low. " +
+      "When false (default), uses a two-phase Partial+Final aggregation across a shuffle. " +
+      "This setting has no effect on queries containing DISTINCT aggregate functions, where " +
+      "the partial aggregation phases are required for correctness and are always applied.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -3891,8 +4044,9 @@ object SQLConf {
     buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
       .internal()
       .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
-        "replaces repeated simple named get_json_object paths over the same input " +
-        "with one shared parse.")
+        "replaces repeated simple named and array-index get_json_object paths over the same " +
+        "input with one shared parse, including mutually exclusive object/array coalesce " +
+        "branches.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -7149,8 +7303,11 @@ object SQLConf {
   val TIME_TRAVEL_AT_SYNTAX_ENABLED =
     buildConf("spark.sql.timeTravel.atSyntax.enabled")
       .doc("When true, a table name in a query or in table-reading APIs can carry a time " +
-        "travel suffix: 'name@v123' reads version 123 of the table. When false, '@' in " +
-        "table names fails at parse time.")
+        "travel suffix: 'name@v123' reads version 123 of the table, and " +
+        "'name@20240101000000000' (format yyyyMMddHHmmssSSS, interpreted in the session " +
+        "time zone) reads the table as of that timestamp, to millisecond precision (use " +
+        "TIMESTAMP AS OF for finer granularity). When false, '@' in table names fails at " +
+        "parse time.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -7369,6 +7526,112 @@ object SQLConf {
       .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val SINGLE_TASK_EXECUTION_ENABLED =
+    buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
+      .doc("When true, eligible query fragments that read a small single-partition scan can run " +
+        "in a single task, skipping the shuffle that would otherwise be inserted before an " +
+        "operator such as a sort or aggregation. This avoids the scheduling overhead of an " +
+        "unnecessary shuffle for small, low-latency queries.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val SINGLE_TASK_EXECUTION_AGGREGATION =
+    buildConf("spark.sql.optimizer.singleTaskExecution.aggregation")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with aggregation operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_EXPAND =
+    buildConf("spark.sql.optimizer.singleTaskExecution.expand")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with expand operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_LIMIT_OFFSET =
+    buildConf("spark.sql.optimizer.singleTaskExecution.limitOffset")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with limit or offset operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_SORT =
+    buildConf("spark.sql.optimizer.singleTaskExecution.sort")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with sort operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_WINDOW =
+    buildConf("spark.sql.optimizer.singleTaskExecution.window")
+      .internal()
+      .doc("When true, and 'spark.sql.optimizer.singleTaskExecution.enabled' is also true, " +
+        "enable the single-task optimization for query plans with window operators.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(SINGLE_TASK_EXECUTION_ENABLED)
+
+  val SINGLE_TASK_EXECUTION_MAX_NUM_FILES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.maxNumFiles")
+      .internal()
+      .doc("The maximum number of files that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_MIN_NUM_FILES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.minNumFiles")
+      .internal()
+      .doc("The minimum number of files that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_MIN_NUM_BYTES =
+    buildConf("spark.sql.optimizer.singleTaskExecution.minNumBytes")
+      .internal()
+      .doc("The minimum total size in bytes that a file scan may have for the single-task " +
+        "optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_MIN_ROWS =
+    buildConf("spark.sql.optimizer.singleTaskExecution.localTableScan.minRows")
+      .internal()
+      .doc("The minimum number of rows that a local in-memory relation may have for the " +
+        "single-task optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1)
+
+  val SINGLE_TASK_EXECUTION_LOCAL_TABLE_SCAN_THRESHOLD =
+    buildConf("spark.sql.optimizer.singleTaskExecution.localTableScan.threshold")
+      .internal()
+      .doc("The maximum number of rows that a local in-memory relation may have for the " +
+        "single-task optimization to apply to it.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(1000)
 
   val LEGACY_PARSE_QUERY_WITHOUT_EOF = buildConf("spark.sql.legacy.parseQueryWithoutEof")
     .internal()
@@ -8053,6 +8316,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
+  def convertSortMergeJoinToShuffledHashJoinEnabled: Boolean =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED)
+
+  def convertSortMergeJoinToShuffledHashJoinLookThroughOperatorsEnabled: Boolean =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED)
+
+  def convertSortMergeJoinToShuffledHashJoinMinWideningFactor: Double =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR)
+
+  def costEvaluatorCountLocalSortEnabled: Boolean =
+    getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
+
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
@@ -8296,6 +8571,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
+  def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
+
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -8398,6 +8675,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
   def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
+
+  def bypassPartialAggregation: Boolean = getConf(BYPASS_PARTIAL_AGGREGATION)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
@@ -8895,6 +9174,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sessionFunctionResolutionOrder: String =
     getConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER)
+
+  // UDT loading configuration.
+  override def allowCreatingUDTFromString: Boolean = getConf(SQLConf.ALLOW_CREATING_UDT_FROM_STRING)
+  override def allowedDynamicUDTClasses: Seq[String] = getConf(SQLConf.ALLOWED_DYNAMIC_UDT_CLASSES)
 
   /**
    * Returns true when the system catalog is prioritized for 2-part builtin/session resolution.

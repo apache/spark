@@ -1151,6 +1151,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("hintName" -> hintName))
   }
 
+  def invalidRebalanceBySizeHintParameterError(
+      hintName: String, advisoryPartitionSize: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER",
+      messageParameters = Map(
+        "hintName" -> hintName,
+        "advisoryPartitionSize" -> advisoryPartitionSize))
+  }
+
   def starExpandDataTypeNotSupportedError(attributes: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1050",
@@ -4960,6 +4969,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "UNSUPPORTED_TIME_TYPE",
       messageParameters = Map.empty)
+  }
+
+  def asOfJoinMatchConditionTableReferenceError(
+      expr1: Expression,
+      expr2: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      messageParameters = Map(
+        "refs1" -> toSQLExpr(expr1),
+        "refs2" -> toSQLExpr(expr2)))
   }
 
   def nestedSequentialStreamingUnionError(): Throwable = {

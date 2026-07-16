@@ -1394,8 +1394,8 @@ class DataFrame(ParentDataFrame):
                 min_non_nulls = None
             else:
                 raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
-                    messageParameters={"arg_name": "how", "arg_value": str(how)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
                 )
 
         if thresh is not None:

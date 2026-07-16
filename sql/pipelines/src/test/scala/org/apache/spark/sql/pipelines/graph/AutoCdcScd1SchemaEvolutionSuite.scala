@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ColumnSelection,
   UnqualifiedColumnName
 }
@@ -219,6 +220,56 @@ class AutoCdcScd1SchemaEvolutionSuite
         Row(2, "bob", 2L, cdcMeta(None, Some(2L)), "b@x.com")
       )
     )
+  }
+
+  test("additive target-column evolution leaves the SCD1 auxiliary table schema unchanged") {
+    val session = spark
+    import session.implicits._
+
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    // Shared (id, name, version) stream so the streaming checkpoint resumes cleanly across
+    // runs; run #1 projects away `name` (target starts at (id, version)), run #2 keeps it so
+    // the target additively gains `name`.
+    val stream = MemoryStream[(Int, String, Long)]
+    def buildCtx(includeName: Boolean): TestGraphRegistrationContext = {
+      val sourceDf = stream.toDF().toDF("id", "name", "version")
+      val projectedDf = if (includeName) sourceDf else sourceDf.drop("name")
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
+    }
+
+    val expectedAuxSchema = Seq("id", AutoCdcReservedNames.cdcMetadataColName)
+
+    // Run #1: target is (id, version); aux is (id, _cdc_metadata).
+    stream.addData((1, "ignored", 1L))
+    runPipeline(buildCtx(includeName = false))
+    assert(
+      spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema,
+      "auxiliary schema after run #1 should be the keys plus the CDC metadata column"
+    )
+
+    // Run #2: `name` is added to the target but the auxiliary schema must remain unchanged, since
+    // the SCD keys remain unchanged. For SCD1, the auxiliary table only contains key and CDC
+    // metadata columns.
+    stream.addData((2, "bob", 2L))
+    runPipeline(buildCtx(includeName = true))
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target"),
+      Seq(
+        Row(1, 1L, cdcMeta(None, Some(1L)), null),
+        Row(2, 2L, cdcMeta(None, Some(2L)), "bob")
+      )
+    )
+    assert(spark.table(auxTableNameFor("target")).schema.fieldNames.toSeq == expectedAuxSchema)
   }
 
   test("broadening the column selection between runs adds the newly-included column to " +
