@@ -804,7 +804,7 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
       sqlState = "42601",
       parameters = Map(
         "clauses" -> "WITH METRICS",
-        "operation" -> "METRIC VIEW CREATION"),
+        "operation" -> "CREATE METRIC VIEW"),
       context = ExpectedContext(
         fragment = query,
         start = 0,
@@ -826,7 +826,7 @@ class QueryParsingErrorsSuite extends SharedSparkSession {
       sqlState = "42601",
       parameters = Map(
         "clauses" -> "LANGUAGE",
-        "operation" -> "METRIC VIEW CREATION"),
+        "operation" -> "CREATE METRIC VIEW"),
       context = ExpectedContext(
         fragment = query,
         start = 0,
