@@ -57,6 +57,15 @@ public class BitmapExpressionUtils {
     }
   }
 
+  /** Performs bitwise XOR on both bitmaps and writes the result into bitmap1. */
+  public static void bitmapXorMerge(byte[] bitmap1, byte[] bitmap2) {
+    // For XOR operation, bytes beyond the shorter bitmap's length are unchanged
+    // since XOR with 0 (absent bits) is identity: X ^ 0 = X.
+    for (int i = 0; i < java.lang.Math.min(bitmap1.length, bitmap2.length); ++i) {
+      bitmap1[i] = (byte) ((bitmap1[i] & 0x0FF) ^ (bitmap2[i] & 0x0FF));
+    }
+  }
+
   /** Performs bitwise AND on both bitmaps and writes the result into bitmap1. */
   public static void bitmapAndMerge(byte[] bitmap1, byte[] bitmap2) {
     int minLen = java.lang.Math.min(bitmap1.length, bitmap2.length);

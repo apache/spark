@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{bitmap_and_agg, bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, col, expr, hex, lit, substring, to_binary}
+import org.apache.spark.sql.functions.{bitmap_and_agg, bitmap_bit_position, bitmap_bucket_number, bitmap_construct_agg, bitmap_count, bitmap_or_agg, bitmap_xor_agg, col, expr, hex, lit, substring, to_binary}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BitmapExpressionsQuerySuite extends SharedSparkSession {
@@ -355,5 +355,103 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         "inputSql" -> "\"a\"",
         "inputType" -> "\"INT\""),
       context = ExpectedContext(fragment = "bitmap_and_agg(a)", start = 0, stop = 16))
+  }
+
+  test("bitmap_xor_agg") {
+    // Test basic XOR functionality: 10 ^ 30 ^ 40 = 60
+    val df = Seq("10", "30", "40").toDF("a")
+    checkAnswer(
+      df.selectExpr("substring(hex(bitmap_xor_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("600000")))
+    checkAnswer(
+      df.select(substring(hex(bitmap_xor_agg(to_binary(col("a"), lit("hex")))), 0, 6)),
+      Seq(Row("600000")))
+
+    // Test with same values - XOR should result in zero: 10 ^ 10 = 00
+    val df2 = Seq("10", "10").toDF("a")
+    checkAnswer(
+      df2.selectExpr("substring(hex(bitmap_xor_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("000000")))
+
+    // Test with zero - X XOR 0 = X: A0 ^ 00 = A0
+    val df3 = Seq("A0", "00").toDF("a")
+    checkAnswer(
+      df3.selectExpr("substring(hex(bitmap_xor_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("A00000")))
+
+    // Test with binary values of different lengths: 0A ^ 0A0B = 000B
+    val df4 = Seq("0A0B", "0A").toDF("a")
+    checkAnswer(
+      df4.selectExpr("substring(hex(bitmap_xor_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("000B00")))
+
+    // Test empty result (no rows) - should return all zeros as XOR identity
+    val emptyDf = Seq.empty[String].toDF("a")
+    checkAnswer(
+      emptyDf.selectExpr("substring(hex(bitmap_xor_agg(to_binary(a, 'hex'))), 0, 6)"),
+      Seq(Row("000000")))
+
+    val emptyDf2 = Seq.empty[(String, Int)].toDF("a", "b")
+    checkAnswer(
+      emptyDf2
+        .selectExpr("bitmap_xor_agg(to_binary(a, 'hex')) " +
+          "filter (where b = 1) as xor_agg")
+        .select(substring(hex(col("xor_agg")), 0, 6)),
+      Seq(Row("000000")))
+
+    // Test empty result (no rows) with GROUP BY - should return empty DataFrame
+    val emptyDf3 = Seq.empty[(String, Int, Int)].toDF("a", "b", "c")
+    checkAnswer(
+      emptyDf3
+        .groupBy("c")
+        .agg(expr("bitmap_xor_agg(to_binary(a, 'hex')) " +
+          "filter (where b = 1) as xor_agg").alias("xor_agg"))
+        .select(substring(hex(col("xor_agg")), 0, 6)),
+      Seq())
+  }
+
+  test("bitmap_xor_agg with complex bitmaps from bitmap_construct_agg") {
+    val table = "bitmap_xor_test_table"
+    withTable(table) {
+      // Create test data: Group 1 has bits 1,2,4; Group 2 has bits 1,2,3;
+      // XOR should give bits 3,4 (intersection removed, union kept)
+      spark.sql(s"""
+           | CREATE TABLE $table (group_id INT, bit_pos LONG)
+           | """.stripMargin)
+      spark.sql(s"""
+           | INSERT INTO $table VALUES
+           | (1, 1), (1, 2), (1, 4),  -- Group 1: bits 1,2,4 set
+           | (2, 1), (2, 2), (2, 3)   -- Group 2: bits 1,2,3 set
+           | """.stripMargin)
+      // XOR of the two group bitmaps: bits 1,2 cancel out, leaving bits 3,4 = 2 bits
+      val xorResult = spark.sql(s"""
+           | SELECT bitmap_count(
+           |   bitmap_xor_agg(group_bitmap)
+           | ) as xor_count
+           | FROM (
+           |   SELECT bitmap_construct_agg(bitmap_bit_position(bit_pos)) as group_bitmap
+           |   FROM $table
+           |   GROUP BY group_id
+           | )
+           | """.stripMargin)
+      // The symmetric difference should be 2 (bits 3 and 4)
+      checkAnswer(xorResult, Seq(Row(2)))
+    }
+  }
+
+  test("bitmap_xor_agg called with non-binary type") {
+    val df = Seq(12).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.selectExpr("bitmap_xor_agg(a)")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_xor_agg(a)\"",
+        "paramIndex" -> "first",
+        "requiredType" -> "\"BINARY\"",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\""),
+      context = ExpectedContext(fragment = "bitmap_xor_agg(a)", start = 0, stop = 16))
   }
 }

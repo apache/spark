@@ -92,4 +92,57 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     setBitmapBits(bitmap, bitmap.length - 1, 0x67)
     assert(BitmapExpressionUtils.bitmapCount(bitmap) == 15L)
   }
+
+  test("bitmap_xor_merge equal length") {
+    val bitmap1 = Array[Byte](0x10, 0x30, 0x40)
+    val bitmap2 = Array[Byte](0x10, 0x20, 0x40)
+    // 0x10 ^ 0x10 = 0x00, 0x30 ^ 0x20 = 0x10, 0x40 ^ 0x40 = 0x00
+    val expected = Array[Byte](0x00, 0x10, 0x00)
+    BitmapExpressionUtils.bitmapXorMerge(bitmap1, bitmap2)
+    for (i <- expected.indices) {
+      assert(bitmap1(i) == expected(i), s"bitmap1($i) should be ${expected(i)}")
+    }
+  }
+
+  test("bitmap_xor_merge different lengths") {
+    val bitmap1 = Array[Byte](0x0A, 0x0B, 0x0C)
+    val bitmap2 = Array[Byte](0x0A)
+    // 0x0A ^ 0x0A = 0x00, remaining bytes unchanged because XOR 0 = X
+    val expected = Array[Byte](0x00, 0x0B, 0x0C)
+    BitmapExpressionUtils.bitmapXorMerge(bitmap1, bitmap2)
+    for (i <- expected.indices) {
+      assert(bitmap1(i) == expected(i), s"bitmap1($i) should be ${expected(i)}")
+    }
+  }
+
+  test("bitmap_xor_merge all zeros") {
+    val bitmap1 = Array[Byte](0x10, 0x20)
+    val bitmap2 = Array[Byte](0x00, 0x00)
+    val expected = Array[Byte](0x10, 0x20)
+    BitmapExpressionUtils.bitmapXorMerge(bitmap1, bitmap2)
+    for (i <- expected.indices) {
+      assert(bitmap1(i) == expected(i), s"bitmap1($i) should be ${expected(i)}")
+    }
+  }
+
+  test("bitmap_xor_merge self xor equals zero") {
+    val bitmap1 = Array[Byte](0x10, 0x30, 0x40)
+    val bitmap2 = Array[Byte](0x10, 0x30, 0x40)
+    val expected = Array[Byte](0x00, 0x00, 0x00)
+    BitmapExpressionUtils.bitmapXorMerge(bitmap1, bitmap2)
+    for (i <- expected.indices) {
+      assert(bitmap1(i) == expected(i), s"bitmap1($i) should be ${expected(i)}")
+    }
+  }
+
+  test("bitmap_xor_merge with bytes containing sign bits") {
+    val bitmap1 = Array[Byte](0xFF.toByte, 0x80.toByte)
+    val bitmap2 = Array[Byte](0xF0.toByte, 0x0F.toByte)
+    // 0xFF ^ 0xF0 = 0x0F, 0x80 ^ 0x0F = 0x8F
+    val expected = Array[Byte](0x0F.toByte, 0x8F.toByte)
+    BitmapExpressionUtils.bitmapXorMerge(bitmap1, bitmap2)
+    for (i <- expected.indices) {
+      assert(bitmap1(i) == expected(i), s"bitmap1($i) should be ${expected(i)}")
+    }
+  }
 }

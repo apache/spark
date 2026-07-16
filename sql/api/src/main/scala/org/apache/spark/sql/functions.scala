@@ -5011,6 +5011,15 @@ object functions {
    */
   def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
+  /**
+   * Returns a bitmap that is the bitwise XOR of all of the bitmaps from the input column. The
+   * input column should be bitmaps created from bitmap_construct_agg().
+   *
+   * @group agg_funcs
+   * @since 4.3.0
+   */
+  def bitmap_xor_agg(col: Column): Column = Column.fn("bitmap_xor_agg", col)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

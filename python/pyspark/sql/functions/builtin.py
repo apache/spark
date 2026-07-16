@@ -31080,6 +31080,42 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_and_agg", col)
 
 
+@_try_remote_functions
+def bitmap_xor_agg(col: "ColumnOrName") -> Column:
+    """
+    Returns a bitmap that is the bitwise XOR of all of the bitmaps from the input column.
+    The input column should be bitmaps created from bitmap_construct_agg().
+
+    .. versionadded:: 4.3.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        The input column should be bitmaps created from bitmap_construct_agg().
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("10",),("30",),("40",)], ["a"])
+    >>> df.select(sf.bitmap_xor_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +---------------------------------+
+    |bitmap_xor_agg(to_binary(a, hex))|
+    +---------------------------------+
+    |             [60 00 00 00 00 0...|
+    +---------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_xor_agg", col)
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 

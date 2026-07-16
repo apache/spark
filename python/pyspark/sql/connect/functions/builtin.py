@@ -5521,6 +5521,13 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
 bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
 
 
+def bitmap_xor_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_xor_agg", col)
+
+
+bitmap_xor_agg.__doc__ = pysparkfuncs.bitmap_xor_agg.__doc__
+
+
 # Geospatial ST Functions
 
 
