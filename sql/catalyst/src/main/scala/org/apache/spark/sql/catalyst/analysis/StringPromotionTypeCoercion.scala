@@ -34,6 +34,7 @@ import org.apache.spark.sql.types.{
   DoubleType,
   NullType,
   StringTypeExpression,
+  TimestampLTZNanosTypeExpression,
   TimestampType,
   TimestampTypeExpression
 }
@@ -55,10 +56,20 @@ object StringPromotionTypeCoercion {
 
     // For equality between string and timestamp we cast the string to a timestamp
     // so that things like rounding of subsecond precision does not affect the comparison.
+    // Both micros and nanos are scoped to the LTZ family (TimestampType / TimestampLTZNanosType):
+    // the NTZ families need no arm here, because their equality reaches the general
+    // BinaryComparison arm below and findCommonTypeForBinaryComparison returns the config-blind
+    // nanos/micros common type for them -- the same Cast this arm would add. Only the LTZ arm is
+    // load-bearing, since without it LTZ equality would take the range path and be promoted to
+    // string under legacy castDatetimeToString.
     case p @ Equality(left @ StringTypeExpression(), right @ TimestampTypeExpression()) =>
       p.withNewChildren(Seq(Cast(left, TimestampType), right))
     case p @ Equality(left @ TimestampTypeExpression(), right @ StringTypeExpression()) =>
       p.withNewChildren(Seq(left, Cast(right, TimestampType)))
+    case p @ Equality(left @ StringTypeExpression(), right @ TimestampLTZNanosTypeExpression()) =>
+      p.withNewChildren(Seq(Cast(left, right.dataType), right))
+    case p @ Equality(left @ TimestampLTZNanosTypeExpression(), right @ StringTypeExpression()) =>
+      p.withNewChildren(Seq(left, Cast(right, left.dataType)))
 
     case p @ BinaryComparison(left, right)
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>

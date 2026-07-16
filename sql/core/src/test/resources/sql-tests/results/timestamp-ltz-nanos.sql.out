@@ -1125,3 +1125,67 @@ struct<v:timestamp_ltz(9),next_v:timestamp_ltz(9)>
 2020-01-01 00:00:00.0000001	2020-01-01 00:00:00.0000005
 2020-01-01 00:00:00.0000005	2020-01-01 00:00:00.0000009
 2020-01-01 00:00:00.0000009	NULL
+
+
+-- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c = '2020-01-02 03:04:05.123456788',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c = 2020-01-02 03:04:05.123456788):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	false	true
+
+
+-- !query
+SELECT c FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000001'),
+  (TIMESTAMP_LTZ '2020-01-02 03:04:05.000000009') AS t(c)
+  WHERE c BETWEEN '2020-01-02 03:04:05.000000001' AND '2020-01-02 03:04:05.000000005'
+-- !query schema
+struct<c:timestamp_ltz(9)>
+-- !query output
+2020-01-02 03:04:05.000000001
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	true
+
+
+-- !query
+SELECT c = '2020-01-02 03:04:05.123456789',
+       c < '2020-01-02 03:04:05.123456790'
+  FROM VALUES (TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789') AS t(c)
+-- !query schema
+struct<(c = 2020-01-02 03:04:05.123456789):boolean,(c < 2020-01-02 03:04:05.123456790):boolean>
+-- !query output
+true	true
+
+
+-- !query
+SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.legacy.typeCoercion.datetimeToString.enabled	false
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true

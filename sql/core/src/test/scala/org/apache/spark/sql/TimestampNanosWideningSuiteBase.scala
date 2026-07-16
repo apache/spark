@@ -132,6 +132,29 @@ abstract class TimestampNanosWideningSuiteBase extends SharedSparkSession {
     val ntzEq = twoCols(TimestampNTZType, ldtA, TimestampNTZNanosType(9), ldtA)
     checkAnswer(ntzEq.selectExpr("a = b", "a < b"), Row(true, false))
   }
+
+  test("SPARK-57811: string operand coerces to the nanosecond timestamp type") {
+    // Equality on the exact sub-microsecond value: the string is parsed at nanos precision, so a
+    // string that differs only in the 9th digit does NOT compare equal. The paired
+    // `= '...789' => true` / `= '...788' => false` is the load-bearing pair: it rules out
+    // micro-truncation (truncating the operand to micros would make both strings equal the column).
+    // The nanos-vs-string-promotion distinction is locked separately by the analyzer goldens
+    // (explicit `cast as timestamp_ntz(9)`) and the unit tests in TypeCoercionSuite.
+    val ntz =
+      single(TimestampNTZNanosType(9), LocalDateTime.parse("2020-01-02T03:04:05.123456789"))
+    checkAnswer(
+      ntz.selectExpr(
+        "c = '2020-01-02 03:04:05.123456789'",
+        "c = '2020-01-02 03:04:05.123456788'",
+        "c < '2020-01-02 03:04:05.123456790'",
+        "c > '2020-01-02 03:04:05.123456788'"),
+      Row(true, false, true, true))
+
+    // LTZ operand: the string literal is parsed in the session zone (America/Los_Angeles), so the
+    // 2020-01-01T00:00:00Z instant equals the local wall-clock time eight hours earlier.
+    val ltz = single(TimestampLTZNanosType(9), Instant.parse("2020-01-01T00:00:00Z"))
+    checkAnswer(ltz.selectExpr("c = '2019-12-31 16:00:00'"), Row(true))
+  }
 }
 
 // Runs the nanosecond timestamp widening tests with ANSI mode enabled explicitly.
