@@ -439,9 +439,12 @@ case class Scd2BatchProcessor(
    *   a dataframe with the same schema as the input. Every closed non-tombstone row that
    *   was bisected has been replaced by its head + tail pair; every other row is carried
    *   through as-is. Each output row can be classified as one of: {decomposition head,
-   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}. It's possible
-   *   that some of the returned decomposition tails are logically redundant, as deletion
-   *   markers that are immediately overtaken by a succeeding row.
+   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}. Tombstones here
+   *   are aux-table-only rows representing early-arriving deletes (SCD2 has no tombstone in the
+   *   target table - a delete there is just a closed history record); see the "tombstone" and
+   *   "aux table" concepts in this class's scaladoc. It's possible that some of the returned
+   *   decomposition tails are logically redundant, as deletion markers that are immediately
+   *   overtaken by a succeeding row.
    */
   private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
@@ -646,9 +649,12 @@ case class Scd2BatchProcessor(
    * target-table merges consume.
    *
    * Decomposition tails and tombstones round-trip unchanged. An open upsert may close at its
-   * successor's effective sequence (becoming closed); a closed upsert may have its endAt cleared
-   * when absorbed into a run as a no-op continuation (becoming open). [[recordStartAtFieldName]]
-   * is never modified.
+   * successor's effective sequence (becoming closed); the closing successor may be either a
+   * later state-changing upsert or a delete, which is represented as an instantaneous tombstone
+   * (see the "tombstone" concept in this class's scaladoc), so a delete closes the preceding
+   * upsert at the tombstone's sequence like any other successor. A closed upsert may conversely
+   * have its endAt cleared when absorbed into a run as a no-op continuation (becoming open).
+   * [[recordStartAtFieldName]] is never modified.
    *
    * @param decomposedAndCleanedDf
    *   the output of [[dropRedundantRowsPostDecomposition]]: a dataframe conforming to the
@@ -764,7 +770,11 @@ case class Scd2BatchProcessor(
       F.when(isDecompositionTail, endAtCol)
         .when(isLastRowInKeyWindow, endAtCol)
         // A no-op continuation collapses into its run head, so the row's visible interval
-        // disappears and `endAt` is reset to null to route the row to the aux table.
+        // disappears and `endAt` is reset to null to route the row to the aux table. Only the
+        // *interior* rows of a run are no-op continuations; the run's tail is not (its successor
+        // either starts a new run or does not exist), so the tail keeps a non-null `endAt` and
+        // stays in the target table as the single visible row representing the whole run. A run
+        // therefore never fully disappears into the aux table.
         .when(currentIsNoOpUpsertWithNext, F.lit(null).cast(resolvedSequencingType))
         // The row already closes strictly before the next event (e.g., a tombstone or a
         // closed upsert that ended before the next event arrived), so there is nothing to
