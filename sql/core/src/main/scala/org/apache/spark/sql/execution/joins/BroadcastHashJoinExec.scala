@@ -193,11 +193,9 @@ case class BroadcastHashJoinExec private(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val clsName = broadcastRelation.value.getClass.getName
 
-    // Inline mutable state since not many join operations in a task
-    // The relation is built by the shared BroadcastHashJoinExec.buildReadOnlyRelation helper (also
-    // used by the interpreted path), which records peak execution memory. The helper returns the
-    // HashedRelation supertype, so the result is downcast to the concrete relation class; the field
-    // stays concretely typed for the hot-path getValue/get dispatch.
+    // Inline mutable state since not many join operations in a task.
+    // Cast the helper's HashedRelation result back to the concrete class so the field stays
+    // concretely typed for the hot-path getValue/get calls.
     val relationTerm = ctx.addMutableState(clsName, "relation",
       v => s"""
          | $v = ($clsName) org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -255,11 +253,9 @@ case class BroadcastHashJoinExec private(
 
 object BroadcastHashJoinExec extends JoinSelectionHelper {
   /**
-   * Returns a read-only copy of the broadcast `HashedRelation` and records its size as this
-   * task's peak execution memory. This is called both by the interpreted path (`doExecute`) and
-   * by the generated code of `prepareBroadcast`, so the type-independent relation setup is
-   * compiled once per JVM instead of being re-emitted into every BroadcastHashJoinExec stage's
-   * generated code. This is called by generated Java class, should be public.
+   * Returns a read-only copy of the broadcast relation and records its size as peak execution
+   * memory. Shared by `doExecute` and the generated code of `prepareBroadcast`. This is called by
+   * generated Java class, should be public.
    */
   def buildReadOnlyRelation(broadcast: Broadcast[HashedRelation]): HashedRelation = {
     val relation = broadcast.value.asReadOnlyCopy()
