@@ -147,6 +147,14 @@ class BlockManagerMaster(
     driverEndpoint.askSync[Int](SealRddChecksums(rddId))
   }
 
+  /**
+   * Verify every block of a sealed RDD is sealed and the directory tracks only replicas carrying
+   * the sealed checksum. Returns None if the invariant holds, else a diagnostic string.
+   */
+  def verifyRddChecksumSeal(rddId: Int): Option[String] = {
+    driverEndpoint.askSync[Option[String]](VerifyRddChecksumSeal(rddId))
+  }
+
   /** Get locations of the blockId from the driver */
   def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))

@@ -3000,7 +3000,7 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
+  val LOCAL_CHECKPOINT_VERIFY_CHECKSUM_ENABLED =
     ConfigBuilder("spark.checkpoint.local.verifyChecksum.enabled")
       .internal()
       .doc("When true, Spark fingerprints the serialized bytes of locally-checkpointed RDD " +
