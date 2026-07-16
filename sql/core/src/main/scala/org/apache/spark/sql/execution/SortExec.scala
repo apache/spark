@@ -211,8 +211,8 @@ object SortExec {
   /**
    * Records the sort metrics (sort time, peak memory and spill size) for a completed sort. This
    * is called both by the interpreted path ([[SortExec.doExecute]]) and by the generated code of
-   * [[SortExec.doProduce]], so the type-independent metric bookkeeping is compiled once per JVM
-   * instead of being re-emitted into every SortExec stage's generated code.
+   * [[SortExec]] (through the static forwarder), so the type-independent metric bookkeeping is
+   * compiled once per JVM instead of being re-emitted into every SortExec stage's generated code.
    *
    * `spillSizeBefore` is the task's spilled-bytes count captured before the rows were fed to the
    * sorter, so that `spillSize` reflects only this operator's contribution.
