@@ -62,6 +62,13 @@ def _create_column_from_name(name: str) -> "JavaObject":
     return cast(JVMView, sc._jvm).functions.col(name)
 
 
+def _to_java_column_opt(col: Optional["ColumnOrName"]) -> Optional["JavaObject"]:
+    if col is None:
+        return None
+    else:
+        return _to_java_column(col)
+
+
 def _to_java_column(col: "ColumnOrName") -> "JavaObject":
     if isinstance(col, Column):
         jcol = col._jc
@@ -650,9 +657,13 @@ class Column(ParentColumn):
         return Column(jc)
 
     def __nonzero__(self) -> None:
+        try:
+            column_repr = self._jc.toString()
+        except Exception:
+            column_repr = "<unknown>"
         raise PySparkValueError(
             errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",
-            messageParameters={},
+            messageParameters={"column": column_repr},
         )
 
     __bool__ = __nonzero__

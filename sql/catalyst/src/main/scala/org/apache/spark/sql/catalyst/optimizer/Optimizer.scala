@@ -174,6 +174,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
+    // UDF substitution rules should be executed before any other optimization rules
+    // so that the substituted Catalyst alternatives go through the same finalization
+    // (FinishAnalysis, RewriteWithExpression, etc.) and downstream optimization as
+    // any other expression. Anything ConvertToCatalyst leaves behind -- including
+    // RuntimeReplaceable nodes inside transpiled options -- is still rewritten by
+    // the FinishAnalysis batch that runs immediately after.
+    Batch("Convert python UDFs to Catalyst", Once, ConvertToCatalyst),
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression
     // may produce `With` expressions that need to be rewritten.
@@ -304,6 +311,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   def nonExcludableRules: Seq[String] =
     Seq(
+      // ConvertToCatalyst is the only rule that strips the Unevaluable
+      // TranspiledPythonUDF node; excluding it would leak that node into
+      // execution, so it must never be excludable.
+      ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
@@ -1003,6 +1014,80 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+  }
+}
+
+/**
+ * Attempt to convert UDFS to Catalyst expressions.
+ */
+object ConvertToCatalyst extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Short circuit if there are no Transpiled Python UDFs in the plan.
+    if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
+      return plan
+    }
+    // Traverse subquery plans too: this batch runs Once, and later rules (e.g.
+    // PullupCorrelatedPredicates) can move expressions from a subquery into the
+    // outer plan, so an Unevaluable TranspiledPythonUDF left inside a subquery
+    // here could otherwise escape and reach execution un-stripped.
+    plan.transformDownWithSubqueriesAndPruning(
+      _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
+      case p => p.transformExpressionsWithPruning(_.containsPattern(TRANSPILED_PYTHON_UDF)) {
+        case s: TranspiledPythonUDF => applyExpr(s, parentIsUdf = false)
+      }
+    }
+  }
+
+  def applyExpr(expression: Expression, parentIsUdf: Boolean = false): Expression = {
+    expression match {
+      case s: TranspiledPythonUDF =>
+        // We _shouldn't_ have these nodes if ANSI is not enabled or transpilation is disabled
+        // but if someone changed it while running we'll want to strip the nodes out.
+        if (!conf.getConf(SQLConf.ANSI_ENABLED)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ANSI_ENABLED.key)} is disabled. The transpiler " +
+            log"targets ANSI semantics and refuses to rewrite plans under non-ANSI mode. " +
+            log"Enable ANSI or disable transpilation to silence this warning.")
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        } else if (!conf.getConf(SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS)) {
+          logWarning(log"Skipping Python UDF transpilation: " +
+            log"${MDC(LogKeys.CONFIG, SQLConf.ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS.key)} " +
+            log"is disabled but we still got TranspiledPythonUDFs in our plan.")
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
+          // Walk the full list of transpiled options and pick the first one,
+          // falling back to the original Python UDF if none are available.
+          // Options whose declared input-type categories don't match the bound
+          // column types are already pruned during analysis by
+          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
+          // safe to use. If you're plugging in your own transpilation, please add
+          // a separate ConvertToX so you can choose your desired transpiled nodes.
+          // NOTE: the substituted option is used as-is, with no cast back to the
+          // UDF's declared return type. The built-in transpiler guarantees each
+          // option's dataType already matches; a custom transpiler MUST do the
+          // same (or insert its own Cast), or it will silently change the output
+          // schema.
+          val firstEvaluable = s.transpiledOptions.headOption
+          firstEvaluable match {
+            case None =>
+              s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+            case Some(catalystExpr) =>
+              // Recursively apply to the children first because we may use them as inputs in parent
+              catalystExpr.mapChildren(applyExpr(_, parentIsUdf = false))
+          }
+        } else {
+          // We should avoid converting a UDF node where that could break pipelining.
+          // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
+          s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
+        }
+      case _ =>
+        // Not a TranspiledPythonUDF: recurse down, telling the children whether
+        // this node is itself a scalar Python UDF so a transpiled child can
+        // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
+        // transpiled wrapping one that could).
+        expression.mapChildren(
+          applyExpr(_, parentIsUdf = isScalarPythonUDF(expression)))
+    }
   }
 }
 

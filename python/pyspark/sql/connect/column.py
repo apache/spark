@@ -622,9 +622,13 @@ class Column(ParentColumn):
         )
 
     def __nonzero__(self) -> None:
+        try:
+            column_repr = repr(self._expr)
+        except Exception:
+            column_repr = "<unknown>"
         raise PySparkValueError(
             errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",
-            messageParameters={},
+            messageParameters={"column": column_repr},
         )
 
     __bool__ = __nonzero__

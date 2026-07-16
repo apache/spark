@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TRANSPILED_PYTHON_UDF,
+  TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
@@ -87,6 +88,41 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+}
+
+
+case class TranspiledPythonUDF(
+  name: String,
+  pythonUDFExpr: Expression,
+  transpiledOptions: List[Expression],
+  // Per-option input-type categories ("numeric"/"string" per public param),
+  // parallel to `transpiledOptions`. ResolveTranspiledPythonUDFOptions prunes the
+  // options to those whose categories match the resolved input types (before
+  // CheckAnalysis can reject a type-incompatible option) and clears this field;
+  // ConvertToCatalyst then picks the first survivor or falls back to the Python
+  // UDF. Empty means "no restriction" (kept as-is).
+  optionInputCategories: List[List[String]] = Nil) extends Expression with Unevaluable {
+  require(
+    optionInputCategories.isEmpty || optionInputCategories.length == transpiledOptions.length,
+    s"optionInputCategories (${optionInputCategories.length}) must be parallel to " +
+    s"transpiledOptions (${transpiledOptions.length}) or empty"
+  )
+  override def children: Seq[Expression] = pythonUDFExpr +: transpiledOptions
+  override def dataType: DataType = pythonUDFExpr.dataType
+  override def nullable: Boolean = pythonUDFExpr.nullable
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]):
+      TranspiledPythonUDF =
+    copy(pythonUDFExpr = newChildren.head, transpiledOptions = newChildren.tail.toList)
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPILED_PYTHON_UDF)
+
+  // True when every direct input to pythonUDFExpr is a plain PythonUDF (not a
+  // TranspiledPythonUDF). Used to decide whether to preserve the UDF batch pipeline
+  // rather than inserting a Catalyst node in the middle of a Python UDF chain.
+  def hasOnlyPythonUDFInputs: Boolean =
+    pythonUDFExpr.children.nonEmpty &&
+    pythonUDFExpr.children.forall {
+      _.isInstanceOf[PythonUDF]
+    }
 }
 
 /**
