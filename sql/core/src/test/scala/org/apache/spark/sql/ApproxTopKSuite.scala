@@ -614,16 +614,37 @@ class ApproxTopKSuite extends SharedSparkSession {
     // The inner aggregate produces a single sketch row, which WHERE false filters out, so
     // approx_top_k_combine sees zero input rows. It must return a single empty sketch that
     // estimates to an empty top-k result, instead of failing the query with a MatchError,
-    // whether or not the combine size is specified.
+    // whether or not the combine size is specified. When the size is specified, the empty
+    // result carries that size; when it is unspecified, the empty buffer never learns a size
+    // from input and eval falls back to DEFAULT_MAX_ITEMS_TRACKED (10000).
+    Seq(("approx_top_k_combine(sketch, 5)", 5), ("approx_top_k_combine(sketch)", 10000))
+      .foreach { case (combine, expectedMaxItemsTracked) =>
+        withView("combined") {
+          sql(
+            s"SELECT $combine AS com " +
+              "FROM (SELECT approx_top_k_accumulate(expr) AS sketch " +
+              "      FROM VALUES (1), (2) AS t(expr)) " +
+              "WHERE false")
+            .createOrReplaceTempView("combined")
+          checkAnswer(sql("SELECT approx_top_k_estimate(com) FROM combined"), Row(Seq.empty))
+          checkAnswer(
+            sql("SELECT com.maxItemsTracked FROM combined"), Row(expectedMaxItemsTracked))
+        }
+      }
+  }
+
+  test("SPARK-58095: approx_top_k_combine over mixed empty and non-empty partitions") {
     Seq("approx_top_k_combine(sketch, 5)", "approx_top_k_combine(sketch)").foreach { combine =>
       withView("combined") {
         sql(
           s"SELECT $combine AS com " +
-            "FROM (SELECT approx_top_k_accumulate(expr) AS sketch " +
-            "      FROM VALUES (1), (2) AS t(expr)) " +
-            "WHERE false")
+            "FROM (SELECT /*+ REPARTITION(4) */ sketch " +
+            "      FROM (SELECT approx_top_k_accumulate(expr) AS sketch " +
+            "            FROM VALUES (1), (1), (2) AS t(expr)))")
           .createOrReplaceTempView("combined")
-        checkAnswer(sql("SELECT approx_top_k_estimate(com) FROM combined"), Row(Seq.empty))
+        checkAnswer(
+          sql("SELECT approx_top_k_estimate(com) FROM combined"),
+          Row(Seq(Row(1, 2), Row(2, 1))))
       }
     }
   }
