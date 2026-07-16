@@ -24,4 +24,6 @@ import org.apache.spark.{sql, SparkFunSuite}
  */
 trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   override protected def spark: SparkSession = super.spark.asInstanceOf[SparkSession]
+
+  override protected def sql(query: String): DataFrame = spark.sql(query)
 }
