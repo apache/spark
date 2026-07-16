@@ -463,12 +463,16 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       checkAnswer(
         ntz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
         ntzExpected)
-      checkAnswer(ntz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"), ntzExpected)
+      checkAnswer(
+        ntz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ntzExpected)
       val ltz = ltzNanos(ltzStr, p)
       checkAnswer(
         ltz.select(unix_seconds(col("c")), unix_millis(col("c")), unix_micros(col("c"))),
         ltzExpected)
-      checkAnswer(ltz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"), ltzExpected)
+      checkAnswer(
+        ltz.selectExpr("unix_seconds(c)", "unix_millis(c)", "unix_micros(c)"),
+        ltzExpected)
     }
   }
 
