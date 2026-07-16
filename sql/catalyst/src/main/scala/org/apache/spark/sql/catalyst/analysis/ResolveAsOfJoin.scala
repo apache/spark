@@ -31,20 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
-import org.apache.spark.sql.types.{
-  ArrayType,
-  CalendarIntervalType,
-  DataType,
-  DatetimeType,
-  DateType,
-  DayTimeIntervalType,
-  NumericType,
-  StringType,
-  StructType,
-  TimestampNTZType,
-  TimestampType,
-  YearMonthIntervalType
-}
+import org.apache.spark.sql.types.{ArrayType, DataType, DatetimeType, StringType, StructType}
 
 /**
  * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into `asOfCondition` and
@@ -194,17 +181,7 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
   private def areScalarSubtractBasedOperands(
       leftExpr: Expression,
       rightExpr: Expression): Boolean = {
-    supportsSubtractForPlanner(leftExpr.dataType) && supportsSubtractForPlanner(rightExpr.dataType)
-  }
-
-  private def supportsSubtractForPlanner(dataType: DataType): Boolean = {
-    dataType match {
-      case _: NumericType | _: DayTimeIntervalType | _: YearMonthIntervalType |
-           _: CalendarIntervalType | _: TimestampType | _: TimestampNTZType | _: DateType =>
-        true
-      case _ =>
-        false
-    }
+    AsOfJoin.supportsSubtract(leftExpr.dataType) && AsOfJoin.supportsSubtract(rightExpr.dataType)
   }
 
   /**

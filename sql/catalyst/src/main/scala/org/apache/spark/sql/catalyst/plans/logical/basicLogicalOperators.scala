@@ -2628,17 +2628,6 @@ object AsOfJoin {
       requiresSortMergeAsOfJoin = true)
   }
 
-  def resolveMatchComparison(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      leftExpr: Expression,
-      operator: MatchComparisonOperator,
-      rightExpr: Expression): (Expression, Expression, Seq[Expression], Seq[Expression]) = {
-    val (leftOperand, rightOperand, normalizedOp) =
-      normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
-    materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
-  }
-
   private[catalyst] def materializeMatchComparison(
       leftOperand: Expression,
       rightOperand: Expression,
@@ -2782,7 +2771,7 @@ object AsOfJoin {
     }
   }
 
-  private def supportsSubtract(dataType: DataType): Boolean = {
+  private[catalyst] def supportsSubtract(dataType: DataType): Boolean = {
     dataType match {
       case _: NumericType | _: DayTimeIntervalType | _: YearMonthIntervalType |
            _: CalendarIntervalType | _: TimestampType | _: TimestampNTZType | _: DateType =>
