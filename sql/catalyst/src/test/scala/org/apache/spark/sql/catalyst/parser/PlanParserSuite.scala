@@ -1031,6 +1031,38 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
+  test("asof join - not equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a <> u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "<>"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a <> u.a)",
+            start = 16,
+            stop = 55)))
+    }
+  }
+
+  test("asof join - null-safe equal match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a <=> u.a)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "<=>"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a <=> u.a)",
+            start = 16,
+            stop = 56)))
+    }
+  }
+
   test("asof join - compound match condition rejected") {
     withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
       checkError(

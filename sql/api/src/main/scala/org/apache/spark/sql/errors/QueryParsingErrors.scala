@@ -237,7 +237,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def sqlAsofJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+  def sqlAsOfJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.ASOF_JOIN",
       messageParameters = Map("config" -> toSQLConf(configKey)),

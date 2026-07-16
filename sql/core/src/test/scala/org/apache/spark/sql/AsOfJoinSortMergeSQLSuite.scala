@@ -19,15 +19,16 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * SQL ASOF JOIN tests that require the sort-merge physical operator
- * (`spark.sql.join.sortMergeAsOfJoin.enabled=true`).
+ * SQL ASOF JOIN tests that exercise the sort-merge physical operator.
+ * SQL ASOF JOIN uses sort-merge implicitly; only `spark.sql.join.asofJoin.enabled`
+ * needs to be set (unlike the DataFrame API, which still requires
+ * `spark.sql.join.sortMergeAsOfJoin.enabled`).
  */
 class AsOfJoinSortMergeSQLSuite extends QueryTest
   with SharedSparkSession
@@ -36,11 +37,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.SQL_ASOF_JOIN_ENABLED.key, "true")
-    spark.conf.set(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key, "true")
   }
 
   override def afterAll(): Unit = {
-    spark.conf.unset(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key)
     spark.conf.unset(SQLConf.SQL_ASOF_JOIN_ENABLED.key)
     super.afterAll()
   }
@@ -75,30 +74,6 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         |       (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
         |       (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50)
         |""".stripMargin)
-  }
-
-  test("SQL ASOF JOIN requires sort-merge conf") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT t.trade_time, q.bid_price
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException](sql(sqlText)),
-        condition = "AS_OF_JOIN.SORT_MERGE_REQUIRED",
-        parameters = Map("config" -> SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key),
-        queryContext = Array(
-          ExpectedContext(
-            fragment = """ASOF JOIN quotes q
-                         |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-                         |  ON t.symbol = q.symbol""".stripMargin,
-            start = 48,
-            stop = 139)))
-    }
   }
 
   test("INNER ASOF JOIN with TIMESTAMP MATCH_CONDITION") {
@@ -447,97 +422,6 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  ON t.symbol = q.symbol
           |""".stripMargin),
       Row(3L) :: Nil)
-  }
-
-  test("MATCH_CONDITION rejects cross-side operand references") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT count(*)
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time + q.quote_time >= q.quote_time)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](sql(sqlText)),
-      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
-      sqlState = Some("42K0E"),
-      parameters = Map(
-        "refs1" -> "\"(trade_time + quote_time)\"",
-        "refs2" -> "\"quote_time\""),
-      queryContext = Array(
-        ExpectedContext(
-          fragment = """ASOF JOIN quotes q
-                       |  MATCH_CONDITION (t.trade_time + q.quote_time >= q.quote_time)
-                       |  ON t.symbol = q.symbol""".stripMargin,
-          start = 31,
-          stop = 137)))
-  }
-
-  test("MATCH_CONDITION rejects invalid table references") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT count(*)
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.symbol >= t.symbol)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](sql(sqlText)),
-      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
-      sqlState = Some("42K0E"),
-      parameters = Map(
-        "refs1" -> "\"symbol\"",
-        "refs2" -> "\"symbol\""))
-  }
-
-  test("MATCH_CONDITION rejects non-deterministic expressions") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT t.trade_time
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (rand() >= q.quote_time)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](sql(sqlText)),
-      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION",
-      sqlState = Some("42903"),
-      parameters = Map("expr" -> "\"rand()\""),
-      queryContext = Array(
-        ExpectedContext(
-          fragment = """ASOF JOIN quotes q
-                       |  MATCH_CONDITION (rand() >= q.quote_time)
-                       |  ON t.symbol = q.symbol""".stripMargin,
-          start = 35,
-          stop = 120)))
-  }
-
-  test("MATCH_CONDITION rejects incompatible operand types") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT t.trade_time
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time >= q.symbol)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    checkError(
-      exception = intercept[AnalysisException](sql(sqlText)),
-      condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
-      sqlState = Some("42K09"),
-      parameters = Map(
-        "type1" -> "\"TIMESTAMP\"",
-        "type2" -> "\"STRING\""),
-      queryContext = Array(
-        ExpectedContext(
-          fragment = """ASOF JOIN quotes q
-                       |  MATCH_CONDITION (t.trade_time >= q.symbol)
-                       |  ON t.symbol = q.symbol""".stripMargin,
-          start = 35,
-          stop = 122)))
   }
 
   test("LEFT ASOF JOIN null-pads NOT NULL right catalog columns") {

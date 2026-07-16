@@ -425,30 +425,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Plans AS-OF joins using a dedicated sort-merge operator when the
-   * conf is enabled.
+   * Plans AS-OF joins using a dedicated sort-merge operator when enabled for the
+   * DataFrame API, or implicitly for SQL ASOF JOIN (`requiresSortMergeAsOfJoin`).
    */
   object AsOfJoinSelection extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType,
-          orderExpression, _, _, _, _, _, leftSortExprs, rightSortExprs, _)
-          if conf.sortMergeAsOfJoinEnabled =>
-        val (leftKeys, rightKeys, residual) = condition match {
-          case Some(cond) => extractEquiJoinKeys(cond, left, right)
+      case j: AsOfJoin if conf.useSortMergeAsOfJoinOperator(j.requiresSortMergeAsOfJoin) =>
+        val (leftKeys, rightKeys, residual) = j.condition match {
+          case Some(cond) => extractEquiJoinKeys(cond, j.left, j.right)
           case None => (Seq.empty[Expression], Seq.empty[Expression], None)
         }
         val (leftSort, rightSort) =
-          if (leftSortExprs.nonEmpty && rightSortExprs.nonEmpty) {
-            (leftSortExprs, rightSortExprs)
+          if (j.leftSortExprs.nonEmpty && j.rightSortExprs.nonEmpty) {
+            (j.leftSortExprs, j.rightSortExprs)
           } else {
-            val (leftAsOf, rightAsOf) = extractAsOfExprs(orderExpression, left, right)
+            val (leftAsOf, rightAsOf) = extractAsOfExprs(j.orderExpression, j.left, j.right)
             (Seq(leftAsOf), Seq(rightAsOf))
           }
 
         joins.SortMergeAsOfJoinExec(
           leftKeys, rightKeys, leftSort, rightSort,
-          asOfCondition, orderExpression, joinType, residual,
-          planLater(left), planLater(right)) :: Nil
+          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
 

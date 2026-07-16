@@ -191,11 +191,6 @@
       "Invalid as-of join."
     ],
     "subClass" : {
-      "SORT_MERGE_REQUIRED" : {
-        "message" : [
-          "SQL ASOF JOIN requires the sort-merge physical operator. Set <config> to true."
-        ]
-      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -209,11 +204,6 @@
       "UNSUPPORTED_DIRECTION" : {
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
-        ]
-      },
-      "UNSUPPORTED_MATCH_CONDITION_OPERAND" : {
-        "message" : [
-          "The MATCH_CONDITION operands (<type1> and <type2>) use types that require multi-column sort-merge ASOF join execution. Only scalar numeric and datetime operands are currently supported."
         ]
       }
     },
