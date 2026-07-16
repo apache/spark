@@ -104,7 +104,7 @@ class AsyncProgressTrackingRealTimeModeSuite
           equal(Array(0, 1, 2))
         getBatchIdsSortedFromLog(checkpointLocation + "/commits") should
           equal(Array(0, 1, 2))
-      },
+      }
     )
   }
 
@@ -188,7 +188,7 @@ class AsyncProgressTrackingRealTimeModeSuite
       // Restart the query.
       StartStream(checkpointLocation = checkpointLocation),
       AddData(inputData, 100),
-      CheckAnswerWithTimeout(60000, 100), // Should not reprocess old data.
+      CheckAnswerWithTimeout(60000, 100) // Should not reprocess old data.
     )
   }
 
@@ -362,7 +362,7 @@ class AsyncProgressTrackingRealTimeModeSuite
                 assert(sparkEx.getCause.isInstanceOf[java.io.IOException])
                 assert(sparkEx.getCause.getMessage === "Fake File Stream Close Failure")
               },
-              typeIsSuperClass = true),
+              typeIsSuperClass = true)
           )
         } finally {
           FailureInjectionFileSystem.removePathFromTempToInjectionState(checkpointDir.getPath)
