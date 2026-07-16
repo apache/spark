@@ -1616,7 +1616,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         percentile(col("year"), lit(0.3), lit(2)),
         percentile(col("year"), lit(Array(0.25, 0.75)), lit(2))
       ),
-      Row("Java", 2012.2999999999997, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
+      Row("Java", 2012.3, Seq(2012.25, 2012.75), 2012.0, Seq(2012.0, 2013.0)) ::
         Row("dotNET", 2012.0, Seq(2012.0, 2012.5), 2012.0, Seq(2012.0, 2012.75)) :: Nil
     )
 

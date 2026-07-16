@@ -75,7 +75,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
            la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
+           la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
@@ -1104,8 +1104,24 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
+    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
+    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    ;
+
+asofJoinType
+    : INNER?
+    | LEFT OUTER?
+    ;
+
+joinPostfix
+    : joinCriteria
+    | nearestByClause
+    ;
+
+asofJoinCriteria
+    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+      ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
 joinType
@@ -2013,6 +2029,7 @@ ansiNonReserved
     | ARRAY
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTO
@@ -2180,6 +2197,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2405,6 +2423,7 @@ nonReserved
     | AS
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2610,6 +2629,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE

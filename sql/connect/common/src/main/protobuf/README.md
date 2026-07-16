@@ -42,16 +42,16 @@ Install the required tools:
 - Python 3.12+
 
 Install the required Python packages. Check `pyproject.toml` for the latest
-pinned versions of `mypy`, `mypy-protobuf`, and `black`, then run:
+pinned versions of `mypy`, `mypy-protobuf`, and `ruff`, then run:
 
 ```bash
-pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'black==<version>'
+pip install 'mypy==<version>' 'mypy-protobuf==<version>' 'ruff==<version>'
 ```
 
 For example, based on the current `pyproject.toml`:
 
 ```bash
-pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'black==26.3.1'
+pip install 'mypy==1.19.1' 'mypy-protobuf==3.3.0' 'ruff==0.14.8'
 ```
 
 ### Generate

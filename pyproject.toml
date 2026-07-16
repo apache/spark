@@ -59,15 +59,9 @@ ignore = [
     "python/pyspark/errors/error_classes.py" = ["E501"]
     # Examples contain some unused variables.
     "examples/src/main/python/sql/datasource.py" = ["F841"]
-
-[tool.black]
-# When changing the version, we have to update
-# GitHub workflow version and dev/reformat-python
-required-version = "26.3.1"
-line-length = 100
-target-version = ['py39']
-include = '\.pyi?$'
-extend-exclude = 'cloudpickle|error_classes.py'
+    # DataFrame golden test scripts are executed by the framework with ``spark``
+    # injected into their namespace, so it is undefined at lint time.
+    "python/pyspark/sql/tests/df_golden/scripts/**/*.py" = ["F821"]
 
 [dependency-groups]
 _py4j = ["py4j>=0.10.9.9"]
@@ -172,6 +166,7 @@ _docs = [
     "nbsphinx",
     "numpydoc",
     "jinja2",
+    "mkdocs",
 ]
 
 _devtools = [
