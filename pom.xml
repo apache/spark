@@ -3553,6 +3553,12 @@
           <url>${env.MAVEN_MIRROR_URL}</url>
         </repository>
       </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>maven-mirror</id>
+          <url>${env.MAVEN_MIRROR_URL}</url>
+        </pluginRepository>
+      </pluginRepositories>
     </profile>
 
     <!--
