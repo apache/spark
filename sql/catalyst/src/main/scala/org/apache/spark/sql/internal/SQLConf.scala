@@ -3675,6 +3675,7 @@ object SQLConf {
       "default for stateless queries. If explicitly set, the stream writer option for async " +
       "progress tracking will still take precedence over this flag.")
     .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 
