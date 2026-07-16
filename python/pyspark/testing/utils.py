@@ -47,13 +47,11 @@ __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 
 def log_session_timing(test_id: str, phase: str, elapsed_seconds: float) -> None:
-    """Emit an opt-in timing marker for Spark test fixture lifecycle operations."""
-    if os.environ.get("PYSPARK_SESSION_TIMING") == "1":
-        print(
-            f"PYSPARK_SESSION_TIMING test={test_id} phase={phase} "
-            f"seconds={elapsed_seconds:.6f}",
-            flush=True,
-        )
+    """Emit a timing marker for Spark test fixture lifecycle operations."""
+    print(
+        f"PYSPARK_SESSION_TIMING test={test_id} phase={phase} seconds={elapsed_seconds:.6f}",
+        flush=True,
+    )
 
 
 def have_package(name: str) -> bool:
