@@ -235,12 +235,12 @@ trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
 
       catalog.dropTable(testIdent)
       catalog.createTable(
-      testIdent,
-      new TableInfo.Builder()
-        .withColumns(Array(
-          Column.create("id", IntegerType),
-          Column.create("salary", IntegerType)))
-        .build())
+        testIdent,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
 
       // CachingInMemoryTableCatalog does not invalidate on drop/create, so loadTable
       // still returns the old cached table object. CacheManager still matches and
