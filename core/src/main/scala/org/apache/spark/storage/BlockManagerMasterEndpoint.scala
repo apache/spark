@@ -994,9 +994,7 @@ class BlockManagerMasterEndpoint(
       } else if (locations.exists(bm =>
           bm.port != externalShuffleServicePort &&
             !perReplica.get(bm).contains(sealedValue.get))) {
-        // Skip external-shuffle-service pseudo-ids (identified by port, as the seal and read paths
-        // do): `updateBlockInfo` adds them to `blockLocations` for disk RDD blocks but never to
-        // `blockChecksums`, so they carry no per-replica checksum to compare against the seal.
+        // Skip the external-shuffle-service pseudo-replica: it has no checksum entry of its own.
         Some(s"$blockId sealed to ${sealedValue.get} but the directory tracks a replica whose " +
           s"checksum differs: locations=$locations checksums=$perReplica")
       } else {
