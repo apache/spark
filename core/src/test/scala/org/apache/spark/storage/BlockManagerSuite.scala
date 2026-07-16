@@ -2538,9 +2538,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("verifyRddChecksumSeal ignores the external-shuffle-service pseudo-replica") {
-    // With RDD fetch from the external shuffle service enabled, updateBlockInfo adds an ESS
-    // pseudo-BlockManagerId to blockLocations for a disk RDD block but never to blockChecksums.
-    // verifyRddChecksumSeal must skip it (by port) rather than flag it as a divergent replica.
+    // The ESS pseudo-replica is tracked in blockLocations but has no checksum entry.
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
     conf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
     val essBlockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
