@@ -28,10 +28,10 @@ import org.apache.spark.util.Utils
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
  *
- * This trait is sealed and is not meant to be implemented directly. A shuffle manager declares its
- * kind by extending one of its two subtypes: [[BlockingShuffleManager]] (output is materialized as
- * block-manager-addressed blocks served through a [[ShuffleBlockResolver]]) or
- * [[PipelinedShuffleManager]] (output is read incrementally and served out-of-band).
+ * An implementation declares its kind by extending one of its two subtypes:
+ * [[BlockingShuffleManager]] (output is materialized as block-manager-addressed blocks served
+ * through a [[ShuffleBlockResolver]]) or [[PipelinedShuffleManager]] (output is read incrementally
+ * and served out-of-band).
  *
  * NOTE:
  * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * Shuffle Service when it is enabled. Need to pay attention to that, if implementing a custom
  * shuffle manager, to make sure it could co-exist with the External Shuffle Service.
  */
-private[spark] sealed trait ShuffleManager {
+private[spark] trait ShuffleManager {
 
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.

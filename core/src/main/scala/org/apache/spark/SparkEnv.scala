@@ -653,7 +653,6 @@ object SparkEnv extends Logging {
             None
           }, blockManagerInfo,
           mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          _shuffleManager = null,
           isDriver)),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,

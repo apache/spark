@@ -199,7 +199,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     liveListenerBus = spy[LiveListenerBus](new LiveListenerBus(conf))
     master = spy[BlockManagerMaster](new BlockManagerMaster(rpcEnv.setupEndpoint("blockmanager",
       new BlockManagerMasterEndpoint(rpcEnv, true, conf,
-        liveListenerBus, None, blockManagerInfo, mapOutputTracker, shuffleManager,
+        liveListenerBus, None, blockManagerInfo, mapOutputTracker,
         isDriver = true)),
       rpcEnv.setupEndpoint("blockmanagerHeartbeat",
       new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, blockManagerInfo)), conf, true))

@@ -38,7 +38,6 @@ import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPu
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
-import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -56,7 +55,6 @@ class BlockManagerMasterEndpoint(
     externalBlockStoreClient: Option[ExternalBlockStoreClient],
     blockManagerInfo: mutable.Map[BlockManagerId, BlockManagerInfo],
     mapOutputTracker: MapOutputTrackerMaster,
-    private val _shuffleManager: ShuffleManager,
     isDriver: Boolean)
   extends IsolatedThreadSafeRpcEndpoint with Logging {
 
