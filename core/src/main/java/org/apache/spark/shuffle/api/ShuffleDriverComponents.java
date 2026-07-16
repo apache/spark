@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.api;
 import java.util.Map;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metric.CustomShuffleMetric;
 
 /**
  * :: Private ::
@@ -69,5 +70,13 @@ public interface ShuffleDriverComponents {
    */
   default boolean supportsReliableStorage() {
     return false;
+  }
+
+  /**
+   * The custom shuffle-write metrics this shuffle component supports. Per-task values are reported
+   * by {@link ShuffleMapOutputWriter#currentMetricsValues()} and matched to these by name.
+   */
+  default CustomShuffleMetric[] supportedCustomMetrics() {
+    return new CustomShuffleMetric[0];
   }
 }

@@ -31,6 +31,7 @@ import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.Utils
@@ -126,6 +127,35 @@ class SortShuffleWriterSuite
     assert(dataFile.exists())
     assert(dataFile.length() === writeMetrics.bytesWritten)
     assert(records.size === writeMetrics.recordsWritten)
+  }
+
+  test("reports no custom shuffle metrics by default") {
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+    val writer = new SortShuffleWriter[Int, Int, Int](
+      shuffleHandle,
+      mapId = 3,
+      context,
+      context.taskMetrics().shuffleWriteMetrics,
+      shuffleExecutorComponents)
+    writer.write(List[(Int, Int)]((1, 2), (2, 3)).iterator)
+    writer.stop(success = true)
+    assert(writer.currentMetricsValues().isEmpty)
+  }
+
+  test("exposes custom shuffle metrics reported by the map output writer") {
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+    val reported = Array[CustomShuffleTaskMetric](
+      TestCustomShuffleTaskMetric("s3BytesUploaded", 1024L),
+      TestCustomShuffleTaskMetric("s3BlockUploads", 2L))
+    val writer = new SortShuffleWriter[Int, Int, Int](
+      shuffleHandle,
+      mapId = 4,
+      context,
+      context.taskMetrics().shuffleWriteMetrics,
+      new CustomMetricReportingExecutorComponents(shuffleExecutorComponents, reported))
+    writer.write(List[(Int, Int)]((1, 2), (2, 3), (4, 4)).iterator)
+    writer.stop(success = true)
+    assert(writer.currentMetricsValues() === reported)
   }
 
   test("Row-based checksums are independent of input row order") {

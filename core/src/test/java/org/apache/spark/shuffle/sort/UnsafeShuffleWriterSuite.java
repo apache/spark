@@ -50,6 +50,8 @@ import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.security.CryptoStreamUtils;
 import org.apache.spark.serializer.*;
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
@@ -198,6 +200,13 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   private UnsafeShuffleWriter<Object, Object> createWriter(
     boolean transferToEnabled,
     IndexShuffleBlockResolver blockResolver) throws SparkException {
+    return createWriter(transferToEnabled,
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver));
+  }
+
+  private UnsafeShuffleWriter<Object, Object> createWriter(
+    boolean transferToEnabled,
+    ShuffleExecutorComponents executorComponents) throws SparkException {
     conf.set(package$.MODULE$.SHUFFLE_MERGE_PREFER_NIO().key(),
       String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
@@ -208,7 +217,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
-      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver));
+      executorComponents);
   }
 
   private void assertSpillFilesWereCleanedUp() {
@@ -287,6 +296,28 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
+  }
+
+  @Test
+  public void reportsNoCustomShuffleMetricsByDefault() throws Exception {
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+    writer.write(Collections.emptyIterator());
+    writer.stop(true);
+    assertEquals(0, writer.currentMetricsValues().length);
+  }
+
+  @Test
+  public void exposesCustomShuffleMetricsReportedByMapOutputWriter() throws Exception {
+    CustomShuffleTaskMetric[] reported = new CustomShuffleTaskMetric[] {
+      new TestCustomShuffleTaskMetric("s3BytesUploaded", 4096L)
+    };
+    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true,
+      new CustomMetricReportingExecutorComponents(
+        new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver),
+        reported));
+    writer.write(Collections.emptyIterator());
+    writer.stop(true);
+    assertArrayEquals(reported, writer.currentMetricsValues());
   }
 
   @Test
