@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.security.credentials;
+package org.apache.spark.security;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Optional;
@@ -27,8 +29,6 @@ import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import org.apache.spark.security.UserContext;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,7 +44,10 @@ public class FileTokenIngestorSuite {
   @AfterEach
   public void tearDown() throws Exception {
     if (tempDir != null) {
-      Files.walk(tempDir).sorted(Comparator.reverseOrder()).forEach(path -> { try { Files.deleteIfExists(path); } catch (Exception ignored) {} });
+      Files.walk(tempDir).sorted(Comparator.reverseOrder())
+          .forEach(path -> {
+            try { Files.deleteIfExists(path); } catch (Exception e) { /* cleanup, ignore */ }
+          });
     }
   }
 
@@ -52,19 +55,32 @@ public class FileTokenIngestorSuite {
     var builder = Jwts.builder()
         .subject(subject)
         .issuer(issuer);
-
     if (issuedAt != null) builder.issuedAt(issuedAt);
     if (expiresAt != null) builder.expiration(expiresAt);
-
     return builder.compact();
   }
 
   private String createUnsignedJwt(String subject, String issuer) {
-    return createUnsignedJwt(subject, issuer, new Date(), new Date(System.currentTimeMillis() + 3600000));
+    return createUnsignedJwt(subject, issuer,
+        new Date(), new Date(System.currentTimeMillis() + 3600000));
   }
 
   private String createUnsignedJwt() {
-    return createUnsignedJwt("system:serviceaccount:ns:sa", "https://kubernetes.default.svc");
+    return createUnsignedJwt("system:serviceaccount:ns:sa",
+        "https://kubernetes.default.svc");
+  }
+
+  private String createSignedJwt(String subject, String issuer) throws Exception {
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+    kpg.initialize(2048);
+    KeyPair kp = kpg.generateKeyPair();
+    return Jwts.builder()
+        .subject(subject)
+        .issuer(issuer)
+        .issuedAt(new Date())
+        .expiration(new Date(System.currentTimeMillis() + 3600000))
+        .signWith(kp.getPrivate())
+        .compact();
   }
 
   private void writeToken(Path path, String content) throws Exception {
@@ -84,6 +100,24 @@ public class FileTokenIngestorSuite {
     UserContext ctx = result.get();
     assertEquals("system:serviceaccount:ns:sa", ctx.getPrincipal());
     assertEquals("https://kubernetes.default.svc", ctx.getIssuer());
+    assertEquals(token, ctx.getRawToken());
+    assertNotNull(ctx.getIssuedAt());
+    assertNotNull(ctx.getExpiresAt());
+  }
+
+  @Test
+  public void loadWorksWithSignedJwt() throws Exception {
+    Path tokenFile = tempDir.resolve("token");
+    String token = createSignedJwt("user@corp.example.com", "https://oidc.eks.us-west-2.amazonaws.com/id/ABC123");
+    writeToken(tokenFile, token);
+
+    FileTokenIngestor ingestor = new FileTokenIngestor(tokenFile);
+    Optional<UserContext> result = ingestor.load();
+
+    assertTrue(result.isPresent());
+    UserContext ctx = result.get();
+    assertEquals("user@corp.example.com", ctx.getPrincipal());
+    assertEquals("https://oidc.eks.us-west-2.amazonaws.com/id/ABC123", ctx.getIssuer());
     assertEquals(token, ctx.getRawToken());
     assertNotNull(ctx.getIssuedAt());
     assertNotNull(ctx.getExpiresAt());
@@ -137,7 +171,7 @@ public class FileTokenIngestorSuite {
   @Test
   public void loadReturnsEmptyForMalformedJwt() throws Exception {
     Path tokenFile = tempDir.resolve("token");
-    writeToken(tokenFile, "not-a-valid-jwt-token");
+    writeToken(tokenFile, "not-a-jwt");
 
     FileTokenIngestor ingestor = new FileTokenIngestor(tokenFile);
     assertTrue(ingestor.load().isEmpty());
@@ -194,7 +228,8 @@ public class FileTokenIngestorSuite {
     Optional<UserContext> result1 = ingestor.load();
     Optional<UserContext> result2 = ingestor.load();
 
-    assertEquals(result1, result2);
+    // Reference identity proves the cached path was hit (not re-parsed)
+    assertSame(result1.get(), result2.get());
     assertEquals("cached-user", result1.get().getPrincipal());
   }
 

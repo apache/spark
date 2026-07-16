@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.security.credentials;
+package org.apache.spark.security;
 
 import java.util.Optional;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.security.UserContext;
 
 /**
  * :: DeveloperApi ::
- * Read OIDC identity token and produce a {@link UserContext}.
+ * Read an OIDC identity token and produces a {@link UserContext}.
  * <p>
  * Implementation should be stateless with respect to Spark configuration;
  * configuration is passed at construction time.
@@ -38,7 +37,7 @@ public interface TokenIngestor {
    * Attempt to load the current identity token and parse it into a UserContext.
    *
    * @return a present Optional containing the UserContext if a valid token is available,
-   *         or empty if unavailable (e.g. empty content / missing file).
+   * or empty if unavailable (e.g. empty content / missing file).
    */
   Optional<UserContext> load();
 }

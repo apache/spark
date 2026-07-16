@@ -15,24 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.security.credentials;
+package org.apache.spark.security;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Date;
+import java.util.Base64;
 import java.util.Optional;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.annotation.Private;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.internal.SparkLogger;
 import org.apache.spark.internal.SparkLoggerFactory;
-import org.apache.spark.security.UserContext;
 
 /**
- * :: DeveloperApi ::
  * A {@link TokenIngestor} that reads an OIDC identity token from a file.
  * <p>
  * The file path is typically a Kubernetes projected service account token
@@ -42,22 +43,28 @@ import org.apache.spark.security.UserContext;
  * This implementation:
  * <ul>
  *   <li>Detects file rotation via mtime change (only re-parses when the file changes)</li>
- *   <li>Parses JWT claims without signature verification (unsigned claims parsing)
- *       since the token is trusted from the local filesystem</li>
+ *   <li>Parses JWT claims by Base64-decoding the payload segment directly, without
+ *       signature verification, since the token is trusted from the local filesystem
+ *       and works with both signed (RS256, ES256) and unsigned tokens</li>
  *   <li>Handles errors gracefully: malformed JWT, missing file, or empty content
  *       returns empty rather than throwing</li>
  * </ul>
  *
  * @since 4.3.0
  */
-@DeveloperApi
+@Private
 public class FileTokenIngestor implements TokenIngestor {
 
   private static final SparkLogger LOG = SparkLoggerFactory.getLogger(FileTokenIngestor.class);
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private final Path tokenPath;
-  private volatile long lastMtime = -1L;
+
+  // Cached state for rotation detection.
+  // Write order matters for thread-safety: cachedContext must be visible before
+  // lastMtime, so a concurrent reader never sees a new mtime with a stale context.
   private volatile UserContext cachedContext = null;
+  private volatile long lastMtime = -1L;
 
   /**
    * Construct a new FileTokenIngestor.
@@ -82,39 +89,48 @@ public class FileTokenIngestor implements TokenIngestor {
         return Optional.of(cachedContext);
       }
 
-      // Read the token contents and check for emptiness
-      String content = new String(Files.readAllBytes(tokenPath), "UTF-8").trim();
+      String content = new String(Files.readAllBytes(tokenPath), StandardCharsets.UTF_8).trim();
       if (content.isEmpty()) {
-        LOG.warn("Token file is empty: " + tokenPath);
+        LOG.warn("Token file is empty: {}", MDC.of(LogKeys.PATH, tokenPath));
         return Optional.empty();
       }
 
       Optional<UserContext> userContext = parseJwt(content);
       if (userContext.isPresent()) {
-        lastMtime = currentMtime;
+        // If the new file has invalid content, return empty and do NOT
+        // fall back to the previously cached context. The caller will retry on next poll.
         cachedContext = userContext.get();
+        lastMtime = currentMtime;
       }
       return userContext;
     } catch (Exception e) {
-      LOG.warn("Failed to load token from " + tokenPath, e);
+      LOG.warn("Failed to load token from {}: {}", e,
+          MDC.of(LogKeys.PATH, tokenPath),
+          MDC.of(LogKeys.CLASS_NAME, e.getClass().getName()));
       return Optional.empty();
     }
   }
 
   /**
-   * Parse a JWT token string into a UserContext using unsigned claims parsing.
-   * The token is trusted from the local filesystem. No need to verify the signature.
+   * Parse a JWT token string into a UserContext by Base64-decoding the payload segment.
+   * This works with both signed (RS256, ES256) and unsigned (alg:none) tokens since
+   * we never verify the signature - the token is trusted from the local filesystem and
+   * will be re-verified downstream at the STS token exchange.
    */
   private Optional<UserContext> parseJwt(String token) {
     try {
-      Claims claims = Jwts.parser()
-          .unsecured()
-          .build()
-          .parseUnsecuredClaims(token)
-          .getPayload();
+      String[] parts = token.split("\\.");
+      if (parts.length < 2) {
+        LOG.warn("JWT token does not have the expected header.payload format");
+        return Optional.empty();
+      }
 
-      String subject = claims.getSubject();
-      String issuer = claims.getIssuer();
+      // Decode the payload (second segment) - works for both signed and unsigned JWTs
+      byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
+      JsonNode claims = MAPPER.readTree(payloadBytes);
+
+      String subject = claims.has("sub") ? claims.get("sub").asText() : null;
+      String issuer = claims.has("iss") ? claims.get("iss").asText() : null;
 
       if (subject == null || subject.isEmpty()) {
         LOG.warn("JWT token missing required 'sub' claim");
@@ -125,14 +141,15 @@ public class FileTokenIngestor implements TokenIngestor {
         return Optional.empty();
       }
 
-      Date issuedAtDate = claims.getIssuedAt();
-      Date expirationDate = claims.getExpiration();
-      Instant issuedAt = issuedAtDate != null ? issuedAtDate.toInstant() : null;
-      Instant expiresAt = expirationDate != null ? expirationDate.toInstant() : null;
+      Instant issuedAt = claims.has("iat")
+          ? Instant.ofEpochSecond(claims.get("iat").asLong()) : null;
+      Instant expiresAt = claims.has("exp")
+          ? Instant.ofEpochSecond(claims.get("exp").asLong()) : null;
 
       return Optional.of(new UserContext(subject, issuer, token, issuedAt, expiresAt));
     } catch (Exception e) {
-      LOG.warn("Failed to parse JWT token", e);
+      LOG.warn("Failed to parse JWT token: {}",
+          MDC.of(LogKeys.CLASS_NAME, e.getClass().getName()));
       return Optional.empty();
     }
   }
