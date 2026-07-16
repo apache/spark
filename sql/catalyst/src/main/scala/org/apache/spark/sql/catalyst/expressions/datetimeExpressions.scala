@@ -2939,7 +2939,7 @@ case class TruncDate(date: Expression, format: Expression)
 /**
  * Returns timestamp truncated to the unit specified by the format.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
@@ -2971,10 +2971,14 @@ case class TruncDate(date: Expression, format: Expression)
        2015-03-05 09:00:00
       > SELECT _FUNC_('MILLISECOND', '2015-03-05T09:32:05.123456');
        2015-03-05 09:32:05.123
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_('MICROSECOND', TIMESTAMP_NTZ '2015-03-05 09:32:05.123456789');
+       2015-03-05 09:32:05.123456
   """,
   group = "datetime_funcs",
   since = "2.3.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 case class TruncTimestamp(
     format: Expression,
     timestamp: Expression,
@@ -2984,26 +2988,44 @@ case class TruncTimestamp(
   override def right: Expression = timestamp
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true), TimestampType)
-  override def dataType: TimestampType = TimestampType
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      TypeCollection(TimestampType, AnyTimestampNanoType))
+  override def dataType: DataType = timestamp.dataType match {
+    case _: AnyTimestampNanoType => timestamp.dataType
+    case _ => TimestampType
+  }
   override def prettyName: String = "date_trunc"
   override val instant = timestamp
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  // TIMESTAMP_NTZ(p) carries wall-clock fields (evaluated at UTC); TIMESTAMP_LTZ(p) and the
+  // microsecond TimestampType use the session zone. For micro NTZ the analyzer casts to LTZ
+  // micro before eval, so this reduces to `zoneId`.
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
+
   def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
 
   override def eval(input: InternalRow): Any = {
     evalHelper(input, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC) { (t: Any, level: Int) =>
-      DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, zoneId)
+      timestamp.dataType match {
+        case _: AnyTimestampNanoType =>
+          DateTimeUtils.truncTimestampNanos(t.asInstanceOf[TimestampNanosVal], level, zoneIdInEval)
+        case _ =>
+          DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, zoneIdInEval)
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     codeGenHelper(ctx, ev, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC, true) {
       (date: String, fmt: String) =>
-        s"truncTimestamp($date, $fmt, $zid);"
+        timestamp.dataType match {
+          case _: AnyTimestampNanoType => s"truncTimestampNanos($date, $fmt, $zid);"
+          case _ => s"truncTimestamp($date, $fmt, $zid);"
+        }
     }
   }
 

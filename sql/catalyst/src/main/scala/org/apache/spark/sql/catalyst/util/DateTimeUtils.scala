@@ -646,6 +646,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   */
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
+    TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
+  }
+
+  /**
    * Returns time truncated to the unit specified by the level.
    */
   private def parseTimeTruncLevel(level: UTF8String): ChronoUnit = {

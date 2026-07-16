@@ -78,13 +78,17 @@ object VariantExpressionEvalUtils {
 
   /**
    * Parse a JSONPath for a variant manipulation function. Throws `INVALID_VARIANT_PATH` on a
-   * malformed path or on the empty (root `$`) path.
+   * malformed path, or on the empty (root `$`) path unless `allowRoot` is set (as
+   * `variant_array_append` does, since `$` refers to the root array there).
    */
-  def parseVariantPath(pathValue: String, functionName: String): Array[VariantPathSegment] = {
+  def parseVariantPath(
+      pathValue: String,
+      functionName: String,
+      allowRoot: Boolean = false): Array[VariantPathSegment] = {
     val parsed = VariantPathParser.parse(pathValue).getOrElse {
       throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
-    if (parsed.isEmpty) {
+    if (!allowRoot && parsed.isEmpty) {
       throw QueryExecutionErrors.invalidVariantPath(pathValue, functionName)
     }
     parsed
@@ -214,6 +218,45 @@ object VariantExpressionEvalUtils {
     val pathStr = path.toString
     val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName))
     setAtPath(input, javaSegments, pathStr, value, valueDataType, createIfMissing, functionName)
+  }
+
+  /**
+   * Append `value` to the array in `input` at `javaSegments`. `path` is the source string used in
+   * error messages. `value` is cast to a variant first; a size overflow maps to
+   * `VARIANT_SIZE_LIMIT` and a target that is not an array (or an incompatible path segment) maps
+   * to `VARIANT_PATH_TYPE_MISMATCH`.
+   */
+  def arrayAppendAtPath(
+      input: VariantVal,
+      javaSegments: Array[VariantBuilder.PathSegment],
+      path: String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    try {
+      val valVal = castToVariant(value, valueDataType)
+      val valVariant = new Variant(valVal.getValue, valVal.getMetadata)
+      val out = VariantBuilder.arrayAppendAtPath(v, javaSegments, valVariant)
+      new VariantVal(out.getValue, out.getMetadata)
+    } catch {
+      case e: VariantPathTypeMismatchException =>
+        throw QueryExecutionErrors.variantPathTypeMismatch(
+          path, renderVariantPath(javaSegments.take(e.depth)), functionName)
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(VariantUtil.SIZE_LIMIT, functionName)
+    }
+  }
+
+  def arrayAppendAtPath(
+      input: VariantVal,
+      path: UTF8String,
+      value: Any,
+      valueDataType: DataType,
+      functionName: String): VariantVal = {
+    val pathStr = path.toString
+    val javaSegments = toJavaSegments(parseVariantPath(pathStr, functionName, allowRoot = true))
+    arrayAppendAtPath(input, javaSegments, pathStr, value, valueDataType, functionName)
   }
 
   /** Cast a Spark value from `dataType` into the variant type. */

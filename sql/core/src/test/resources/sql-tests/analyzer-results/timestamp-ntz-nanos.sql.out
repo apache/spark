@@ -910,3 +910,38 @@ SELECT unix_seconds(NULL :: timestamp_ntz(9)), unix_millis(NULL :: timestamp_ntz
 -- !query analysis
 Project [unix_seconds(cast(null as timestamp_ntz(9))) AS unix_seconds(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL, unix_millis(cast(null as timestamp_ntz(9))) AS unix_millis(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL, unix_micros(cast(null as timestamp_ntz(9))) AS unix_micros(CAST(NULL AS TIMESTAMP_NTZ(9)))#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(SECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(SECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(MICROSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [date_trunc(HOUR, cast(2020-01-01 12:34:56.123456789 as timestamp_ntz(9)), Some(America/Los_Angeles)) AS date_trunc(HOUR, CAST(2020-01-01 12:34:56.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7))
+-- !query analysis
+Project [date_trunc(DAY, cast(2020-06-21 23:30:00.000000123 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS date_trunc(DAY, CAST(2020-06-21 23:30:00.000000123 AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query analysis
+Project [date_trunc(NANOSECOND, 2020-01-01 12:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')#x]
++- OneRowRelation
