@@ -1154,7 +1154,6 @@ class Analyzer(
         // Thus, we need to look at the raw plan if `relation` is a temporary view.
         // unwrapRelationPlan also resolves V2TableReference nodes in temp view plans.
         unwrapRelationPlan(relation) match {
-          // Only REPLACE WHERE is rejected here. REPLACE ON/USING is rejected separately.
           case v: View if i.replaceCriteriaOpt.exists(_.isReplaceWhere) =>
             throw QueryCompilationErrors.writeIntoViewNotAllowedError(v.desc.identifier, i)
           case v: View =>
@@ -1352,7 +1351,6 @@ class Analyzer(
         throw QueryCompilationErrors.unsupportedInsertReplaceOnOrUsing(
           i.table.asInstanceOf[DataSourceV2Relation].table.name())
 
-      // Handles all plain INSERTs and REPLACE WHERE.
       case i: InsertIntoStatement
           if i.table.isInstanceOf[DataSourceV2Relation] &&
             i.query.resolved &&
@@ -1409,8 +1407,10 @@ class Analyzer(
         } else {
           val deleteExpr = i.replaceCriteriaOpt match {
             case Some(InsertReplaceWhere(condition)) =>
-              assert(staticPartitions.isEmpty,
-                s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
+              if (staticPartitions.nonEmpty) {
+                throw SparkException.internalError(
+                  s"REPLACE WHERE must not carry static partitions, but got: $staticPartitions")
+              }
               condition
             case Some(other) => throw SparkException.internalError(
               s"Replace criteria ${other.getClass.getSimpleName} must not reach " +
