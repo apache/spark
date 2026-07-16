@@ -57,7 +57,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{BlockingShuffle, IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.LogBlockType.LogBlockType
 import org.apache.spark.storage.memory._
@@ -196,27 +196,24 @@ private[spark] class BlockManager(
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
-  // (except for tests) and we ask for it from the SparkEnv.
-  private lazy val shuffleManager = {
-    Option(_shuffleManager).getOrElse {
-      // Wait for ShuffleManager to be initialized before handling shuffle operations.
-      // Exception will be thrown if it is not initialized within the configured timeout.
-      waitForShuffleManagerInit()
-      SparkEnv.get.defaultShuffleManager
-    }
-  }
-
-  // The resolver used for block-by-id resolution (reads, push-merge, decommission migration). It
-  // comes from the default manager: a pipelined shuffle is served out-of-band by the incremental
-  // manager and produces no block-manager-addressed blocks, so these paths only ever resolve
-  // regular shuffles. Prefer this over `shuffleManager.shuffleBlockResolver` -- it does not require
-  // a ShuffleManager reference at the call site.
+  // (except for tests) and we ask for the resolver from the SparkEnv.
+  // The resolver used for block-by-id resolution (reads, push-merge, decommission migration). Only
+  // a BlockingShuffle serves block-manager-addressed blocks; a pipelined shuffle is served
+  // out-of-band and produces none, so these paths only ever resolve regular shuffles. Prefer this
+  // over reaching through a ShuffleManager at the call site.
   private def shuffleBlockResolver: ShuffleBlockResolver = {
-    Option(_shuffleManager).map(_.shuffleBlockResolver).getOrElse {
-      // Wait for ShuffleManager to be initialized before handling shuffle operations.
-      // Exception will be thrown if it is not initialized within the configured timeout.
-      waitForShuffleManagerInit()
-      SparkEnv.get.shuffleBlockResolver
+    val resolver = Option(_shuffleManager) match {
+      case Some(blocking: BlockingShuffle) => Some(blocking.shuffleBlockResolver)
+      case Some(_) => None
+      case None =>
+        // Wait for ShuffleManager to be initialized before handling shuffle operations.
+        // Exception will be thrown if it is not initialized within the configured timeout.
+        waitForShuffleManagerInit()
+        SparkEnv.get.shuffleBlockResolver
+    }
+    resolver.getOrElse {
+      throw new UnsupportedOperationException(
+        "The configured shuffle manager does not provide a ShuffleBlockResolver")
     }
   }
 
@@ -951,8 +948,8 @@ private[spark] class BlockManager(
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
         case _: ClassCastException =>
-          throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(shuffleManager,
-            blockId)
+          throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(
+            shuffleBlockResolver, blockId)
       }
     }
     logDebug(s"Putting regular block ${blockId}")

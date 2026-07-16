@@ -72,37 +72,44 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         // block push requests. It delegates pushing the blocks to a different thread-pool -
         // ShuffleBlockPusher.BLOCK_PUSHER_POOL.
         if (!dep.shuffleMergeFinalized) {
-          manager.shuffleBlockResolver match {
-            case resolver: IndexShuffleBlockResolver =>
-              logInfo(log"Shuffle merge enabled with" +
-                log" ${MDC(NUM_MERGER_LOCATIONS, dep.getMergerLocs.size)} merger locations" +
-                log" for stage ${MDC(STAGE_ID, context.stageId())}" +
-                log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
-              logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
-              val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
-              val blockPusher = new ShuffleBlockPusher(SparkEnv.get.conf)
-              // Register a post-status-update listener to defer push until after the task
-              // result has been sent to the driver. This ensures the driver processes the
-              // task result (and can mark stale partitions from speculative duplicates)
-              // before any push data reaches the merger, avoiding stale data being merged
-              // without detection.
-              //
-              // The listener callback runs on the Task thread and only does a lightweight
-              // submitTask; actual push I/O runs on BLOCK_PUSHER_POOL threads.
-              context.addPostStatusUpdateListener(new PostStatusUpdateListener {
-                override def onStatusUpdateSent(context: TaskContext): Unit = {
-                  if (!context.isInterrupted() && !context.isFailed()) {
-                    logDebug(s"Task ${context.taskAttemptId()} status update sent, " +
-                      s"proceeding with shuffle block push for shuffle ${dep.shuffleId}")
-                    blockPusher.initiateBlockPush(
-                      dataFile, writer.getPartitionLengths(), dep, mapIndex)
-                  } else {
-                    logInfo(s"Task ${context.taskAttemptId()} was " +
-                      s"${if (context.isInterrupted()) "killed" else "failed"}, " +
-                      s"skipping shuffle block push for shuffle ${dep.shuffleId}")
-                  }
-                }
-              })
+          // Push-based merge only applies to a blocking shuffle that resolves blocks via an
+          // IndexShuffleBlockResolver. A pipelined shuffle disables merge (shuffleMergeFinalized is
+          // true above), so it never reaches here.
+          manager match {
+            case blocking: BlockingShuffle =>
+              blocking.shuffleBlockResolver match {
+                case resolver: IndexShuffleBlockResolver =>
+                  logInfo(log"Shuffle merge enabled with" +
+                    log" ${MDC(NUM_MERGER_LOCATIONS, dep.getMergerLocs.size)} merger locations" +
+                    log" for stage ${MDC(STAGE_ID, context.stageId())}" +
+                    log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
+                  logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
+                  val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
+                  val blockPusher = new ShuffleBlockPusher(SparkEnv.get.conf)
+                  // Register a post-status-update listener to defer push until after the task
+                  // result has been sent to the driver. This ensures the driver processes the
+                  // task result (and can mark stale partitions from speculative duplicates)
+                  // before any push data reaches the merger, avoiding stale data being merged
+                  // without detection.
+                  //
+                  // The listener callback runs on the Task thread and only does a lightweight
+                  // submitTask; actual push I/O runs on BLOCK_PUSHER_POOL threads.
+                  context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+                    override def onStatusUpdateSent(context: TaskContext): Unit = {
+                      if (!context.isInterrupted() && !context.isFailed()) {
+                        logDebug(s"Task ${context.taskAttemptId()} status update sent, " +
+                          s"proceeding with shuffle block push for shuffle ${dep.shuffleId}")
+                        blockPusher.initiateBlockPush(
+                          dataFile, writer.getPartitionLengths(), dep, mapIndex)
+                      } else {
+                        logInfo(s"Task ${context.taskAttemptId()} was " +
+                          s"${if (context.isInterrupted()) "killed" else "failed"}, " +
+                          s"skipping shuffle block push for shuffle ${dep.shuffleId}")
+                      }
+                    }
+                  })
+                case _ =>
+              }
             case _ =>
           }
         }

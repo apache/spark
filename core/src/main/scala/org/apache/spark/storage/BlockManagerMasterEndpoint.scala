@@ -38,7 +38,7 @@ import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPu
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{BlockingShuffle, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -63,11 +63,16 @@ class BlockManagerMasterEndpoint(
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the resolver from the SparkEnv.
-  // Used only for block-by-id resolution during external-shuffle-service cleanup. Pipelined
-  // shuffles are served out-of-band (no block-manager blocks, and not tracked in the
-  // MapOutputTracker this loop iterates), so this path only resolves regular shuffles.
-  private lazy val shuffleBlockResolver =
-    Option(_shuffleManager).map(_.shuffleBlockResolver).getOrElse(SparkEnv.get.shuffleBlockResolver)
+  // Used only for block-by-id resolution during external-shuffle-service cleanup. Only a
+  // BlockingShuffle serves block-manager blocks; pipelined shuffles are served out-of-band (no
+  // block-manager blocks, and not tracked in the MapOutputTracker this loop iterates), so this
+  // path only resolves regular shuffles and is None when the default manager is not blocking.
+  private lazy val shuffleBlockResolver: Option[ShuffleBlockResolver] =
+    Option(_shuffleManager) match {
+      case Some(blocking: BlockingShuffle) => Some(blocking.shuffleBlockResolver)
+      case Some(_) => None
+      case None => SparkEnv.get.shuffleBlockResolver
+    }
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -445,8 +450,9 @@ class BlockManagerMasterEndpoint(
           mapStatuses.filter(_ != null).foreach { mapStatus =>
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
-              val blocksToDel =
-                shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+              val blocksToDel = shuffleBlockResolver
+                .map(_.getBlocksForShuffle(shuffleId, mapStatus.mapId))
+                .getOrElse(Seq.empty)
               if (blocksToDel.nonEmpty) {
                 val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
                   new mutable.HashSet[BlockId])

@@ -129,7 +129,11 @@ class MultiShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
     }
   }
 
-  override def shuffleBlockResolver: ShuffleBlockResolver = {
+  // MultiShuffleManager is a plain ShuffleManager, not a BlockingShuffle: shuffleBlockResolver is
+  // no longer part of the ShuffleManager interface, so block-by-id resolution (which routes only to
+  // a BlockingShuffle) never reaches here. Retained for the inner SortShuffleManager it delegates
+  // to; MultiShuffleManager is slated for deprecation in favor of per-dependency routing.
+  def shuffleBlockResolver: ShuffleBlockResolver = {
     shuffleIdToManager.synchronized {
       if (sortShuffleManager.nonEmpty) {
         sortShuffleManager.get.shuffleBlockResolver

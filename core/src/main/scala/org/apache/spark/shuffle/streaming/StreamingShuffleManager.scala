@@ -76,7 +76,7 @@ object StreamingShuffleManager extends Logging {
   }
 }
 
-private[spark] class StreamingShuffleManager extends ShuffleManager with Logging {
+private[spark] class StreamingShuffleManager extends PipelinedShuffle with Logging {
 
   logInfo(log"Using StreamingShuffleManager")
 
@@ -118,11 +118,9 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
     true
   }
 
-  override def shuffleBlockResolver: ShuffleBlockResolver = {
-    // don't need to support this for the streaming shuffle implementation
-    // since block manager is not used
-    throw new UnsupportedOperationException()
-  }
+  // No shuffleBlockResolver: a StreamingShuffleManager is a PipelinedShuffle, serving its output
+  // out-of-band rather than as block-manager-addressed blocks. Block-by-id resolution never routes
+  // here (see BlockingShuffle).
 
   override def stop(): Unit = {}
 }

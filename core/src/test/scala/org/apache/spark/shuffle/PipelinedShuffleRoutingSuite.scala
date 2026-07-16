@@ -19,11 +19,10 @@ package org.apache.spark.shuffle
 
 import scala.collection.mutable
 
-import org.mockito.Mockito.mock
-
 import org.apache.spark._
 import org.apache.spark.internal.config.{SHUFFLE_MANAGER, SHUFFLE_MANAGER_INCREMENTAL}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.shuffle.streaming.StreamingShuffleManager
 
 /**
@@ -55,7 +54,6 @@ private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean) extend
     unregistered += shuffleId
     true
   }
-  override def shuffleBlockResolver: ShuffleBlockResolver = mock(classOf[ShuffleBlockResolver])
   override def stop(): Unit = stopped = true
 }
 
@@ -255,5 +253,32 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     intercept[Exception] {
       sc = new SparkContext("local", "test", badConf)
     }
+  }
+
+  test("a manager's type declares its shuffle kind (blocking vs pipelined)") {
+    // SortShuffleManager materializes blocks -- it is a BlockingShuffle and exposes a resolver.
+    val sortMgr = new SortShuffleManager(new SparkConf(loadDefaults = false))
+    assert(sortMgr.isInstanceOf[BlockingShuffle])
+    // StreamingShuffleManager serves output out-of-band -- it is a PipelinedShuffle with no
+    // resolver (the shuffleBlockResolver method was removed from the ShuffleManager interface).
+    val streaming = new StreamingShuffleManager
+    assert(streaming.isInstanceOf[PipelinedShuffle])
+    assert(!streaming.isInstanceOf[BlockingShuffle])
+  }
+
+  test("SparkEnv.shuffleBlockResolver is defined for a blocking default manager, empty otherwise") {
+    // Default manager is SortShuffleManager (blocking) -> a resolver is available.
+    val blockingConf = new SparkConf(loadDefaults = false).set(SHUFFLE_MANAGER, "sort")
+    sc = new SparkContext("local", "test", blockingConf)
+    assert(SparkEnv.get.shuffleBlockResolver.isDefined,
+      "a blocking default manager must expose a shuffleBlockResolver")
+    sc.stop()
+
+    // Default manager is StreamingShuffleManager (pipelined) -> no block-manager resolver.
+    val pipelinedConf = new SparkConf(loadDefaults = false)
+      .set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
+    sc = new SparkContext("local", "test", pipelinedConf)
+    assert(SparkEnv.get.shuffleBlockResolver.isEmpty,
+      "a pipelined default manager must not expose a shuffleBlockResolver")
   }
 }

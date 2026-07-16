@@ -90,14 +90,34 @@ private[spark] trait ShuffleManager {
    */
   def unregisterShuffle(shuffleId: Int): Boolean
 
+  /** Shut down this ShuffleManager. */
+  def stop(): Unit
+}
+
+/**
+ * A [[ShuffleManager]] that materializes shuffle output as addressable blocks served through the
+ * block manager (reads, push-based merge, and decommission migration all go through its
+ * [[ShuffleBlockResolver]]). This is the traditional shuffle model: a consumer stage reads the
+ * producer's output only after it is fully written.
+ * [[org.apache.spark.shuffle.sort.SortShuffleManager]] is the built-in implementation. A manager's
+ * type declares its kind -- match on `BlockingShuffle` to reach the resolver rather than assuming
+ * every `ShuffleManager` provides one.
+ */
+private[spark] trait BlockingShuffle extends ShuffleManager {
   /**
    * Return a resolver capable of retrieving shuffle block data based on block coordinates.
    */
   def shuffleBlockResolver: ShuffleBlockResolver
-
-  /** Shut down this ShuffleManager. */
-  def stop(): Unit
 }
+
+/**
+ * A [[ShuffleManager]] whose output is read incrementally: a consumer stage may begin reading while
+ * the producer is still running (see [[org.apache.spark.PipelinedShuffleDependency]]). Such a
+ * manager serves its output out-of-band and does not produce block-manager-addressed blocks, so it
+ * has no [[ShuffleBlockResolver]]. [[org.apache.spark.shuffle.streaming.StreamingShuffleManager]]
+ * is the built-in implementation.
+ */
+private[spark] trait PipelinedShuffle extends ShuffleManager
 
 /**
  * Utility companion object to create a ShuffleManager given a spark configuration.
