@@ -21,6 +21,7 @@ import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 import org.apache.spark.util.PostStatusUpdateListener
 
 /**
@@ -36,6 +37,11 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
   protected def createMetricsReporter(context: TaskContext): ShuffleWriteMetricsReporter = {
     context.taskMetrics().shuffleWriteMetrics
   }
+
+  /**
+   * Report the custom shuffle metrics of a [[ShuffleWriter]] for this task.
+   */
+  protected def reportCustomMetrics(metricsValues: Array[CustomShuffleTaskMetric]): Unit = {}
 
   /**
    * The write process for particular partition, it controls the life circle of [[ShuffleWriter]]
@@ -57,6 +63,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
         createMetricsReporter(context))
       writer.write(inputs.asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       val mapStatus = writer.stop(success = true)
+      reportCustomMetrics(writer.currentMetricsValues())
       if (mapStatus.isDefined) {
         // Check if sufficient shuffle mergers are available now for the ShuffleMapTask to push
         if (dep.shuffleMergeAllowed && dep.getMergerLocs.isEmpty) {
