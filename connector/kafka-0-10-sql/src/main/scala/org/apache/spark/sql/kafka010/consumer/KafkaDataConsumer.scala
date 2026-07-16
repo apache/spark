@@ -106,7 +106,7 @@ private[kafka010] class InternalKafkaConsumer(
         throw new TimeoutException(
           s"Cannot fetch record for offset $offset in $pollTimeoutMs milliseconds")
       } else {
-        logWarning(log"Polled zero visible records for ${MDC(TOPIC_PARTITION, topicPartition)} " +
+        logDebug(log"Polled zero visible records for ${MDC(TOPIC_PARTITION, topicPartition)} " +
           log"in group ${MDC(GROUP_ID, groupId)} after ${MDC(TIMEOUT, pollTimeoutMs)} " +
           log"milliseconds, while the offset changed from ${MDC(OFFSET, offset)} to " +
           log"${MDC(UNTIL_OFFSET, offsetAfterPoll)}. This can happen when fetched records are " +
