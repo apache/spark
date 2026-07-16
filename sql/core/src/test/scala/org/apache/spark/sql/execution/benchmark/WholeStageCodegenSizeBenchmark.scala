@@ -24,7 +24,7 @@ import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, TPCDSSchema, TPCDSTableStats}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
@@ -43,8 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
  *   - max method bytecode (max): the single largest compiled method across all stages;
  *   - inner classes: number of generated inner classes summed over all stages;
  *   - constant pool (sum / max): compiled constant-pool entries, summed and the per-stage max;
- *   - compile time: total Janino compilation time (ms), measured cold via
- *     [[CodeGenerator.resetCompileTime()]];
  *   - codegen fallbacks: stages whose generated code failed to compile (fell back to interpreted);
  *   - stages / queries: the whole-stage-codegen stage count and the number of queries measured.
  *
@@ -161,14 +159,9 @@ object WholeStageCodegenSizeBenchmark extends SqlBasedBenchmark with Logging {
       val queriesV1_4 = CodegenSizeTpcdsSchema.tpcdsQueries
       val queriesV2_7 = CodegenSizeTpcdsSchema.tpcdsQueriesV2_7_0
 
-      // Measure compile time cold: reset the accumulator, let codegenStringSeq trigger the Janino
-      // compiles (the compile cache is keyed on the source string, so distinct queries miss), then
-      // read the total below.
-      CodeGenerator.resetCompileTime()
       val totals = Totals()
       queriesV1_4.foreach(measureQuery("tpcds", _, totals))
       queriesV2_7.foreach(measureQuery("tpcds-v2.7.0", _, totals))
-      val compileTimeMs = CodeGenerator.compileTime / 1000000.0
 
       runBenchmark("TPCDS codegen size") {
         // Use a Benchmark instance only for its `out` PrintStream, which tees to stdout and the
@@ -188,7 +181,6 @@ object WholeStageCodegenSizeBenchmark extends SqlBasedBenchmark with Logging {
         row("constant pool (sum)", totals.constPoolSum)
         row("constant pool (max)", totals.constPoolMax)
         row("codegen fallbacks", totals.fallbacks)
-        row("compile time (ms)", "%.1f".format(compileTimeMs))
         out.println()
         // scalastyle:on println
       }

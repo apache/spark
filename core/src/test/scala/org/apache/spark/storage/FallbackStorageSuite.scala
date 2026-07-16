@@ -243,7 +243,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     when(bm.master).thenReturn(bmm)
     val blockTransferService = mock(classOf[BlockTransferService])
     when(blockTransferService.uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
-      mc.any(), mc.any())).thenThrow(new IOException)
+      mc.any(), mc.any(), mc.any(), mc.any())).thenThrow(new IOException)
     when(bm.blockTransferService).thenReturn(blockTransferService)
     when(bm.migratableResolver).thenReturn(resolver)
     when(bm.getMigratableRDDBlocks()).thenReturn(Seq())
@@ -256,7 +256,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       eventually(timeout(10.second), interval(1.seconds)) {
         // uploadBlockSync should not be used, verify that it is not called
         verify(blockTransferService, never())
-          .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+          .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(),
+            mc.any(), mc.any())
 
         Seq("shuffle_1_1_0.index", "shuffle_1_1_0.data").foreach { filename =>
           assert(fallbackStorage.exists(shuffleId = 1, filename))

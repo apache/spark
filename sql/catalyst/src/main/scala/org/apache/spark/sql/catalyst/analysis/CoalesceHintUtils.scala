@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, ShortLiteral, SortOrder, StringLiteral}
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, Expression, IntegerLiteral, LongLiteral, ShortLiteral, SortOrder, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RebalancePartitions, Repartition, RepartitionByExpression, UnresolvedHint}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Helper functions used to build the logical plans for the "COALESCE", "REPARTITION",
- * "REPARTITION_BY_RANGE" and "REBALANCE" hints.
+ * "REPARTITION_BY_RANGE", "REBALANCE" and "REBALANCE_BY_SIZE" hints.
  */
 object CoalesceHintUtils {
 
@@ -38,6 +39,39 @@ object CoalesceHintUtils {
       case Seq(IntegerLiteral(numPartitions), _*) => (Some(numPartitions), hint.parameters.tail)
       case _ => (None, hint.parameters)
     }
+  }
+
+  def getAdvisorySizeOfPartitions(hint: UnresolvedHint): (Long, Seq[Expression]) = {
+    val (advisoryPartitionSize, partitionExprs) = hint.parameters match {
+      case Seq(ByteLiteral(advisoryPartitionSize), _*) =>
+        (advisoryPartitionSize.toLong, hint.parameters.tail)
+      case Seq(ShortLiteral(advisoryPartitionSize), _*) =>
+        (advisoryPartitionSize.toLong, hint.parameters.tail)
+      case Seq(IntegerLiteral(advisoryPartitionSize), _*) =>
+        (advisoryPartitionSize.toLong, hint.parameters.tail)
+      case Seq(LongLiteral(advisoryPartitionSize), _*) =>
+        (advisoryPartitionSize, hint.parameters.tail)
+      case Seq(StringLiteral(advisoryPartitionSize), _*) =>
+        val sizeInBytes = try {
+          JavaUtils.byteStringAsBytes(advisoryPartitionSize)
+        } catch {
+          case _: IllegalArgumentException =>
+            throw QueryCompilationErrors.invalidRebalanceBySizeHintParameterError(
+              hint.name.toUpperCase(Locale.ROOT),
+              advisoryPartitionSize)
+        }
+        (sizeInBytes, hint.parameters.tail)
+      case _ =>
+        throw QueryCompilationErrors.invalidRebalanceBySizeHintParameterError(
+          hint.name.toUpperCase(Locale.ROOT),
+          hint.parameters.headOption.map(_.sql).getOrElse("empty"))
+    }
+    if (advisoryPartitionSize <= 0) {
+      throw QueryCompilationErrors.invalidRebalanceBySizeHintParameterError(
+        hint.name.toUpperCase(Locale.ROOT),
+        advisoryPartitionSize.toString)
+    }
+    (advisoryPartitionSize, partitionExprs)
   }
 
   def validateParameters(hint: String, parms: Seq[Expression]): Unit = {
@@ -111,12 +145,24 @@ object CoalesceHintUtils {
     RebalancePartitions(partitionExprs, hint.child, numPartitionsOption)
   }
 
-  def transformStringToAttribute(hint: UnresolvedHint): UnresolvedHint = {
-    // for all the coalesce hints, it's safe to transform the string literal to an attribute as
-    // all the parameters should be column names.
-    val parameters = hint.parameters.map {
-      case StringLiteral(name) => UnresolvedAttribute(name)
-      case e => e
+  /**
+   * This function handles hints for "REBALANCE_BY_SIZE".
+   */
+  def createRebalanceBySize(hint: UnresolvedHint): LogicalPlan = {
+    val (advisoryPartitionSize, partitionExprs) = getAdvisorySizeOfPartitions(hint)
+    validateParameters(hint.name, partitionExprs)
+    RebalancePartitions(partitionExprs, hint.child, None, Some(advisoryPartitionSize))
+  }
+
+  def transformStringToAttribute(
+      hint: UnresolvedHint,
+      skipFirstParameter: Boolean = false): UnresolvedHint = {
+    // For all the coalesce hints, string literal parameters should be transformed to attributes,
+    // except for the first parameter of REBALANCE_BY_SIZE, which is the advisory partition size.
+    val parameters = hint.parameters.zipWithIndex.map {
+      case (StringLiteral(name), index) if !skipFirstParameter || index > 0 =>
+        UnresolvedAttribute(name)
+      case (e, _) => e
     }
     hint.copy(parameters = parameters)
   }

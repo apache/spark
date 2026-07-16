@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,15 +36,38 @@ import org.apache.spark.sql.internal.SQLConf
 case class ExpandExec(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
-    child: SparkPlan)
+    child: SparkPlan,
+    // When true, this Expand is part of a plan marked for single-task execution by the
+    // `MarkSingleTaskExecution` optimizer rule, and forwards the child's `SinglePartition`
+    // output partitioning (see `outputPartitioning`).
+    useSingleTask: Boolean = false)
   extends UnaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
-  // as UNKNOWN partitioning
-  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
+  // as UNKNOWN partitioning. Expand only replicates rows within a partition and never moves rows
+  // across partitions, so when this Expand is part of a plan marked for single-task execution
+  // and the child produces a single partition, we can forward the `SinglePartition` property to
+  // avoid an unneeded shuffle.
+  override def outputPartitioning: Partitioning = {
+    if (useSingleTask && child.outputPartitioning == SinglePartition) {
+      SinglePartition
+    } else {
+      UnknownPartitioning(0)
+    }
+  }
+
+  // Show `useSingleTask` in the string representation only when it is set, so that plans not
+  // using single-task execution (the default) keep their existing explain output.
+  override protected def stringArgs: Iterator[Any] = {
+    if (useSingleTask) {
+      super.stringArgs
+    } else {
+      Iterator(projections, output, child)
+    }
+  }
 
   @transient
   override lazy val references: AttributeSet =

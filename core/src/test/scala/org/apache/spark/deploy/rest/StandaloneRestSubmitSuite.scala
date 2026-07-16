@@ -35,7 +35,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.config.{MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS, MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS, MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -599,6 +599,62 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-58049: Reject an over-sized request body with SC_REQUEST_ENTITY_TOO_LARGE") {
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, "1k")
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", "x" * 4096)
+    assert(code === HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
+    getErrorResponse(response)
+  }
+
+  test("SPARK-58049: Reject an over-sized request body without Content-Length") {
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, "1k")
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", "x" * 4096, chunked = true)
+    assert(code === HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
+    getErrorResponse(response)
+  }
+
+  test("SPARK-58049: Accept a request body exactly at the limit") {
+    val json = constructSubmitRequest("spark://localhost:7077").toJson
+    val limit = json.getBytes(StandardCharsets.UTF_8).length
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, limit.toString)
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", json)
+    assert(code === HttpServletResponse.SC_OK)
+    getSubmitResponse(response)
+  }
+
   /* --------------------- *
    |     Helper methods    |
    * --------------------- */
@@ -740,11 +796,15 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
   private def sendHttpRequest(
       url: String,
       method: String,
-      body: String = ""): HttpURLConnection = {
+      body: String = "",
+      chunked: Boolean = false): HttpURLConnection = {
     val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)
+      if (chunked) {
+        conn.setChunkedStreamingMode(0)
+      }
       val out = new DataOutputStream(conn.getOutputStream)
       out.write(body.getBytes(StandardCharsets.UTF_8))
       out.close()
@@ -759,8 +819,9 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
   private def sendHttpRequestWithResponse(
       url: String,
       method: String,
-      body: String = ""): (SubmitRestProtocolResponse, Int) = {
-    val conn = sendHttpRequest(url, method, body)
+      body: String = "",
+      chunked: Boolean = false): (SubmitRestProtocolResponse, Int) = {
+    val conn = sendHttpRequest(url, method, body, chunked)
     (new RestSubmissionClient("spark://host:port").readResponse(conn), conn.getResponseCode)
   }
 }

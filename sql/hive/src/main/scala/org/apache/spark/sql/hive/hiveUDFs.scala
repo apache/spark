@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, USER_DEFINED_AGGREGATION}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types._
 
@@ -336,6 +337,8 @@ private[hive] case class HiveUDAFFunction(
   extends TypedImperativeAggregate[HiveUDAFBuffer]
   with HiveInspectors
   with UserDefinedExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(USER_DEFINED_AGGREGATION)
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
