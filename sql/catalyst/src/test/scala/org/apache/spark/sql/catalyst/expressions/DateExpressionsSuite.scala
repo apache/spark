@@ -1758,11 +1758,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // Micro TIMESTAMP_NTZ is now accepted directly and read as a physical Long with no zone shift.
-    // It was NOT rejected before this change: implicit coercion silently cast it to TIMESTAMP_LTZ,
-    // which applies a session-zone shift. So under a non-UTC session zone the result changed. The
-    // direct reads below are zoneless (session-zone-independent); the equivalent old coercion (a
-    // Cast to TIMESTAMP_LTZ) under America/Los_Angeles shifts the same wall clock by +8h to a
-    // different value. The contrasting pair guards against silently reintroducing the old shift.
+    // (Before this change it was rejected with DATATYPE_MISMATCH, since TimestampToLongBase uses
+    // ExpectsInputTypes and only accepted TIMESTAMP_LTZ.) The direct reads below are zoneless
+    // (session-zone-independent); explicitly casting the same NTZ value to TIMESTAMP_LTZ under
+    // America/Los_Angeles shifts the wall clock by +8h to a different value. The contrasting pair
+    // documents that reading NTZ directly is not the same as an explicit TIMESTAMP_LTZ cast.
     val microNtz =
       Literal.create(LocalDateTime.parse("2008-12-25T15:30:00.123456"), TimestampNTZType)
     checkEvaluation(UnixSeconds(microNtz), 1230219000L)
