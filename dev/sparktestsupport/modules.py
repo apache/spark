@@ -1643,6 +1643,16 @@ docs = Module(
     ],
 )
 
+
+spark_cli = Module(
+    name="cli",
+    dependencies=[],
+    source_file_regexes=["cli/"],
+    python_test_goals=[
+        "cli.tests.test_spark_cli",
+    ],
+)
+
 build = Module(
     name="build",
     dependencies=[],
