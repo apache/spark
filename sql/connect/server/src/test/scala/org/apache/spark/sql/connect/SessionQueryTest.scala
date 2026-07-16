@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import scala.util.matching.Regex
 
-import org.apache.spark.sql
+import org.apache.spark.{sql => sqlCore}
 
 /**
  * Overrides test utils to implement 'connect variants' of suites declared in sql/core:
@@ -33,14 +33,14 @@ import org.apache.spark.sql
  * This trait overrides [[spark]] to use a [[SparkSession connect.SparkSession]], which executes
  * via the gRPC API using an in-process connect server.
  */
-trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
+trait SessionQueryTest extends sqlCore.SessionQueryTest with SparkSessionBinder {
 
   private val sortOperator: Regex = """\b(?:Photon)?Sort\b""".r
 
   /**
    * Approximates [[sql.SessionQueryTest.isDfSorted]] by inspecting the explain string.
    */
-  override def isDfSorted(df: sql.DataFrame): Boolean = df match {
+  override def isDfSorted(df: sqlCore.DataFrame): Boolean = df match {
     case df: DataFrame => sortOperator.unanchored.matches(df.explainString(extended = false))
     case df => super.isDfSorted(df)
   }
