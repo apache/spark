@@ -3619,7 +3619,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 result_iter: Iterable["pd.DataFrame"],
             ) -> Iterator["pa.RecordBatch"]:
                 # TODO(SPARK-49100): add verification that elements in result_iter are
-                # indeed of type pd.DataFrame and confirm to assigned cols
+                # indeed of type pd.DataFrame and conform to assigned cols
                 for result in result_iter:
                     if isinstance(return_type, StructType) and not isinstance(result, pd.DataFrame):
                         raise PySparkValueError(
