@@ -2882,6 +2882,8 @@ def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
         return _has_type(dt.elementType, dts)
     elif isinstance(dt, MapType):
         return _has_type(dt.keyType, dts) or _has_type(dt.valueType, dts)
+    elif isinstance(dt, UserDefinedType):
+        return _has_type(dt.sqlType(), dts)
     else:
         return False
 

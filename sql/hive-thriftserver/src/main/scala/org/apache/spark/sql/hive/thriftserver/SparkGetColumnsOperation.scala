@@ -207,7 +207,7 @@ private[hive] class SparkGetColumnsOperation(
           pos + 1
         }
         val rowData = Array[AnyRef](
-          null, // TABLE_CAT
+          sessionCatalogTableCat(null), // TABLE_CAT
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME

@@ -926,6 +926,109 @@ class SparkConnectClientSuite extends ConnectFunSuite {
         Status.Code.UNAVAILABLE)
   }
 
+  test(
+    "SPARK-58094: gRPC keepalive surfaces a bounded failure on a silently dropped " +
+      "connection instead of hanging forever") {
+    val requestReceived = new CountDownLatch(1)
+    val serverLatch = new CountDownLatch(1)
+    val slowService = new DummySparkConnectService {
+      override def analyzePlan(
+          request: AnalyzePlanRequest,
+          responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+        requestReceived.countDown()
+        // Blocks far longer than the test's keepalive settings, standing in for a query that
+        // is still genuinely running server-side while the client's connection goes dark.
+        serverLatch.await(30, TimeUnit.SECONDS)
+        super.analyzePlan(request, responseObserver)
+      }
+    }
+    val keepAliveMs = 300L
+    server = NettyServerBuilder
+      .forPort(0)
+      .addService(slowService)
+      // The server must permit client PINGs at least as frequently as the client's own
+      // keepAliveTime, or it will tear down the connection as "too_many_pings" even when
+      // healthy. In production (SparkConnectService.scala) this floor is a fixed constant
+      // decoupled from any per-connection setting; here it's simply set to match the test
+      // client's cadence.
+      .permitKeepAliveTime(keepAliveMs, TimeUnit.MILLISECONDS)
+      .permitKeepAliveWithoutCalls(true)
+      .build()
+      .start()
+    service = slowService
+    val relay = new FreezableTcpRelay(server.getPort)
+    try {
+      client = SparkConnectClient
+        .builder()
+        .connectionString(s"sc://localhost:${relay.port}")
+        .grpcKeepAliveEnabled(true)
+        .grpcKeepAliveTimeMs(keepAliveMs)
+        .grpcKeepAliveTimeoutMs(keepAliveMs)
+        .retryPolicy(RetryPolicy(maxRetries = Some(0), canRetry = _ => false, name = "NoRetry"))
+        .build()
+
+      val resultPromise = scala.concurrent.Promise[Unit]()
+      val callThread = new Thread(() => {
+        try {
+          client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId("abc123").build())
+          resultPromise.success(())
+        } catch {
+          case t: Throwable => resultPromise.failure(t)
+        }
+      })
+      callThread.setDaemon(true)
+      callThread.start()
+
+      assert(requestReceived.await(10, TimeUnit.SECONDS), "server never received the request")
+      // Freeze the relay without closing either socket, simulating a NAT gateway/load balancer
+      // silently dropping an idle connection mapping (no TCP RST/FIN to either endpoint).
+      relay.freeze()
+
+      // Bounded by Await's timeout: without the keepalive fix this never completes and the
+      // test would fail with a TimeoutException instead of surfacing UNAVAILABLE.
+      // scalastyle:off awaitresult
+      val ex = intercept[SparkException] {
+        scala.concurrent.Await.result(resultPromise.future, FiniteDuration(15, TimeUnit.SECONDS))
+      }
+      // scalastyle:on awaitresult
+      // The status code/description of a keepalive-triggered UNAVAILABLE is part of the
+      // message (see GrpcExceptionConverter.toThrowable).
+      assert(ex.getMessage.contains("UNAVAILABLE"))
+      assert(ex.getMessage.contains("Keepalive failed"))
+    } finally {
+      serverLatch.countDown()
+      relay.close()
+    }
+  }
+
+  test("SPARK-58094: keepalive does not disrupt a healthy long-lived connection") {
+    val keepAliveMs = 300L
+    server = NettyServerBuilder
+      .forPort(0)
+      .addService(new DummySparkConnectService)
+      .permitKeepAliveTime(keepAliveMs, TimeUnit.MILLISECONDS)
+      .permitKeepAliveWithoutCalls(true)
+      .build()
+      .start()
+    client = SparkConnectClient
+      .builder()
+      .connectionString(s"sc://localhost:${server.getPort}")
+      .grpcKeepAliveEnabled(true)
+      .grpcKeepAliveTimeMs(keepAliveMs)
+      .grpcKeepAliveTimeoutMs(keepAliveMs)
+      .build()
+
+    // Several calls spaced out well beyond the keepalive interval: if permitKeepAliveTime were
+    // mistuned (e.g. left at the gRPC default of 5 minutes while the client pings every 300ms),
+    // the server would tear the connection down as "too_many_pings" and these would fail.
+    for (i <- 1 to 3) {
+      val response =
+        client.analyze(proto.AnalyzePlanRequest.newBuilder().setSessionId(s"abc$i").build())
+      assert(response.getSessionId === s"abc$i")
+      Thread.sleep(keepAliveMs * 2)
+    }
+  }
+
   test("analyzePlan with short deadline fires, then succeeds after disabling deadlines") {
     val latch = new CountDownLatch(1)
     val slowService = new DummySparkConnectService {
@@ -1092,6 +1195,77 @@ class SparkConnectClientSuite extends ConnectFunSuite {
     assert(failure.isEmpty, s"unexpected failure: ${failure.orNull}")
     assert(captured.isDefined)
     assert(captured.get.get(authorizationKey) === s"Bearer $token")
+  }
+}
+
+/**
+ * A minimal bidirectional TCP relay that can be "frozen" mid-connection without closing either
+ * side's socket -- simulating a NAT gateway/load balancer/corporate proxy that silently drops an
+ * idle connection's mapping (no TCP RST/FIN sent to either endpoint). While frozen, no bytes are
+ * read from or written to either socket, so gRPC/HTTP2 keepalive PING frames also stop flowing,
+ * exactly as they would over a genuinely dead network path.
+ */
+private class FreezableTcpRelay(targetPort: Int) {
+  private val listener = new java.net.ServerSocket(0)
+  @volatile private var frozen = false
+  private val sockets = mutable.ListBuffer[java.net.Socket]()
+
+  private val acceptThread = new Thread(() => {
+    try {
+      while (true) {
+        val clientSocket = listener.accept()
+        val serverSocket = new java.net.Socket("127.0.0.1", targetPort)
+        sockets.synchronized {
+          sockets += clientSocket
+          sockets += serverSocket
+        }
+        pump(clientSocket, serverSocket)
+        pump(serverSocket, clientSocket)
+      }
+    } catch {
+      case _: java.io.IOException => // listener closed, relay shutting down
+    }
+  })
+  acceptThread.setDaemon(true)
+  acceptThread.start()
+
+  def port: Int = listener.getLocalPort
+
+  // Once frozen, bytes read from either socket are dropped rather than forwarded: no data
+  // (including keepalive PING/PONG frames) reaches the other side, but neither socket is
+  // closed -- the same observable behavior as a middlebox silently black-holing the connection.
+  def freeze(): Unit = frozen = true
+
+  private def pump(src: java.net.Socket, dst: java.net.Socket): Unit = {
+    val t = new Thread(() => {
+      try {
+        val in = src.getInputStream
+        val out = dst.getOutputStream
+        val buf = new Array[Byte](8192)
+        var n = 0
+        while ({ n = in.read(buf); n != -1 }) {
+          if (!frozen) {
+            out.write(buf, 0, n)
+            out.flush()
+          }
+        }
+      } catch {
+        case _: java.io.IOException => // socket closed, nothing left to pump
+      }
+    })
+    t.setDaemon(true)
+    t.start()
+  }
+
+  def close(): Unit = {
+    listener.close()
+    sockets.synchronized(sockets.foreach { s =>
+      try {
+        s.close()
+      } catch {
+        case _: java.io.IOException =>
+      }
+    })
   }
 }
 

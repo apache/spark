@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.time.{DateTimeException, LocalDateTime}
 import java.util.{List, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -45,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
@@ -708,6 +709,11 @@ class AstBuilder extends DataTypeAstBuilder
     visitMultipartIdentifier(ctx.multipartIdentifier)
   }
 
+  override def visitSingleTemporalTableIdentifier(
+      ctx: SingleTemporalTableIdentifierContext): TemporalIdentifier = withOrigin(ctx) {
+    visitTemporalTableIdentifier(ctx.temporalTableIdentifier)
+  }
+
   override def visitSinglePathElementList(
       ctx: SinglePathElementListContext): Seq[PathElement] = withOrigin(ctx) {
     ctx.pathElement().asScala.map(visitPathElement).toSeq
@@ -1237,7 +1243,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitUpdateTable(ctx: UpdateTableContext): LogicalPlan = withOrigin(ctx) {
     val table = createUnresolvedRelation(
-      ctx.identifierReference, writePrivileges = Set(TableWritePrivilege.UPDATE))
+      ctx.identifierReference, Option(ctx.optionsClause()),
+      writePrivileges = Set(TableWritePrivilege.UPDATE))
     val tableAlias = getTableAliasWithoutColumnAlias(ctx.tableAlias(), "UPDATE")
     val aliasedTable = tableAlias.map(SubqueryAlias(_, table)).getOrElse(table)
     val assignments = withAssignments(ctx.setClause().assignmentList())
@@ -1361,6 +1368,56 @@ class AstBuilder extends DataTypeAstBuilder
       notMatchedBySourceActions,
       withSchemaEvolution)
   }
+
+  protected def buildAutoCdcInto(ctx: AutoCdcCommandContext): AutoCdcInto =
+    withOrigin(ctx) {
+      val target = UnresolvedIdentifier(visitMultipartIdentifier(ctx.target))
+      val params = parseAutoCdcParams(ctx.autoCdcParameters())
+      AutoCdcInto(
+        targetTable = target,
+        source = params.source,
+        keys = params.keys,
+        deleteCondition = params.deleteCondition,
+        sequenceByExpr = params.sequencing,
+        includeColumns = params.includeColumns,
+        excludeColumns = params.excludeColumns)
+    }
+
+  protected def parseAutoCdcParams(params: AutoCdcParametersContext): AutoCdcParams =
+    withOrigin(params) {
+      // The source is parsed as a general `relationPrimary` to allow richer streaming queries
+      // (e.g. streaming TVFs, or a STREAM(...) source with options and watermark). It must still
+      // read from a streaming source; a batch relation is not a valid AUTO CDC source.
+      val source = plan(params.source)
+      if (!source.isStreaming) {
+        withOrigin(params.source) {
+          operationNotAllowed(
+            "AUTO CDC source must be a streaming query, e.g. STREAM(<table>).", params.source)
+        }
+      }
+      val keys = visitIdentifierSeq(params.keys).map(UnresolvedAttribute.quoted)
+      val deleteCondition = Option(params.autoCdcDeleteClause())
+        .map(c => expression(c.deleteCondition))
+      val sequencing = expression(params.autoCdcSequenceByClause().sequence)
+
+      val columnsClause = Option(params.autoCdcColumnsClause())
+      val includeColumns = columnsClause.collect {
+        case c if c.columns != null =>
+          visitIdentifierSeq(c.columns).map(UnresolvedAttribute.quoted)
+      }
+      val excludeColumns = columnsClause.collect {
+        case c if c.exceptCols != null =>
+          visitIdentifierSeq(c.exceptCols).map(UnresolvedAttribute.quoted)
+      }
+
+      AutoCdcParams(
+        source = source,
+        keys = keys,
+        deleteCondition = deleteCondition,
+        sequencing = sequencing,
+        includeColumns = includeColumns,
+        excludeColumns = excludeColumns)
+    }
 
   /**
    * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
@@ -2448,11 +2505,17 @@ class AstBuilder extends DataTypeAstBuilder
         }
       }
 
-      if (ctx.nearestByClause != null) {
-        withNearestByJoin(ctx, base, baseJoinType)
+      val joinPostfix = Option(ctx.joinPostfix)
+      val joinCriteriaCtx = joinPostfix.flatMap(p => Option(p.joinCriteria))
+      val nearestByClauseCtx = joinPostfix.flatMap(p => Option(p.nearestByClause))
+
+      if (ctx.asofJoinCriteria != null) {
+        withAsOfJoin(ctx, base, ctx.asofJoinCriteria)
+      } else if (nearestByClauseCtx.isDefined) {
+        withNearestByJoin(ctx, base, baseJoinType, nearestByClauseCtx.get)
       } else {
         // Resolve the join type and join condition
-        val (joinType, condition) = Option(ctx.joinCriteria) match {
+        val (joinType, condition) = joinCriteriaCtx match {
           case Some(c) if c.USING != null =>
             if (ctx.LATERAL != null) {
               throw QueryParsingErrors.lateralJoinWithUsingJoinUnsupportedError(ctx)
@@ -2489,6 +2552,56 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 
+  private def asOfMatchConditionFromExpression(
+      expr: Expression,
+      ctx: ParserRuleContext): (Expression, MatchComparisonOperator, Expression) = {
+    expr match {
+      case GreaterThanOrEqual(left, right) => (left, GreaterThanOrEqualOp, right)
+      case GreaterThan(left, right) => (left, GreaterThanOp, right)
+      case LessThanOrEqual(left, right) => (left, LessThanOrEqualOp, right)
+      case LessThan(left, right) => (left, LessThanOp, right)
+      case _ =>
+        throw QueryParsingErrors.sqlAsOfJoinMatchConditionInvalidOperator(
+          asOfMatchConditionInvalidOperatorText(expr), ctx)
+    }
+  }
+
+  private def asOfMatchConditionInvalidOperatorText(expr: Expression): String = expr match {
+    case EqualTo(_, _) => "="
+    case And(_, _) => "AND"
+    case Or(_, _) => "OR"
+    case _ => expr.prettyName
+  }
+
+  /**
+   * Build an [[AsOfJoin]] from the parsed `ASOF JOIN ... MATCH_CONDITION` clause.
+   */
+  private def withAsOfJoin(
+      ctx: JoinRelationContext,
+      base: LogicalPlan,
+      criteria: AsofJoinCriteriaContext): AsOfJoin = {
+    if (!conf.sqlAsOfJoinEnabled) {
+      throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
+    }
+    val joinType = Option(ctx.asofJoinType) match {
+      case None => Inner
+      case Some(jt) if jt.LEFT != null => LeftOuter
+      case _ => Inner
+    }
+    val (leftExpr, operator, rightExpr) =
+      asOfMatchConditionFromExpression(expression(criteria.matchExpr), criteria.matchExpr)
+    val (condition, usingColumns) =
+      (Option(criteria.onExpr), Option(criteria.identifierList)) match {
+      case (Some(expr), None) => (Some(expression(expr)), None)
+      case (None, Some(ids)) => (None, Some(visitIdentifierList(ids)))
+      case (None, None) => (None, None)
+      case _ =>
+        throw SparkException.internalError(s"Unimplemented asofJoinCriteria: $criteria")
+    }
+    AsOfJoin.fromMatchCondition(
+      base, plan(ctx.right), leftExpr, operator, rightExpr, condition, joinType, usingColumns)
+  }
+
   /**
    * Build a [[NearestByJoin]] from the parsed `NEAREST BY` clause attached to a join relation.
    * Validates that the clause is not combined with `LATERAL` and that the base join type is one
@@ -2498,7 +2611,8 @@ class AstBuilder extends DataTypeAstBuilder
   private def withNearestByJoin(
       ctx: JoinRelationContext,
       base: LogicalPlan,
-      baseJoinType: JoinType): NearestByJoin = {
+      baseJoinType: JoinType,
+      nearestByClause: NearestByClauseContext): NearestByJoin = {
     if (ctx.LATERAL != null) {
       throw QueryParsingErrors.nearestByJoinWithLateralUnsupportedError(ctx)
     }
@@ -2506,7 +2620,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw QueryParsingErrors.unsupportedNearestByJoinTypeError(
         ctx, baseJoinType.sql, NearestByJoinType.supportedDisplay)
     }
-    val clause = ctx.nearestByClause
+    val clause = nearestByClause
     val approx = clause.APPROX != null
     val numResults = Option(clause.num).map { n =>
       // Guard against literals that overflow Long.
@@ -2634,11 +2748,87 @@ class AstBuilder extends DataTypeAstBuilder
    * Create an aliased table reference. This is typically used in FROM clauses.
    */
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
-    val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
-    val table = mayApplyAliasPlan(
-      ctx.tableAlias, relation.optionalMap(ctx.temporalClause)(withTimeTravel))
+    val ttCtx = ctx.temporalTableIdentifierReference
+    val relation = createUnresolvedRelation(ttCtx.identifierReference, Option(ctx.optionsClause))
+    val withTimeTravelSpec = withTableTimeTravel(relation, ttCtx, ctx.temporalClause)
+    val table = mayApplyAliasPlan(ctx.tableAlias, withTimeTravelSpec)
     val sample = table.optionalMap(ctx.sample)(withSample)
     sample.optionalMap(ctx.watermarkClause)(withWatermark)
+  }
+
+  /**
+   * Applies the table-name '@' time travel suffix and/or the `AS OF` clause to `relation`.
+   */
+  private def withTableTimeTravel(
+      relation: LogicalPlan,
+      ttCtx: TemporalTableIdentifierReferenceContext,
+      clause: TemporalClauseContext): LogicalPlan = {
+    val (atTimestamp, atVersion) = temporalSpec(ttCtx, ttCtx.timestamp, ttCtx.version)
+    val hasAtSpec = atTimestamp.isDefined || atVersion.isDefined
+    if (hasAtSpec && clause != null) {
+      withOrigin(clause) {
+        throw QueryParsingErrors.multipleTimeTravelSpec(clause)
+      }
+    }
+    val withAtSpec =
+      if (hasAtSpec) RelationTimeTravel(relation, atTimestamp, atVersion) else relation
+    withAtSpec.optionalMap(clause)(withTimeTravel)
+  }
+
+  override def visitTemporalTableIdentifier(
+      ctx: TemporalTableIdentifierContext): TemporalIdentifier = withOrigin(ctx) {
+    val (timestamp, version) = temporalSpec(ctx, ctx.timestamp, ctx.version)
+    TemporalIdentifier(visitMultipartIdentifier(ctx.id), timestamp, version)
+  }
+
+  /**
+   * Parse the digits of an '@' time travel timestamp (format yyyyMMddHHmmssSSS) to
+   * microseconds since epoch in the session time zone.
+   */
+  private def parseAtSyntaxTimestamp(text: String, ctx: ParserRuleContext): Long = {
+    val format = TemporalIdentifier.TimestampFormat
+    if (text.length != format.length) {
+      throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
+    }
+    try {
+      val localDateTime = LocalDateTime.of(
+        text.substring(0, 4).toInt,
+        text.substring(4, 6).toInt,
+        text.substring(6, 8).toInt,
+        text.substring(8, 10).toInt,
+        text.substring(10, 12).toInt,
+        text.substring(12, 14).toInt,
+        text.substring(14, 17).toInt * DateTimeConstants.NANOS_PER_MILLIS.toInt)
+      DateTimeUtils.instantToMicros(
+        localDateTime.atZone(getZoneId(conf.sessionLocalTimeZone)).toInstant)
+    } catch {
+      case _: DateTimeException =>
+        throw QueryParsingErrors.invalidAtSyntaxTimestamp(text, format, ctx)
+    }
+  }
+
+  /**
+   * Extract the optional '@' time travel suffix of a table identifier: '@<timestamp>'
+   * (format yyyyMMddHHmmssSSS) or '@v<version>'.
+   */
+  private def temporalSpec(
+      ctx: ParserRuleContext,
+      timestampToken: Token,
+      versionCtx: VersionContext): (Option[Expression], Option[String]) = {
+    if (timestampToken == null && versionCtx == null) {
+      (None, None)
+    } else {
+      if (!conf.getConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED)) {
+        throw QueryParsingErrors.timeTravelAtSyntaxDisabled(
+          SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key, ctx)
+      }
+      if (timestampToken != null) {
+        val micros = parseAtSyntaxTimestamp(timestampToken.getText, ctx)
+        (Some(Literal(micros, TimestampType)), None)
+      } else {
+        (None, visitVersion(versionCtx))
+      }
+    }
   }
 
   override def visitVersion(ctx: VersionContext): Option[String] = {
@@ -5475,7 +5665,7 @@ class AstBuilder extends DataTypeAstBuilder
       case (null, storageHandler) =>
         invalidStatement("STORED BY", ctx)
       case _ =>
-        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError(ctx)
+        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError()
     }
   }
 
@@ -7710,3 +7900,14 @@ class AstBuilder extends DataTypeAstBuilder
     }
   }
 }
+
+/**
+ * Parameters parsed from an AUTO CDC clause.
+ */
+case class AutoCdcParams(
+    source: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequencing: Expression,
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]])

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # pyspark documentation build configuration file, created by
 # sphinx-quickstart on Thu Aug 28 15:17:47 2014.

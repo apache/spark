@@ -286,6 +286,21 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df2, Seq.empty)
   }
 
+  test("SPARK-57988: IS [NOT] NULL over an IN operand is pushed down and runs on H2") {
+    // Without the parentheses around the IN operand the pushed SQL would be
+    // `SALARY IN (...) IS NOT NULL`, which databases reject as a syntax error.
+    val df1 =
+      sql("SELECT name FROM h2.test.employee WHERE (salary IN (10000, 12000)) IS NOT NULL")
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [(SALARY IN (10000.00, 12000.00)) IS NOT NULL]")
+    checkAnswer(df1, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+    val df2 = sql("SELECT name FROM h2.test.employee WHERE (salary IN (10000, 12000)) IS NULL")
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [(SALARY IN (10000.00, 12000.00)) IS NULL]")
+    checkAnswer(df2, Seq.empty)
+  }
+
   // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
   // TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
   // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS

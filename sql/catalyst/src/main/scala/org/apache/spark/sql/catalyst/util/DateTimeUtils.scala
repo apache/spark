@@ -175,7 +175,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val scaleFactor = math.pow(10, precision).toLong
     val scaledFraction = (nanos % NANOS_PER_SECOND) * scaleFactor / NANOS_PER_SECOND
     val fraction = scaledFraction.toDouble / scaleFactor
-    Decimal(seconds + fraction, 8, 6)
+    Decimal(seconds + fraction, 2 + precision, precision)
   }
 
   /**

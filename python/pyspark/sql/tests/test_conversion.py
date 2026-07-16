@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 import datetime
+import decimal
 import unittest
+import unittest.mock
 from zoneinfo import ZoneInfo
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
@@ -842,6 +844,150 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
             pa.array([], type=geometry_type), GeometryType(0)
         )
         self.assertEqual(len(result), 0)
+
+
+@unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
+class ArrowColumnToPylistTests(unittest.TestCase):
+    """
+    ArrowTableToRowsConversion._to_pylist must return exactly what
+    column.to_pylist() returns, including exact element types.
+    """
+
+    def setUp(self):
+        # Force the manual bulk paths so they stay covered regardless of the
+        # installed PyArrow version (with a fast native PyArrow the method
+        # short-circuits to column.to_pylist()).
+        self._gate_patcher = unittest.mock.patch.object(
+            ArrowTableToRowsConversion, "_should_manual_bulk", lambda: True
+        )
+        self._gate_patcher.start()
+
+    def tearDown(self):
+        self._gate_patcher.stop()
+
+    def test_native_to_pylist_gate(self):
+        import pyarrow as pa
+
+        column = pa.array([[1, None], None], type=pa.list_(pa.int32()))
+        with unittest.mock.patch.object(
+            ArrowTableToRowsConversion, "_should_manual_bulk", lambda: False
+        ):
+            self.assertEqual(ArrowTableToRowsConversion._to_pylist(column), [[1, None], None])
+
+    def _assert_identical_types(self, actual, expected):
+        self.assertIs(type(actual), type(expected))
+        if isinstance(actual, (list, tuple)):
+            self.assertEqual(len(actual), len(expected))
+            for a, e in zip(actual, expected):
+                self._assert_identical_types(a, e)
+
+    def test_matches_to_pylist(self):
+        import pyarrow as pa
+
+        columns = [
+            pa.array([[1, None, 3], None, [], [4]], type=pa.list_(pa.int32())),
+            pa.array([["a", None], None, [], ["bcd", ""]], type=pa.list_(pa.string())),
+            pa.array([["a", None], None, ["b"]], type=pa.large_list(pa.string())),
+            pa.array([[[1], None, [2, None]], None], type=pa.list_(pa.list_(pa.int32()))),
+            pa.array(
+                [[{"a": 1, "b": "x"}, None], None],
+                type=pa.list_(pa.struct([("a", pa.int32()), ("b", pa.string())])),
+            ),
+            pa.array([[("k1", 1), ("k2", None)], None, []], type=pa.map_(pa.string(), pa.int32())),
+            pa.array([[1.5, None], [float("nan")]], type=pa.list_(pa.float64())),
+            pa.array([1, None, 3], type=pa.int64()),
+            pa.array(["x", None], type=pa.string()),
+            pa.array([], type=pa.list_(pa.int32())),
+            pa.array([None, None], type=pa.list_(pa.string())),
+            pa.array([[1, 2], None], type=pa.list_(pa.int64(), 2)),
+            # non-list leaves keep as_py semantics (native to_pylist)
+            pa.array([b"", None, b"\x00\xff"], type=pa.binary()),
+            pa.array([datetime.date(2020, 1, 2), None], type=pa.date32()),
+            pa.array([decimal.Decimal("1.23"), None], type=pa.decimal128(10, 2)),
+            pa.array([[b"x", None], None, [b""]], type=pa.list_(pa.binary())),
+            pa.array([[True, None], [False]], type=pa.list_(pa.bool_())),
+            # struct and map bulk paths
+            pa.array(
+                [{"a": 1, "b": "x"}, None, {"a": None, "b": None}],
+                type=pa.struct([("a", pa.int64()), ("b", pa.string())]),
+            ),
+            pa.array(
+                [{"s": {"a": 1}, "l": [1, None]}, None],
+                type=pa.struct(
+                    [("s", pa.struct([("a", pa.int32())])), ("l", pa.list_(pa.int64()))]
+                ),
+            ),
+            pa.array([{}, None, {}], type=pa.struct([])),
+            pa.array([None] * 4, type=pa.struct([("a", pa.int32())])),
+            pa.array(
+                [[("k1", [1, None]), ("k2", None)], None, []],
+                type=pa.map_(pa.string(), pa.list_(pa.int32())),
+            ),
+            pa.array(
+                [{"m": [("k", 1)]}, None],
+                type=pa.struct([("m", pa.map_(pa.string(), pa.int64()))]),
+            ),
+            pa.array(
+                [[{"a": 1}, None], None],
+                type=pa.list_(pa.struct([("a", pa.int64())])),
+            ),
+        ]
+        for column in columns:
+            views = [column, column.slice(1), column.slice(0, max(len(column) - 1, 0))]
+            views.append(pa.chunked_array([column, column.slice(1)], type=column.type))
+            for view in views:
+                with self.subTest(type=str(column.type), length=len(view)):
+                    actual = ArrowTableToRowsConversion._to_pylist(view)
+                    expected = view.to_pylist()
+                    # NaN != NaN; compare via repr for the float case
+                    self.assertEqual(repr(actual), repr(expected))
+                    self._assert_identical_types(actual, expected)
+
+    def test_int_list_with_nulls_stays_int(self):
+        # The exact case that makes a pandas round trip unusable: ints must not
+        # become floats/NaN when the list contains nulls.
+        import pyarrow as pa
+
+        result = ArrowTableToRowsConversion._to_pylist(
+            pa.array([[1, None, 3]], type=pa.list_(pa.int32()))
+        )
+        self.assertEqual(result, [[1, None, 3]])
+        self.assertEqual([type(v) for v in result[0]], [int, type(None), int])
+
+    def test_struct_duplicate_field_names_still_raises(self):
+        import pyarrow as pa
+
+        dup = pa.StructArray.from_arrays([pa.array([1, 2]), pa.array(["a", "b"])], names=["x", "x"])
+        with self.assertRaises(ValueError):
+            ArrowTableToRowsConversion._to_pylist(dup)
+
+    def test_struct_rows_are_distinct_dicts(self):
+        import pyarrow as pa
+
+        result = ArrowTableToRowsConversion._to_pylist(pa.array([{}, {}], type=pa.struct([])))
+        self.assertEqual(result, [{}, {}])
+        self.assertIsNot(result[0], result[1])
+
+    def test_convert_table_with_list_columns(self):
+        import pyarrow as pa
+
+        schema = (
+            StructType()
+            .add("arr", ArrayType(IntegerType()))
+            .add("nested", ArrayType(ArrayType(StringType())))
+        )
+        tbl = pa.table(
+            {
+                "arr": pa.array([[1, None], None, []], type=pa.list_(pa.int32())),
+                "nested": pa.array(
+                    [[["a"], None], [[]], None], type=pa.list_(pa.list_(pa.string()))
+                ),
+            }
+        )
+        actual = ArrowTableToRowsConversion.convert(tbl, schema)
+        self.assertEqual(actual[0], Row(arr=[1, None], nested=[["a"], None]))
+        self.assertEqual(actual[1], Row(arr=None, nested=[[]]))
+        self.assertEqual(actual[2], Row(arr=[], nested=None))
 
 
 if __name__ == "__main__":

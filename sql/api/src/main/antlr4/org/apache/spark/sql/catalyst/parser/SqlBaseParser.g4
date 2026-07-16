@@ -75,7 +75,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
            la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
+           la == ANTI || la == ASOF || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
@@ -199,6 +199,10 @@ singleExpression
 
 singleTableIdentifier
     : tableIdentifier EOF
+    ;
+
+singleTemporalTableIdentifier
+    : temporalTableIdentifier EOF
     ;
 
 singleMultipartIdentifier
@@ -416,8 +420,9 @@ statement
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
-        (AS query)?                                                    #createPipelineDataset
+        (AS query | FLOW autoCdcBody)?                                 #createPipelineDataset
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    | createPipelineFlowHeader autoCdcCommand                          #createFlowAutoCdc
     ;
 
 materializedView
@@ -740,7 +745,7 @@ dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
     | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
-    | UPDATE identifierReference tableAlias setClause whereClause?                 #updateTable
+    | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         USING (source=identifierReference |
           LEFT_PAREN sourceQuery=query RIGHT_PAREN) sourceAlias=tableAlias
@@ -748,6 +753,37 @@ dmlStatementNoWith
         matchedClause*
         notMatchedClause*
         notMatchedBySourceClause*                                                  #mergeIntoTable
+    ;
+
+autoCdcCommand
+    : AUTO CDC INTO target=multipartIdentifier
+        autoCdcParameters
+    ;
+
+autoCdcBody
+    : AUTO CDC autoCdcParameters
+    ;
+
+autoCdcParameters
+    : FROM source=relationPrimary
+        KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
+        autoCdcDeleteClause?
+        autoCdcSequenceByClause
+        autoCdcColumnsClause?
+    ;
+
+autoCdcDeleteClause
+    : APPLY AS DELETE WHEN deleteCondition=booleanExpression
+    ;
+
+autoCdcSequenceByClause
+    : SEQUENCE BY sequence=expression
+    ;
+
+autoCdcColumnsClause
+    : COLUMNS (
+        LEFT_PAREN columns=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN exceptCols=identifierSeq RIGHT_PAREN)
     ;
 
 identifierReference
@@ -1068,8 +1104,24 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
+    : (joinType) JOIN LATERAL? right=relationPrimary joinPostfix?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
+    | asofJoinType ASOF JOIN right=relationPrimary asofJoinCriteria
+    ;
+
+asofJoinType
+    : INNER?
+    | LEFT OUTER?
+    ;
+
+joinPostfix
+    : joinCriteria
+    | nearestByClause
+    ;
+
+asofJoinCriteria
+    : MATCH_CONDITION LEFT_PAREN matchExpr=booleanExpression RIGHT_PAREN
+      ( ON onExpr=booleanExpression | USING identifierList )?
     ;
 
 joinType
@@ -1133,7 +1185,7 @@ relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
-    | identifierReference temporalClause?
+    | temporalTableIdentifierReference temporalClause?
       optionsClause? sample? watermarkClause? tableAlias    #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
       tableAlias                                            #aliasedQuery
@@ -1237,6 +1289,18 @@ multipartIdentifierProperty
 
 tableIdentifier
     : (db=errorCapturingIdentifier DOT)? table=errorCapturingIdentifier
+    ;
+
+temporalTableIdentifier
+    : id=multipartIdentifier AT_SIGN timestamp=INTEGER_VALUE
+    | id=multipartIdentifier AT_VERSION version
+    | id=multipartIdentifier
+    ;
+
+temporalTableIdentifierReference
+    : identifierReference AT_SIGN timestamp=INTEGER_VALUE
+    | identifierReference AT_VERSION version
+    | identifierReference
     ;
 
 functionIdentifier
@@ -1959,13 +2023,16 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -1987,6 +2054,7 @@ ansiNonReserved
     | CASCADE
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2129,6 +2197,7 @@ ansiNonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2218,6 +2287,7 @@ ansiNonReserved
     | SECURITY
     | SEMI
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SET
@@ -2346,15 +2416,18 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
     | ARRAY
     | AS
     | ASC
     | ASENSITIVE
+    | ASOF
     | AT
     | ATOMIC
     | AUTHORIZATION
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -2380,6 +2453,7 @@ nonReserved
     | CAST
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2555,6 +2629,7 @@ nonReserved
     | MACRO
     | MAP
     | MATCHED
+    | MATCH_CONDITION
     | MATERIALIZED
     | MAX
     | MEASURE
@@ -2655,6 +2730,7 @@ nonReserved
     | SECURITY
     | SELECT
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SESSION_USER

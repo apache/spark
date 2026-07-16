@@ -9822,6 +9822,172 @@ object functions {
     Column.fn("variant_delete", (v +: lit(path) +: paths.map(lit)): _*)
 
   /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field (error if it already exists); an array path inserts at the index, shifting later
+   * elements right. Missing intermediate keys are created. Throws an error if a path segment hits
+   * a value of an incompatible type. Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the insertion target. A valid path
+   *   should start with `$` and is followed by one or more segments like `[123]`, `.name`,
+   *   `['name']`, or `["name"]`. The root path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_insert(v: Column, path: Column, value: Column): Column =
+    Column.fn("variant_insert", v, path, value)
+
+  /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field (error if it already exists); an array path inserts at the index, shifting later
+   * elements right. Missing intermediate keys are created. Throws an error if a path segment hits
+   * a value of an incompatible type. Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the insertion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_insert(v: Column, path: String, value: Column): Column =
+    Column.fn("variant_insert", v, lit(path), value)
+
+  /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field; an array path inserts at the index, shifting later elements right. Missing
+   * intermediate keys are created. Returns NULL if the field already exists or a path segment
+   * hits a value of an incompatible type, or if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the insertion target. A valid path
+   *   should start with `$` and is followed by one or more segments like `[123]`, `.name`,
+   *   `['name']`, or `["name"]`. The root path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def try_variant_insert(v: Column, path: Column, value: Column): Column =
+    Column.fn("try_variant_insert", v, path, value)
+
+  /**
+   * Inserts a value into a variant at the given JSONPath location. An object path adds a new
+   * field; an array path inserts at the index, shifting later elements right. Missing
+   * intermediate keys are created. Returns NULL if the field already exists or a path segment
+   * hits a value of an incompatible type, or if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the insertion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param value
+   *   the value to insert. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def try_variant_insert(v: Column, path: String, value: Column): Column =
+    Column.fn("try_variant_insert", v, lit(path), value)
+
+  /**
+   * Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+   * or array element at the target is replaced. A missing field, array index, or intermediate
+   * path is created. Throws an error if a path segment hits a value of an incompatible type.
+   * Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the set target. A valid path should
+   *   start with `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`,
+   *   or `["name"]`. The root path `$` is not allowed.
+   * @param value
+   *   the value to set. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_set(v: Column, path: Column, value: Column): Column =
+    Column.fn("variant_set", v, path, value)
+
+  /**
+   * Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+   * or array element at the target is replaced. A missing field, array index, or intermediate
+   * path is created. Throws an error if a path segment hits a value of an incompatible type.
+   * Returns NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the set target. A valid path should start with `$` and is followed
+   *   by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$`
+   *   is not allowed.
+   * @param value
+   *   the value to set. Any expression castable to variant.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_set(v: Column, path: String, value: Column): Column =
+    Column.fn("variant_set", v, lit(path), value)
+
+  /**
+   * Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+   * or array element at the target is replaced. A missing field, array index, or intermediate
+   * path is created, unless `createIfMissing` is false, in which case the variant is left
+   * unchanged. Throws an error if a path segment hits a value of an incompatible type. Returns
+   * NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the JSONPath string identifying the set target. A valid path should
+   *   start with `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`,
+   *   or `["name"]`. The root path `$` is not allowed.
+   * @param value
+   *   the value to set. Any expression castable to variant.
+   * @param createIfMissing
+   *   whether to create missing keys or out-of-range array indices.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_set(v: Column, path: Column, value: Column, createIfMissing: Boolean): Column =
+    Column.fn("variant_set", v, path, value, lit(createIfMissing))
+
+  /**
+   * Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+   * or array element at the target is replaced. A missing field, array index, or intermediate
+   * path is created, unless `createIfMissing` is false, in which case the variant is left
+   * unchanged. Throws an error if a path segment hits a value of an incompatible type. Returns
+   * NULL if any argument is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the JSONPath identifying the set target. A valid path should start with `$` and is followed
+   *   by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$`
+   *   is not allowed.
+   * @param value
+   *   the value to set. Any expression castable to variant.
+   * @param createIfMissing
+   *   whether to create missing keys or out-of-range array indices.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_set(v: Column, path: String, value: Column, createIfMissing: Boolean): Column =
+    Column.fn("variant_set", v, lit(path), value, lit(createIfMissing))
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *

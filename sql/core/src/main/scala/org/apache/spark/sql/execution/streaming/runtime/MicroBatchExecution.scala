@@ -129,10 +129,11 @@ class MicroBatchExecution(
     }
   }
 
-  // Historical sink metadata read from the commit log on restart. Insertion order is preserved so
-  // that we can re-emit deactivated sinks in the same order they originally appeared. Mutated by
-  // [[populateStartOffsets]] (reads) and by the commit-log write in [[runBatch]] (updates).
-  private val sinkMetadataMap = mutable.LinkedHashMap.empty[String, SinkMetadataInfo]
+  // Historical sink metadata keyed by sink name, read from the commit log on restart. Hydrated by
+  // [[populateStartOffsets]] from the latest CommitMetadataV3 and rewritten by the commit-log write
+  // in [[markMicroBatchEnd]]. The active sink is identified by its isActive flag, not by position,
+  // so the iteration order is not significant.
+  private val sinkMetadataMap = mutable.HashMap.empty[String, SinkMetadataInfo]
 
   /** True when the current query should persist V3 sink metadata in the commit log. */
   private def commitLogV3Enabled: Boolean =
@@ -1234,6 +1235,11 @@ class MicroBatchExecution(
     setupStateStoreCommitTracking(execCtx)
 
     markMicroBatchExecutionStart(execCtx)
+    if (!isActive) {
+      // Workaround for the case the interrupt status is unexpectedly cleared. See SPARK-57963 for
+      // more details.
+      Thread.currentThread.interrupt
+    }
 
     if (trigger.isInstanceOf[RealTimeTrigger]) {
       RealTimeModeAllowlist.checkAllowedPhysicalOperator(

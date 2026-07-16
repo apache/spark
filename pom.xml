@@ -126,7 +126,7 @@
     <maven.version>3.9.16</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <asm.version>9.9.1</asm.version>
+    <asm.version>9.10.1</asm.version>
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.26.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
@@ -147,7 +147,7 @@
     <parquet.version>1.17.1</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.10</jetty.version>
+    <jetty.version>12.1.11</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -215,14 +215,14 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
-    <tink.version>1.22.0</tink.version>
+    <tink.version>1.23.0</tink.version>
     <!--
       TODO: Once upgrade datasketches to a version that supports Java 25,
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.15.Final</netty.version>
-    <netty-tcnative.version>2.0.79.Final</netty-tcnative.version>
+    <netty.version>4.2.16.Final</netty.version>
+    <netty-tcnative.version>2.0.80.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -237,13 +237,13 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
-    <ammonite.version>3.0.8</ammonite.version>
+    <ammonite.version>3.0.9</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.7.0</kubernetes-client.version>
-    <vertx.version>4.5.26</vertx.version>
+    <kubernetes-client.version>7.8.0</kubernetes-client.version>
+    <vertx.version>4.5.28</vertx.version>
     <xz.version>1.12</xz.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -544,7 +544,7 @@
       <dependency>
         <groupId>org.apache.xbean</groupId>
         <artifactId>xbean-asm9-shaded</artifactId>
-        <version>4.30</version>
+        <version>4.31</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -878,7 +878,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.11.0</version>
+        <version>1.11.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>

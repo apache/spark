@@ -122,6 +122,12 @@ PySpark development requires to build Spark that needs a proper JDK installed, e
 
 Note that if you intend to contribute to Spark Connect in Python, ``buf`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
 
+``pip>=25.1`` is required to install the dependencies. If your ``pip`` version is older than 25.1, you can upgrade it by:
+
+.. code-block:: bash
+
+    pip install --upgrade pip
+
 Conda
 ~~~~~
 
@@ -132,7 +138,7 @@ If you are using Conda, the development environment can be set as follows.
     # Python 3.11+ is required
     conda create --name pyspark-dev-env python=3.11
     conda activate pyspark-dev-env
-    pip install --upgrade -r dev/requirements.txt
+    pip install --upgrade --group dev
 
 Once it is set up, make sure you switch to `pyspark-dev-env` before starting the development:
 
@@ -152,7 +158,7 @@ You can use Python's built-in ``venv`` module to create an isolated environment:
     # Python 3.11+ is required
     python3 -m venv .venv
     source .venv/bin/activate
-    pip install --upgrade -r dev/requirements.txt
+    pip install --upgrade --group dev
 
 pip
 ~~~
@@ -161,7 +167,7 @@ With Python 3.11+, pip can be used as below to install and set up the developmen
 
 .. code-block:: bash
 
-    pip install --upgrade -r dev/requirements.txt
+    pip install --upgrade --group dev
 
 Now, you can start developing and `running the tests <testing.rst>`_.
 
