@@ -397,6 +397,15 @@ class DataFrameSubquerySuite extends SharedSparkSession {
         .table("l")
         .where($"l.a".isin(spark.table("r").select("c")) && $"l.a" > 2 && $"l.b".isNotNull),
       sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"))
+
+    // SPARK-58165: Classic parity for a scalar subquery nested inside the IN subquery's
+    // values. Classic embeds the subquery plan directly, so it is unaffected by the Connect
+    // WithRelations bug; this guards against a future regression and keeps the two suites in sync.
+    checkAnswer(
+      spark
+        .table("l")
+        .where(spark.table("r").select(max($"c")).scalar().isin(spark.table("r").select($"c"))),
+      sql("select * from l where (select max(c) from r) in (select c from r)"))
   }
 
   test("IN predicate subquery with struct") {
