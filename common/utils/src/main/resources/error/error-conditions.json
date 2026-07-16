@@ -210,6 +210,11 @@
         "message" : [
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
+      },
+      "UNSUPPORTED_MATCH_CONDITION_OPERAND" : {
+        "message" : [
+          "The MATCH_CONDITION operands (<type1> and <type2>) use types that require multi-column sort-merge ASOF join execution. Only scalar numeric and datetime operands are currently supported."
+        ]
       }
     },
     "sqlState" : "42604"
