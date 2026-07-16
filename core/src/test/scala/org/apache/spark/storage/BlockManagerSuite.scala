@@ -2537,6 +2537,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     // registration for a sealed block (see the reject test above), so it is not reachable here.
   }
 
+  test("verifyRddChecksumSeal ignores the external-shuffle-service pseudo-replica") {
+    // With RDD fetch from the external shuffle service enabled, updateBlockInfo adds an ESS
+    // pseudo-BlockManagerId to blockLocations for a disk RDD block but never to blockChecksums.
+    // verifyRddChecksumSeal must skip it (by port) rather than flag it as a divergent replica.
+    conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val essBlockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]()
+    val essMaster = new BlockManagerMaster(
+      rpcEnv.setupEndpoint("blockmanager-ess",
+        new BlockManagerMasterEndpoint(rpcEnv, isLocal = true, conf, liveListenerBus,
+          Some(mock(classOf[ExternalBlockStoreClient])), essBlockManagerInfo, mapOutputTracker,
+          shuffleManager, isDriver = true)),
+      rpcEnv.setupEndpoint("blockmanagerHeartbeat-ess",
+        new BlockManagerMasterHeartbeatEndpoint(rpcEnv, true, essBlockManagerInfo)),
+      conf, true)
+    val bmRef = rpcEnv.setupEndpoint("bm-ess", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = BlockManagerSuite.this.rpcEnv
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case _ => context.reply(true)
+      }
+    })
+    val bmId = essMaster.registerBlockManager(
+      BlockManagerId("exec1", "localhost", 1234, None), Array.empty, 2000, 0, bmRef)
+
+    val blockId = RDDBlockId(13, 0)
+    essMaster.updateBlockInfo(bmId, blockId, StorageLevel.DISK_ONLY, 0, 100, Some(55L))
+    // The directory now tracks both the executor and the ESS pseudo-replica for the block.
+    assert(essMaster.getLocations(blockId).exists(_.port == conf.get(SHUFFLE_SERVICE_PORT)))
+    assert(essMaster.sealRddChecksums(13) === 0)
+    // Only the executor replica carries a checksum; the ESS pseudo-replica must not be flagged.
+    assert(essMaster.verifyRddChecksumSeal(13) === None)
+  }
+
   test("sealed checksums are cleared when the RDD is removed") {
     val store = makeBlockManager(20000, "exec1")
     val blockId = RDDBlockId(10, 0)

@@ -991,7 +991,12 @@ class BlockManagerMasterEndpoint(
       val locations = Option(blockLocations.get(blockId)).getOrElse(mutable.HashSet.empty)
       if (sealedValue.isEmpty) {
         Some(s"$blockId is present but not sealed")
-      } else if (locations.exists(bm => !perReplica.get(bm).contains(sealedValue.get))) {
+      } else if (locations.exists(bm =>
+          bm.port != externalShuffleServicePort &&
+            !perReplica.get(bm).contains(sealedValue.get))) {
+        // Skip external-shuffle-service pseudo-ids (identified by port, as the seal and read paths
+        // do): `updateBlockInfo` adds them to `blockLocations` for disk RDD blocks but never to
+        // `blockChecksums`, so they carry no per-replica checksum to compare against the seal.
         Some(s"$blockId sealed to ${sealedValue.get} but the directory tracks a replica whose " +
           s"checksum differs: locations=$locations checksums=$perReplica")
       } else {
