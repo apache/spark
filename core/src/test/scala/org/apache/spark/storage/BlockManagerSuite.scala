@@ -62,7 +62,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, Spar
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoDeserializationStream, KryoSerializer, KryoSerializerInstance, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{BlockingShuffle, MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
+import org.apache.spark.shuffle.{BlockingShuffleManager, MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.storage.LogBlockType.LogBlockType
@@ -2056,7 +2056,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   test("we reject putting blocks when we have the wrong shuffle resolver") {
-    val badShuffleManager = mock(classOf[BlockingShuffle])
+    val badShuffleManager = mock(classOf[BlockingShuffleManager])
     val badShuffleResolver = mock(classOf[ShuffleBlockResolver])
     when(badShuffleManager.shuffleBlockResolver).thenReturn(badShuffleResolver)
     val shuffleBlockId = ShuffleDataBlockId(0, 0, 0)

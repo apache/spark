@@ -70,7 +70,8 @@ import org.apache.spark.util.collection.OpenHashSet
  *
  * For more details on these optimizations, see SPARK-7081.
  */
-private[spark] class SortShuffleManager(conf: SparkConf) extends BlockingShuffle with Logging {
+private[spark] class SortShuffleManager(conf: SparkConf)
+  extends BlockingShuffleManager with Logging {
 
   import SortShuffleManager._
 

@@ -57,7 +57,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{BlockingShuffle, IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{BlockingShuffleManager, IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.LogBlockType.LogBlockType
 import org.apache.spark.storage.memory._
@@ -198,13 +198,13 @@ private[spark] class BlockManager(
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
   // (except for tests) and we ask for the resolver from the SparkEnv.
   // The resolver used for block-by-id resolution (reads, push-merge, decommission migration). Only
-  // a BlockingShuffle serves block-manager-addressed blocks; a pipelined shuffle is served
+  // a BlockingShuffleManager serves block-manager-addressed blocks; a pipelined shuffle is served
   // out-of-band and produces none, so these paths only ever resolve regular shuffles. Prefer this
   // over reaching through a ShuffleManager at the call site. Cached as a lazy val so the
   // init-wait and type match happen once, not on every (hot-path) block access.
   private lazy val shuffleBlockResolver: ShuffleBlockResolver = {
     val resolver = Option(_shuffleManager) match {
-      case Some(blocking: BlockingShuffle) => Some(blocking.shuffleBlockResolver)
+      case Some(blocking: BlockingShuffleManager) => Some(blocking.shuffleBlockResolver)
       case Some(_) => None
       case None =>
         // Wait for ShuffleManager to be initialized before handling shuffle operations.

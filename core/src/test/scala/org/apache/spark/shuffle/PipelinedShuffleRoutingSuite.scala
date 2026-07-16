@@ -19,6 +19,8 @@ package org.apache.spark.shuffle
 
 import scala.collection.mutable
 
+import org.mockito.Mockito.mock
+
 import org.apache.spark._
 import org.apache.spark.internal.config.{SHUFFLE_MANAGER, SHUFFLE_MANAGER_INCREMENTAL}
 import org.apache.spark.rdd.RDD
@@ -30,9 +32,12 @@ import org.apache.spark.shuffle.streaming.StreamingShuffleManager
  * test can assert that [[SparkEnv.shuffleManagerFor]] routed a dependency to the correct manager.
  * Every instance registers itself in a process-wide registry keyed by class, because the two
  * managers live in private SparkEnv fields and a test otherwise has no reference to them.
- * Constructor takes (SparkConf, Boolean) to match how SparkEnv instantiates managers.
+ * Constructor takes (SparkConf, Boolean) to match how SparkEnv instantiates managers. It is a
+ * [[BlockingShuffleManager]] because ShuffleManager is sealed and only its two subtypes may be
+ * implemented; the routing tests never exercise the resolver, so it returns a mock.
  */
-private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean) extends ShuffleManager {
+private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean)
+  extends BlockingShuffleManager {
   RecordingShuffleManager.register(this)
   val registered = mutable.ArrayBuffer[Int]()
   val unregistered = mutable.ArrayBuffer[Int]()
@@ -54,6 +59,7 @@ private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean) extend
     unregistered += shuffleId
     true
   }
+  override def shuffleBlockResolver: ShuffleBlockResolver = mock(classOf[ShuffleBlockResolver])
   override def stop(): Unit = stopped = true
 }
 
@@ -256,14 +262,14 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
   }
 
   test("a manager's type declares its shuffle kind (blocking vs pipelined)") {
-    // SortShuffleManager materializes blocks -- it is a BlockingShuffle and exposes a resolver.
+    // SortShuffleManager materializes blocks -- it is a BlockingShuffleManager with a resolver.
     val sortMgr = new SortShuffleManager(new SparkConf(loadDefaults = false))
-    assert(sortMgr.isInstanceOf[BlockingShuffle])
-    // StreamingShuffleManager serves output out-of-band -- it is a PipelinedShuffle with no
+    assert(sortMgr.isInstanceOf[BlockingShuffleManager])
+    // StreamingShuffleManager serves output out-of-band -- it is a PipelinedShuffleManager with no
     // resolver (the shuffleBlockResolver method was removed from the ShuffleManager interface).
     val streaming = new StreamingShuffleManager
-    assert(streaming.isInstanceOf[PipelinedShuffle])
-    assert(!streaming.isInstanceOf[BlockingShuffle])
+    assert(streaming.isInstanceOf[PipelinedShuffleManager])
+    assert(!streaming.isInstanceOf[BlockingShuffleManager])
   }
 
   test("SparkEnv.shuffleBlockResolver is defined for a blocking default manager, empty otherwise") {

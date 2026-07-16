@@ -76,7 +76,7 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
           // IndexShuffleBlockResolver. A pipelined shuffle disables merge (shuffleMergeFinalized is
           // true above), so it never reaches here.
           manager match {
-            case blocking: BlockingShuffle =>
+            case blocking: BlockingShuffleManager =>
               blocking.shuffleBlockResolver match {
                 case resolver: IndexShuffleBlockResolver =>
                   logInfo(log"Shuffle merge enabled with" +

@@ -28,14 +28,19 @@ import org.apache.spark.util.Utils
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
  *
+ * This trait is sealed and is not meant to be implemented directly. A shuffle manager declares its
+ * kind by extending one of its two subtypes: [[BlockingShuffleManager]] (output is materialized as
+ * block-manager-addressed blocks served through a [[ShuffleBlockResolver]]) or
+ * [[PipelinedShuffleManager]] (output is read incrementally and served out-of-band).
+ *
  * NOTE:
  * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
- * 2. This contains a method ShuffleBlockResolver which interacts with External Shuffle Service
- * when it is enabled. Need to pay attention to that, if implementing a custom ShuffleManager, to
- * make sure the custom ShuffleManager could co-exist with External Shuffle Service.
+ * 2. A [[BlockingShuffleManager]] exposes a ShuffleBlockResolver which interacts with the External
+ * Shuffle Service when it is enabled. Need to pay attention to that, if implementing a custom
+ * shuffle manager, to make sure it could co-exist with the External Shuffle Service.
  */
-private[spark] trait ShuffleManager {
+private[spark] sealed trait ShuffleManager {
 
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
@@ -100,10 +105,10 @@ private[spark] trait ShuffleManager {
  * [[ShuffleBlockResolver]]). This is the traditional shuffle model: a consumer stage reads the
  * producer's output only after it is fully written.
  * [[org.apache.spark.shuffle.sort.SortShuffleManager]] is the built-in implementation. A manager's
- * type declares its kind -- match on `BlockingShuffle` to reach the resolver rather than assuming
- * every `ShuffleManager` provides one.
+ * type declares its kind -- match on `BlockingShuffleManager` to reach the resolver rather than
+ * assuming every `ShuffleManager` provides one.
  */
-private[spark] trait BlockingShuffle extends ShuffleManager {
+private[spark] trait BlockingShuffleManager extends ShuffleManager {
   /**
    * Return a resolver capable of retrieving shuffle block data based on block coordinates.
    */
@@ -117,7 +122,7 @@ private[spark] trait BlockingShuffle extends ShuffleManager {
  * has no [[ShuffleBlockResolver]]. [[org.apache.spark.shuffle.streaming.StreamingShuffleManager]]
  * is the built-in implementation.
  */
-private[spark] trait PipelinedShuffle extends ShuffleManager
+private[spark] trait PipelinedShuffleManager extends ShuffleManager
 
 /**
  * Utility companion object to create a ShuffleManager given a spark configuration.
