@@ -118,9 +118,5 @@ private[spark] class StreamingShuffleManager extends PipelinedShuffleManager wit
     true
   }
 
-  // No shuffleBlockResolver: a StreamingShuffleManager is a PipelinedShuffleManager, serving output
-  // out-of-band rather than as block-manager-addressed blocks. Block-by-id resolution never routes
-  // here (see BlockingShuffleManager).
-
   override def stop(): Unit = {}
 }

@@ -46,7 +46,7 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.{BlockingShuffleManager, ShuffleBlockResolver, ShuffleManager}
-import org.apache.spark.shuffle.streaming.StreamingShuffleManager
+import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
@@ -423,7 +423,8 @@ class SparkEnv (
     }
 
     val shuffleManagerName = ShuffleManager.getShuffleManagerClassName(conf)
-    if (shuffleManagerName == classOf[StreamingShuffleManager].getName) {
+    if (shuffleManagerName == classOf[StreamingShuffleManager].getName
+        || shuffleManagerName == classOf[MultiShuffleManager].getName) {
       createStreamingShuffleOutputTracker()
     }
   }
