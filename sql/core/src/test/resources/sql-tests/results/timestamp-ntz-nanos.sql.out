@@ -986,3 +986,43 @@ SET spark.sql.ansi.enabled=true
 struct<key:string,value:string>
 -- !query output
 spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query schema
+struct<date_trunc(SECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789'):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:34:56
+
+
+-- !query
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query schema
+struct<date_trunc(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789'):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:34:56.123456
+
+
+-- !query
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9))
+-- !query schema
+struct<date_trunc(HOUR, CAST(2020-01-01 12:34:56.123456789 AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00
+
+
+-- !query
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7))
+-- !query schema
+struct<date_trunc(DAY, CAST(2020-06-21 23:30:00.000000123 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
+-- !query output
+2020-06-21 00:00:00
+
+
+-- !query
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789')
+-- !query schema
+struct<date_trunc(NANOSECOND, TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789'):timestamp_ntz(9)>
+-- !query output
+NULL

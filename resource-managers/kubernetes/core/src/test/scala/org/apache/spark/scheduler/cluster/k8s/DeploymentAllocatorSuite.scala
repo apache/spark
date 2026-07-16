@@ -24,7 +24,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.{AppsAPIGroupDSL, PodResource}
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{never, times, verify, when}
+import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
@@ -113,6 +113,22 @@ class DeploymentAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   after {
     ResourceProfile.clearDefaultProfile()
+  }
+
+  test("SPARK-58113: wait for driver readiness by default") {
+    // The allocator in `before` was started with the default conf.
+    verify(driverPodResource, times(1)).waitUntilReady(any(), any())
+  }
+
+  test("SPARK-58113: skip driver readiness wait when publishNotReadyAddresses is enabled") {
+    clearInvocations(driverPodResource)
+    val confWithPublishNotReady = conf.clone()
+      .set(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES, true)
+    val podsAllocator = new DeploymentPodsAllocator(
+      confWithPublishNotReady, secMgr, executorBuilder, kubernetesClient, snapshotsStore,
+      snapshotsStore.clock)
+    podsAllocator.start(TEST_SPARK_APP_ID, schedulerBackend)
+    verify(driverPodResource, never()).waitUntilReady(any(), any())
   }
 
   test("creates deployments per resource profile and seeds deletion cost annotation") {

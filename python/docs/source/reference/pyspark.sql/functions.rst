@@ -602,8 +602,12 @@ VARIANT Functions
     schema_of_variant
     schema_of_variant_agg
     try_variant_get
+    variant_array_append
     variant_delete
     variant_get
+    variant_insert
+    try_variant_insert
+    variant_set
     try_parse_json
     to_variant_object
 

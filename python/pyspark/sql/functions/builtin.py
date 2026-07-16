@@ -21727,6 +21727,249 @@ def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
 
 
 @_try_remote_functions
+def variant_insert(v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName") -> Column:
+    """
+    Inserts a value into a variant at the given JSONPath location. An object path adds a new field
+    (error if it already exists); an array path inserts at the index, shifting later elements
+    right. Missing intermediate keys are created. Throws an error if a path segment hits a value
+    of an incompatible type. Returns NULL if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath insertion target. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to insert. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` inserted at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_insert
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a": 1, "arr": ["x", "y"] }''',
+    ...     'path': '$.d'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_insert(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
+    >>> df.select(to_json(variant_insert(v, df.path, lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"d":9}')]
+    >>> df.select(to_json(variant_insert(v, "$.b", parse_json(lit('null')))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":null}')]
+    >>> df.select(variant_insert(v, "$.b", lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_insert",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+    )
+
+
+@_try_remote_functions
+def try_variant_insert(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    """
+    Inserts a value into a variant at the given JSONPath location. An object path adds a new field;
+    an array path inserts at the index, shifting later elements right. Missing intermediate keys
+    are created. Returns NULL if the field already exists or a path segment hits a value of an
+    incompatible type, or if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath insertion target. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path should start with
+        `$` and is followed by one or more segments like `[123]`, `.name`, `['name']`, or
+        `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to insert. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` inserted at `path`, or NULL if the insertion fails
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, try_variant_insert
+    >>> df = spark.createDataFrame([{'json': '''{ "a": 1, "arr": ["x", "y"] }'''}])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(try_variant_insert(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"b":2}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.c.d", lit(3))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y"],"c":{"d":3}}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[1]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","z","y"]}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.arr[5]", lit("z"))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":["x","y",null,null,null,"z"]}')]
+    >>> df.select(to_json(try_variant_insert(v, "$.a", lit(2))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(to_json(try_variant_insert(v, "$.a.b", lit(2))).alias("r")).collect()
+    [Row(r=None)]
+    >>> df.select(to_json(try_variant_insert(v, "$.b", lit(None))).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "try_variant_insert",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+    )
+
+
+@_try_remote_functions
+def variant_set(
+    v: "ColumnOrName",
+    path: Union[Column, str],
+    value: "ColumnOrName",
+    create_if_missing: bool = True,
+) -> Column:
+    """
+    Sets or upserts a value in a variant at the given JSONPath location. An existing object field
+    or array element at the target is replaced. A missing field, array index, or intermediate path
+    is created, unless `create_if_missing` is false, in which case the variant is left unchanged.
+    Throws an error if a path segment hits a value of an incompatible type. Returns NULL if any
+    argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath set target. A `str` is a literal path; a :class:`~pyspark.sql.Column` supplies
+        the path at runtime. A valid path should start with `$` and is followed by one or more
+        segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to set. Any expression castable to variant.
+    create_if_missing : bool, optional
+        whether to create missing keys or out-of-range array indices (default True).
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` set at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_set
+    >>> df = spark.createDataFrame([{'json': '''{"a": 1, "arr": [1, 2, 3]}'''}])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_set(v, "$.a", lit(9))).alias("r")).collect()
+    [Row(r='{"a":9,"arr":[1,2,3]}')]
+    >>> df.select(to_json(variant_set(v, "$.b", lit(2))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,2,3],"b":2}')]
+    >>> df.select(to_json(variant_set(v, "$.arr[1]", lit(9))).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,9,3]}')]
+    >>> df.select(to_json(variant_set(v, "$.b", lit(2), False)).alias("r")).collect()
+    [Row(r='{"a":1,"arr":[1,2,3]}')]
+    >>> df.select(to_json(variant_set(v, "$.a", parse_json(lit("null")))).alias("r")).collect()
+    [Row(r='{"a":null,"arr":[1,2,3]}')]
+    >>> df.select(to_json(variant_set(v, "$.a", lit(None))).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_set",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+        _enum_to_value(create_if_missing),
+    )
+
+
+@_try_remote_functions
+def variant_array_append(
+    v: "ColumnOrName", path: Union[Column, str], value: "ColumnOrName"
+) -> Column:
+    """
+    Appends a value to the array in a variant at the given JSONPath location. Returns the variant
+    unchanged if a path key or index is absent, throws an error if a path segment hits a value of
+    an incompatible type or the target is not an array, and returns NULL if any argument is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    path : :class:`~pyspark.sql.Column` or str
+        the JSONPath target array. A `str` is a literal path; a :class:`~pyspark.sql.Column`
+        supplies the path at runtime. A valid path should start with `$` and is followed by zero or
+        more segments like `[123]`, `.name`, `['name']`, or `["name"]`.
+    value : :class:`~pyspark.sql.Column` or str
+        the value to append. Any expression castable to variant.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with `value` appended to the array at `path`
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_array_append
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''[[1, 2], 5]''',
+    ...     'path': '$[0]'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_array_append(v, "$", lit(3))).alias("r")).collect()
+    [Row(r='[[1,2],5,3]')]
+    >>> df.select(to_json(variant_array_append(v, "$[5]", lit(3))).alias("r")).collect()
+    [Row(r='[[1,2],5]')]
+    >>> df.select(to_json(variant_array_append(v, df.path, lit(9))).alias("r")).collect()
+    [Row(r='[[1,2,9],5]')]
+    >>> nested = variant_array_append(v, "$", parse_json(lit('[4, 5]')))
+    >>> df.select(to_json(nested).alias("r")).collect()
+    [Row(r='[[1,2],5,[4,5]]')]
+    >>> df.select(variant_array_append(v, "$", lit(None)).alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    path_col = path if isinstance(path, Column) else lit(path)
+    return _invoke_function(
+        "variant_array_append",
+        _to_java_column(v),
+        _to_java_column(path_col),
+        _to_java_column(value),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to

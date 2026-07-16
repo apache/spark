@@ -296,3 +296,13 @@ SELECT c = '2020-01-02 03:04:05.123456789',
   FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') AS t(c);
 SET spark.sql.legacy.typeCoercion.datetimeToString.enabled=false;
 SET spark.sql.ansi.enabled=true;
+
+-- SPARK-57821: date_trunc keeps the nanosecond type/family and zeroes the whole fraction (including
+-- the sub-microsecond digits); MICROSECOND keeps epochMicros and only drops nanosWithinMicro. NTZ
+-- is zone-independent, so DAY/HOUR read the wall clock and never shift.
+SELECT date_trunc('SECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('MICROSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789' :: timestamp_ntz(9));
+SELECT date_trunc('DAY', '2020-06-21 23:30:00.000000123' :: timestamp_ntz(7));
+-- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
+SELECT date_trunc('NANOSECOND', TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789');

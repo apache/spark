@@ -799,12 +799,517 @@ object VariantDelete {
       if (v == null) {
         None
       } else {
-        Some(ParsedDeletePath(
-          VariantExpressionEvalUtils.parseVariantDeletePath(v.asInstanceOf[UTF8String].toString)))
+        Some(ParsedDeletePath(VariantExpressionEvalUtils.parseVariantPath(
+          v.asInstanceOf[UTF8String].toString, "variant_delete")))
       }
     } else {
       Some(DynamicDeletePath(child))
     }
+  }
+}
+
+case class VariantInsert(
+    input: Expression,
+    path: Expression,
+    value: Expression,
+    failOnError: Boolean = true)
+    extends TernaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+
+  override def first: Expression = input
+  override def second: Expression = path
+  override def third: Expression = value
+
+  override def nullIntolerant: Boolean = true
+  override def nullable: Boolean = !failOnError || children.exists(_.nullable)
+
+  override def dataType: DataType = VariantType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true), AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (value.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  // When the path is a foldable expression, parse it once at planning time and cache it. The Java
+  // segments are derived once per task (see `ParsedInsertPath`), avoiding a per-row conversion.
+  // `None` means the path is dynamic (or a foldable NULL, which makes the whole expression NULL and
+  // is never evaluated).
+  @transient private lazy val foldablePath: Option[VariantInsert.ParsedInsertPath] = {
+    if (path.foldable) {
+      val p = path.eval()
+      if (p == null) {
+        None
+      } else {
+        val s = p.asInstanceOf[UTF8String].toString
+        Some(VariantInsert.ParsedInsertPath(
+          VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
+      }
+    } else {
+      None
+    }
+  }
+
+  override protected def nullSafeEval(v: Any, p: Any, valValue: Any): Any = {
+    val inputVariant = v.asInstanceOf[VariantVal]
+    foldablePath match {
+      case Some(parsed) =>
+        VariantExpressionEvalUtils.insertAtPath(
+          inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType, prettyName,
+          failOnError)
+      case None =>
+        VariantExpressionEvalUtils.insertAtPath(
+          inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName,
+          failOnError)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val fromArg = ctx.addReferenceObj("from", value.dataType)
+    def call(vVal: String, pVal: String, valVal: String): String = foldablePath match {
+      case Some(parsed) =>
+        val parsedArg = ctx.addReferenceObj("insertPath", parsed)
+        s"""$cls.insertAtPath(
+           |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
+           |  "$prettyName", $failOnError)""".stripMargin
+      case None =>
+        s"""$cls.insertAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName", $failOnError)"""
+    }
+    if (failOnError) {
+      nullSafeCodeGen(ctx, ev,
+        (vVal, pVal, valVal) => s"${ev.value} = ${call(vVal, pVal, valVal)};")
+    } else {
+      val resultType = CodeGenerator.javaType(VariantType)
+      val tmp = ctx.freshName("insertResult")
+      nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) =>
+        s"""
+           |$resultType $tmp = ${call(vVal, pVal, valVal)};
+           |if ($tmp == null) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = $tmp;
+           |}
+         """.stripMargin)
+    }
+  }
+
+  override def prettyName: String = if (failOnError) "variant_insert" else "try_variant_insert"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): VariantInsert =
+    copy(input = newFirst, path = newSecond, value = newThird)
+}
+
+object VariantInsert {
+  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
+  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
+  // source string, retained for error messages.
+  case class ParsedInsertPath(segments: Array[VariantPathSegment], pathStr: String) {
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
+}
+
+abstract class VariantInsertExpressionBuilderBase(failOnError: Boolean) extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    val numArgs = expressions.length
+    if (numArgs == 3) {
+      VariantInsert(expressions(0), expressions(1), expressions(2), failOnError)
+    } else {
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(3), numArgs)
+    }
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path, val) - Inserts a value into a variant at the given JSONPath " +
+    "location. An object path adds a new field (error if it already exists); an array path " +
+    "inserts at the index, shifting later elements right. Missing intermediate keys are created. " +
+    "Throws an error if a path segment hits a value of an incompatible type. Returns NULL if any " +
+    "argument is NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * path - A string expression evaluating to a JSONPath identifying the insertion target. A
+          valid path should start with `$` and is followed by one or more segments like `[123]`,
+          `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
+      * val - Any expression castable to variant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.b', 2);
+       {"a":1,"b":2}
+      > SELECT _FUNC_(parse_json('{}'), '$.a.b', 1);
+       {"a":{"b":1}}
+      > SELECT _FUNC_(parse_json('["a","b","c"]'), '$[1]', 'z');
+       ["a","z","b","c"]
+      > SELECT _FUNC_(parse_json('["a","b"]'), '$[5]', 'z');
+       ["a","b",null,null,null,"z"]
+      > SELECT _FUNC_(parse_json('{}'), '$.a', parse_json('{"x":1}'));
+       {"a":{"x":1}}
+      > SELECT _FUNC_(parse_json('{}'), '$.a', parse_json('null'));
+       {"a":null}
+      > SELECT _FUNC_(parse_json('{}'), '$.a', null);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object VariantInsertExpressionBuilder extends VariantInsertExpressionBuilderBase(true)
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path, val) - Inserts a value into a variant at the given JSONPath " +
+    "location. An object path adds a new field; an array path inserts at the index, shifting " +
+    "later elements right. Missing intermediate keys are created. Returns NULL if the field " +
+    "already exists or a path segment hits a value of an incompatible type, or if any argument is " +
+    "NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * path - A string expression evaluating to a JSONPath identifying the insertion target. A
+          valid path should start with `$` and is followed by one or more segments like `[123]`,
+          `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
+      * val - Any expression castable to variant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.b', 2);
+       {"a":1,"b":2}
+      > SELECT _FUNC_(parse_json('{}'), '$.a.b', 1);
+       {"a":{"b":1}}
+      > SELECT _FUNC_(parse_json('["a","b","c"]'), '$[1]', 'z');
+       ["a","z","b","c"]
+      > SELECT _FUNC_(parse_json('["a","b"]'), '$[5]', 'z');
+       ["a","b",null,null,null,"z"]
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', 2);
+       NULL
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a.b', 2);
+       NULL
+      > SELECT _FUNC_(parse_json('{}'), '$.a', null);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object TryVariantInsertExpressionBuilder extends VariantInsertExpressionBuilderBase(false)
+
+case class VariantSet(
+    input: Expression,
+    path: Expression,
+    value: Expression,
+    createIfMissing: Expression)
+    extends QuaternaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+
+  override def first: Expression = input
+  override def second: Expression = path
+  override def third: Expression = value
+  override def fourth: Expression = createIfMissing
+
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = VariantType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      VariantType,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      AnyDataType,
+      BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (value.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  // When the path is a foldable expression, parse it once at planning time and cache it. The Java
+  // segments are derived once per task (see `ParsedSetPath`), avoiding a per-row conversion. `None`
+  // means the path is dynamic (or a foldable NULL, which makes the whole expression NULL and is
+  // never evaluated).
+  @transient private lazy val foldablePath: Option[VariantSet.ParsedSetPath] = {
+    if (path.foldable) {
+      val p = path.eval()
+      if (p == null) {
+        None
+      } else {
+        val s = p.asInstanceOf[UTF8String].toString
+        Some(VariantSet.ParsedSetPath(
+          VariantExpressionEvalUtils.parseVariantPath(s, prettyName), s))
+      }
+    } else {
+      None
+    }
+  }
+
+  override protected def nullSafeEval(v: Any, p: Any, valValue: Any, create: Any): Any = {
+    val inputVariant = v.asInstanceOf[VariantVal]
+    val createIfMissingValue = create.asInstanceOf[Boolean]
+    foldablePath match {
+      case Some(parsed) =>
+        VariantExpressionEvalUtils.setAtPath(
+          inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType,
+          createIfMissingValue, prettyName)
+      case None =>
+        VariantExpressionEvalUtils.setAtPath(
+          inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType,
+          createIfMissingValue, prettyName)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal, createVal) => {
+      val fromArg = ctx.addReferenceObj("from", value.dataType)
+      foldablePath match {
+        case Some(parsed) =>
+          val parsedArg = ctx.addReferenceObj("setPath", parsed)
+          s"""
+             |${ev.value} = $cls.setAtPath(
+             |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
+             |  $createVal, "$prettyName");
+           """.stripMargin
+        case None =>
+          s"""
+             |${ev.value} = $cls.setAtPath(
+             |  $vVal, $pVal, $valVal, $fromArg, $createVal, "$prettyName");
+           """.stripMargin
+      }
+    })
+  }
+
+  override def prettyName: String = "variant_set"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression,
+      newSecond: Expression,
+      newThird: Expression,
+      newFourth: Expression): VariantSet =
+    copy(input = newFirst, path = newSecond, value = newThird, createIfMissing = newFourth)
+}
+
+object VariantSet {
+  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
+  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
+  // source string, retained for error messages.
+  case class ParsedSetPath(segments: Array[VariantPathSegment], pathStr: String) {
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path, val[, create_if_missing]) - Sets or upserts a value in a variant at " +
+    "the given JSONPath location. An existing object field or array element at the target is " +
+    "replaced. A missing field, array index, or intermediate path is created, unless " +
+    "`create_if_missing` is false, in which case the variant is left unchanged. Throws an error " +
+    "if a path segment hits a value of an incompatible type. Returns NULL if any argument is " +
+    "NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * path - A string expression evaluating to a JSONPath identifying the set target. A valid
+          path should start with `$` and is followed by one or more segments like `[123]`,
+          `.name`, `['name']`, or `["name"]`. The root path `$` is not allowed.
+      * val - Any expression castable to variant.
+      * create_if_missing - An optional boolean (default true).
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', 2);
+       {"a":2}
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.b', 3);
+       {"a":1,"b":3}
+      > SELECT _FUNC_(parse_json('{"a": {"b": 1}}'), '$.a.c.d', 2);
+       {"a":{"b":1,"c":{"d":2}}}
+      > SELECT _FUNC_(parse_json('["a","b","c"]'), '$[1]', 'z');
+       ["a","z","c"]
+      > SELECT _FUNC_(parse_json('["a","b","c"]'), '$[5]', 'z');
+       ["a","b","c",null,null,"z"]
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.b', 2, false);
+       {"a":1}
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', parse_json('null'));
+       {"a":null}
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.a', null);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+object VariantSetExpressionBuilder extends ExpressionBuilder {
+  override def functionSignature: Option[FunctionSignature] = {
+    val vArg = InputParameter("v")
+    val pathArg = InputParameter("path")
+    val valArg = InputParameter("val")
+    val createIfMissingArg =
+      InputParameter("create_if_missing", Some(Literal.create(true, BooleanType)))
+    Some(FunctionSignature(Seq(vArg, pathArg, valArg, createIfMissingArg)))
+  }
+
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    assert(expressions.size == 4)
+    VariantSet(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path, val) - Appends a value to the array in a variant at the given JSONPath " +
+    "location. Returns the variant unchanged if a path key or index is absent. Throws an error " +
+    "if a path segment hits a value of an incompatible type or the target is not an array. " +
+    "Returns NULL if any argument is NULL.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * path - A string expression evaluating to a JSONPath identifying the target array. A valid
+          path should start with `$` and is followed by zero or more segments like `[123]`, `.name`,
+          `['name']`, or `["name"]`.
+      * val - Any expression castable to variant.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('[1, 2, 3]'), '$', 4);
+       [1,2,3,4]
+      > SELECT _FUNC_(parse_json('{"a": [1, 2]}'), '$.a', 3);
+       {"a":[1,2,3]}
+      > SELECT _FUNC_(parse_json('[1]'), '$', parse_json('[2, 3]'));
+       [1,[2,3]]
+      > SELECT _FUNC_(parse_json('{"a": 1}'), '$.missing', 2);
+       {"a":1}
+      > SELECT _FUNC_(parse_json('[1, 2]'), '$', parse_json('null'));
+       [1,2,null]
+      > SELECT _FUNC_(parse_json('[1, 2]'), '$', null);
+       NULL
+  """,
+  since = "4.3.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+case class VariantArrayAppend(input: Expression, path: Expression, value: Expression)
+    extends TernaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+
+  override def first: Expression = input
+  override def second: Expression = path
+  override def third: Expression = value
+
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = VariantType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true), AnyDataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val result = super.checkInputDataTypes()
+    if (result.isFailure) {
+      result
+    } else if (value.dataType == NullType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else if (!VariantGet.checkDataType(value.dataType, allowStructsAndMaps = false)) {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(value.dataType), "targetType" -> toSQLType(VariantType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  // When the path is a foldable expression, parse it once at planning time and cache it. `None`
+  // means the path is dynamic (or a foldable NULL, which makes the whole expression NULL
+  // and is never evaluated).
+  @transient private lazy val foldablePath: Option[VariantArrayAppend.ParsedAppendPath] = {
+    if (path.foldable) {
+      val p = path.eval()
+      if (p == null) {
+        None
+      } else {
+        val s = p.asInstanceOf[UTF8String].toString
+        Some(VariantArrayAppend.ParsedAppendPath(
+          VariantExpressionEvalUtils.parseVariantPath(s, prettyName, allowRoot = true), s))
+      }
+    } else {
+      None
+    }
+  }
+
+  override protected def nullSafeEval(v: Any, p: Any, valValue: Any): Any = {
+    val inputVariant = v.asInstanceOf[VariantVal]
+    foldablePath match {
+      case Some(parsed) =>
+        VariantExpressionEvalUtils.arrayAppendAtPath(
+          inputVariant, parsed.javaSegments, parsed.pathStr, valValue, value.dataType, prettyName)
+      case None =>
+        VariantExpressionEvalUtils.arrayAppendAtPath(
+          inputVariant, p.asInstanceOf[UTF8String], valValue, value.dataType, prettyName)
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (vVal, pVal, valVal) => {
+      val fromArg = ctx.addReferenceObj("from", value.dataType)
+      foldablePath match {
+        case Some(parsed) =>
+          val parsedArg = ctx.addReferenceObj("appendPath", parsed)
+          s"""
+             |${ev.value} = $cls.arrayAppendAtPath(
+             |  $vVal, $parsedArg.javaSegments(), $parsedArg.pathStr(), $valVal, $fromArg,
+             |  "$prettyName");
+           """.stripMargin
+        case None =>
+          s"""
+             |${ev.value} = $cls.arrayAppendAtPath($vVal, $pVal, $valVal, $fromArg, "$prettyName");
+           """.stripMargin
+      }
+    })
+  }
+
+  override def prettyName: String = "variant_array_append"
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): VariantArrayAppend =
+    copy(input = newFirst, path = newSecond, value = newThird)
+}
+
+object VariantArrayAppend {
+  // Caches a foldable path. `VariantBuilder.PathSegment` is not `Serializable`, so the Java form is
+  // `@transient` and re-derived once per executor task after deserialization. `pathStr` is the
+  // source string, retained for error messages.
+  case class ParsedAppendPath(segments: Array[VariantPathSegment], pathStr: String) {
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
   }
 }
 

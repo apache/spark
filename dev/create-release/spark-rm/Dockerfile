@@ -55,17 +55,13 @@ RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' && \
     python3.11 -m pip cache purge
 
 # Sphinx and documentation packages
-# Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
-# See 'ipython_genutils' in SPARK-38517, 'docutils<0.18.0' in SPARK-39421
-RUN python3.11 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' \
+# See 'ipython_genutils' in SPARK-38517, 'docutils' in SPARK-39421
+RUN python3.11 -m pip install 'sphinx==8.2.3' mkdocs 'pydata_sphinx_theme>=0.13' \
     sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
     ipython ipython_genutils sphinx_plotly_directive 'numpy>=1.23.2' pyarrow pandas \
-    'plotly>=4.8' 'docutils<0.18.0' 'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' \
+    'plotly>=4.8' 'docutils' 'flake8==3.9.0' 'mypy==1.19.1' 'pytest==7.1.3' \
     'pytest-mypy-plugins==1.9.3' 'ruff==0.14.8' 'pandas-stubs==1.2.0.53' \
-    'grpcio==1.76.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
-    'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' \
-    'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' \
-    'sphinxcontrib-serializinghtml==1.1.5'
+    'grpcio==1.76.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
 
 # Set Python 3.11 as the default
 RUN ln -sf "$(which python3.11)" "/usr/local/bin/python" && \

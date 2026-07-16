@@ -1091,3 +1091,38 @@ SetCommand (spark.sql.legacy.typeCoercion.datetimeToString.enabled,Some(false))
 SET spark.sql.ansi.enabled=true
 -- !query analysis
 SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT date_trunc('SECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query analysis
+Project [date_trunc(SECOND, 2020-01-01 04:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(SECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('MICROSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query analysis
+Project [date_trunc(MICROSECOND, 2020-01-01 04:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789 UTC' :: timestamp_ltz(9))
+-- !query analysis
+Project [date_trunc(HOUR, cast(2020-01-01 12:34:56.123456789 UTC as timestamp_ltz(9)), Some(America/Los_Angeles)) AS date_trunc(HOUR, CAST(2020-01-01 12:34:56.123456789 UTC AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('DAY', '2020-01-01 04:00:00.000000123 UTC' :: timestamp_ltz(7))
+-- !query analysis
+Project [date_trunc(DAY, cast(2020-01-01 04:00:00.000000123 UTC as timestamp_ltz(7)), Some(America/Los_Angeles)) AS date_trunc(DAY, CAST(2020-01-01 04:00:00.000000123 UTC AS TIMESTAMP_LTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query analysis
+Project [date_trunc(NANOSECOND, 2020-01-01 04:34:56.123456789, Some(America/Los_Angeles)) AS date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789')#x]
++- OneRowRelation

@@ -92,5 +92,23 @@ public enum TableCatalogCapability {
    * {@link TableCatalog#createTable}.
    * See {@link Column#identityColumnSpec()}.
    */
-  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS
+  SUPPORTS_CREATE_TABLE_WITH_IDENTITY_COLUMNS,
+
+  /**
+   * Signals that the TableCatalog supports Spark auto-filling generated column values and
+   * enforcing generated column constraints during writes.
+   * <p>
+   * When this capability is present, Spark will:
+   * <ul>
+   *   <li>Auto-compute missing generated column values using the generation expression.</li>
+   *   <li>Validate explicitly-provided generated column values against the generation
+   *       expression.</li>
+   * </ul>
+   * <p>
+   * Without this capability, the connector is responsible for handling generated column values
+   * during writes.
+   *
+   * @since 4.3.0
+   */
+  SUPPORT_GENERATED_COLUMN_ON_WRITE
 }

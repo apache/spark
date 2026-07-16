@@ -126,7 +126,13 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
       returnNullable = false))
 
   override def createArrowFieldWriter(vector: ValueVector): Option[ArrowFieldWriter] =
-    Some(new TimestampNTZNanosWriter(vector.asInstanceOf[TimeStampNanoVector]))
+    vector match {
+      case v: TimeStampNanoVector => Some(new TimestampNTZNanosWriter(v))
+      // The lossless struct representation (ArrowUtils.toArrowField with
+      // losslessInternalTypes = true) is backed by a StructVector; its writer needs the
+      // recursively-built child writers, so defer to ArrowWriter's default matching.
+      case _ => None
+    }
 }
 
 /**
@@ -179,5 +185,10 @@ case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
       returnNullable = false))
 
   override def createArrowFieldWriter(vector: ValueVector): Option[ArrowFieldWriter] =
-    Some(new TimestampLTZNanosWriter(vector.asInstanceOf[TimeStampNanoTZVector]))
+    vector match {
+      case v: TimeStampNanoTZVector => Some(new TimestampLTZNanosWriter(v))
+      // See the NTZ counterpart above: the lossless StructVector shape is handled by
+      // ArrowWriter's default matching.
+      case _ => None
+    }
 }

@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File}
 import java.math.BigInteger
 import java.net.URLClassLoader
 import java.time.{Duration, Period, ZoneOffset}
@@ -32,7 +32,8 @@ import scala.reflect.classTag
 import scala.reflect.runtime.{universe => ru}
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
-import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.{BaseVariableWidthViewVector, FieldVector, VarBinaryVector, VectorSchemaRoot, ViewVarBinaryVector, ViewVarCharVector}
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoders, Row}
@@ -256,6 +257,55 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         timeZoneId = "UTC")
       assert(iterator.isEmpty)
       assert(allocator.getAllocatedMemory == 0)
+    }
+  }
+
+  test("deserializing string and binary view vectors") {
+    // The client never produces view-encoded batches itself, but it can receive them, so the
+    // readers must handle them. Mix short (inline, <= 12 bytes) and long (stored in a data
+    // buffer) values to exercise both view-storage paths.
+    val values = Seq("a", "a-string-longer-than-twelve-bytes", null)
+
+    def serializeViewVector(vector: BaseVariableWidthViewVector): Array[Byte] = {
+      vector.allocateNew()
+      values.zipWithIndex.foreach {
+        case (null, i) => vector.setNull(i)
+        case (s, i) =>
+          val bytes = s.getBytes("utf8")
+          vector.setSafe(i, bytes, 0, bytes.length)
+      }
+      vector.setValueCount(values.size)
+      val root = new VectorSchemaRoot(Collections.singletonList[FieldVector](vector))
+      try {
+        val out = new ByteArrayOutputStream()
+        val writer = new ArrowStreamWriter(root, null, out)
+        writer.start()
+        writer.writeBatch()
+        writer.end()
+        out.toByteArray
+      } finally {
+        root.close()
+      }
+    }
+
+    withAllocator { allocator =>
+      val strings = ArrowDeserializers.deserializeFromArrow(
+        Iterator.single(serializeViewVector(new ViewVarCharVector("s", allocator))),
+        StringEncoder,
+        allocator,
+        timeZoneId = "UTC")
+      compareIterators(values.iterator, strings)
+      strings.close()
+
+      val binaries = ArrowDeserializers.deserializeFromArrow(
+        Iterator.single(serializeViewVector(new ViewVarBinaryVector("b", allocator))),
+        BinaryEncoder,
+        allocator,
+        timeZoneId = "UTC")
+      compareIterators(
+        values.iterator.map(Option(_).map(_.getBytes("utf8").toSeq)),
+        binaries.map(Option(_).map(_.toSeq)))
+      binaries.close()
     }
   }
 
