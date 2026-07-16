@@ -1583,7 +1583,10 @@ class Column(TableValuedFunctionArgument):
         --------
         >>> from pyspark.sql import functions as sf
         >>> employees = spark.createDataFrame(
-        ...     [(1, "Alice", 5000, 101), (2, "Bob", 6000, 101), (3, "Charlie", 4500, 102)],
+        ...     [
+        ...         (1, "Alice", 45000, 101), (2, "Bob", 54000, 101), (3, "Charlie", 29000, 102),
+        ...         (4, "David", 61000, 102), (5, "Eve", 48000, 101),
+        ...     ],
         ...     ["id", "name", "salary", "department_id"],
         ... )
         >>> employees.alias("e1").where(
@@ -1591,11 +1594,12 @@ class Column(TableValuedFunctionArgument):
         ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
         ...     ).select(sf.avg("salary")).scalar()
         ... ).select("name", "salary", "department_id").orderBy("name").show()
-        +----+------+-------------+
-        |name|salary|department_id|
-        +----+------+-------------+
-        | Bob|  6000|          101|
-        +----+------+-------------+
+        +-----+------+-------------+
+        | name|salary|department_id|
+        +-----+------+-------------+
+        |  Bob| 54000|          101|
+        |David| 61000|          102|
+        +-----+------+-------------+
         """
         ...
 
