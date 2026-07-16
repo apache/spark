@@ -992,9 +992,9 @@ class BlockManagerMasterEndpoint(
       if (sealedValue.isEmpty) {
         Some(s"$blockId is present but not sealed")
       } else if (locations.exists(bm =>
+          // Skip the external-shuffle-service pseudo-replica: it has no checksum entry of its own.
           bm.port != externalShuffleServicePort &&
             !perReplica.get(bm).contains(sealedValue.get))) {
-        // Skip the external-shuffle-service pseudo-replica: it has no checksum entry of its own.
         Some(s"$blockId sealed to ${sealedValue.get} but the directory tracks a replica whose " +
           s"checksum differs: locations=$locations checksums=$perReplica")
       } else {
