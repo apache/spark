@@ -2533,7 +2533,15 @@ case class AsOfJoin(
     condition: Option[Expression],
     joinType: JoinType,
     orderExpression: Expression,
-    toleranceAssertion: Option[Expression]) extends BinaryNode {
+    toleranceAssertion: Option[Expression],
+    usingColumns: Option[Seq[String]] = None,
+    matchLeftOperand: Option[Expression] = None,
+    matchOperator: Option[MatchComparisonOperator] = None,
+    matchRightOperand: Option[Expression] = None,
+    leftSortExprs: Seq[Expression] = Nil,
+    rightSortExprs: Seq[Expression] = Nil,
+    requiresSortMergeAsOfJoin: Boolean = false)
+    extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported as-of join type $joinType")
@@ -2553,6 +2561,10 @@ case class AsOfJoin(
 
   override lazy val resolved: Boolean = {
     childrenResolved &&
+      usingColumns.isEmpty &&
+      matchLeftOperand.isEmpty &&
+      matchOperator.isEmpty &&
+      matchRightOperand.isEmpty &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
@@ -2586,6 +2598,302 @@ object AsOfJoin {
     val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
     AsOfJoin(left, right, asOfCond, condition, joinType,
       orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+  }
+
+  /**
+   * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
+   * Operand normalization is deferred until analysis when join inputs are resolved.
+   */
+  def fromMatchCondition(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftExpr: Expression,
+      operator: MatchComparisonOperator,
+      rightExpr: Expression,
+      condition: Option[Expression],
+      joinType: JoinType,
+      usingColumns: Option[Seq[String]] = None): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      asOfCondition = Literal.TrueLiteral,
+      condition = condition,
+      joinType = joinType,
+      orderExpression = Literal(0),
+      toleranceAssertion = None,
+      usingColumns = usingColumns,
+      matchLeftOperand = Some(leftExpr),
+      matchOperator = Some(operator),
+      matchRightOperand = Some(rightExpr),
+      requiresSortMergeAsOfJoin = true)
+  }
+
+  private[catalyst] def materializeMatchComparison(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      normalizedOp: MatchComparisonOperator)
+      : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
+    val (asOfCondition, orderExpression) =
+      buildMatchExpressions(leftOperand, rightOperand, normalizedOp)
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(leftOperand, rightOperand)
+    (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
+  }
+
+  /**
+   * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
+   * right-side buffer is ordered consistently with MATCH_CONDITION lexicographic comparison.
+   *
+   * SQL tuple literals `(t.a, t.b)` are flattened to scalar leaves. Whole struct columns
+   * (`t.k >= r.k`) sort by the struct value directly so nested struct shapes stay intact.
+   */
+  def matchSortExpressions(
+      leftOperand: Expression,
+      rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.sameType(rightStruct) && leftStruct.nonEmpty =>
+        if (isSqlTupleStructOperand(leftOperand) || isSqlTupleStructOperand(rightOperand)) {
+          val pairs = collectStructLeafPairs(leftOperand, rightOperand, leftStruct)
+          (pairs.map(_._1), pairs.map(_._2))
+        } else {
+          (Seq(leftOperand), Seq(rightOperand))
+        }
+      case _ =>
+        (Seq(leftOperand), Seq(rightOperand))
+    }
+  }
+
+  /** True for SQL `(col1, col2, ...)` tuple operands, which become [[CreateNamedStruct]]. */
+  private def isSqlTupleStructOperand(operand: Expression): Boolean =
+    operand.isInstanceOf[CreateNamedStruct]
+
+  private[catalyst] def normalizeMatchOperands(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      expr1: Expression,
+      operator: MatchComparisonOperator,
+      expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
+    val leftSet = left.outputSet
+    val rightSet = right.outputSet
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
+    (expr1Side, expr2Side) match {
+      case (Some(true), Some(false)) => (expr1, expr2, operator)
+      case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
+      case _ =>
+        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(expr1, expr2)
+    }
+  }
+
+  private def operandJoinSide(
+      expr: Expression,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet): Option[Boolean] = {
+    val refs = expr.references
+    if (refs.isEmpty) {
+      None
+    } else if (refs.subsetOf(leftSet)) {
+      Some(true)
+    } else if (refs.subsetOf(rightSet)) {
+      Some(false)
+    } else {
+      None
+    }
+  }
+
+  private def buildMatchExpressions(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): (Expression, Expression) = {
+    val (leftForCompare, rightForCompare) =
+      alignOperandsForComparison(leftOperand, rightOperand)
+    val orderExpression = buildOrderExpression(leftOperand, rightOperand, operator)
+    operator match {
+      case GreaterThanOrEqualOp =>
+        (GreaterThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+      case GreaterThanOp =>
+        (GreaterThan(leftForCompare, rightForCompare), orderExpression)
+      case LessThanOrEqualOp =>
+        (LessThanOrEqual(leftForCompare, rightForCompare), orderExpression)
+      case LessThanOp =>
+        (LessThan(leftForCompare, rightForCompare), orderExpression)
+    }
+  }
+
+  private def buildOrderExpression(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): Expression = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (ArrayType(leftElem, _), ArrayType(rightElem, _))
+          if DataTypeUtils.sameType(leftElem, rightElem) =>
+        buildArrayOrderExpression(leftOperand, rightOperand, leftElem, operator)
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
+        buildFlattenedStructOrderExpression(
+          leftOperand, rightOperand, leftStruct, operator)
+      case _ =>
+        buildLeafOrderExpression(leftOperand, rightOperand, operator)
+    }
+  }
+
+  /**
+   * Tuple/struct operands may use different field names on each side. Rewrite them to positional
+   * structs with matching schemas so comparison and ordering type-check.
+   */
+  private def alignOperandsForComparison(
+      leftOperand: Expression,
+      rightOperand: Expression): (Expression, Expression) = {
+    decomposeStructOperands(leftOperand, rightOperand) match {
+      case Some(pairs) =>
+        val aligned = pairs.map { case (left, right) =>
+          alignOperandsForComparison(left, right)
+        }
+        (CreateStruct(aligned.map(_._1)), CreateStruct(aligned.map(_._2)))
+      case None =>
+        (leftOperand, rightOperand)
+    }
+  }
+
+  private def buildLeafOrderExpression(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): Expression = {
+    if (supportsSubtract(leftOperand.dataType)) {
+      operator match {
+        case GreaterThanOrEqualOp | GreaterThanOp =>
+          Subtract(leftOperand, rightOperand)
+        case LessThanOrEqualOp | LessThanOp =>
+          Subtract(rightOperand, leftOperand)
+      }
+    } else {
+      buildSignedComparisonDistance(leftOperand, rightOperand, operator)
+    }
+  }
+
+  private[catalyst] def supportsSubtract(dataType: DataType): Boolean = {
+    dataType match {
+      case _: NumericType | _: DayTimeIntervalType | _: YearMonthIntervalType |
+           _: CalendarIntervalType | _: TimestampType | _: TimestampNTZType | _: DateType =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  private def buildSignedComparisonDistance(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      operator: MatchComparisonOperator): Expression = {
+    val (greaterValue, lesserValue) = operator match {
+      case GreaterThanOrEqualOp | GreaterThanOp => (Literal(1), Literal(-1))
+      case LessThanOrEqualOp | LessThanOp => (Literal(-1), Literal(1))
+    }
+    If(
+      EqualTo(leftOperand, rightOperand),
+      Literal(0),
+      If(GreaterThan(leftOperand, rightOperand), greaterValue, lesserValue))
+  }
+
+  private def buildArrayOrderExpression(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      elementType: DataType,
+      operator: MatchComparisonOperator): Expression = {
+    elementType match {
+      case struct: StructType =>
+        val leftElement = NamedLambdaVariable("left_elem", struct, nullable = true)
+        val rightElement = NamedLambdaVariable("right_elem", struct, nullable = true)
+        val leafDiffs = collectStructLeafPairs(leftElement, rightElement, struct).map {
+          case (left, right) => buildLeafOrderExpression(left, right, operator)
+        }
+        val elementOrder = wrapCompositeOrderExpression(
+          leafDiffs,
+          ArrayType(struct, containsNull = true))
+        ZipWith(
+          leftOperand,
+          rightOperand,
+          LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
+      case _ =>
+        val leftElement = NamedLambdaVariable("left_elem", elementType, nullable = true)
+        val rightElement = NamedLambdaVariable("right_elem", elementType, nullable = true)
+        val elementOrder = buildLeafOrderExpression(leftElement, rightElement, operator)
+        ZipWith(
+          leftOperand,
+          rightOperand,
+          LambdaFunction(elementOrder, Seq(leftElement, rightElement)))
+    }
+  }
+
+  private def buildFlattenedStructOrderExpression(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      structType: StructType,
+      operator: MatchComparisonOperator): Expression = {
+    val leafDiffs = collectStructLeafPairs(leftOperand, rightOperand, structType).map {
+      case (left, right) => buildLeafOrderExpression(left, right, operator)
+    }
+    wrapCompositeOrderExpression(leafDiffs, structType)
+  }
+
+  private def collectStructLeafPairs(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      structType: StructType): Seq[(Expression, Expression)] = {
+    structFieldExprs(leftOperand, structType)
+      .zip(structFieldExprs(rightOperand, structType))
+      .flatMap {
+        case (left, right) =>
+          (left.dataType, right.dataType) match {
+            case (leftStruct: StructType, rightStruct: StructType)
+                if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
+              collectStructLeafPairs(left, right, leftStruct)
+            case _ =>
+              Seq((left, right))
+          }
+      }
+  }
+
+  private def wrapCompositeOrderExpression(
+      diffs: Seq[Expression],
+      compositeType: DataType): Expression = {
+    diffs match {
+      case Seq(single) => single
+      case _ =>
+        compositeType match {
+          case _: ArrayType => CreateArray(diffs)
+          case _ => CreateStruct(diffs)
+        }
+    }
+  }
+
+  /** Positional struct fields when both operands are the same struct shape. */
+  private def decomposeStructOperands(
+      leftOperand: Expression,
+      rightOperand: Expression): Option[Seq[(Expression, Expression)]] = {
+    (leftOperand.dataType, rightOperand.dataType) match {
+      case (leftStruct: StructType, rightStruct: StructType)
+          if leftStruct.length == rightStruct.length && leftStruct.nonEmpty =>
+        val leftFields = structFieldExprs(leftOperand, leftStruct)
+        val rightFields = structFieldExprs(rightOperand, rightStruct)
+        if (leftFields.length == rightFields.length) {
+          Some(leftFields.zip(rightFields))
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  private def structFieldExprs(
+      operand: Expression,
+      structType: StructType): Seq[Expression] = {
+    operand match {
+      case ns: CreateNamedStruct => ns.valExprs
+      case _ =>
+        structType.indices.map(index =>
+          GetStructField(operand, index, Some(structType(index).name)))
+    }
   }
 
   private def makeAsOfCond(

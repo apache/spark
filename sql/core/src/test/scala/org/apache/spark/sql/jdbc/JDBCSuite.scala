@@ -912,7 +912,9 @@ class JDBCSuite extends SharedSparkSession {
 
   test("Default jdbc dialect registration") {
     assert(JdbcDialects.get("jdbc:mysql://127.0.0.1/db") === MySQLDialect())
+    assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === MySQLDialect())
     assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:aws-wrapper:postgresql://127.0.0.1/db") === PostgresDialect())
     assert(JdbcDialects.get("jdbc:db2://127.0.0.1/db") === DB2Dialect())
     assert(JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db") === MsSqlServerDialect())
     assert(JdbcDialects.get("jdbc:derby:db") === DerbyDialect())
@@ -941,6 +943,33 @@ class JDBCSuite extends SharedSparkSession {
       verify(stmt).executeQuery(sqlCaptor.capture())
       assert(sqlCaptor.getValue.contains(expectedClause),
         s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+    }
+  }
+
+  test("SPARK-57960: (H2|Postgres)Dialect escape a single quote in indexExists table/schema name") {
+    // indexExists also embeds the table (and, for H2, schema) name as a SQL string literal, so a
+    // single quote in the identifier must be escaped too, consistent with the index-name escaping.
+    val ident = Identifier.of(Array("sch'ema"), "ta'ble")
+    Seq(
+      "jdbc:h2:mem:testdb0" -> Seq("TABLE_SCHEMA = 'sch''ema'", "TABLE_NAME = 'ta''ble'"),
+      "jdbc:postgresql://127.0.0.1/db" -> Seq("tablename = 'ta''ble'")
+    ).foreach { case (jdbcUrl, expectedClauses) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "idx", ident, options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      expectedClauses.foreach { expectedClause =>
+        assert(sqlCaptor.getValue.contains(expectedClause),
+          s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+      }
     }
   }
 
@@ -1045,6 +1074,69 @@ class JDBCSuite extends SharedSparkSession {
     val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](a))
     assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+  }
+
+  test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
+    val dialect = JdbcDialects.get("jdbc:")
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val a = FieldReference("a")
+    val b = FieldReference("b")
+    val one = LiteralValue(1, IntegerType)
+    val two = LiteralValue(2, IntegerType)
+
+    // An IN operand must be parenthesized: `"a" IN (1, 2) IS NULL` is invalid SQL (PostgreSQL,
+    // for example, rejects it), and BooleanSimplification produces IsNotNull(In(...)) from
+    // `x IN (...) OR x NOT IN (...)`. MsSqlServer has no boolean type, so IS [NOT] NULL over any
+    // predicate operand is not pushed down there at all.
+    val in = new Predicate("IN", Array[V2Expression](a, one, two))
+    for ((isNullOp, keyword) <- Seq("IS_NULL" -> "IS NULL", "IS_NOT_NULL" -> "IS NOT NULL")) {
+      val expr = new Predicate(isNullOp, Array[V2Expression](in))
+      assert(dialect.compileExpression(expr).get === s"""("a" IN (1, 2)) $keyword""")
+      assert(msSqlServer.compileExpression(expr).isEmpty)
+    }
+
+    // The boolean connectives are parenthesized as well.
+    val eqA = new Predicate("=", Array[V2Expression](a, one))
+    val eqB = new Predicate("=", Array[V2Expression](b, two))
+    val and = new Predicate("AND", Array[V2Expression](eqA, eqB))
+    val or = new Predicate("OR", Array[V2Expression](eqA, eqB))
+    val not = new Predicate("NOT", Array[V2Expression](eqA))
+    assert(dialect.compileExpression(new Predicate("IS_NULL", Array[V2Expression](and))).get ===
+      """(("a" = 1) AND ("b" = 2)) IS NULL""")
+    assert(dialect.compileExpression(new Predicate("IS_NOT_NULL", Array[V2Expression](or))).get ===
+      """(("a" = 1) OR ("b" = 2)) IS NOT NULL""")
+    assert(dialect.compileExpression(new Predicate("IS_NULL", Array[V2Expression](not))).get ===
+      """(NOT ("a" = 1)) IS NULL""")
+    Seq(and, or, not).foreach { p =>
+      val isNull = new Predicate("IS_NULL", Array[V2Expression](p))
+      assert(msSqlServer.compileExpression(isNull).isEmpty)
+    }
+
+    // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
+    // LiteralValue for StringType must use UTF8String (Spark's internal string type).
+    import org.apache.spark.unsafe.types.UTF8String
+    for ((op, pattern) <- Seq(
+        "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
+      val like = new Predicate(op,
+        Array[V2Expression](a, LiteralValue(UTF8String.fromString("abc"), StringType)))
+      val isNullLike = new Predicate("IS_NULL", Array[V2Expression](like))
+      assert(dialect.compileExpression(isNullLike).get ===
+        raw"""("a" LIKE '$pattern' ESCAPE '\') IS NULL""")
+      assert(msSqlServer.compileExpression(isNullLike).isEmpty)
+    }
+
+    // Arithmetic operands are parenthesized; they are value expressions, not predicates, so
+    // MsSqlServer still pushes them down.
+    val plus = new GeneralScalarExpression("+", Array[V2Expression](a, b))
+    val isNullPlus = new Predicate("IS_NULL", Array[V2Expression](plus))
+    assert(dialect.compileExpression(isNullPlus).get === """("a" + "b") IS NULL""")
+    assert(msSqlServer.compileExpression(isNullPlus).get === """("a" + "b") IS NULL""")
+
+    // Self-delimiting operands are left unwrapped: function calls render as `f(...)` already.
+    val abs = new GeneralScalarExpression("ABS", Array[V2Expression](a))
+    assert(h2.compileExpression(new Predicate("IS_NULL", Array[V2Expression](abs))).get ===
+      """ABS("a") IS NULL""")
   }
 
   test("SPARK-57332: escape backslash in LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {

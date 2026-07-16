@@ -1197,3 +1197,43 @@ SELECT date_format(NULL :: timestamp_ltz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
 struct<date_format(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
 -- !query output
 NULL
+
+
+-- !query
+SELECT date_trunc('SECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query schema
+struct<date_trunc(SECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
+-- !query output
+2020-01-01 04:34:56
+
+
+-- !query
+SELECT date_trunc('MICROSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query schema
+struct<date_trunc(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
+-- !query output
+2020-01-01 04:34:56.123456
+
+
+-- !query
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789 UTC' :: timestamp_ltz(9))
+-- !query schema
+struct<date_trunc(HOUR, CAST(2020-01-01 12:34:56.123456789 UTC AS TIMESTAMP_LTZ(9))):timestamp_ltz(9)>
+-- !query output
+2020-01-01 04:00:00
+
+
+-- !query
+SELECT date_trunc('DAY', '2020-01-01 04:00:00.000000123 UTC' :: timestamp_ltz(7))
+-- !query schema
+struct<date_trunc(DAY, CAST(2020-01-01 04:00:00.000000123 UTC AS TIMESTAMP_LTZ(7))):timestamp_ltz(7)>
+-- !query output
+2019-12-31 00:00:00
+
+
+-- !query
+SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
+-- !query schema
+struct<date_trunc(NANOSECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
+-- !query output
+NULL

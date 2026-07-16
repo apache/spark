@@ -347,3 +347,14 @@ SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'HH:mm:ss
 SELECT date_format(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
 -- NULL nanosecond timestamp.
 SELECT date_format(NULL :: timestamp_ltz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS');
+
+-- SPARK-57821: date_trunc keeps the nanosecond type/family and zeroes the whole fraction (including
+-- the sub-microsecond digits); MICROSECOND keeps epochMicros and only drops nanosWithinMicro. LTZ
+-- truncates in the session time zone (America/Los_Angeles, UTC-08:00), so DAY over an early-hours
+-- UTC instant floors to the previous calendar day in the session zone.
+SELECT date_trunc('SECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC');
+SELECT date_trunc('MICROSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC');
+SELECT date_trunc('HOUR', '2020-01-01 12:34:56.123456789 UTC' :: timestamp_ltz(9));
+SELECT date_trunc('DAY', '2020-01-01 04:00:00.000000123 UTC' :: timestamp_ltz(7));
+-- An unsupported (sub-microsecond) unit yields NULL; the result still carries the nanos type.
+SELECT date_trunc('NANOSECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC');

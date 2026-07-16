@@ -152,14 +152,19 @@ case class ColumnarToRowExec(child: SparkPlan)
         (name, s"$name = ($columnVectorClz) $batch.column($i);")
     }.unzip
 
+    // The type-independent advance machinery (releasing the current batch, fetching the next one
+    // and bumping the metrics) is a compiled helper; only the per-column vector casts are emitted.
+    // Exception-path note: if the helper throws after releasing the current batch (the input
+    // iterator failing mid-scan), the field briefly keeps referencing the released batch. That
+    // state is unobservable: the cleanup block below is not in a finally, a failed task's
+    // iterator is never pumped again, and reader-owned batches are not freeable to begin with.
     val nextBatch = ctx.freshName("nextBatch")
     val nextBatchFuncName = ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
-         |  if ($input.hasNext()) {
-         |    $batch = ($columnarBatchClz)$input.next();
-         |    $numInputBatches.add(1);
-         |    $numOutputRows.add($batch.numRows());
+         |  $batch = org.apache.spark.sql.execution.ColumnarToRowExec.advanceBatch(
+         |    $input, $batch, $numInputBatches, $numOutputRows);
+         |  if ($batch != null) {
          |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}
          |  }
@@ -191,8 +196,6 @@ case class ColumnarToRowExec(child: SparkPlan)
        |    $shouldStop
        |  }
        |  $idx = $numRows;
-       |  $batch.closeIfFreeable();
-       |  $batch = null;
        |  $nextBatchFuncName();
        |}
        |// clean up resources
@@ -208,6 +211,33 @@ case class ColumnarToRowExec(child: SparkPlan)
 
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarToRowExec =
     copy(child = newChild)
+}
+
+object ColumnarToRowExec {
+  /**
+   * Releases the current batch (if any) and fetches the next one from the input iterator,
+   * bumping the batch/row metrics. Returns null when the input is exhausted. This is called by
+   * the generated code of [[ColumnarToRowExec]] (through the static forwarder), so the
+   * type-independent per-batch bookkeeping is compiled once per JVM instead of being re-emitted
+   * into every stage's generated `nextBatch` method.
+   */
+  def advanceBatch(
+      input: Iterator[ColumnarBatch],
+      current: ColumnarBatch,
+      numInputBatches: SQLMetric,
+      numOutputRows: SQLMetric): ColumnarBatch = {
+    if (current != null) {
+      current.closeIfFreeable()
+    }
+    if (input.hasNext) {
+      val batch = input.next()
+      numInputBatches.add(1)
+      numOutputRows.add(batch.numRows())
+      batch
+    } else {
+      null
+    }
+  }
 }
 
 /**

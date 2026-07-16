@@ -26,11 +26,12 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationChanges, Re
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -434,6 +435,18 @@ class PlanParserSuite extends AnalysisTest {
         fragment = "order by a distribute by a",
         start = 16,
         stop = 41))
+  }
+
+  test("DISTRIBUTE BY is not supported in the Catalyst parser") {
+    val sql = "select * from t distribute by a"
+    checkError(
+      exception = parseException(sql),
+      condition = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "distribute by a",
+        start = 16,
+        stop = 30))
   }
 
   test("insert into") {
@@ -952,17 +965,112 @@ class PlanParserSuite extends AnalysisTest {
         stop = 73))
   }
 
+  test("asof join") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner).select(star()))
+
+      assertEqual(
+        "select * from t left asof join u match_condition (t.a >= u.a) on t.b = u.b",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          Some($"t.b" === $"u.b"),
+          LeftOuter).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (t.a >= u.a) using (b)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"t.a",
+          GreaterThanOrEqualOp,
+          $"u.a",
+          None,
+          Inner,
+          usingColumns = Some(Seq("b"))).select(star()))
+
+      assertEqual(
+        "select * from t asof join u match_condition (u.a <= t.a)",
+        AsOfJoin.fromMatchCondition(
+          table("t"),
+          table("u"),
+          $"u.a",
+          LessThanOrEqualOp,
+          $"t.a",
+          None,
+          Inner).select(star()))
+    }
+  }
+
+  test("asof join - invalid match operator") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      val sql =
+        "select * from t asof join u match_condition (t.a = u.a)"
+      checkError(
+        exception = parseException(sql),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "="),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a = u.a)",
+            start = 16,
+            stop = 54)))
+    }
+  }
+
+  test("asof join - compound match condition rejected") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "true") {
+      checkError(
+        exception = parseException(
+          "select * from t asof join u match_condition (t.a >= u.a and t.b >= u.b)"),
+        condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+        sqlState = Some("42K0E"),
+        parameters = Map("operator" -> "AND"),
+        queryContext = Array(
+          ExpectedContext(
+            fragment = "asof join u match_condition (t.a >= u.a and t.b >= u.b)",
+            start = 16,
+            stop = 70)))
+    }
+  }
+
+  test("asof join disabled by default") {
+    withSQLConf(SQLConf.SQL_ASOF_JOIN_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException("select * from t asof join u match_condition (t.a >= u.a)"),
+        condition = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+        sqlState = "0A000",
+        parameters = Map("config" -> "\"spark.sql.join.asofJoin.enabled\""),
+        context = ExpectedContext(
+          fragment = "asof join u match_condition (t.a >= u.a)",
+          start = 16,
+          stop = 55))
+    }
+  }
+
   test("nearest-by keywords are non-reserved (usable as identifiers)") {
-    // The five new keywords (APPROX, DISTANCE, EXACT, NEAREST, SIMILARITY) must remain
-    // non-reserved so they can continue to be used as column or table identifiers.
-    Seq("approx", "distance", "exact", "nearest", "similarity").foreach { kw =>
+    // Spark-specific join keywords must remain non-reserved so they can be used as identifiers.
+    Seq("approx", "asof", "distance", "exact", "nearest", "similarity").foreach { kw =>
       // As a column identifier in the SELECT list.
       parsePlan(s"select $kw from t")
       // As a table identifier in the FROM clause.
       parsePlan(s"select * from $kw")
     }
-    // All five together in a single SELECT list.
-    parsePlan("select approx, distance, exact, nearest, similarity from t")
+    // All six together in a single SELECT list.
+    parsePlan("select approx, asof, distance, exact, nearest, similarity from t")
   }
 
   test("sampled relations") {
@@ -2191,6 +2299,121 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment,
         start = 20,
         stop = 38))
+  }
+
+  test("at syntax time travel") {
+    def versionPlan(version: String): LogicalPlan = {
+      Project(Seq(UnresolvedStar(None)),
+        RelationTimeTravel(UnresolvedRelation(Seq("a", "b", "c")), None, Some(version)))
+    }
+    assertEqual("SELECT * FROM a.b.c@v123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c@V123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c @v123456789", versionPlan("123456789"))
+    assertEqual("SELECT * FROM a.b.c@v'Snapshot123456789'", versionPlan("Snapshot123456789"))
+
+    val micros = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    assertEqual("SELECT * FROM a.b.c@20190129003758000",
+      Project(Seq(UnresolvedStar(None)),
+        RelationTimeTravel(
+          UnresolvedRelation(Seq("a", "b", "c")),
+          Some(Literal(micros, TimestampType)),
+          None)))
+
+    val microsWithMillis = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58.123"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    assertEqual("SELECT * FROM a.b.c@20190129003758123",
+      Project(Seq(UnresolvedStar(None)),
+        RelationTimeTravel(
+          UnresolvedRelation(Seq("a", "b", "c")),
+          Some(Literal(microsWithMillis, TimestampType)),
+          None)))
+
+    assertEqual("SELECT * FROM `t@v1`",
+      Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("t@v1"))))
+
+    // A non-time-travel '@' suffix is always a parse error.
+    Seq("SELECT * FROM a@foo", "SELECT * FROM a@", "SELECT * FROM a@v").foreach { q =>
+      assert(intercept[ParseException](parsePlan(q)).getCondition == "PARSE_SYNTAX_ERROR",
+        s"expected PARSE_SYNTAX_ERROR for: $q")
+    }
+
+    // The '@' suffix conflicts with an AS OF clause.
+    checkError(
+      exception = parseException("SELECT * FROM t@v1 VERSION AS OF 2"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "VERSION AS OF 2", start = 19, stop = 33))
+    checkError(
+      exception = parseException("SELECT * FROM t@v1 TIMESTAMP AS OF '2019-01-29'"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "TIMESTAMP AS OF '2019-01-29'", start = 19, stop = 46))
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129003758000 VERSION AS OF 2"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "VERSION AS OF 2", start = 34, stop = 48))
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129003758000 TIMESTAMP AS OF '2019-01-29'"),
+      condition = "MULTIPLE_TIME_TRAVEL_SPEC",
+      parameters = Map.empty,
+      context = ExpectedContext(fragment = "TIMESTAMP AS OF '2019-01-29'", start = 34, stop = 61))
+
+    checkError(
+      exception = parseException("SELECT * FROM t@123"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "123", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@123", start = 14, stop = 18))
+
+    checkError(
+      exception = parseException("SELECT * FROM t@20191301000000000"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20191301000000000", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20191301000000000", start = 14, stop = 32))
+
+    // Wrong-length timestamps are rejected.
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129003758"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20190129003758", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20190129003758", start = 14, stop = 29))
+    checkError(
+      exception = parseException("SELECT * FROM t@20190129"),
+      condition = "INVALID_TIME_TRAVEL_TIMESTAMP_FORMAT",
+      parameters = Map("timestamp" -> "20190129", "format" -> "yyyyMMddHHmmssSSS"),
+      context = ExpectedContext(fragment = "t@20190129", start = 14, stop = 23))
+
+    assert(intercept[ParseException] {
+      parsePlan("INSERT INTO t@v1 VALUES (1)")
+    }.getCondition == "PARSE_SYNTAX_ERROR")
+
+    withSQLConf(SQLConf.TIME_TRAVEL_AT_SYNTAX_ENABLED.key -> "false") {
+      checkError(
+        exception = parseException("SELECT * FROM t@v1"),
+        condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL_AT_SYNTAX",
+        parameters = Map("config" -> "\"spark.sql.timeTravel.atSyntax.enabled\""),
+        context = ExpectedContext(fragment = "t@v1", start = 14, stop = 17))
+    }
+  }
+
+  test("parseTemporalTableIdentifier") {
+    assert(parseTemporalTableIdentifier("a.b") ===
+      TemporalIdentifier(Seq("a", "b"), None, None))
+    assert(parseTemporalTableIdentifier("a.b@v5") ===
+      TemporalIdentifier(Seq("a", "b"), None, Some("5")))
+    assert(parseTemporalTableIdentifier("`t@v1`") ===
+      TemporalIdentifier(Seq("t@v1"), None, None))
+    val micros = DateTimeUtils.stringToTimestampAnsi(
+      UTF8String.fromString("2019-01-29 00:37:58"),
+      DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+    assert(parseTemporalTableIdentifier("t@20190129003758000") ===
+      TemporalIdentifier(Seq("t"), Some(Literal(micros, TimestampType)), None))
+    Seq("a.b@x", "a@foo", "a@", "a@v").foreach { s =>
+      intercept[ParseException](parseTemporalTableIdentifier(s))
+    }
   }
 
   test("CHANGES clause - version range") {

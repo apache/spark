@@ -84,6 +84,7 @@ def get_sbt_runtime_classpath(project_relative_path, project_name_map):
             cwd=SPARK_HOME,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=180,
         )
 
@@ -138,7 +139,7 @@ def read_classpath(project_relative_path, project_name_map=None):
 
     # First try to read classpath.txt (Maven builds)
     if os.path.exists(classpath_file):
-        with open(classpath_file, "r") as f:
+        with open(classpath_file, "r", encoding="utf-8") as f:
             classpath = f.read().strip()
         # Replace colon with comma for spark-submit --jars format
         return classpath.replace(":", ",")

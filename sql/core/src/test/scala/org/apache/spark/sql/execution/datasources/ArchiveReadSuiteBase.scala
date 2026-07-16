@@ -30,8 +30,8 @@ import org.apache.spark.util.Utils
 
 /**
  * Format- and archive-agnostic end-to-end tests for reading archives of data files through the
- * streaming [[ArchiveReader]] path. Entries are streamed (never unpacked to disk), and the central
- * contract verified throughout is parity with reading the same files from a directory.
+ * streaming [[SupportsArchiveFormat]] path. Entries are streamed (never unpacked to disk), and the
+ * central contract verified throughout is parity with reading the same files from a directory.
  *
  * A concrete suite binds the abstract hooks below by mixing in a file-format trait (e.g.
  * [[org.apache.spark.sql.execution.datasources.CSVArchiveReadBase]]) and an archive-format trait

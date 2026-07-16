@@ -175,7 +175,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val scaleFactor = math.pow(10, precision).toLong
     val scaledFraction = (nanos % NANOS_PER_SECOND) * scaleFactor / NANOS_PER_SECOND
     val fraction = scaledFraction.toDouble / scaleFactor
-    Decimal(seconds + fraction, 8, 6)
+    Decimal(seconds + fraction, 2 + precision, precision)
   }
 
   /**
@@ -643,6 +643,21 @@ object DateTimeUtils extends SparkDateTimeUtils {
       case TRUNC_TO_DAY => truncToUnit(micros, zoneId, ChronoUnit.DAYS)
       case _ => daysToMicros(truncDate(microsToDays(micros, zoneId), level), zoneId)
     }
+  }
+
+  /**
+   * Truncates a nanosecond-precision timestamp to the unit given by `level`. `epochMicros` is
+   * truncated with the same [[truncTimestamp]] used by microsecond timestamps, and the
+   * sub-microsecond `nanosWithinMicro` is always dropped: `date_trunc`'s finest supported unit
+   * is MICROSECOND (see `MIN_LEVEL_OF_TIMESTAMP_TRUNC`), which already discards everything below
+   * a microsecond. NTZ vs. LTZ zone handling is the caller's responsibility via `zoneId`.
+   */
+  def truncTimestampNanos(
+      value: TimestampNanosVal,
+      level: Int,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val truncatedMicros = truncTimestamp(value.epochMicros, level, zoneId)
+    TimestampNanosVal.fromParts(truncatedMicros, 0.toShort)
   }
 
   /**

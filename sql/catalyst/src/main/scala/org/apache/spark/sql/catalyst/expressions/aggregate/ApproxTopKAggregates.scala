@@ -24,12 +24,13 @@ import org.apache.datasketches.common._
 import org.apache.datasketches.frequencies.{ErrorType, ItemsSketch}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ArrayOfDecimalsSerDe, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
+import org.apache.spark.sql.catalyst.expressions.{ArrayOfCollatedStringsSerDe, ArrayOfDecimalsSerDe, CollatedString, Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -69,6 +70,11 @@ import org.apache.spark.unsafe.types.UTF8String
 
       > SELECT _FUNC_(expr, 10, 100) FROM VALUES (0), (1), (1), (2), (2), (2) AS tab(expr);
        [{"item":2,"count":3},{"item":1,"count":2},{"item":0,"count":1}]
+  """,
+  note = """
+    When `expr` is a string with a non-UTF8_BINARY collation, values that are equal under the
+    collation are counted as one item, and the returned item is one of the actual input values of
+    that group; which one is returned is not deterministic (as with the `mode` function).
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -253,8 +259,12 @@ object ApproxTopK {
         new ItemsSketch[Long](maxMapSize).asInstanceOf[ItemsSketch[Any]]
       case _: DoubleType =>
         new ItemsSketch[Double](maxMapSize).asInstanceOf[ItemsSketch[Any]]
-      case _: StringType =>
-        new ItemsSketch[String](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+      case st: StringType =>
+        if (UnsafeRowUtils.isBinaryStable(st)) {
+          new ItemsSketch[String](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+        } else {
+          new ItemsSketch[CollatedString](maxMapSize).asInstanceOf[ItemsSketch[Any]]
+        }
       case _: DecimalType =>
         new ItemsSketch[Decimal](maxMapSize).asInstanceOf[ItemsSketch[Any]]
     }
@@ -269,8 +279,12 @@ object ApproxTopK {
         new ArrayOfLongsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
       case _: DoubleType =>
         new ArrayOfDoublesSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
-      case _: StringType =>
-        new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+      case st: StringType =>
+        if (UnsafeRowUtils.isBinaryStable(st)) {
+          new ArrayOfStringsSerDe().asInstanceOf[ArrayOfItemsSerDe[Any]]
+        } else {
+          new ArrayOfCollatedStringsSerDe(st.collationId).asInstanceOf[ArrayOfItemsSerDe[Any]]
+        }
       case dt: DecimalType =>
         new ArrayOfDecimalsSerDe(dt).asInstanceOf[ArrayOfItemsSerDe[Any]]
     }
@@ -285,7 +299,9 @@ object ApproxTopK {
 
   def dataTypeToDDL(dataType: DataType): String = dataType match {
     case _: StringType =>
-      // Hide collation information in DDL format, otherwise CollationExpressionWalkerSuite fails
+      // Strip collation from the user-facing state DDL to keep the persisted format stable across
+      // collations. Collation is recovered from the state struct's static field-2 type (see
+      // withCollationOf in ApproxTopKCombine.update and the JSON encoding in CombineInternal).
       s"item string not null"
     case other =>
       StructField("item", other, nullable = false).toDDL
@@ -293,6 +309,11 @@ object ApproxTopK {
 
   def DDLToDataType(ddl: String): DataType = {
     StructType.fromDDL(ddl).fields.head.dataType
+  }
+
+  def withCollationOf(base: DataType, source: DataType): DataType = (base, source) match {
+    case (_: StringType, st: StringType) => st
+    case _ => base
   }
 
   def checkStateFieldAndType(state: Expression): TypeCheckResult = {
@@ -358,8 +379,14 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
         case _: TimestampNTZType =>
           sketch.asInstanceOf[ItemsSketch[Long]].update(v.asInstanceOf[Long])
         case st: StringType =>
-          val cKey = CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
-          sketch.asInstanceOf[ItemsSketch[String]].update(cKey.toString)
+          val orig = v.asInstanceOf[UTF8String]
+          if (UnsafeRowUtils.isBinaryStable(st)) {
+            sketch.asInstanceOf[ItemsSketch[String]].update(orig.toString)
+          } else {
+            val cKey = CollationFactory.getCollationKey(orig, st.collationId).toString
+            sketch.asInstanceOf[ItemsSketch[CollatedString]]
+              .update(new CollatedString(cKey, orig.toString))
+          }
         case _: DecimalType =>
           sketch.asInstanceOf[ItemsSketch[Decimal]].update(v.asInstanceOf[Decimal])
       }
@@ -429,7 +456,12 @@ class ApproxTopKAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullC
                _: DateType | _: TimestampType | _: TimestampNTZType =>
             curFrequentItem.getItem
           case _: StringType =>
-            UTF8String.fromString(curFrequentItem.getItem.asInstanceOf[String])
+            curFrequentItem.getItem match {
+              case cs: CollatedString => UTF8String.fromString(cs.original)
+              case s: String => UTF8String.fromString(s)
+              case other => throw SparkException.internalError(
+                s"Unexpected sketch item type for a string column: ${other.getClass.getName}")
+            }
         }
         fiIndex += 1 // move to next frequent item
         (item, itemEstimate)
@@ -653,22 +685,25 @@ class CombineInternal[T](
    * Serialize the CombineInternal instance to a byte array.
    * Serialization format:
    *     maxItemsTracked (4 bytes int) +
-   *     itemDataTypeDDL length n in byte  (4 bytes int) +
-   *     itemDataTypeDDL (n bytes) +
+   *     itemDataType JSON length n in byte  (4 bytes int) +
+   *     itemDataType JSON (n bytes) +
    *     sketchBytes
+   *
+   * The item data type is encoded as collation-preserving JSON (not the collation-stripped DDL)
+   * so that a collated sketch is deserialized and merged by collation key across shuffle
+   * boundaries (SPARK-58069).
    */
   def serialize(): Array[Byte] = {
     val sketchWithNullCountBytes = sketchWithNullCount.serialize(
       ApproxTopK.genSketchSerDe(itemDataType).asInstanceOf[ArrayOfItemsSerDe[T]])
-    val itemDataTypeDDL = ApproxTopK.dataTypeToDDL(itemDataType)
-    val ddlBytes: Array[Byte] = itemDataTypeDDL.getBytes(StandardCharsets.UTF_8)
+    val typeBytes: Array[Byte] = itemDataType.json.getBytes(StandardCharsets.UTF_8)
     val byteArray = new Array[Byte](
-      sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + ddlBytes.length)
+      sketchWithNullCountBytes.length + Integer.BYTES + Integer.BYTES + typeBytes.length)
 
     val byteBuffer = ByteBuffer.wrap(byteArray)
     byteBuffer.putInt(maxItemsTracked)
-    byteBuffer.putInt(ddlBytes.length)
-    byteBuffer.put(ddlBytes)
+    byteBuffer.putInt(typeBytes.length)
+    byteBuffer.put(typeBytes)
     byteBuffer.put(sketchWithNullCountBytes)
     byteArray
   }
@@ -679,22 +714,21 @@ object CombineInternal {
    * Deserialize a byte array to a CombineInternal instance.
    * Serialization format:
    *     maxItemsTracked (4 bytes int) +
-   *     itemDataTypeDDL length n in byte  (4 bytes int) +
-   *     itemDataTypeDDL (n bytes) +
+   *     itemDataType JSON length n in byte  (4 bytes int) +
+   *     itemDataType JSON (n bytes) +
    *     sketchBytes
    */
   def deserialize(buffer: Array[Byte]): CombineInternal[Any] = {
     val byteBuffer = ByteBuffer.wrap(buffer)
     // read maxItemsTracked
     val maxItemsTracked = byteBuffer.getInt
-    // read itemDataTypeDDL
-    val ddlLength = byteBuffer.getInt
-    val ddlBytes = new Array[Byte](ddlLength)
-    byteBuffer.get(ddlBytes)
-    val itemDataTypeDDL = new String(ddlBytes, StandardCharsets.UTF_8)
-    val itemDataType = ApproxTopK.DDLToDataType(itemDataTypeDDL)
+    // read itemDataType JSON
+    val typeLength = byteBuffer.getInt
+    val typeBytes = new Array[Byte](typeLength)
+    byteBuffer.get(typeBytes)
+    val itemDataType = DataType.fromJson(new String(typeBytes, StandardCharsets.UTF_8))
     // read sketchBytes
-    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - ddlLength)
+    val sketchBytes = new Array[Byte](buffer.length - Integer.BYTES - Integer.BYTES - typeLength)
     byteBuffer.get(sketchBytes)
     val sketchWithNullCount = ApproxTopKAggregateBuffer.deserialize(
       sketchBytes, ApproxTopK.genSketchSerDe(itemDataType))
@@ -817,7 +851,8 @@ case class ApproxTopKCombine(
     val inputSketchBytes = inputState.getBinary(0)
     val inputMaxItemsTracked = inputState.getInt(1)
     val inputItemDataTypeDDL = inputState.getUTF8String(3).toString
-    val inputItemDataType = ApproxTopK.DDLToDataType(inputItemDataTypeDDL)
+    val inputItemDataType = ApproxTopK.withCollationOf(
+      ApproxTopK.DDLToDataType(inputItemDataTypeDDL), uncheckedItemDataType)
     // update maxItemsTracked (throw error if not match)
     buffer.updateMaxItemsTracked(combineSizeSpecified, inputMaxItemsTracked)
     // update itemDataType (throw error if not match)
