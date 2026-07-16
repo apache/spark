@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.SQLException
+import java.sql.{Connection, ResultSetMetaData, SQLException, Types}
 import java.util.Locale
 
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
@@ -149,6 +150,37 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     }
   }
 
+  override def updateExtraColumnMeta(
+      conn: Connection,
+      rsmd: ResultSetMetaData,
+      columnIdx: Int,
+      metadata: MetadataBuilder): Unit = {
+    if (rsmd.getColumnType(columnIdx) == Types.TIME) {
+      val columnName = rsmd.getColumnName(columnIdx)
+      val tableName = rsmd.getTableName(columnIdx)
+      if (columnName.nonEmpty) {
+        // The Microsoft JDBC driver reports scale=6 for all TIME columns regardless of
+        // declared precision. Query INFORMATION_SCHEMA for the actual precision.
+        // Note: rsmd.getTableName() may return empty with the MSSQL driver (issue #753),
+        // so we include TABLE_NAME only when available.
+        val tableFilter = if (tableName.nonEmpty) s"AND TABLE_NAME = '$tableName'" else ""
+        val query =
+          s"""SELECT DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS
+             |WHERE COLUMN_NAME = '$columnName' $tableFilter
+             |""".stripMargin
+        try {
+          Using.resource(conn.createStatement()) { stmt =>
+            Using.resource(stmt.executeQuery(query)) { rs =>
+              if (rs.next()) metadata.putLong("datetimePrecision", rs.getLong(1))
+            }
+          }
+        } catch {
+          case _: SQLException => // fall back to DEFAULT_PRECISION in getCatalystType
+        }
+      }
+    }
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     val conf = SQLConf.get
@@ -168,11 +200,15 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         Some(FloatType)
       case java.sql.Types.TIME if conf.isTimeTypeEnabled && !conf.legacyJdbcTimeMappingEnabled =>
         // SQL Server TIME(n) supports precision 0-7 (100ns). The Microsoft JDBC driver
-        // correctly reports fractional-second precision via getScale() (DECIMAL_DIGITS).
+        // reports scale=6 for all TIME columns regardless of declared precision, so we
+        // use the actual precision from INFORMATION_SCHEMA (set by updateExtraColumnMeta).
         val md0 = md.build()
-        val scale = if (md0.contains("scale")) md0.getLong("scale").toInt else 7
-        val precision = math.min(scale, TimeType.MAX_PRECISION)
-        Some(TimeType(precision))
+        val precision = if (md0.contains("datetimePrecision")) {
+          md0.getLong("datetimePrecision").toInt
+        } else {
+          TimeType.DEFAULT_PRECISION
+        }
+        Some(TimeType(math.min(precision, TimeType.MAX_PRECISION)))
       case GEOMETRY | GEOGRAPHY => Some(BinaryType)
       case _ => None
     }
