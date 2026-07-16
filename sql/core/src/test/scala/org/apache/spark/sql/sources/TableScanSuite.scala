@@ -123,7 +123,6 @@ class LegacyTimestampSource extends RelationProvider {
 }
 
 class TableScanSuite extends DataSourceTest with SharedSparkSession {
-  protected override lazy val sql = spark.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(

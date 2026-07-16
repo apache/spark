@@ -30,7 +30,6 @@ import org.apache.spark.util.Utils
 class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
-  protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
