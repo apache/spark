@@ -2252,6 +2252,36 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("reconcileStartAndEndAt: a bisecting event between a decomposition head and tail closes " +
+    "the head at the event, not at the tail boundary") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The three-row shape produced when a previously-closed row [5, 30] is bisected by a
+    // late-arriving, tracked-different event at recordStartAt=15: a decomposition head
+    // (open, `alice`), the bisecting event (open, `bob`), and a decomposition tail carrying
+    // the original right boundary 30 (recordStartAt null). The head must close at the
+    // bisecting event's sequence (15), NOT at the tail's boundary (30) - the bisecting event
+    // opens a new run in between. The bisecting event in turn closes at the tail boundary
+    // (30), and the tail passes through unchanged.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "bob", 15L, null, Row(15L)),
+      Row(1, "alice", null, 30L, Row(null))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L, 15L, Row(5L)),
+        Row(1, "bob", 15L, 30L, Row(15L)),
+        Row(1, "alice", null, 30L, Row(null))
+      )
+    )
+  }
+
   test("reconcileStartAndEndAt: a closed upsert that already closes before the next event " +
     "keeps its endAt") {
     val processor = processorWithKeys(Seq("id"))

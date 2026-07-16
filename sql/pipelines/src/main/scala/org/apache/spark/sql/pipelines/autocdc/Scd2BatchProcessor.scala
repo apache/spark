@@ -769,12 +769,14 @@ case class Scd2BatchProcessor(
     val finalEndAt =
       F.when(isDecompositionTail, endAtCol)
         .when(isLastRowInKeyWindow, endAtCol)
-        // A no-op continuation collapses into its run head, so the row's visible interval
-        // disappears and `endAt` is reset to null to route the row to the aux table. Only the
-        // *interior* rows of a run are no-op continuations; the run's tail is not (its successor
-        // either starts a new run or does not exist), so the tail keeps a non-null `endAt` and
-        // stays in the target table as the single visible row representing the whole run. A run
-        // therefore never fully disappears into the aux table.
+        // A no-op continuation collapses into its run head, so its own visible interval is
+        // erased by clearing `endAt` to null. Note this cleared `endAt` is NOT by itself the
+        // aux-routing signal: the run tail is the row that represents the run to the user, and
+        // a tail can also carry `endAt = null` (an open run whose latest event is still active),
+        // so `endAt = null` alone does not mean "route to aux". Deciding which reconciled rows
+        // land in the target table (the run tail) versus the aux table (interior no-op rows)
+        // happens in a later transform (SPARK-57378), keyed off the reconciled run shape rather
+        // than `endAt` alone. A run therefore never fully disappears from the target.
         .when(currentIsNoOpUpsertWithNext, F.lit(null).cast(resolvedSequencingType))
         // The row already closes strictly before the next event (e.g., a tombstone or a
         // closed upsert that ended before the next event arrived), so there is nothing to
