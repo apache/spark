@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -754,6 +754,31 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
               parameters = expectedParameters)
           }
       }
+    }
+  }
+
+  test("SPARK-57816: date_format / to_char / to_varchar over NTZ nanos reject a zone-token " +
+    "pattern with a clean error") {
+    // A zone token (`z`, `Z`, `X`, `O`, `VV`) has no meaning for the zone-less TIMESTAMP_NTZ wall
+    // clock, so rendering raises java.time.DateTimeException underneath. date_format maps it to a
+    // clean INVALID_PARAMETER_VALUE.PATTERN Spark error rather than leaking the raw java.time
+    // exception. LTZ is zone-aware, so the same pattern renders the session zone instead of
+    // erroring - hence this is NTZ-only.
+    val ntz = ntzNanos("2020-01-01T13:24:35.123456789", 9)
+    Seq("z", "Z", "X", "O", "VV").foreach { zoneToken =>
+      val fmt = s"yyyy-MM-dd HH:mm:ss $zoneToken"
+      Seq(s"date_format(c, '$fmt')", s"to_char(c, '$fmt')", s"to_varchar(c, '$fmt')")
+        .foreach { expr =>
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              ntz.selectExpr(expr).collect()
+            },
+            condition = "INVALID_PARAMETER_VALUE.PATTERN",
+            parameters = Map(
+              "parameter" -> "`format`",
+              "functionName" -> "`date_format`",
+              "value" -> s"'$fmt'"))
+        }
     }
   }
 }

@@ -395,6 +395,33 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       DateFormatClass(Literal.create(null, TimestampNTZNanosType(9)),
         Literal("yyyy-MM-dd HH:mm:ss.SSSSSSSSS"), UTC_OPT), null)
+
+    // Pre-epoch value combined with sub-precision truncation: epochMicros is negative but the
+    // sub-micro digits floor toward the precision step independently, so p=7 zeros the low 2
+    // digits of a 1960 timestamp exactly like a post-epoch one.
+    val preEpochNtz = localDateTimeToNanosVal(timestampNTZ(1960, 1, 1, 13, 24, 35, 123456789))
+    Seq(
+      9 -> "1960-01-01 13:24:35.123456789",
+      7 -> "1960-01-01 13:24:35.123456700").foreach { case (p, expected) =>
+      checkEvaluation(
+        DateFormatClass(Literal.create(preEpochNtz, TimestampNTZNanosType(p)),
+          Literal("yyyy-MM-dd HH:mm:ss.SSSSSSSSS"), UTC_OPT),
+        expected)
+    }
+
+    // A zone-token pattern (here `z`) cannot render the zone-less NTZ wall clock: the underlying
+    // LocalDateTime.format raises java.time.DateTimeException, which surfaces as a clean
+    // INVALID_PARAMETER_VALUE.PATTERN Spark error (mirroring the TIME path) rather than leaking the
+    // raw java.time exception. checkErrorInExpression exercises both eval and codegen.
+    checkErrorInExpression[SparkRuntimeException](
+      DateFormatClass(Literal.create(ntz, TimestampNTZNanosType(9)),
+        Literal("yyyy-MM-dd HH:mm:ss z"), UTC_OPT),
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> "`format`",
+        "functionName" -> "`date_format`",
+        "value" -> "'yyyy-MM-dd HH:mm:ss z'")
+    )
   }
 
   test("Hour") {
