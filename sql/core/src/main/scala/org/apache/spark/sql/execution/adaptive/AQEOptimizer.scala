@@ -41,7 +41,7 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
       AQEPropagateEmptyRelation,
       ConvertToLocalRelation,
       UpdateAttributeNullability),
-    Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
+    Batch("Demote Broadcast Hash Join", Once, DemoteBroadcastHashJoin),
     Batch("Eliminate Limits", fixedPoint, EliminateLimits),
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)) :+
     Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizerRules: _*) :+

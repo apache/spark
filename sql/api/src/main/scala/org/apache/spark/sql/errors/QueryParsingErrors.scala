@@ -161,7 +161,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.DISTRIBUTE_BY", ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
@@ -234,6 +234,22 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
       messageParameters = Map("numResults" -> numResults, "min" -> "1", "max" -> max.toString),
+      ctx)
+  }
+
+  def sqlAsofJoinDisabled(configKey: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.ASOF_JOIN",
+      messageParameters = Map("config" -> toSQLConf(configKey)),
+      ctx)
+  }
+
+  def sqlAsOfJoinMatchConditionInvalidOperator(
+      operator: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR",
+      messageParameters = Map("operator" -> operator),
       ctx)
   }
 

@@ -897,12 +897,12 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (ctx.METRICS(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+        ctx, "WITH METRICS", "CREATE METRIC VIEW")
     }
 
     if (ctx.routineLanguage(0) == null) {
       throw QueryParsingErrors.missingClausesForOperation(
-        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+        ctx, "LANGUAGE", "CREATE METRIC VIEW")
     }
 
     val languageCtx = ctx.routineLanguage(0)
@@ -1633,7 +1633,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val flowHeaderCtx = ctx.createPipelineFlowHeader()
     val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
     val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
-    val autoCdcInto = buildAutoCdcIntoCommand(ctx.autoCdcCommand())
+    val autoCdcInto = buildAutoCdcInto(ctx.autoCdcCommand())
     CreateFlowCommand(
       name = ident,
       flowOperation = autoCdcInto,

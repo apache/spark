@@ -945,6 +945,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_ASOF_JOIN_ENABLED =
+    buildConf("spark.sql.join.asofJoin.enabled")
+      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION. When false, " +
+        "ASOF JOIN fails at parse time.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
       .internal()
@@ -1360,6 +1369,65 @@ object SQLConf {
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled")
+      .doc("When true, Spark converts a sort merge join to a shuffled hash join during adaptive " +
+        "execution when the build side's materialized per-partition sizes are all within " +
+        s"${ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key} (which additionally requires " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} to not be larger than it). This is the master " +
+        "switch for the conversion. By default it only looks through the join's own required " +
+        "sort to reach a direct input shuffle; set " +
+        "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled " +
+        "to true to also look through non-shuffle operators (aggregate, project, filter, " +
+        "window, etc.) sitting between the join and its input shuffle.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED =
+    buildConf(
+      "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled")
+      .doc("When true, the sort merge join to shuffled hash join conversion (see " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key}) additionally " +
+        "looks through non-shuffle operators (aggregate, project, filter, window, etc.) sitting " +
+        "between the join and its input shuffle, instead of only the join's own required sort. " +
+        s"Has no effect unless " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} is true.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR =
+    buildConf("spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.minWideningFactor")
+      .doc("The lower bound applied to the row-widening factor used when the sort-merge-join to " +
+        "shuffled-hash-join conversion bounds a build side's shuffled hash map size. The factor " +
+        "scales the input shuffle bytes by the estimated per-row size growth of the operators " +
+        "between the join and its shuffle; a larger lower bound is more conservative and makes " +
+        "the conversion less likely when statistics may under-estimate the build size. Must be " +
+        "positive.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doubleConf
+      .checkValue(_ > 0, "The minimum widening factor must be positive.")
+      .createWithDefault(1.0)
+
+  val ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED =
+    buildConf("spark.sql.adaptive.costEvaluator.countLocalSort.enabled")
+      .doc("When true, the default AQE cost evaluator also counts the number of local sorts as a " +
+        "lower-priority tiebreaker below the number of shuffles. This lets adaptive execution " +
+        "prefer a plan with fewer local sorts among plans with the same number of shuffles, for " +
+        "example a shuffled hash join that " +
+        s"${ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED.key} produced from a " +
+        "sort merge join when the conversion does not push extra sorts elsewhere. Defaults to " +
+        "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled " +
+        "so that it is enabled together with the look-through conversion.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .fallbackConf(
+        ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED)
 
   val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
@@ -2096,6 +2164,21 @@ object SQLConf {
     .version("1.4.0")
     .intConf
     .createWithDefault(200)
+
+  val THRIFTSERVER_CATALOG_METADATA_ENABLED =
+    buildConf("spark.sql.thriftServer.catalogMetadata.enabled")
+      .doc("When true, JDBC metadata operations (getCatalogs, getSchemas, getTables, " +
+        "getColumns) are DataSource V2 catalog-aware: getCatalogs returns all loaded catalogs, " +
+        "and TABLE_CAT is populated with the real catalog name. When false, the legacy behavior " +
+        "is preserved (empty TABLE_CAT and getCatalogs returns no rows). " +
+        "Known limitation: when the current catalog is a DSv2 catalog and this conf is enabled, " +
+        "getSchemas lists the DSv2 catalog's namespaces while getTables/getColumns still " +
+        "enumerate session catalog (spark_catalog) objects until DSv2 routing for those " +
+        "operations lands in a follow-up.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val DATA_SOURCE_DONT_ASSERT_ON_PREDICATE =
     buildConf("spark.sql.dataSource.skipAssertOnPredicatePushdown")
@@ -3720,6 +3803,16 @@ object SQLConf {
       .internal()
       .doc("When true, enable code-gen for sort aggregate.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ENABLE_SORT_AGGREGATE_CODEGEN_WITH_KEYS =
+    buildConf("spark.sql.codegen.aggregate.sortAggregate.withKeys.enabled")
+      .internal()
+      .doc("When true, enable code-gen for sort aggregate with grouping keys. Takes effect only " +
+        s"when ${ENABLE_SORT_AGGREGATE_CODEGEN.key} is enabled.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -8223,6 +8316,18 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def nonEmptyPartitionRatioForBroadcastJoin: Double =
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
+  def convertSortMergeJoinToShuffledHashJoinEnabled: Boolean =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_ENABLED)
+
+  def convertSortMergeJoinToShuffledHashJoinLookThroughOperatorsEnabled: Boolean =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_LOOK_THROUGH_OPERATORS_ENABLED)
+
+  def convertSortMergeJoinToShuffledHashJoinMinWideningFactor: Double =
+    getConf(ADAPTIVE_CONVERT_SORT_MERGE_JOIN_TO_SHUFFLED_HASH_JOIN_MIN_WIDENING_FACTOR)
+
+  def costEvaluatorCountLocalSortEnabled: Boolean =
+    getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
+
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
@@ -8465,6 +8570,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
+
+  def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 

@@ -156,6 +156,30 @@
     ],
     "sqlState" : "42713"
   },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION" : {
+    "message" : [
+      "The MATCH_CONDITION operand contains an invalid expression: <expr>. Rewrite the query to avoid subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions in MATCH_CONDITION operands."
+    ],
+    "sqlState" : "42903"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_OPERATOR" : {
+    "message" : [
+      "The MATCH_CONDITION operator must be one of >=, >, <=, <. Got: <operator>."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE" : {
+    "message" : [
+      "The MATCH_CONDITION operands must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE" : {
+    "message" : [
+      "Each operand of the MATCH_CONDITION comparison must reference only columns of one join input. Got: <refs1> and <refs2>."
+    ],
+    "sqlState" : "42K0E"
+  },
   "ASSIGNMENT_ARITY_MISMATCH" : {
     "message" : [
       "The number of columns or variables assigned or aliased: <numTarget> does not match the number of source expressions: <numExpr>."
@@ -167,6 +191,11 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "SORT_MERGE_REQUIRED" : {
+        "message" : [
+          "SQL ASOF JOIN requires the sort-merge physical operator. Set <config> to true."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -4680,6 +4709,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REBALANCE_BY_SIZE_HINT_PARAMETER" : {
+    "message" : [
+      "The first parameter for <hintName> must be a positive byte-size literal, but got <advisoryPartitionSize>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_RECURSIVE_CTE" : {
     "message" : [
       "Invalid recursive definition found. Recursive queries must contain an UNION or an UNION ALL statement with 2 children. The first child needs to be the anchor term without any recursive references. Any top level inner CTE must not contain self references."
@@ -7712,6 +7747,25 @@
     ],
     "sqlState" : "2203G"
   },
+  "UDT_CLASS_NOT_FOUND" : {
+    "message" : [
+      "Could not load UserDefinedType class <udtClass>.",
+      "Ensure the JAR containing this class is on the classpath."
+    ],
+    "subClass" : {
+      "FOR_USER_CLASS" : {
+        "message" : [
+          "The class was registered as the UserDefinedType for user class <userClass>."
+        ]
+      },
+      "WITHOUT_USER_CLASS" : {
+        "message" : [
+          ""
+        ]
+      }
+    },
+    "sqlState" : "38000"
+  },
   "UDT_CLASS_NOT_USER_DEFINED_TYPE" : {
     "message" : [
       "The class <udtClass> cannot be loaded as a user-defined type because it is not a subtype of UserDefinedType."
@@ -8176,8 +8230,8 @@
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
-      "A query operator contains one or more unsupported expressions.",
-      "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the WHERE clause.",
+      "The query operator <operator> contains one or more unsupported expressions.",
+      "Consider to rewrite it to avoid window functions, aggregate functions, and generator functions in the <operator> operator.",
       "Invalid expressions: [<invalidExprSqls>]"
     ],
     "sqlState" : "42K0E"
@@ -8234,6 +8288,11 @@
       "ANALYZE_VIEW" : {
         "message" : [
           "The ANALYZE TABLE command does not support views."
+        ]
+      },
+      "ASOF_JOIN" : {
+        "message" : [
+          "SQL ASOF JOIN syntax. Set <config> to true to enable it."
         ]
       },
       "BIN_BY" : {
@@ -8304,6 +8363,11 @@
       "DESC_TABLE_COLUMN_PARTITION" : {
         "message" : [
           "DESC TABLE COLUMN for a specific partition."
+        ]
+      },
+      "DISTRIBUTE_BY" : {
+        "message" : [
+          "DISTRIBUTE BY clause."
         ]
       },
       "DROP_DATABASE" : {
@@ -9321,11 +9385,6 @@
   "_LEGACY_ERROR_TEMP_0004" : {
     "message" : [
       "Empty source for merge: you should specify a source table/subquery in merge."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0012" : {
-    "message" : [
-      "DISTRIBUTE BY is not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0014" : {
@@ -10877,11 +10936,6 @@
       "<name> is not an UserDefinedType. Please make sure registering an UserDefinedType for <userClass>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2228" : {
-    "message" : [
-      "Can not load in UserDefinedType <name> for user class <userClass>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2229" : {
     "message" : [
       "<name> is not a public class. Only public classes are supported."
@@ -11611,11 +11665,6 @@
   "_LEGACY_ERROR_TEMP_3169" : {
     "message" : [
       "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3170" : {
-    "message" : [
-      "SortAggregate code-gen does not support grouping keys"
     ]
   },
   "_LEGACY_ERROR_TEMP_3173" : {

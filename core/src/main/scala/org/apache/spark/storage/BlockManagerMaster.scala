@@ -106,9 +106,10 @@ class BlockManagerMaster(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long): Boolean = {
+      diskSize: Long,
+      checksum: Option[Long] = None): Boolean = {
     val res = driverEndpoint.askSync[Boolean](
-      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize))
+      UpdateBlockInfo(blockManagerId, blockId, storageLevel, memSize, diskSize, checksum))
     logDebug(s"Updated info of block $blockId")
     res
   }
@@ -124,6 +125,26 @@ class BlockManagerMaster(
   /** Check whether a block is visible */
   def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
     driverEndpoint.askSync[Boolean](GetRDDBlockVisibility(blockId))
+  }
+
+  /**
+   * The authoritative sealed checksum for an RDD block, or None if it is not sealed. Returns None
+   * for a non-`RDDBlockId`: such blocks are never sealed.
+   */
+  def getSealedChecksum(blockId: BlockId): Option[Long] = {
+    blockId.asRDDId match {
+      case Some(rddBlockId) => driverEndpoint.askSync[Option[Long]](GetSealedChecksum(rddBlockId))
+      case None => None
+    }
+  }
+
+  /**
+   * Seal an RDD's per-block content checksums: for each materialized block keep one version (the
+   * plurality checksum), evict divergent copies, and reject future divergent registrations. Returns
+   * the count of present blocks that had no recorded checksum and so could not be sealed.
+   */
+  def sealRddChecksums(rddId: Int): Int = {
+    driverEndpoint.askSync[Int](SealRddChecksums(rddId))
   }
 
   /** Get locations of the blockId from the driver */

@@ -37,12 +37,13 @@ import numpy as np
 import pyarrow as pa
 
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import write_int, write_long, SpecialLengths
+from pyspark.serializers import CPickleSerializer, write_int, write_long, SpecialLengths
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     DoubleType,
     IntegerType,
+    LongType,
     StringType,
     StructField,
     StructType,
@@ -2145,4 +2146,609 @@ class TransformWithStatePandasInitStateUDFTimeBench(
 class TransformWithStatePandasInitStateUDFPeakmemBench(
     _TransformWithStatePandasInitStateBenchMixin, _PeakmemBenchBase
 ):
+    pass
+
+
+# -- SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF ----------------------------------
+# Stateful streaming with plain PySpark Rows. UDF signature is
+# ``(api_client, mode, key, rows)`` and returns ``Iterator[Row]``. The input
+# wire stream is a single plain Arrow stream pre-sorted by the grouping key
+# column at offset 0; ``TransformWithStateInPySparkRowSerializer`` walks the
+# batch row by row, materializing each into a ``Row`` (all columns, including
+# the key) via ``.as_py()``, groups consecutive rows by key, and yields one
+# ``(mode, key, rows)`` tuple per group, then a phantom ``PROCESS_TIMER`` and
+# ``COMPLETE`` call with an empty iterator. Output ``Row``s are encoded back to
+# Arrow through ``row.asDict(True)`` + ``pa.RecordBatch.from_pylist`` -- the
+# per-row Python object round trip this eval type is built around, in contrast
+# to the columnar Pandas variant above. ``StatefulProcessorApiClient.__init__``
+# opens a real TCP socket to the JVM state server; the ``_StubStateServer``
+# above satisfies that connect. The benchmark UDFs never invoke any state API
+# method, so no protocol exchange is needed.
+
+
+class _TransformWithStateRowBenchMixin:
+    """Provides ``_write_scenario`` for SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF.
+
+    Each scenario emits one plain Arrow stream pre-sorted by the leading int
+    key column. Unlike the Pandas variant, the key column is NOT projected out:
+    UDFs receive an iterator of ``Row`` objects carrying every column (key
+    included), mirroring ``TransformWithStateInPySparkRowSerializer``. Row-by-row
+    materialization and re-encoding is ~10x slower than the columnar Pandas
+    path, so row counts are scaled down accordingly to stay under ASV's 60s
+    per-sample timeout.
+    """
+
+    # Per-scenario value-column type pool. ``mixed_cols`` exercises the
+    # string/binary/boolean paths and ``nested_struct`` exercises the struct
+    # (dict) conversion path; the rest stay numeric to keep the cost dominated
+    # by row volume rather than per-value Python work.
+    _MIXED_POOL = MockDataFactory.MIXED_TYPES
+    _NESTED_POOL = [
+        MockDataFactory.TYPE_REGISTRY["int"],
+        MockDataFactory.make_struct_type(num_fields=3, base_types=MockDataFactory.MIXED_TYPES),
+    ]
+
+    # Each scenario: (num_groups, rows_per_group, num_value_cols, value_pool).
+    _scenario_configs = {
+        "few_groups_sm": (50, 500, 5, MockDataFactory.NUMERIC_TYPES),
+        "few_groups_lg": (50, 5_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_sm": (2_000, 50, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_lg": (500, 200, 5, MockDataFactory.NUMERIC_TYPES),
+        "wide_cols": (200, 500, 20, MockDataFactory.NUMERIC_TYPES),
+        "mixed_cols": (200, 500, 5, _MIXED_POOL),
+        "nested_struct": (200, 500, 4, _NESTED_POOL),
+    }
+
+    @classmethod
+    def _build_scenario(cls, name):
+        """Build a single TWS Row scenario.
+
+        Returns ``(batches, schema)`` where ``batches`` is a plain list of Arrow
+        RecordBatches with rows pre-sorted by the leading int32 key column.
+        """
+        np.random.seed(42)
+        num_groups, rows_per_group, num_value_cols, value_pool = cls._scenario_configs[name]
+        total_rows = num_groups * rows_per_group
+        key_array = pa.array(
+            np.repeat(np.arange(num_groups, dtype=np.int32), rows_per_group),
+            type=pa.int32(),
+        )
+        value_arrays = [
+            value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
+        ]
+        names = ["col_0"] + [f"col_{i + 1}" for i in range(num_value_cols)]
+        full_batch = pa.RecordBatch.from_arrays([key_array] + value_arrays, names=names)
+        batch_size = MockDataFactory.MAX_RECORDS_PER_BATCH
+        batches = [
+            full_batch.slice(offset, min(batch_size, total_rows - offset))
+            for offset in range(0, total_rows, batch_size)
+        ]
+        schema = StructType(
+            [StructField("col_0", IntegerType())]
+            + [
+                StructField(f"col_{i + 1}", value_pool[i % len(value_pool)][1])
+                for i in range(num_value_cols)
+            ]
+        )
+        return batches, schema
+
+    def _tws_row_identity(api_client, mode, key, rows):
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            yield from rows
+
+    def _tws_row_rebuild(api_client, mode, key, rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # Read every field and construct a fresh Row per input row. This is the
+        # per-row Python work the Row variant is built around (field access +
+        # object construction), and it is type-agnostic so it also covers the
+        # mixed / nested_struct scenarios.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            for row in rows:
+                yield Row(**row.asDict())
+
+    def _tws_row_count(api_client, mode, key, rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # An aggregating UDF: consume all input rows and emit a single (key,
+        # count) Row, reconstructing the grouping key from the ``key`` arg. This
+        # isolates input-materialization cost from output-encoding cost.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            total = sum(1 for _ in rows)
+            yield Row(col_0=key[0], col_1=total)
+
+    # ret_type=None means "use the full input schema" (identity and rebuild are
+    # whole-row passthroughs, and the input Rows carry the key). count_udf
+    # re-emits only the key plus a count, so it declares an explicit output
+    # schema of (key, count).
+    _udfs = {
+        "identity_udf": (_tws_row_identity, None),
+        "rebuild_udf": (_tws_row_rebuild, None),
+        "count_udf": (
+            _tws_row_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", IntegerType())]),
+        ),
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    _NUM_KEY_COLS = 1
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._build_scenario(scenario)
+        udf_func, ret_type = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema
+        n_value_cols = len(schema.fields) - self._NUM_KEY_COLS
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(self._NUM_KEY_COLS, n_value_cols)
+        grouping_key_schema = StructType(schema.fields[: self._NUM_KEY_COLS])
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+            eval_conf={
+                "state_server_socket_port": str(_StubStateServer.get_port()),
+                "grouping_key_schema": grouping_key_schema.json(),
+            },
+        )
+
+
+class TransformWithStateRowUDFTimeBench(_TransformWithStateRowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF -----------------------
+# Stateful streaming with plain PySpark Rows plus an initial-state dataset. The
+# UDF signature is ``(api_client, mode, key, rows, init_rows)`` where both
+# ``rows`` and ``init_rows`` are iterators of ``Row`` objects; it returns
+# ``Iterator[Row]``.
+#
+# The wire stream matches the Pandas init-state variant: a single Arrow stream
+# whose top-level schema is ``struct<inputData: dataSchema, initState:
+# initStateSchema>`` (see ``TransformWithStateInPySparkPythonInitialStateRunner``).
+# Each batch carries either inputData or initState rows -- never both -- with the
+# inactive column written as an all-null struct. Matching the JVM ``initData ++
+# data`` ordering, all initial-state batches are emitted first, then all data
+# batches. ``TransformWithStateInPySparkRowInitStateSerializer`` walks each
+# batch row by row, materializing every column (key included) into a ``Row`` via
+# ``.as_py()``, then regroups consecutive rows by the leading key column so each
+# key surfaces as one ``(mode, key, (input_rows, init_rows))`` call. This is the
+# per-row Python object round trip the Row variant is built around, layered on
+# top of the nested-struct init-state deserialization, in contrast to the
+# columnar Pandas init-state variant above.
+
+
+class _TransformWithStateRowInitStateBenchMixin(_TransformWithStateRowBenchMixin):
+    """Provides ``_write_scenario`` for SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF.
+
+    Reuses the plain-Row scenario grid for the input data and seeds a small
+    initial-state dataset per group (``_INIT_ROWS_PER_GROUP`` rows sharing the
+    input schema). The per-row init-state materialization cost (nested-struct
+    flatten plus row-by-row ``.as_py()`` and per-key regrouping) is incurred
+    during ``load_stream`` regardless of whether the UDF reads ``init_rows``.
+    """
+
+    # Initial state is small relative to the streamed data (one seeded chunk per
+    # key), so data deserialization stays the dominant cost -- mirroring
+    # production where initial state loads once and input data streams per batch.
+    _INIT_ROWS_PER_GROUP = 100
+
+    @classmethod
+    def _build_init_batches(cls, name):
+        """Build the initial-state Arrow batches for a scenario.
+
+        Shares the input schema (same value columns) but with only
+        ``_INIT_ROWS_PER_GROUP`` rows per group, pre-sorted by the leading key.
+        """
+        np.random.seed(7)
+        num_groups, _, num_value_cols, value_pool = cls._scenario_configs[name]
+        total_rows = num_groups * cls._INIT_ROWS_PER_GROUP
+        key_array = pa.array(
+            np.repeat(np.arange(num_groups, dtype=np.int32), cls._INIT_ROWS_PER_GROUP),
+            type=pa.int32(),
+        )
+        value_arrays = [
+            value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
+        ]
+        names = ["col_0"] + [f"col_{i + 1}" for i in range(num_value_cols)]
+        full_batch = pa.RecordBatch.from_arrays([key_array] + value_arrays, names=names)
+        batch_size = MockDataFactory.MAX_RECORDS_PER_BATCH
+        return [
+            full_batch.slice(offset, min(batch_size, total_rows - offset))
+            for offset in range(0, total_rows, batch_size)
+        ]
+
+    @staticmethod
+    def _wrap_nested(flat_batch, struct_type, *, is_init):
+        """Wrap a flat batch into a ``struct<inputData, initState>`` batch.
+
+        The populated side carries ``flat_batch``'s columns; the inactive side is
+        an all-null struct array of the same length, so ``extract_rows`` in the
+        serializer treats it as empty.
+        """
+        n = flat_batch.num_rows
+        populated = pa.StructArray.from_arrays(
+            [flat_batch.column(i) for i in range(flat_batch.num_columns)],
+            names=flat_batch.schema.names,
+        )
+        null_struct = pa.array([None] * n, type=struct_type)
+        arrays = [null_struct, populated] if is_init else [populated, null_struct]
+        return pa.RecordBatch.from_arrays(arrays, names=["inputData", "initState"])
+
+    def _tws_row_init_identity(api_client, mode, key, rows, init_rows):
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            yield from rows
+
+    def _tws_row_init_rebuild(api_client, mode, key, rows, init_rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # Read every field and construct a fresh Row per input row. This is the
+        # per-row Python work the Row variant is built around (field access +
+        # object construction), and it is type-agnostic so it also covers the
+        # mixed / nested_struct scenarios.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            for row in rows:
+                yield Row(**row.asDict())
+
+    def _tws_row_init_count(api_client, mode, key, rows, init_rows):
+        from pyspark.sql import Row
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        # An aggregating UDF: consume both the input rows and the initial-state
+        # rows so both materialization paths are counted, then emit a single
+        # (key, count) Row reconstructing the grouping key from the ``key`` arg.
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            total = sum(1 for _ in rows) + sum(1 for _ in init_rows)
+            yield Row(col_0=key[0], col_1=total)
+
+    # ret_type=None means "use the full input schema" (identity and rebuild are
+    # whole-row passthroughs, and the input Rows carry the key). count_udf
+    # re-emits only the key plus a count, so it declares an explicit output
+    # schema of (key, count).
+    _udfs = {
+        "identity_udf": (_tws_row_init_identity, None),
+        "rebuild_udf": (_tws_row_init_rebuild, None),
+        "count_udf": (
+            _tws_row_init_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", IntegerType())]),
+        ),
+    }
+    params = [list(_TransformWithStateRowBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        data_batches, schema = self._build_scenario(scenario)
+        init_batches = self._build_init_batches(scenario)
+        udf_func, ret_type = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = schema
+        n_value_cols = len(schema.fields) - self._NUM_KEY_COLS
+        # Two arg-offset groups -- one for input data, one for initial state.
+        # Both datasets share the schema, so each resolves to key=[0], values=[1..n].
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(
+            self._NUM_KEY_COLS, n_value_cols
+        ) + MockUDFFactory.make_grouped_arg_offsets(self._NUM_KEY_COLS, n_value_cols)
+        grouping_key_schema = StructType(schema.fields[: self._NUM_KEY_COLS])
+        # Wrap both datasets into the struct<inputData, initState> wire schema;
+        # the two structs share a type since the datasets share a schema.
+        struct_type = pa.StructArray.from_arrays(
+            [data_batches[0].column(i) for i in range(data_batches[0].num_columns)],
+            names=data_batches[0].schema.names,
+        ).type
+        nested_batches = [self._wrap_nested(b, struct_type, is_init=True) for b in init_batches] + [
+            self._wrap_nested(b, struct_type, is_init=False) for b in data_batches
+        ]
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(nested_batches), b),
+            buf,
+            eval_conf={
+                "state_server_socket_port": str(_StubStateServer.get_port()),
+                "grouping_key_schema": grouping_key_schema.json(),
+            },
+        )
+
+
+class TransformWithStateRowInitStateUDFTimeBench(
+    _TransformWithStateRowInitStateBenchMixin, _TimeBenchBase
+):
+    pass
+
+
+class TransformWithStateRowInitStateUDFPeakmemBench(
+    _TransformWithStateRowInitStateBenchMixin, _PeakmemBenchBase
+):
+    pass
+
+
+# -- SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE -------------------------------------
+# Stateful grouped map with Pandas (applyInPandasWithState). The UDF signature is
+# ``(key, pdfs, state)`` and returns ``Iterator[pandas.DataFrame]``, where
+# ``state`` is a ``GroupState`` the UDF may read (``getOption``) and write
+# (``update``/``remove``). Unlike TransformWithState, no state server socket is
+# involved: ``ApplyInPandasWithStateSerializer`` reconstructs each ``GroupState``
+# entirely from a metadata column carried inline in the Arrow stream.
+#
+# The wire stream is a single plain Arrow IPC stream whose batch schema is the
+# data columns followed by one trailing struct column (``__state``, matching the
+# JVM ``ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA``): fields
+# ``properties`` (GroupStateImpl.json()), ``keyRowAsUnsafe``, ``object`` (pickled
+# state value), ``startOffset``, ``numRows``, ``isLastChunk``. Data and state
+# columns must share a row count, so exactly one populated state row per data
+# chunk sits at the top of each group's range and the remaining state rows are
+# null structs (which the serializer treats as end-of-data padding).
+
+
+class _ApplyInPandasWithStateBenchMixin:
+    """Provides ``_write_scenario`` for SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE.
+
+    Each scenario emits one plain Arrow stream whose leading int32 column is the
+    grouping key (pre-sorted) and whose trailing struct column carries the state
+    metadata. One populated state row per chunk marks that chunk's ``[startOffset,
+    numRows)`` range; the rest of the state column is null-padded. A group that
+    overflows a batch is split into multiple chunks (mirroring the JVM writer).
+    """
+
+    _MIXED_POOL = MockDataFactory.MIXED_TYPES
+    _NESTED_POOL = [
+        MockDataFactory.TYPE_REGISTRY["int"],
+        MockDataFactory.make_struct_type(num_fields=3, base_types=MockDataFactory.MIXED_TYPES),
+    ]
+
+    # Each scenario: (num_groups, rows_per_group, num_value_cols, value_pool).
+    # Row counts mirror the TransformWithState pandas scenarios so identity_udf
+    # (full pdf passthrough) stays under ASV's 60s per-sample timeout.
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "few_groups_lg": (50, 50_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_sm": (2_000, 500, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_lg": (500, 2_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "wide_cols": (200, 5_000, 20, MockDataFactory.NUMERIC_TYPES),
+        "mixed_cols": (200, 5_000, 5, _MIXED_POOL),
+        "nested_struct": (200, 5_000, 4, _NESTED_POOL),
+    }
+
+    # State value schema (the type of the object each GroupState carries). A
+    # single long counter, which count_udf reads and updates per group key.
+    _STATE_VALUE_SCHEMA = StructType([StructField("count", LongType())])
+
+    # Field order must match ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA.
+    _STATE_METADATA_TYPE = pa.struct(
+        [
+            pa.field("properties", pa.string()),
+            pa.field("keyRowAsUnsafe", pa.binary()),
+            pa.field("object", pa.binary()),
+            pa.field("startOffset", pa.int32()),
+            pa.field("numRows", pa.int32()),
+            pa.field("isLastChunk", pa.bool_()),
+        ]
+    )
+
+    # GroupStateImpl.json() for a fresh, defined state with no timeout. The
+    # serializer overwrites ``optionalValue`` with the unpickled ``object``, so
+    # its placeholder value here is irrelevant.
+    _STATE_PROPERTIES_JSON = json.dumps(
+        {
+            "optionalValue": None,
+            "batchProcessingTimeMs": 0,
+            "eventTimeWatermarkMs": -1,
+            "timeoutConf": "NoTimeout",
+            "hasTimedOut": False,
+            "watermarkPresent": False,
+            "defined": True,
+            "updated": False,
+            "removed": False,
+            "timeoutTimestamp": -1,
+        }
+    )
+
+    @classmethod
+    def _build_scenario(cls, name):
+        """Build a single applyInPandasWithState scenario.
+
+        Returns ``(batches, schema)`` where each batch is an Arrow RecordBatch of
+        data columns plus a trailing ``__state`` struct column, pre-sorted by the
+        leading int32 key column with one populated state row per group.
+        """
+        np.random.seed(42)
+        num_groups, rows_per_group, num_value_cols, value_pool = cls._scenario_configs[name]
+        total_rows = num_groups * rows_per_group
+        key_array = pa.array(
+            np.repeat(np.arange(num_groups, dtype=np.int32), rows_per_group),
+            type=pa.int32(),
+        )
+        value_arrays = [
+            value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
+        ]
+        data_names = ["col_0"] + [f"col_{i + 1}" for i in range(num_value_cols)]
+        data_schema = StructType(
+            [StructField("col_0", IntegerType())]
+            + [
+                StructField(f"col_{i + 1}", value_pool[i % len(value_pool)][1])
+                for i in range(num_value_cols)
+            ]
+        )
+
+        # Pickle of the initial state value (count=0), matching what the JVM
+        # writer pickles via PythonSQLUtils.toPyRow.
+        pickled_object = CPickleSerializer().dumps(cls._STATE_VALUE_SCHEMA.toInternal((0,)))
+
+        batch_size = MockDataFactory.MAX_RECORDS_PER_BATCH
+        # Plan the batch/chunk layout the JVM ApplyInPandasWithStateWriter would
+        # produce: bin-pack whole groups into batches of at most ``batch_size``
+        # data rows, and split a group that overflows a batch into multiple chunks
+        # (one state row each). ``isLastChunk`` is True only on a group's final
+        # chunk, so the serializer reassembles a group split across batches into a
+        # single GroupState segment.
+        batch_plans = cls._plan_batches(num_groups, rows_per_group, batch_size)
+
+        batches = []
+        row_offset = 0
+        for chunks in batch_plans:
+            batch_rows = sum(c[1] for c in chunks)
+            data_arrays = [key_array.slice(row_offset, batch_rows)] + [
+                arr.slice(row_offset, batch_rows) for arr in value_arrays
+            ]
+            state_array = cls._build_state_column(chunks, batch_rows, pickled_object)
+            batches.append(
+                pa.RecordBatch.from_arrays(
+                    data_arrays + [state_array], names=data_names + ["__state"]
+                )
+            )
+            row_offset += batch_rows
+        return batches, data_schema
+
+    @staticmethod
+    def _plan_batches(num_groups, rows_per_group, batch_size):
+        """Simulate the JVM writer's bin-packing + chunking.
+
+        Returns a list of batches; each batch is a list of chunks
+        ``(start_offset_in_batch, num_rows, is_last_chunk)``. A batch holds at most
+        ``batch_size`` data rows; a group that exceeds the remaining space is split
+        into contiguous chunks, with ``is_last_chunk`` set only on the chunk that
+        ends the group.
+        """
+        batch_plans = []
+        cur_chunks = []
+        cur_rows = 0
+        for _ in range(num_groups):
+            remaining = rows_per_group
+            chunk_start = cur_rows
+            chunk_rows = 0
+            while remaining > 0:
+                take = min(batch_size - cur_rows, remaining)
+                cur_rows += take
+                chunk_rows += take
+                remaining -= take
+                if cur_rows == batch_size:
+                    cur_chunks.append((chunk_start, chunk_rows, remaining == 0))
+                    batch_plans.append(cur_chunks)
+                    cur_chunks = []
+                    cur_rows = 0
+                    chunk_start = 0
+                    chunk_rows = 0
+                elif remaining == 0:
+                    cur_chunks.append((chunk_start, chunk_rows, True))
+        if cur_chunks:
+            batch_plans.append(cur_chunks)
+        return batch_plans
+
+    @classmethod
+    def _build_state_column(cls, chunks, num_rows, pickled_object):
+        """Build the trailing ``__state`` struct column for one batch.
+
+        One populated state row per chunk sits at the top of the batch; the
+        remaining rows are null structs -- the padding the serializer stops at
+        when scanning state rows.
+        """
+        properties = [None] * num_rows
+        key_bytes = [None] * num_rows
+        objects = [None] * num_rows
+        start_offsets = [None] * num_rows
+        num_rows_col = [None] * num_rows
+        is_last_chunk = [None] * num_rows
+        mask = np.ones(num_rows, dtype=bool)  # True == null
+
+        for idx, (start_offset, chunk_rows, is_last) in enumerate(chunks):
+            properties[idx] = cls._STATE_PROPERTIES_JSON
+            key_bytes[idx] = b""  # opaque to the worker
+            objects[idx] = pickled_object
+            start_offsets[idx] = start_offset
+            num_rows_col[idx] = chunk_rows
+            is_last_chunk[idx] = is_last
+            mask[idx] = False
+
+        return pa.StructArray.from_arrays(
+            [
+                pa.array(properties, type=pa.string()),
+                pa.array(key_bytes, type=pa.binary()),
+                pa.array(objects, type=pa.binary()),
+                pa.array(start_offsets, type=pa.int32()),
+                pa.array(num_rows_col, type=pa.int32()),
+                pa.array(is_last_chunk, type=pa.bool_()),
+            ],
+            fields=list(cls._STATE_METADATA_TYPE),
+            mask=pa.array(mask),
+        )
+
+    def _apply_pandas_state_identity(key, pdfs, state):
+        yield from pdfs
+
+    def _apply_pandas_state_sort(key, pdfs, state):
+        for pdf in pdfs:
+            yield pdf.sort_values(pdf.columns[0])
+
+    def _apply_pandas_state_count(key, pdfs, state):
+        import pandas as pd
+
+        # Exercise the per-group state read/write path: read the running count,
+        # add this group's row total, write it back.
+        prev = state.getOption
+        prev_count = prev[0] if prev is not None else 0
+        total = prev_count + sum(len(pdf) for pdf in pdfs)
+        state.update((total,))
+        yield pd.DataFrame({"col_0": [key[0]], "col_1": [total]})
+
+    # ret_type=None means "use all value columns of the input schema" (identity
+    # and sort pass the value-only pdf straight through). count_udf re-emits the
+    # key plus the count, so it declares an explicit (key, count) output schema.
+    _udfs = {
+        "identity_udf": (_apply_pandas_state_identity, None),
+        "sort_udf": (_apply_pandas_state_sort, None),
+        "count_udf": (
+            _apply_pandas_state_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", LongType())]),
+        ),
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    _NUM_KEY_COLS = 1
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, data_schema = self._build_scenario(scenario)
+        udf_func, ret_type = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = StructType(data_schema.fields[self._NUM_KEY_COLS :])
+        n_value_cols = len(data_schema.fields) - self._NUM_KEY_COLS
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(self._NUM_KEY_COLS, n_value_cols)
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+            eval_conf={"state_value_schema": self._STATE_VALUE_SCHEMA.json()},
+        )
+
+
+class ApplyInPandasWithStateUDFTimeBench(_ApplyInPandasWithStateBenchMixin, _TimeBenchBase):
+    pass
+
+
+class ApplyInPandasWithStateUDFPeakmemBench(_ApplyInPandasWithStateBenchMixin, _PeakmemBenchBase):
     pass

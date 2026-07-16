@@ -147,7 +147,7 @@
     <parquet.version>1.17.1</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.10</jetty.version>
+    <jetty.version>12.1.11</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -215,7 +215,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
-    <tink.version>1.22.0</tink.version>
+    <tink.version>1.23.0</tink.version>
     <!--
       TODO: Once upgrade datasketches to a version that supports Java 25,
             SPARK-53327 workaround should be reverted.

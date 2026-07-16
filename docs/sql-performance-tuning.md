@@ -141,7 +141,8 @@ Coalesce hints allow Spark SQL users to control the number of output files just 
 tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
 parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional. The "REBALANCE"
-hint has an initial partition number, columns, or both/neither of them as parameters.
+hint has an initial partition number, columns, or both/neither of them as parameters. The "REBALANCE_BY_SIZE"
+hint requires an advisory partition size, optionally followed by columns.
 
 ```sql
 SELECT /*+ COALESCE(3) */ * FROM t;
@@ -155,6 +156,10 @@ SELECT /*+ REBALANCE */ * FROM t;
 SELECT /*+ REBALANCE(3) */ * FROM t;
 SELECT /*+ REBALANCE(c) */ * FROM t;
 SELECT /*+ REBALANCE(3, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE(134217728, c) */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m') */ * FROM t;
+SELECT /*+ REBALANCE_BY_SIZE('128m', c) */ * FROM t;
 ```
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
@@ -374,6 +379,38 @@ AQE converts sort-merge join to shuffled hash join when all post shuffle partiti
          Configures the maximum size in bytes per partition that can be allowed to build local hash map. If this value is not smaller than <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> and all the partition sizes are not larger than this config, join selection prefers to use shuffled hash join instead of sort merge join regardless of the value of <code>spark.sql.join.preferSortMergeJoin</code>.
        </td>
        <td>3.2.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled</code></td>
+       <td>true</td>
+       <td>
+         When true, Spark converts a sort-merge join to a shuffled hash join during adaptive execution when the build side's materialized per-partition sizes are all within <code>spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold</code> (which additionally requires <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> to not be larger than it). This is the master switch for the conversion. By default it only looks through the join's own required sort to reach a direct input shuffle; set <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code> to true to also look through non-shuffle operators (such as aggregate, project, filter and window) sitting between the join and its input shuffle.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code></td>
+       <td>false</td>
+       <td>
+         When true, the sort-merge join to shuffled hash join conversion additionally looks through non-shuffle operators (such as aggregate, project, filter and window) sitting between the join and its input shuffle, instead of only the join's own required sort. Has no effect unless <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled</code> is true.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.minWideningFactor</code></td>
+       <td>1.0</td>
+       <td>
+         The lower bound applied to the row-widening factor used when the sort-merge-join to shuffled-hash-join conversion bounds a build side's shuffled hash map size. The factor scales the input shuffle bytes by the estimated per-row size growth of the operators between the join and its shuffle; a larger lower bound is more conservative and makes the conversion less likely when statistics may under-estimate the build size. Must be positive.
+       </td>
+       <td>4.3.0</td>
+     </tr>
+     <tr>
+       <td><code>spark.sql.adaptive.costEvaluator.countLocalSort.enabled</code></td>
+       <td>(value of <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code>)</td>
+       <td>
+         When true, the default AQE cost evaluator also counts the number of local sorts as a lower-priority tiebreaker below the number of shuffles, so that among plans with the same number of shuffles the one with fewer local sorts is preferred. For example, a sort-merge join is replaced by a shuffled hash join only when the conversion does not push extra sorts elsewhere in the plan. Defaults to the value of <code>spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.lookThroughOperators.enabled</code>, so it is enabled together with the look-through conversion.
+       </td>
+       <td>4.3.0</td>
      </tr>
   </table>
 

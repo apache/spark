@@ -322,7 +322,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "invalidExprSqls" : "\"row_number() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Join"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -342,7 +343,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+    "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"",
+    "operator" : "Aggregate"
   },
   "queryContext" : [ {
     "objectType" : "",

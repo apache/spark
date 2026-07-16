@@ -88,6 +88,9 @@ class ExecutorPodsAllocator(
 
   protected val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
+  private val shouldWaitForDriverReadiness =
+    !conf.get(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES)
+
   protected val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
   protected val namespace = conf.get(KUBERNETES_NAMESPACE)
@@ -132,15 +135,18 @@ class ExecutorPodsAllocator(
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
-    driverPod.foreach { pod =>
-      // Wait until the driver pod is ready before starting executors, as the headless service won't
-      // be resolvable by DNS until the driver pod is ready.
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .inNamespace(namespace)
-          .withName(pod.getMetadata.getName)
-          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+    if (shouldWaitForDriverReadiness) {
+      driverPod.foreach { pod =>
+        // Wait until the driver pod is ready before starting executors, as the headless service
+        // won't be resolvable by DNS until the driver pod is ready. This is unnecessary when the
+        // driver service publishes not-ready addresses, since DNS no longer depends on readiness.
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .pods()
+            .inNamespace(namespace)
+            .withName(pod.getMetadata.getName)
+            .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+        }
       }
     }
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>

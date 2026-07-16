@@ -815,7 +815,7 @@ class Resolver(
   private def validateInvalidExpressions(operator: LogicalPlan): Unit = {
     val invalidExpressions = expressionResolver.getLastInvalidExpressionsInTheContextOfOperator
     if (invalidExpressions.nonEmpty) {
-      throwUnsupportedExprForOperator(invalidExpressions)
+      throwUnsupportedExprForOperator(operator, invalidExpressions)
     }
 
     val subqueryExpressions =
@@ -871,10 +871,13 @@ class Resolver(
       summary = operator.origin.context.summary()
     )
 
-  private def throwUnsupportedExprForOperator(invalidExpressions: Seq[Expression]): Nothing = {
+  private def throwUnsupportedExprForOperator(
+      operator: LogicalPlan,
+      invalidExpressions: Seq[Expression]): Nothing = {
     throw new AnalysisException(
       errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
       messageParameters = Map(
+        "operator" -> operator.nodeName,
         "invalidExprSqls" -> makeCommaSeparatedExpressionString(invalidExpressions)
       )
     )
