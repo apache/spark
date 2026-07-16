@@ -19,12 +19,13 @@
 
 import {
   createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
+  escapeHtml,
   formatBytes, formatDate, formatDuration, formatLogsCells,
   getStandAloneAppId,
   setDataTableDefaults
 } from './utils.js';
 
-export { setHeapHistogramEnabled, setThreadDumpEnabled };
+export { formatLossReason, setHeapHistogramEnabled, setThreadDumpEnabled };
 
 var threadDumpEnabled = false;
 var heapHistogramEnabled = false;
@@ -48,7 +49,8 @@ function getHeapHistogramEnabled() {
 
 function formatLossReason(removeReason) {
   if (removeReason) {
-    return removeReason
+    // The reason originates outside the driver and DataTables renders this cell as HTML.
+    return escapeHtml(removeReason)
   } else {
     return ""
   }
