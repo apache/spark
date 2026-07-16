@@ -254,7 +254,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT (SELECT a) FROM t1
     checkAnalysis(
       Project(ScalarSubquery(t0.select($"a")).as("sub") :: Nil, t1),
-      Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
+      Project(ScalarSubquery(
+        Project(OuterReference(a).as(a.name) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
     )
     // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
     checkAnalysis(

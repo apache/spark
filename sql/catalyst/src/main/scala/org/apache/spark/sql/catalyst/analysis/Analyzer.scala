@@ -1752,7 +1752,8 @@ class Analyzer(
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedBasic)
         val resolvedFinal = resolvedWithLCA.map(resolveColsLastResort)
-        p.copy(projectList = resolvedFinal.map(_.asInstanceOf[NamedExpression]))
+        p.copy(projectList =
+          resolvedFinal.map(e => aliasIfOuterReference(e.asInstanceOf[NamedExpression])))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
@@ -2037,19 +2038,6 @@ class Analyzer(
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
-    }
-
-    /**
-     * Wrap an outer-scope star expansion result in [[Alias]] so that the [[OuterReference]]
-     * attribute gets a fresh ExprId in the subquery's scope. This prevents the outer ExprId from
-     * leaking through [[Project.output]] when the expansion goes through a derived table.
-     * Struct star expansion already produces [[Alias]] nodes, so those are left unchanged.
-     */
-    private def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
-      case _: Alias => e
-      case outerReference: OuterReference =>
-        Alias(outerReference, toPrettySQL(outerReference.e))()
-      case _ => e
     }
 
     /**
