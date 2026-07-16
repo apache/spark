@@ -2092,6 +2092,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(mockEnv.isShuffleManagerInitialized).thenReturn(true)
     when(mockEnv.waitForShuffleManagerInit(mc.anyLong())).thenReturn(true)
     when(mockEnv.defaultShuffleManager).thenReturn(sortShuffleMgr)
+    when(mockEnv.shuffleBlockResolver).thenReturn(sortShuffleMgr.shuffleBlockResolver)
     assert(bm.migratableResolver != null)
   }
 

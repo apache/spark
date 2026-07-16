@@ -62,13 +62,12 @@ class BlockManagerMasterEndpoint(
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
-  // (except for tests) and we ask for the instance from the SparkEnv.
-  // The default shuffle manager, used only for block-by-id resolution during
-  // external-shuffle-service cleanup. Pipelined shuffles are served out-of-band (no block-manager
-  // blocks, and not tracked in the MapOutputTracker this loop iterates), so this path only
-  // resolves regular shuffles.
-  private lazy val shuffleManager =
-    Option(_shuffleManager).getOrElse(SparkEnv.get.defaultShuffleManager)
+  // (except for tests) and we ask for the resolver from the SparkEnv.
+  // Used only for block-by-id resolution during external-shuffle-service cleanup. Pipelined
+  // shuffles are served out-of-band (no block-manager blocks, and not tracked in the
+  // MapOutputTracker this loop iterates), so this path only resolves regular shuffles.
+  private lazy val shuffleBlockResolver =
+    Option(_shuffleManager).map(_.shuffleBlockResolver).getOrElse(SparkEnv.get.shuffleBlockResolver)
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -447,7 +446,7 @@ class BlockManagerMasterEndpoint(
             // Check if the executor has been deallocated
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
               val blocksToDel =
-                shuffleManager.shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
+                shuffleBlockResolver.getBlocksForShuffle(shuffleId, mapStatus.mapId)
               if (blocksToDel.nonEmpty) {
                 val blocks = blocksToDeleteByShuffleService.getOrElseUpdate(mapStatus.location,
                   new mutable.HashSet[BlockId])

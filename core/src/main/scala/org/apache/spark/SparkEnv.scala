@@ -45,7 +45,7 @@ import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
-import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.{ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.streaming.{MultiShuffleManager, StreamingShuffleManager}
 import org.apache.spark.storage._
 import org.apache.spark.udf.worker.UDFWorkerSpecification
@@ -98,6 +98,15 @@ class SparkEnv (
    * specific shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type.
    */
   def defaultShuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * The [[ShuffleBlockResolver]] used to resolve shuffle blocks by id (reads, push-merge, and
+   * decommission migration). It always comes from the default manager: block resolution is only
+   * ever needed for regular, materialized shuffles, since a pipelined shuffle is served out-of-band
+   * by the incremental manager and produces no block-manager-addressed blocks. Callers that only
+   * need to resolve a block should use this rather than reaching through a [[ShuffleManager]].
+   */
+  def shuffleBlockResolver: ShuffleBlockResolver = defaultShuffleManager.shuffleBlockResolver
 
   /**
    * Retained for binary compatibility; returns the default manager. Prefer `shuffleManagerFor`

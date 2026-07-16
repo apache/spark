@@ -57,7 +57,7 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleBlockResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.LogBlockType.LogBlockType
 import org.apache.spark.storage.memory._
@@ -196,17 +196,27 @@ private[spark] class BlockManager(
 
   // We initialize the ShuffleManager later in SparkContext and Executor, to allow
   // user jars to define custom ShuffleManagers, as such `_shuffleManager` will be null here
-  // (except for tests) and we ask for the instance from the SparkEnv.
-  // The default shuffle manager, used here only for block-by-id resolution
-  // (`shuffleBlockResolver`). A pipelined shuffle is served out-of-band by the incremental manager
-  // and produces no block-manager-addressed blocks, so these paths only ever resolve regular
-  // shuffles and correctly use the default manager (SparkEnv.defaultShuffleManager).
+  // (except for tests) and we ask for it from the SparkEnv.
   private lazy val shuffleManager = {
     Option(_shuffleManager).getOrElse {
       // Wait for ShuffleManager to be initialized before handling shuffle operations.
       // Exception will be thrown if it is not initialized within the configured timeout.
       waitForShuffleManagerInit()
       SparkEnv.get.defaultShuffleManager
+    }
+  }
+
+  // The resolver used for block-by-id resolution (reads, push-merge, decommission migration). It
+  // comes from the default manager: a pipelined shuffle is served out-of-band by the incremental
+  // manager and produces no block-manager-addressed blocks, so these paths only ever resolve
+  // regular shuffles. Prefer this over `shuffleManager.shuffleBlockResolver` -- it does not require
+  // a ShuffleManager reference at the call site.
+  private def shuffleBlockResolver: ShuffleBlockResolver = {
+    Option(_shuffleManager).map(_.shuffleBlockResolver).getOrElse {
+      // Wait for ShuffleManager to be initialized before handling shuffle operations.
+      // Exception will be thrown if it is not initialized within the configured timeout.
+      waitForShuffleManagerInit()
+      SparkEnv.get.shuffleBlockResolver
     }
   }
 
@@ -400,7 +410,7 @@ private[spark] class BlockManager(
   // This is a lazy val so someone can migrating RDDs even if they don't have a MigratableResolver
   // for shuffles. Used in BlockManagerDecommissioner & block puts.
   lazy val migratableResolver: MigratableResolver = {
-    shuffleManager.shuffleBlockResolver.asInstanceOf[MigratableResolver]
+    shuffleBlockResolver.asInstanceOf[MigratableResolver]
   }
 
   // Timeout waiting for ShuffleManager initialization when receiving shuffle migration requests
@@ -445,7 +455,7 @@ private[spark] class BlockManager(
     assert(blockId.isInstanceOf[ShuffleBlockId],
       s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
-    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+    val resolver = shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
     val checksumFile =
       resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
     val reduceId = shuffleBlock.reduceId
@@ -875,7 +885,7 @@ private[spark] class BlockManager(
   override def getHostLocalShuffleData(
       blockId: BlockId,
       dirs: Array[String]): ManagedBuffer = {
-    shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+    shuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
   /**
@@ -886,7 +896,7 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       logDebug(s"Getting local shuffle block ${blockId}")
       try {
-        shuffleManager.shuffleBlockResolver.getBlockData(blockId)
+        shuffleBlockResolver.getBlockData(blockId)
       } catch {
         case e: IOException =>
           if (conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
@@ -993,7 +1003,7 @@ private[spark] class BlockManager(
   def getLocalMergedBlockData(
       blockId: ShuffleMergedBlockId,
       dirs: Array[String]): Seq[ManagedBuffer] = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
+    shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
 
   /**
@@ -1002,7 +1012,7 @@ private[spark] class BlockManager(
   def getLocalMergedBlockMeta(
       blockId: ShuffleMergedBlockId,
       dirs: Array[String]): MergedBlockMeta = {
-    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
+    shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
   /**
