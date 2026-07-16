@@ -1675,7 +1675,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkAppend("[1]", "$", Literal(true), "[1,true]")
     checkAppend("[1]", "$", Literal(2.5), "[1,2.5]")
 
-    // An array value is cast to a variant and appended as a single element..
+    // An array value is cast to a variant and appended as a single element.
     checkAppend("[1]", "$", Literal.create(Array(2, 3), ArrayType(IntegerType)), "[1,[2,3]]")
     checkAppend("[1, 2]", "$", Literal(parseJson("null")), "[1,2,null]")
     // Strings are stored verbatim; use parse_json for structured JSON.
