@@ -9784,6 +9784,17 @@ object functions {
   def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
 
   /**
+   * Returns a variant value with all the null-valued fields removed from its variant objects,
+   * applied recursively. Returns NULL if the input is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.3.0
+   */
+  def variant_strip_nulls(v: Column): Column = Column.fn("variant_strip_nulls", v)
+
+  /**
    * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
    * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
    *

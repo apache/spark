@@ -561,6 +561,7 @@
 | org.apache.spark.sql.catalyst.expressions.variant.VariantGetExpressionBuilder | variant_get | SELECT variant_get(parse_json('{"a": 1}'), '$.a', 'int') | struct<variant_get(parse_json({"a": 1}), $.a):int> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantInsertExpressionBuilder | variant_insert | SELECT variant_insert(parse_json('{"a": 1}'), '$.b', 2) | struct<variant_insert(parse_json({"a": 1}), $.b, 2):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.VariantSetExpressionBuilder | variant_set | SELECT variant_set(parse_json('{"a": 1}'), '$.a', 2) | struct<variant_set(parse_json({"a": 1}), $.a, 2, true):variant> |
+| org.apache.spark.sql.catalyst.expressions.variant.VariantStripNulls | variant_strip_nulls | SELECT variant_strip_nulls(parse_json('{"a":1, "b":null}')) | struct<variant_strip_nulls(parse_json({"a":1, "b":null})):variant> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathBoolean | xpath_boolean | SELECT xpath_boolean('<a><b>1</b></a>','a/b') | struct<xpath_boolean(<a><b>1</b></a>, a/b):boolean> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_double | SELECT xpath_double('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_double(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |
 | org.apache.spark.sql.catalyst.expressions.xml.XPathDouble | xpath_number | SELECT xpath_number('<a><b>1</b><b>2</b></a>', 'sum(a/b)') | struct<xpath_number(<a><b>1</b><b>2</b></a>, sum(a/b)):double> |

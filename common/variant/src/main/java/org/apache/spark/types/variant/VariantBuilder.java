@@ -130,6 +130,16 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  // Return a new variant equal to `v` with all variant-null values removed from its objects,
+  // applied recursively. Object fields whose value is a variant null are dropped at every level of
+  // nesting. Array elements are never removed (their positions are meaningful), but nested objects
+  // inside arrays are still stripped. The result is always rebuilt with fresh metadata.
+  public static Variant stripNulls(Variant v) {
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithStripNullsImpl(v.value, v.metadata, v.pos);
+    return builder.result();
+  }
+
   // Return a new variant equal to `v` with `val` inserted at `segments` (which must be non-empty).
   // An object leaf adds a field (or throws VARIANT_DUPLICATE_KEY if the key exists); an array leaf
   // inserts at the index, shifting elements right and padding with nulls past the end. Missing
@@ -587,6 +597,56 @@ public class VariantBuilder {
     } else {
       // Container type does not match the segment kind; append unchanged.
       appendVariantImpl(value, metadata, pos);
+    }
+  }
+
+  // Recursively append `value[pos...]` while dropping object fields whose value is a variant null.
+  // Mirrors `appendVariantImpl`, but for objects it skips null-valued fields, and it recurses so
+  // that nested objects (including those inside arrays) are stripped too. Array elements are always
+  // preserved to keep their positions stable.
+  private void appendWithStripNullsImpl(byte[] value, byte[] metadata, int pos) {
+    checkIndex(pos, value.length);
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    switch (basicType) {
+      case OBJECT:
+        handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          ArrayList<FieldEntry> fields = new ArrayList<>(size);
+          int start = writePos;
+          for (int i = 0; i < size; ++i) {
+            int id = readUnsigned(value, idStart + idSize * i, idSize);
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            // Drop fields whose value is a variant null.
+            if (getType(value, elementPos) == Type.NULL) {
+              continue;
+            }
+            String key = getMetadataKey(metadata, id);
+            int newId = addKey(key);
+            fields.add(new FieldEntry(key, newId, writePos - start));
+            appendWithStripNullsImpl(value, metadata, elementPos);
+          }
+          finishWritingObject(start, fields);
+          return null;
+        });
+        break;
+      case ARRAY:
+        handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          ArrayList<Integer> offsets = new ArrayList<>(size);
+          int start = writePos;
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            offsets.add(writePos - start);
+            // Preserve array elements (positions matter), but strip nulls inside nested objects.
+            appendWithStripNullsImpl(value, metadata, elementPos);
+          }
+          finishWritingArray(start, offsets);
+          return null;
+        });
+        break;
+      default:
+        shallowAppendVariantImpl(value, pos);
+        break;
     }
   }
 

@@ -288,6 +288,37 @@ class VariantEndToEndSuite extends SharedSparkSession {
     )
   }
 
+  test("variant_strip_nulls") {
+    def check(input: String, expected: String): Unit = {
+      val df = Seq(input).toDF("j")
+        .selectExpr("to_json(variant_strip_nulls(parse_json(j)))")
+      checkAnswer(df, Seq(Row(expected)))
+      // Verify the Scala DataFrame API produces the same result.
+      val df2 = Seq(input).toDF("j")
+        .select(to_json(variant_strip_nulls(parse_json(col("j")))))
+      checkAnswer(df2, Seq(Row(expected)))
+    }
+
+    check("""{"a": 1, "b": null}""", """{"a":1}""")
+    check("""{"a": null, "b": null}""", "{}")
+    check("""{"a": {"b": null, "c": 2}}""", """{"a":{"c":2}}""")
+    check("[1, null, 2]", "[1,null,2]")
+    check("""[{"a": 1, "b": null}]""", """[{"a":1}]""")
+    check(
+      """{"a": [1, null, {"b": null, "c": 2}]}""",
+      """{"a":[1,null,{"c":2}]}""")
+  }
+
+  test("variant_strip_nulls - Codegen Support") {
+    Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+        val df = Seq("""{"a": 1, "b": null}""").toDF("j")
+          .selectExpr("to_json(variant_strip_nulls(parse_json(j)))")
+        checkAnswer(df, Seq(Row("""{"a":1}""")))
+      }
+    }
+  }
+
   test("from_json variant data type parsing") {
     def check(variantTypeString: String): Unit = {
       val df = Seq("{\"a\": 1, \"b\": [2, 3.1]}").toDF("j").selectExpr("variant_get(from_json(j,\""

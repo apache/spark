@@ -606,6 +606,7 @@ VARIANT Functions
     variant_delete
     variant_get
     variant_insert
+    variant_strip_nulls
     try_variant_insert
     variant_set
     try_parse_json

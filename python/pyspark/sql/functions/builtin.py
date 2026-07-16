@@ -21665,6 +21665,35 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def variant_strip_nulls(v: "ColumnOrName") -> Column:
+    """
+    Returns a variant value with all the null-valued fields removed from its variant objects,
+    applied recursively. Returns NULL if the input is NULL.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with null-valued object fields removed.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1, "b" : null }'''} ])
+    >>> df.select(to_json(variant_strip_nulls(parse_json(df.json))).alias("r")).collect()
+    [Row(r='{"a":1}')]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("variant_strip_nulls", _to_java_column(v))
+
+
+@_try_remote_functions
 def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     """
     Removes fields or array elements from a variant at the given JSONPath locations.

@@ -2206,6 +2206,13 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
 
 
+def variant_strip_nulls(v: "ColumnOrName") -> Column:
+    return _invoke_function("variant_strip_nulls", _to_col(v))
+
+
+variant_strip_nulls.__doc__ = pysparkfuncs.variant_strip_nulls.__doc__
+
+
 def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
     if len(paths) == 0:
         raise PySparkValueError(

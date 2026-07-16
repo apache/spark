@@ -1209,6 +1209,44 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsValidVariant(Literal.create(null, VariantType)), null)
   }
 
+  test("variant_strip_nulls") {
+    def checkStrip(input: String, expected: String): Unit = {
+      val expr = VariantStripNulls(Literal(parseJson(input)))
+      checkEvaluation(
+        ResolveTimeZone.resolveTimeZones(Cast(expr, StringType)),
+        expected)
+    }
+
+    // No null-valued fields: unchanged.
+    checkStrip("""{"a": 1, "b": 2}""", """{"a":1,"b":2}""")
+    checkStrip("[1, 2, 3]", "[1,2,3]")
+    checkStrip("1", "1")
+    // A scalar string cast to StringType yields the raw string content (not JSON-quoted).
+    checkStrip("\"a string\"", "a string")
+
+    // A variant null value at the top level cast to StringType yields SQL NULL.
+    checkStrip("null", null)
+
+    // Top-level object null fields are removed.
+    checkStrip("""{"a": 1, "b": null}""", """{"a":1}""")
+    checkStrip("""{"a": null, "b": null}""", "{}")
+
+    // Stripping is recursive through nested objects.
+    checkStrip("""{"a": {"b": null, "c": 2}}""", """{"a":{"c":2}}""")
+    checkStrip(
+      """{"a": {"b": {"c": null, "d": 3}}}""",
+      """{"a":{"b":{"d":3}}}""")
+
+    // Array elements are preserved (positions matter), even variant nulls.
+    checkStrip("[1, null, 2]", "[1,null,2]")
+
+    // But nested objects inside arrays are still stripped.
+    checkStrip("""[{"a": 1, "b": null}]""", """[{"a":1}]""")
+    checkStrip(
+      """{"a": [1, null, {"b": null, "c": 2}]}""",
+      """{"a":[1,null,{"c":2}]}""")
+  }
+
   test("variant_delete") {
     def checkDelete(input: String, paths: Seq[String], expected: String): Unit = {
       val pathLits: Seq[Expression] = paths.map(p => Literal.create(p, StringType))

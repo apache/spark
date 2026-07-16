@@ -130,6 +130,12 @@ object VariantExpressionEvalUtils {
     new VariantVal(out.getValue, out.getMetadata)
   }
 
+  def variantStripNulls(input: VariantVal): VariantVal = {
+    val v = new Variant(input.getValue, input.getMetadata)
+    val out = VariantBuilder.stripNulls(v)
+    new VariantVal(out.getValue, out.getMetadata)
+  }
+
   def deleteAtPath(input: VariantVal, path: UTF8String): VariantVal =
     deleteAtPath(input, toJavaSegments(parseVariantPath(path.toString, "variant_delete")))
 

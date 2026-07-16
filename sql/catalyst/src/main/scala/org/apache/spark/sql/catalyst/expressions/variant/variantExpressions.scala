@@ -121,6 +121,42 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(v) - Returns a variant value with all the null-valued fields removed from its variant objects, applied recursively. Returns NULL if the input is NULL.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a":1, "b":null}'));
+       {"a":1}
+      > SELECT _FUNC_(parse_json('{"a":{"b":null, "c":2}}'));
+       {"a":{"c":2}}
+      > SELECT _FUNC_(parse_json('[1, null, 2]'));
+       [1,null,2]
+  """,
+  since = "4.3.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class VariantStripNulls(child: Expression) extends UnaryExpression
+  with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    VariantType,
+    "variantStripNulls",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def dataType: DataType = VariantType
+
+  override def prettyName: String = "variant_strip_nulls"
+
+  override protected def withNewChildInternal(newChild: Expression): VariantStripNulls =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Convert a nested input (array/map/struct) into a variant where maps and structs are converted to variant objects which are unordered unlike SQL structs. Input maps can only have string keys.",
   examples = """
     Examples:
