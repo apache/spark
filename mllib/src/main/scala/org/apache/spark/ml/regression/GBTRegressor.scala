@@ -166,7 +166,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /** @group expertSetParam */
-  @Since("5.0.0")
+  @Since("4.3.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = instrumented { instr =>
