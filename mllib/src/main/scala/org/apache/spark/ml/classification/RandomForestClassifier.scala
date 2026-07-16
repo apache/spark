@@ -176,9 +176,10 @@ class RandomForestClassifier @Since("1.4.0") (
       subsamplingRate, thresholds, cacheNodeIds, checkpointInterval, bootstrap,
       intermediateStorageLevel)
 
+    val storageLevel = StorageLevel.fromString($(intermediateStorageLevel))
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr),
-        storageLevel = StorageLevel.fromString($(intermediateStorageLevel)))
+        storageLevel = storageLevel)
       .map(_.asInstanceOf[DecisionTreeClassificationModel])
     trees.foreach(copyValues(_))
 
