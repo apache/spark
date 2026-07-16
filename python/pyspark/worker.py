@@ -3496,7 +3496,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         def func(
             split_index: int,
-            batches: Iterator[pa.RecordBatch],
+            data: Iterator[pa.RecordBatch],
         ) -> Iterator[pa.RecordBatch]:
             """Apply transformWithStateInPandas UDF with initial state.
 
@@ -3536,7 +3536,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
             def row_stream() -> Iterator[tuple]:
                 nonlocal total_bytes, total_rows, average_arrow_row_size
-                for batch in batches:
+                for batch in data:
                     # Short circuit batch size stats if the batch size is
                     # unlimited as computing batch size is computationally
                     # expensive.
