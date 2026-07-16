@@ -1125,11 +1125,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   def visitInsertIntoReplaceWhere(
       ctx: InsertIntoReplaceBooleanCondContext): InsertTableParams = withOrigin(ctx) {
-    // The unified grammar rule for REPLACE WHERE | ON accepts a table alias for symmetry with
-    // REPLACE ON (whose condition can reference the target via the alias, e.g. `t.col`). The
-    // REPLACE WHERE branch has no use for the alias because the WHERE condition is evaluated
-    // against the target table directly. Reject explicitly so users get a clear parse error
-    // instead of a confusing column-not-found at analysis time.
+    // The grammar rule shared with REPLACE ON accepts a table alias, but REPLACE WHERE has no
+    // use for it. Reject it explicitly for a clear parse error.
     if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
       throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
     }
