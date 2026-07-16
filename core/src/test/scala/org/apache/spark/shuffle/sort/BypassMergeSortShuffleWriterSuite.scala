@@ -37,6 +37,7 @@ import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -155,6 +156,50 @@ class BypassMergeSortShuffleWriterSuite
     }
     val rowBasedChecksums = createPartitionRowBasedChecksums(checksumSize)
     when(dependency.rowBasedChecksums).thenReturn(rowBasedChecksums)
+  }
+
+  test("reports no custom shuffle metrics by default") {
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0L, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      shuffleExecutorComponents)
+    writer.write(Iterator((1, 1), (2, 2), (3, 3)))
+    writer.stop( /* success = */ true)
+    assert(writer.currentMetricsValues().isEmpty)
+  }
+
+  test("exposes custom shuffle metrics reported by the map output writer") {
+    val reported = Array[CustomShuffleTaskMetric](
+      TestCustomShuffleTaskMetric("s3BytesUploaded", 2048L))
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0L, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      new CustomMetricReportingExecutorComponents(shuffleExecutorComponents, reported))
+    writer.write(Iterator((1, 1), (2, 2), (3, 3)))
+    writer.stop( /* success = */ true)
+    assert(writer.currentMetricsValues() === reported)
+  }
+
+  test("exposes custom shuffle metrics reported by the map output writer " +
+    "on the empty-iterator path") {
+    val reported = Array[CustomShuffleTaskMetric](
+      TestCustomShuffleTaskMetric("s3BlockUploads", 0L))
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      0L, // MapId
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      new CustomMetricReportingExecutorComponents(shuffleExecutorComponents, reported))
+    writer.write(Iterator.empty)
+    writer.stop( /* success = */ true)
+    assert(writer.currentMetricsValues() === reported)
   }
 
   test("write empty iterator") {
