@@ -30,7 +30,7 @@ import sys
 CLI_HOME = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, CLI_HOME)
 
-from _spark_cli.utils import exec_script, register_daemon, spark_home  # noqa: E402
+from _spark_cli.utils import exec_script, register_daemon, spark_home
 
 
 class _HelpFormatter(argparse.HelpFormatter):

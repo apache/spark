@@ -77,10 +77,10 @@ def register_daemon(
     def _status(args: argparse.Namespace, remaining: list) -> None:
         exec_script([spark_home() / "sbin" / "spark-daemon.sh", "status", server_class, "1"])
 
-    sub.add_parser("start", help=f"Start the server.", add_help=False).set_defaults(func=_start)
-    sub.add_parser("stop", help=f"Stop the server.", add_help=False).set_defaults(func=_stop)
+    sub.add_parser("start", help="Start the server.", add_help=False).set_defaults(func=_start)
+    sub.add_parser("stop", help="Stop the server.", add_help=False).set_defaults(func=_stop)
     # spark-daemon.sh doesn't support `--help`, so we don't suppress it here.
-    sub.add_parser("status", help=f"Show server status.").set_defaults(func=_status)
+    sub.add_parser("status", help="Show server status.").set_defaults(func=_status)
 
     if extras:
         extras(sub)
