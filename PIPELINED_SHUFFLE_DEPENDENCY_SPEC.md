@@ -48,8 +48,9 @@ invariant every component that handles the type must preserve:
   `getShuffleDependenciesAndResourceProfiles` matches `case shuffleDep: ShuffleDependency`
   (`DAGScheduler.scala:882`), so the subtype splits producer and consumer into separate stages
   automatically; this is what §3 ("introduces a shuffle boundary exactly as a regular one does")
-  relies on. (2) **transport** — `shuffleId`, `ShuffleWriter`/`ShuffleReader`, and `ShuffleManager`
-  registration, all from the base constructor.
+  relies on. (2) **transport** — `shuffleId` and `ShuffleManager` registration come from the base
+  constructor (yielding the `shuffleHandle`); the `ShuffleWriter`/`ShuffleReader` are obtained at
+  runtime from the `ShuffleManager` via that handle, exactly as for a regular shuffle.
 - *Scheduler-skipped — it must not be treated as a materialized shuffle for the post-boundary
   lifecycle.* The one clean per-dependency opt-out is `MapOutputTracker` registration: it is
   `DAGScheduler`-driven at `createShuffleMapStage`, gated by `!containsShuffle`
