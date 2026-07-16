@@ -16,7 +16,7 @@
 #
 
 import subprocess
-import sys
+import unittest
 from pathlib import Path
 
 CLI_HOME = Path(__file__).resolve().parent.parent
@@ -32,43 +32,43 @@ def run_cli(*args):
     )
 
 
-def test_no_args_shows_help():
-    result = run_cli()
-    assert result.returncode == 0
-    assert "Unified CLI for Apache Spark." in result.stderr
+class SparkCLITests(unittest.TestCase):
+    def test_no_args_shows_help(self):
+        result = run_cli()
+        assert result.returncode == 0
+        assert "Unified CLI for Apache Spark." in result.stderr
+
+    def test_help_flag(self):
+        result = run_cli("--help")
+        assert result.returncode == 0
+        assert "standalone cluster" in result.stdout
+
+    def test_all_top_level_commands_listed(self):
+        result = run_cli("--help")
+        for cmd in [
+            "cluster", "master", "worker",
+            "scala", "python", "sql",
+            "connect", "history", "thrift", "pipelines", "submit",
+        ]:
+            assert cmd in result.stdout, f"{cmd!r} missing from help output"
+
+    def test_subcommand_no_args_shows_help(self):
+        result = run_cli("connect")
+        assert result.returncode == 0
+        assert "start" in result.stdout
+        assert "stop" in result.stdout
+        assert "status" in result.stdout
+
+    def test_worker_subcommands(self):
+        result = run_cli("worker", "--help")
+        assert result.returncode == 0
+        for sub in ["start", "start-all", "stop", "stop-all", "status", "decommission", "run"]:
+            assert sub in result.stdout, f"{sub!r} missing from worker help"
+
+    def test_unknown_command(self):
+        result = run_cli("bogus")
+        assert result.returncode != 0
 
 
-def test_help_flag():
-    result = run_cli("--help")
-    assert result.returncode == 0
-    assert "standalone cluster" in result.stdout
-
-
-def test_all_top_level_commands_listed():
-    result = run_cli("--help")
-    for cmd in [
-        "cluster", "master", "worker",
-        "scala", "python", "sql",
-        "connect", "history", "thrift", "pipelines", "submit",
-    ]:
-        assert cmd in result.stdout, f"{cmd!r} missing from help output"
-
-
-def test_subcommand_no_args_shows_help():
-    result = run_cli("connect")
-    assert result.returncode == 0
-    assert "start" in result.stdout
-    assert "stop" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_worker_subcommands():
-    result = run_cli("worker", "--help")
-    assert result.returncode == 0
-    for sub in ["start", "start-all", "stop", "stop-all", "status", "decommission", "run"]:
-        assert sub in result.stdout, f"{sub!r} missing from worker help"
-
-
-def test_unknown_command():
-    result = run_cli("bogus")
-    assert result.returncode != 0
+if __name__ == "__main__":
+    unittest.main()
