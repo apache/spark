@@ -234,6 +234,16 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-38983: grouping functions in boolean expressions report type mismatch") {
+    Seq(grouping("course"), grouping_id("course", "year")).foreach { groupingExpr =>
+      val error = intercept[AnalysisException] {
+        courseSales.cube("course", "year").agg(groupingExpr && lit(true)).collect()
+      }
+      assert(error.getCondition === "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
+      assert(!error.getMessage.contains("grouping()/grouping_id() can only be used"))
+    }
+  }
+
   test("grouping/grouping_id inside window function") {
     checkAnswer(
       courseSales.cube("course", "year")
