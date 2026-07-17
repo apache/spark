@@ -30,7 +30,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.{SHUFFLE_MANAGER, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE}
+import org.apache.spark.internal.config.{SHUFFLE_MANAGER_INCREMENTAL, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.client.TransportClient
@@ -49,7 +49,10 @@ class StreamingShuffleWriterSuite
   with MockitoSugar {
 
   private def newConf(): SparkConf =
-    new SparkConf().set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
+    // StreamingShuffleManager is pipelined, so it belongs in the incremental slot (the default
+    // spark.shuffle.manager must be a BlockingShuffleManager). This is what initializes the
+    // streaming output tracker that the writer constructor asserts.
+    new SparkConf().set(SHUFFLE_MANAGER_INCREMENTAL, classOf[StreamingShuffleManager].getName)
 
   private def createTaskContext(conf: SparkConf, partitionId: Int): TaskContextImpl = {
     val properties = new Properties()

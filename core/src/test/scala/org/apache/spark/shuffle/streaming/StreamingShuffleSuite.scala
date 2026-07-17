@@ -39,7 +39,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext.withSpark
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{SHUFFLE_MANAGER, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE, STREAMING_SHUFFLE_READER_MAX_MEMORY, STREAMING_SHUFFLE_WRITER_MAX_MEMORY}
+import org.apache.spark.internal.config.{SHUFFLE_MANAGER_INCREMENTAL, STREAMING_SHUFFLE_CHECKSUM_ENABLED, STREAMING_SHUFFLE_NETWORK_BUFFER_SIZE, STREAMING_SHUFFLE_READER_MAX_MEMORY, STREAMING_SHUFFLE_WRITER_MAX_MEMORY}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClient, TransportClientFactory}
@@ -85,7 +85,10 @@ class StreamingShuffleSuite
   protected override def beforeEach(): Unit = {
     super.beforeEach()
     sparkConf = new SparkConf()
-      .set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
+      // StreamingShuffleManager is pipelined, so it occupies the incremental slot (the default
+      // spark.shuffle.manager must be a BlockingShuffleManager). This still initializes the
+      // streaming output tracker these tests rely on.
+      .set(SHUFFLE_MANAGER_INCREMENTAL, classOf[StreamingShuffleManager].getName)
       .set(STREAMING_SHUFFLE_CHECKSUM_ENABLED, true)
   }
 
@@ -127,7 +130,7 @@ class StreamingShuffleSuite
     extends StreamingShuffleReader[K, C](handle, context, clientHandler, errorNotifier)
 
   private class ShuffleGroup[T: ClassTag](sc: SparkContext, mappers: Int, reducers: Int) {
-    assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+    assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
     assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
     SparkEnv.get.streamingShuffleOutputTracker.get
       .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -803,7 +806,7 @@ class StreamingShuffleSuite
     }
 
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+      assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
       assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -919,7 +922,7 @@ class StreamingShuffleSuite
 
   test("credit control message send failure") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+      assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
       assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -975,7 +978,7 @@ class StreamingShuffleSuite
 
   test("term ack message message send failure") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+      assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
       assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -1446,7 +1449,7 @@ class StreamingShuffleSuite
     }
 
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+      assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
       assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
@@ -1488,7 +1491,7 @@ class StreamingShuffleSuite
   test("writer resources are cleaned up when server handler " +
     "receive fails via errorNotifier") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
-      assert(SparkEnv.get.shuffleManager.isInstanceOf[StreamingShuffleManager])
+      assert(SparkEnv.get.pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager]))
       assert(SparkEnv.get.streamingShuffleOutputTracker.isDefined)
       SparkEnv.get.streamingShuffleOutputTracker.get
         .asInstanceOf[StreamingShuffleOutputTrackerMaster]
