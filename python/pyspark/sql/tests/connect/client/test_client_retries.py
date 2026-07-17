@@ -315,7 +315,7 @@ class SparkConnectClientRetriesTestCase(unittest.TestCase):
 
     def test_retry_exception_bare_no_cause_raises_self_when_bound_exceeded(self):
         # If a RetryException has no attached cause (e.g. the OPERATION_NOT_FOUND/
-        # SESSION_NOT_FOUND path, which today raises a bare RetryException), falling back to
+        # SESSION_NOT_FOUND path, which today raises a bare RetryException), fall back to
         # raising the bare RetryException itself once the bound is exceeded.
         client = SparkConnectClient("sc://foo/;token=bar")
         clock = FakeClock()
