@@ -254,4 +254,90 @@ class RelationQualificationSuite extends SharedSparkSession {
         "searchPath" -> "[`system`.`session`]"),
       context = ExpectedContext("system.session.no_such_view_xyz"))
   }
+
+  test("SECTION 15: Two-part session.name DDL - persistentCatalogFirst controls temp vs " +
+      "persistent") {
+    // Companion to SECTION 13, but for the DDL / misc-command path (lookupTableOrView).
+    val tbl = "ddl_probe_tbl"
+
+    // The columns DESCRIBE TABLE session.<name> reports (only the leading column-name rows).
+    def describedColumns(): Seq[String] =
+      sql(s"DESCRIBE TABLE session.$tbl").collect().map(_.getString(0)).toSeq
+
+    // Run ALTER TABLE session.<name> SET TBLPROPERTIES and report which object it resolved to by
+    // observing the outcome: it succeeds on the persistent table, but a temp view rejects
+    // ALTER TABLE with EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW. Returns "persistent" or "temp".
+    def alterResolvesTo(): String = {
+      try {
+        sql(s"ALTER TABLE session.$tbl SET TBLPROPERTIES ('k' = 'v')")
+        "persistent"
+      } catch {
+        case e: AnalysisException if e.getCondition == "EXPECT_TABLE_NOT_VIEW.USE_ALTER_VIEW" =>
+          "temp"
+      }
+    }
+
+    // (tempExists, permExists); the neither-exists case is covered by SECTION 14 / errors.
+    val existenceCombinations = Seq((true, true), (true, false), (false, true))
+    for {
+      (tempExists, permExists) <- existenceCombinations
+      persistentCatalogFirst <- Seq(false, true)
+    } {
+      withDatabase("session") {
+        sql("CREATE DATABASE session")
+        if (permExists) {
+          sql(s"CREATE TABLE session.$tbl (persistent_col INT) USING parquet")
+        }
+        if (tempExists) {
+          sql(s"CREATE TEMPORARY VIEW $tbl AS SELECT 1 AS temp_col")
+        }
+        try {
+          // Resolves to the temp view unless a permanent table shadows it and
+          // persistentCatalogFirst prefers the permanent one.
+          val resolvesToTemp = tempExists && !(permExists && persistentCatalogFirst)
+          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
+            withClue(s"tempExists=$tempExists, permExists=$permExists, " +
+                s"persistentCatalogFirst=$persistentCatalogFirst: ") {
+              if (resolvesToTemp) {
+                assert(describedColumns().contains("temp_col"))
+                assert(alterResolvesTo() == "temp")
+              } else {
+                assert(describedColumns().contains("persistent_col"))
+                assert(alterResolvesTo() == "persistent")
+                // The ALTER above targeted the persistent table; confirm the property landed on
+                // spark_catalog.session.<name> and not on any temp object.
+                val props = sql(s"SHOW TBLPROPERTIES spark_catalog.session.$tbl")
+                  .collect().map(r => r.getString(0) -> r.getString(1)).toMap
+                assert(props.get("k").contains("v"))
+              }
+            }
+          }
+        } finally {
+          sql(s"DROP VIEW IF EXISTS $tbl")
+        }
+      }
+    }
+
+    // Three-part system.session.<name> is temp-only in both paths and must never consult the
+    // persistent schema `session`, regardless of persistentCatalogFirst (guards the length == 2
+    // condition in lookupTableOrView).
+    withDatabase("session") {
+      sql("CREATE DATABASE session")
+      sql(s"CREATE TABLE session.$tbl (persistent_col INT) USING parquet")
+      sql(s"CREATE TEMPORARY VIEW $tbl AS SELECT 1 AS temp_col")
+      try {
+        Seq(false, true).foreach { persistentCatalogFirst =>
+          withSQLConf(SQLConf.PERSISTENT_CATALOG_FIRST.key -> persistentCatalogFirst.toString) {
+            withClue(s"3-part, persistentCatalogFirst=$persistentCatalogFirst: ") {
+              val cols = sql(s"DESCRIBE TABLE system.session.$tbl")
+                .collect().map(_.getString(0)).toSeq
+              assert(cols.contains("temp_col"))
+            }
+          }
+        }
+      } finally {
+        sql(s"DROP VIEW IF EXISTS $tbl")
+      }
+    }
+  }
 }

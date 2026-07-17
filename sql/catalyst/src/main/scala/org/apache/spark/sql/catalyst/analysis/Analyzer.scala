@@ -1255,9 +1255,11 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
-      relationResolution.lookupTempView(identifier).map { tempView =>
-        ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
-      }.orElse {
+      def tempViewCandidate: Option[LogicalPlan] =
+        relationResolution.lookupTempView(identifier).map { tempView =>
+          ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
+        }
+      def persistentCandidate: Option[LogicalPlan] = {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
@@ -1316,6 +1318,19 @@ class Analyzer(
             }
           case _ => None
         }
+      }
+      // Two-part `session.<name>`: the name can denote either a local temp view `name` or a
+      // persistent relation `name` in schema `session`. Order follows
+      // `SQLConf.prioritizeSystemCatalog` (the inverse of `PERSISTENT_CATALOG_FIRST`), matching
+      // the SELECT/DML path in `RelationResolution.resolveRelation`. Without this, DDL and misc
+      // commands (e.g. DESCRIBE TABLE, ALTER TABLE) would always resolve the temp view first and
+      // ignore `PERSISTENT_CATALOG_FIRST`, diverging from how the same name resolves in a query.
+      if (identifier.length == 2 &&
+          identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) &&
+          !conf.prioritizeSystemCatalog) {
+        persistentCandidate.orElse(tempViewCandidate)
+      } else {
+        tempViewCandidate.orElse(persistentCandidate)
       }
     }
 
