@@ -1674,7 +1674,7 @@ CommentOnTable table comment
 -- !query
 ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment'
 -- !query analysis
-AlterTableChangeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`test_comment`, c1, StructField(c1,IntegerType,true)
+AlterTableChangeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`test_comment`, c1, StructField(c1,IntegerType,true), false
 
 
 -- !query
