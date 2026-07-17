@@ -947,8 +947,8 @@ object SQLConf {
 
   val SQL_ASOF_JOIN_ENABLED =
     buildConf("spark.sql.join.asofJoin.enabled")
-      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION. When false, " +
-        "ASOF JOIN fails at parse time.")
+      .doc("When true, enable SQL ASOF JOIN syntax with MATCH_CONDITION and plan it with " +
+        "the sort-merge ASOF join physical operator. When false, ASOF JOIN fails at parse time.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -8572,6 +8572,14 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
+
+  /**
+   * Whether to keep [[AsOfJoin]] for the sort-merge physical operator instead of the
+   * correlated-subquery rewrite. SQL ASOF JOIN always requires sort-merge; the DataFrame
+   * API is gated separately on [[sortMergeAsOfJoinEnabled]].
+   */
+  def useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin: Boolean): Boolean =
+    sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 

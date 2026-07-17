@@ -676,13 +676,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, _, _, _, _, _, _, _, _, _, _, true)
-              if !SQLConf.get.sortMergeAsOfJoinEnabled =>
-            j.failAnalysis(
-              errorClass = "AS_OF_JOIN.SORT_MERGE_REQUIRED",
-              messageParameters = Map(
-                "config" -> SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key))
-
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
             throw SparkException.internalError(
