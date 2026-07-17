@@ -308,6 +308,21 @@ case class AlterColumns(
     copy(table = newChild)
 }
 
+object AlterColumns {
+  /**
+   * Returns the name of the first column that is altered more than once, either directly (the same
+   * column appears in multiple specs) or through a parent/descendant relationship (both a field and
+   * one of its nested fields are altered). Returns None when every column is altered at most once.
+   * Used to reject `ALTER COLUMN` / `COMMENT ON ... COLUMN` statements that change the same column
+   * twice, which is not supported.
+   */
+  def findRepeatedColumn(specs: Seq[AlterColumnSpec]): Option[Seq[String]] = {
+    val names = specs.map(_.column.name)
+    names.find(name => names.count(_ == name) > 1)
+      .orElse(names.find(name => names.exists(other => other != name && other.startsWith(name))))
+  }
+}
+
 /**
  * The logical plan of the following commands:
  *  - ALTER TABLE ... CLUSTER BY (col1, col2, ...)

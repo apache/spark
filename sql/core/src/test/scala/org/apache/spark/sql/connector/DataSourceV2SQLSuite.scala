@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3356,6 +3356,101 @@ class DataSourceV2SQLSuiteV1Filter
       assert(outerStruct("inner").getComment().contains("inner struct"))
       val innerStruct = outerStruct("inner").dataType.asInstanceOf[StructType]
       assert(innerStruct("leaf").getComment().contains("leaf field"))
+    }
+  }
+
+  test("SPARK-54831: COMMENT ON TABLE ... COLUMN works on the session catalog (V1 table)") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // Multiple top-level columns and nested fields work on an ordinary managed table, routed
+    // through the shared V2 execution path rather than the single-column V1 command.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Multiple top-level columns at once.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | id IS 'id col',
+          | data IS 'data col')""".stripMargin)
+      assert(columnComment("t", "id") === Some("id col"))
+      assert(columnComment("t", "data") === Some("data col"))
+
+      // Nested fields.
+      sql(
+        """COMMENT ON TABLE t COLUMN (
+          | point.x IS 'x field',
+          | point.y IS 'y field')""".stripMargin)
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().contains("x field"))
+      assert(struct("y").getComment().contains("y field"))
+
+      // A single nested field via COMMENT ON TABLE ... COLUMN.
+      sql("COMMENT ON TABLE t COLUMN (point.x IS 'updated x')")
+      val struct2 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct2("x").getComment().contains("updated x"))
+
+      // IS NULL removes comments (top-level and nested) on the session catalog too.
+      sql("COMMENT ON TABLE t COLUMN (id IS NULL, point.y IS NULL)")
+      assert(columnComment("t", "id").isEmpty)
+      val struct3 = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct3("y").getComment().isEmpty)
+
+      // The new comment is visible immediately via DESCRIBE (the relation cache is refreshed).
+      sql("COMMENT ON TABLE t COLUMN (data IS 'fresh comment')")
+      checkAnswer(
+        sql("DESCRIBE t data").filter("info_name = 'comment'").select("info_value"),
+        Row("fresh comment"))
+    }
+
+    // char/varchar columns keep their declared type while their comment is updated.
+    withTable("t") {
+      sql("CREATE TABLE t(c char(5), v varchar(6)) USING parquet")
+      sql("COMMENT ON TABLE t COLUMN (c IS 'char comment', v IS 'varchar comment')")
+      assert(columnComment("t", "c") === Some("char comment"))
+      assert(columnComment("t", "v") === Some("varchar comment"))
+      val raw = spark.sessionState.catalog.getTableRawMetadata(
+        TableIdentifier("t", Some("default")))
+      assert(raw.schema("c").dataType === CharType(5))
+      assert(raw.schema("v").dataType === VarcharType(6))
+    }
+
+    // A parent field and its nested field still cannot be changed in the same command.
+    withTable("t") {
+      sql("CREATE TABLE t(point struct<x: double, y: double>) USING json")
+      val sqlText =
+        """COMMENT ON TABLE t COLUMN (
+          | point IS 'point col',
+          | point.x IS 'x field')""".stripMargin
+      checkError(
+        exception = intercept[AnalysisException](sql(sqlText)),
+        condition = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+        parameters = Map(
+          "table" -> "`spark_catalog`.`default`.`t`",
+          "fieldName" -> "`point`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // An unknown column is still reported as UNRESOLVED_COLUMN on the session catalog.
+    withTable("t") {
+      sql("CREATE TABLE t(id int) USING json")
+      val sqlText = "COMMENT ON TABLE t COLUMN (id IS 'x', nope IS 'y')"
+      checkError(
+        exception = analysisException(sqlText),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`nope`", "proposal" -> "`id`"),
+        context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+    }
+
+    // Commenting a partition column is rejected.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, p string) USING json PARTITIONED BY (p)")
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("COMMENT ON TABLE t COLUMN (id IS 'id col', p IS 'part col')")),
+        condition = "CANNOT_ALTER_PARTITION_COLUMN",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "columnName" -> "`p`"))
     }
   }
 

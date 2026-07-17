@@ -1263,23 +1263,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
       case AlterColumns(table: ResolvedTable, specs) =>
-        val groupedColumns = specs.groupBy(_.column.name)
-        groupedColumns.collect {
-          case (name, occurrences) if occurrences.length > 1 =>
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-        }
-        groupedColumns.keys.foreach { name =>
-          if (groupedColumns.keys.exists(child => child != name && child.startsWith(name))) {
-            alter.failAnalysis(
-              errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
-              messageParameters = Map(
-                "table" -> toSQLId(table.name),
-                "fieldName" -> toSQLId(name)))
-          }
+        AlterColumns.findRepeatedColumn(specs).foreach { name =>
+          alter.failAnalysis(
+            errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
+            messageParameters = Map(
+              "table" -> toSQLId(table.name),
+              "fieldName" -> toSQLId(name)))
         }
         specs.foreach {
           case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>

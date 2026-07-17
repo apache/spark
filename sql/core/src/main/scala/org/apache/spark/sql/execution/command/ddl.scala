@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumnsUtils.CURRENT_DEFAULT_COLUMN_METADATA_KEY
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -493,6 +493,42 @@ case class AlterTableChangeColumnCommand(
   // are allowed.
   private def canEvolveType(from: StructField, to: StructField): Boolean = {
     DataType.equalsIgnoreCompatibleCollation(from.dataType, to.dataType, checkComplexTypes = false)
+  }
+}
+
+/**
+ * A command to set or remove comments on one or more columns of a table, including nested fields.
+ * Used for the multi-column and nested-field forms of `COMMENT ON TABLE ... COLUMN (...)` on the
+ * session catalog, which the single-column [[AlterTableChangeColumnCommand]] cannot express. Only
+ * `UpdateColumnComment` changes are expected here; the comments are applied to the data schema via
+ * [[CatalogV2Util.applySchemaChanges]].
+ */
+case class AlterTableChangeColumnCommentsCommand(
+    tableName: TableIdentifier,
+    changes: Seq[TableChange]) extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    catalog.refreshTable(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
+    val resolver = sparkSession.sessionState.conf.resolver
+    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
+
+    // Comments on partition columns are not supported by this path.
+    changes.foreach {
+      case c: TableChange.UpdateColumnComment =>
+        val topLevel = c.fieldNames.head
+        if (table.partitionColumnNames.exists(resolver(topLevel, _))) {
+          throw QueryCompilationErrors.cannotAlterPartitionColumn(table.qualifiedName, topLevel)
+        }
+      case _ =>
+    }
+
+    val newDataSchema = CatalogV2Util.applySchemaChanges(
+      table.dataSchema, changes, table.provider, "ALTER TABLE")
+    catalog.alterTableDataSchema(tableName, newDataSchema)
+
+    Seq.empty[Row]
   }
 }
 
