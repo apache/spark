@@ -902,3 +902,39 @@ case class DivideDTInterval(
       newLeft: Expression, newRight: Expression): DivideDTInterval =
     copy(interval = newLeft, num = newRight)
 }
+
+// Divide a TIME value (stored as a `Long` number of nanoseconds since midnight) by an integral
+// number, rounding to the nearest nanosecond. Used by `Average` to compute the mean of a TIME
+// column. The result preserves the input `TimeType`'s precision. `num` is expected to be a
+// positive count, so no divide-by-zero or `Long.MinValue` overflow checks are needed (the caller
+// guards the zero-count case).
+case class TimeDivide(
+    time: Expression,
+    num: Expression,
+    targetType: TimeType)
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
+
+  override def left: Expression = time
+  override def right: Expression = num
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, LongType)
+  override def dataType: DataType = targetType
+
+  override def nullSafeEval(nanos: Any, num: Any): Any = {
+    LongMath.divide(nanos.asInstanceOf[Long], num.asInstanceOf[Long], RoundingMode.HALF_UP)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val math = classOf[LongMath].getName
+    nullSafeCodeGen(ctx, ev, (t, n) =>
+      s"${ev.value} = $math.divide($t, $n, java.math.RoundingMode.HALF_UP);")
+  }
+
+  override def toString: String = s"($left / $right)"
+  override def sql: String = s"(${left.sql} / ${right.sql})"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): TimeDivide =
+    copy(time = newLeft, num = newRight)
+}

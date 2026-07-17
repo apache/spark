@@ -3798,6 +3798,46 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Row(LocalTime.of(22, 1, 0), LocalTime.of(3, 0, 0)))
   }
 
+  test("SPARK-58044: Support the TIME data type in the aggregate function `avg`") {
+    // Basic average of TIME values.
+    val df = Seq("10:00:00", "12:00:00", "14:00:00").map(LocalTime.parse).toDF("t")
+    val avgDF = df.select(avg($"t"))
+    checkAnswer(avgDF, Row(LocalTime.of(12, 0, 0)))
+    assert(find(avgDF.queryExecution.executedPlan)(_.isInstanceOf[HashAggregateExec]).isDefined)
+    // The average of a TIME column is a TIME value.
+    assert(avgDF.schema == StructType(Seq(StructField("avg(t)", TimeType()))))
+
+    // Average that requires rounding to the nearest microsecond/nanosecond.
+    val df2 = Seq("10:00:00", "10:00:01").map(LocalTime.parse).toDF("t")
+    checkAnswer(df2.select(avg($"t")), Row(LocalTime.of(10, 0, 0, 500000000)))
+
+    // NULL values are ignored; all-null input yields NULL.
+    val df3 = Seq(Some("10:00:00"), None, Some("14:00:00"))
+      .map(_.map(LocalTime.parse)).toDF("t")
+    checkAnswer(df3.select(avg($"t")), Row(LocalTime.of(12, 0, 0)))
+    val emptyDF = Seq.empty[LocalTime].toDF("t")
+    checkAnswer(emptyDF.select(avg($"t")), Row(null))
+
+    // The output preserves the input precision.
+    val df4 = Seq("10:00:00", "12:00:00").map(LocalTime.parse).toDF("t")
+      .selectExpr("CAST(t AS TIME(3)) AS t")
+    assert(df4.select(avg($"t")).schema ==
+      StructType(Seq(StructField("avg(t)", TimeType(3)))))
+
+    // Grouped average.
+    val df5 = Seq(
+      ("a", "10:00:00"), ("a", "12:00:00"), ("b", "20:00:00"), ("b", "22:00:00"))
+      .map { case (c, t) => (c, LocalTime.parse(t)) }.toDF("class", "t")
+    checkAnswer(
+      df5.groupBy($"class").agg(avg($"t")).orderBy($"class"),
+      Seq(Row("a", LocalTime.of(11, 0, 0)), Row("b", LocalTime.of(21, 0, 0))))
+
+    // The SQL `avg` surface works over TIME literals as well.
+    checkAnswer(
+      sql("SELECT avg(t) FROM VALUES (TIME'10:00:00'), (TIME'14:00:00') AS tab(t)"),
+      Row(LocalTime.of(12, 0, 0)))
+  }
+
   test("SPARK-53155: global lower aggregation should not be removed") {
     val df = emptyTestData
       .groupBy().agg(lit(1).as("col1"), lit(2).as("col2"), lit(3).as("col3"))
