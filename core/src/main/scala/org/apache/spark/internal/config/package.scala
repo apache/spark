@@ -756,6 +756,7 @@ package object config {
         "that does, rather than falling back to the default. Set to 0 (the default) to disable " +
         "this feature and retry OOM tasks with the same resources as the original attempt. " +
         "This feature does not apply to barrier stages.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .checkValue(_ >= 0, "OOM retry cpus increment must be non-negative (0 disables).")
       .createWithDefault(0)
@@ -771,6 +772,7 @@ package object config {
         "its memory limit is killed with the container exit codes -103 (virtual memory) and " +
         "-104 (physical memory), consider setting this to `52,-103,-104`. Has no effect when " +
         "spark.task.oomRetryCpusIncrement is 0.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .toSequence
       .createWithDefault(Seq(SparkExitCode.OOM))
