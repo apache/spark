@@ -178,8 +178,11 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
   }
 
   test("unregisterShuffleFromAllManagers is a no-op (not an NPE) before managers are initialized") {
+    // Disable the incremental slot (it defaults to streaming) so there is genuinely nothing to
+    // notify once the blocking manager is forced back to its pre-init null state below.
     val without = new SparkConf(loadDefaults = false)
       .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
+      .set(SHUFFLE_MANAGER_INCREMENTAL, "")
     val env = startEnv(without)
     // SPARK-45762 defers shuffle-manager init behind a latch (so user jars load first), leaving
     // `_blockingShuffleManager` null until initializeShuffleManager runs. A RemoveShuffle RPC can
@@ -209,14 +212,17 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     assert(dep.shuffleHandle.shuffleId === dep.shuffleId)
   }
 
-  test("with no incremental manager configured, a pipelined dependency falls back to the default") {
+  test("with the incremental manager disabled, a pipelined dependency falls back to the default") {
+    // The incremental slot defaults to the streaming manager; setting it empty disables it, so
+    // there is no pipelined manager and a pipelined dependency falls back to the blocking manager.
     val without = new SparkConf(loadDefaults = false)
       .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
+      .set(SHUFFLE_MANAGER_INCREMENTAL, "")
     val env = startEnv(without)
     // A regular dependency routes to the default manager.
     assert(env.shuffleManagerFor(regularDep(sc)).isInstanceOf[DefaultRecordingManager])
     // A pipelined dependency also routes to the default manager (served as an ordinary materialized
-    // shuffle) when no incremental manager is configured -- the pre-opt-in behavior.
+    // shuffle) when the incremental manager is disabled.
     assert(env.shuffleManagerFor(pipelinedDep(sc)).isInstanceOf[DefaultRecordingManager])
   }
 

@@ -403,14 +403,16 @@ class SparkEnv (
               s"materialized shuffles and resolves blocks by id; configure a pipelined manager " +
               s"via ${config.SHUFFLE_MANAGER_INCREMENTAL.key} instead.")
       }
-      // The pipelined manager (spark.shuffle.manager.incremental), when configured, serves
-      // pipelined shuffle dependencies. It is a peer of the blocking manager -- see
-      // `shuffleManagerFor` -- not a wrapper installed as the top-level manager, and must be a
-      // PipelinedShuffleManager: its output is read incrementally and served out-of-band, so it
-      // produces no block-manager blocks.
-      _pipelinedShuffleManager = conf.get(config.SHUFFLE_MANAGER_INCREMENTAL).map { className =>
-        // Resolve short aliases ("sort", "tungsten-sort") the same way the blocking manager does,
-        // so spark.shuffle.manager.incremental accepts the same values as spark.shuffle.manager.
+      // The pipelined manager (spark.shuffle.manager.incremental) serves pipelined shuffle
+      // dependencies. It is a peer of the blocking manager -- see `shuffleManagerFor` -- not a
+      // wrapper installed as the top-level manager, and must be a PipelinedShuffleManager: its
+      // output is read incrementally and served out-of-band, so it produces no block-manager
+      // blocks. It defaults to the built-in streaming manager; an empty value disables it (no
+      // pipelined manager), in which case a pipelined dependency falls back to the blocking one.
+      _pipelinedShuffleManager = Option(conf.get(config.SHUFFLE_MANAGER_INCREMENTAL))
+        .filter(_.nonEmpty).map { className =>
+        // Resolve short aliases ("sort", "tungsten-sort", "streaming") the same way the blocking
+        // manager does, so spark.shuffle.manager.incremental accepts the same values.
         Utils.instantiateSerializerOrShuffleManager[ShuffleManager](
           ShuffleManager.resolveShortName(className), conf, isDriver) match {
           case pipelined: PipelinedShuffleManager => pipelined
@@ -447,11 +449,12 @@ class SparkEnv (
       return
     }
 
-    // The tracker is needed when a StreamingShuffleManager is configured as the pipelined manager
-    // (spark.shuffle.manager.incremental) to serve pipelined shuffle dependencies.
-    val incrementalIsStreaming = conf.get(config.SHUFFLE_MANAGER_INCREMENTAL)
-      .map(ShuffleManager.resolveShortName)
-      .contains(classOf[StreamingShuffleManager].getName)
+    // The tracker is needed when the pipelined manager (spark.shuffle.manager.incremental) is a
+    // StreamingShuffleManager -- which is the default -- to serve pipelined shuffle dependencies.
+    // Inspect the already-instantiated manager rather than re-reading the config, so an empty
+    // (disabled) incremental slot is correctly treated as "no tracker".
+    val incrementalIsStreaming =
+      _pipelinedShuffleManager.exists(_.isInstanceOf[StreamingShuffleManager])
     if (incrementalIsStreaming) {
       createStreamingShuffleOutputTracker()
       return

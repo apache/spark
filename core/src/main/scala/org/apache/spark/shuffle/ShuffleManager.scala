@@ -137,15 +137,16 @@ private[spark] object ShuffleManager {
     resolveShortName(conf.get(config.SHUFFLE_MANAGER))
 
   /**
-   * Resolve a short shuffle-manager alias ("sort", "tungsten-sort") to its fully-qualified class
-   * name, passing any other value through unchanged. Shared by the default manager
-   * (spark.shuffle.manager) and the incremental manager (spark.shuffle.manager.incremental) so the
-   * same aliases are accepted for both.
+   * Resolve a short shuffle-manager alias ("sort", "tungsten-sort", "streaming") to its
+   * fully-qualified class name, passing any other value through unchanged. Shared by the default
+   * manager (spark.shuffle.manager) and the incremental manager (spark.shuffle.manager.incremental)
+   * so the same aliases are accepted for both. "streaming" is the default for the incremental slot.
    */
   def resolveShortName(shuffleMgrName: String): String = {
     val shortShuffleMgrNames = Map(
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
-      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "streaming" -> classOf[org.apache.spark.shuffle.streaming.StreamingShuffleManager].getName)
 
     shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
   }
