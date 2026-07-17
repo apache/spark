@@ -378,7 +378,7 @@ private[spark] abstract class MockBackend(
   val env = SparkEnv.get
 
   /** Accessed by both scheduling and backend thread, so should be protected by this. */
-  var freeCores: BigDecimal = _
+  var freeCores: BigDecimal = BigDecimal(0)
 
   /**
    * Accessed by both scheduling and backend thread, so should be protected by this.
