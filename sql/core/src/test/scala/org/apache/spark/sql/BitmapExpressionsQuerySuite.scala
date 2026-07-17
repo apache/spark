@@ -425,6 +425,13 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
       Seq(Row(null)))
   }
 
+  test("bitmap_contains with NULL bit_position") {
+    checkAnswer(
+      spark.sql(
+        "SELECT bitmap_contains(X'01', CAST(NULL AS BIGINT))"),
+      Seq(Row(null)))
+  }
+
   test("bitmap_contains called with non-binary type") {
     val df = Seq(12).toDF("a")
     checkError(
@@ -443,6 +450,27 @@ class BitmapExpressionsQuerySuite extends SharedSparkSession {
         fragment = "bitmap_contains(a, 0)",
         start = 0,
         stop = 20
+      )
+    )
+  }
+
+  test("bitmap_contains called with non-numeric second argument") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT bitmap_contains(X'01', '0')")
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"bitmap_contains(X'01', 0)\"",
+        "paramIndex" -> "second",
+        "requiredType" -> "\"BIGINT\"",
+        "inputSql" -> "\"0\"",
+        "inputType" -> "\"STRING\""
+      ),
+      context = ExpectedContext(
+        fragment = "bitmap_contains(X'01', '0')",
+        start = 7,
+        stop = 33
       )
     )
   }

@@ -133,6 +133,18 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MaxValue))
   }
 
+  test("bitmap_contains with position exceeding Int.MaxValue") {
+    val bitmap = createBitmap()
+    // Int.MaxValue + 1 = 2147483648L. Both values far exceed NUM_BITS (32768),
+    // so they hit the early-return guard (bitPosition >= NUM_BITS) and never
+    // reach the bytePos division. This test documents that out-of-range values
+    // in the upper 64-bit space do not throw ArithmeticException.
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, Int.MaxValue.toLong + 1))
+    // Verify that the sentinel value does not cause an ArithmeticException or
+    // ArrayIndexOutOfBoundsException.
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, Int.MaxValue.toLong * 2))
+  }
+
   test("bitmap_contains with short bitmap") {
     val shortBitmap = Array[Byte](0x01)
     assert(BitmapExpressionUtils.bitmapContains(shortBitmap, 0))
@@ -146,5 +158,15 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     assert(BitmapExpressionUtils.bitmapContains(bitmap, 0))
     assert(BitmapExpressionUtils.bitmapContains(bitmap, 1028))
     assert(BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 1))
+  }
+
+  test("bitmap_contains with zero-length bitmap") {
+    val zeroLengthBitmap = Array.emptyByteArray
+    // A zero-length (truly empty) bitmap should return false for any position,
+    // without throwing ArrayIndexOutOfBoundsException. This differs from the
+    // "empty bitmap" test above which uses a zero-filled NUM_BYTES array.
+    assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, 0))
+    assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, 100))
+    assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, BitmapExpressionUtils.NUM_BITS - 1))
   }
 }

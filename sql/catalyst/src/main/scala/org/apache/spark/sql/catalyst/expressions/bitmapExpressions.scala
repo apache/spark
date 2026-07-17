@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType, NumericType, StructType}
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",
@@ -160,19 +160,46 @@ case class BitmapCount(child: Expression)
   since = "4.3.0",
   group = "misc_funcs")
 case class BitmapContains(left: Expression, right: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+  extends BinaryExpression with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, LongType)
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (left.dataType != BinaryType) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BinaryType),
+          "inputSql" -> toSQLExpr(left),
+          "inputType" -> toSQLType(left.dataType)
+        )
+      )
+    } else if (!right.dataType.isInstanceOf[NumericType]) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(1),
+          "requiredType" -> toSQLType(LongType),
+          "inputSql" -> toSQLExpr(right),
+          "inputType" -> toSQLType(right.dataType)
+        )
+      )
+    } else {
+      TypeCheckSuccess
+    }
+  }
 
   override def dataType: DataType = BooleanType
 
   override def prettyName: String = "bitmap_contains"
 
+  // Cast bit_position to LongType manually so that StaticInvoke receives
+  // correctly-typed children without relying on ImplicitCastInputTypes
+  // (which would also allow an undesirable STRING -> BINARY coercion).
   override lazy val replacement: Expression = StaticInvoke(
     classOf[BitmapExpressionUtils],
     BooleanType,
     "bitmapContains",
-    Seq(left, right),
+    Seq(left, Cast(right, LongType)),
     Seq(BinaryType, LongType),
     returnNullable = false)
 

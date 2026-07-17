@@ -141,3 +141,4 @@ tpcds-kit/
 .github/instructions/
 .github/prompts/
 .github/skills/
+benchmark_bitmap_contains.py
