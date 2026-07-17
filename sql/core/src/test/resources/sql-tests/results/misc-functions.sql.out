@@ -321,3 +321,84 @@ SELECT assert_true(col1 <= col2) FROM VALUES ('2025-03-01', '2025-03-10')
 struct<assert_true((col1 <= col2), '(col1 <= col2)' is not true!):void>
 -- !query output
 NULL
+
+
+-- !query
+SELECT hex(hmac('key', 'message'))
+-- !query schema
+struct<hex(hmac(key, message, SHA-256)):string>
+-- !query output
+6E9EF29B75FFFC5B7ABAE527D58FDADB2FE42E7219011976917343065F58ED4A
+
+
+-- !query
+SELECT hex(hmac('key', 'message', 'SHA-256'))
+-- !query schema
+struct<hex(hmac(key, message, SHA-256)):string>
+-- !query output
+6E9EF29B75FFFC5B7ABAE527D58FDADB2FE42E7219011976917343065F58ED4A
+
+
+-- !query
+SELECT hex(hmac('key', 'message', 'SHA-512'))
+-- !query schema
+struct<hex(hmac(key, message, SHA-512)):string>
+-- !query output
+E477384D7CA229DD1426E64B63EBF2D36EBD6D7E669A6735424E72EA6C01D3F8B56EB39C36D8232F5427999B8D1A3F9CD1128FC69F4D75B434216810FA367E98
+
+
+-- !query
+SELECT lower(hex(hmac('key', 'message', 'sha256')))
+-- !query schema
+struct<lower(hex(hmac(key, message, sha256))):string>
+-- !query output
+6e9ef29b75fffc5b7abae527d58fdadb2fe42e7219011976917343065f58ed4a
+
+
+-- !query
+SELECT hex(hmac(hmac('key', 'message'), 'message2'))
+-- !query schema
+struct<hex(hmac(hmac(key, message, SHA-256), message2, SHA-256)):string>
+-- !query output
+28042756E0362D954B61661BB4DEC9FF9F6C970D346CAEB6DB36ED7B735AB38C
+
+
+-- !query
+SELECT hmac(CAST(NULL AS BINARY), 'message')
+-- !query schema
+struct<hmac(CAST(NULL AS BINARY), message, SHA-256):binary>
+-- !query output
+NULL
+
+
+-- !query
+SELECT hmac('key', CAST(NULL AS BINARY))
+-- !query schema
+struct<hmac(key, CAST(NULL AS BINARY), SHA-256):binary>
+-- !query output
+NULL
+
+
+-- !query
+SELECT hmac('key', 'message', CAST(NULL AS STRING))
+-- !query schema
+struct<hmac(key, message, CAST(NULL AS STRING)):binary>
+-- !query output
+NULL
+
+
+-- !query
+SELECT hmac('key', 'message', 'SHA-3')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "INVALID_PARAMETER_VALUE.HMAC_ALGORITHM",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "algorithm" : "'SHA-3'",
+    "functionName" : "`hmac`",
+    "parameter" : "`algorithm`"
+  }
+}
