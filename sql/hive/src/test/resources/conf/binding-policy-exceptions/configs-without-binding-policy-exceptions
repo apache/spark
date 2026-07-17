@@ -316,6 +316,10 @@ spark.scheduler.numCancelledJobGroupsToTrack
 spark.scheduler.resource.profileMergeConflicts
 spark.scheduler.revive.interval
 spark.scheduler.stage.legacyAbortAfterKillTasks
+spark.security.credentials.enabled
+spark.security.credentials.identityToken.file
+spark.security.credentials.renewal.minInterval
+spark.security.credentials.renewal.safetyMargin
 spark.security.credentials.renewalRatio
 spark.security.credentials.retryWait
 spark.serializer

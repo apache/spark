@@ -88,6 +88,7 @@ private[spark] class UserCredentialManager(
    * @throws IllegalStateException if the initial credential acquisition fails.
    */
   def start(): Array[Byte] = {
+    require(renewalExecutor == null, "start() must not be called more than once")
     renewalExecutor =
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("user-credential-renewal")
 
@@ -102,7 +103,7 @@ private[spark] class UserCredentialManager(
     }
 
     val ctx = userContext.get()
-    logInfo(log"Loaded identity token for principal " +
+    logInfo(log"Initial identity token loaded for principal " +
       log"${MDC(LogKeys.PRINCIPAL, ctx.getPrincipal)} " +
       log"(issuer: ${MDC(LogKeys.URI, ctx.getIssuer)})")
 
@@ -157,7 +158,10 @@ private[spark] class UserCredentialManager(
             log"to executors. Executors will receive updated credentials on next renewal.", e)
       }
 
-      // Reset backoff on successful credential resolution
+      // Reset backoff on successful credential resolution. This is intentionally done
+      // even if onCredentialsUpdate failed above: the backoff counter tracks credential
+      // *resolution* failures (STS/provider issues), not propagation failures.
+      // Propagation failures are transient and will be retried on next scheduled renewal.
       consecutiveFailures.set(0)
 
       // Schedule next renewal
@@ -186,31 +190,40 @@ private[spark] class UserCredentialManager(
    */
   private def resolveCredentials(
       ctx: UserContext): (UserCredentials, Option[Instant]) = {
-    val schemes = discoverSchemes(credentialConfMap)
+    val schemes = discoverSchemes()
 
     val credentialMap = new mutable.HashMap[String, ServiceCredential]()
     var earliestExpiry: Option[Instant] = None
 
     for (scheme <- schemes) {
-      val providerOpt = CredentialProviderLoader.providerFor(scheme, credentialConfMap)
-      if (providerOpt.isPresent) {
-        val provider = providerOpt.get()
-        // Use a synthetic target URI with just the scheme for initial resolution.
-        // The full URI is passed in future versions when path-specific resolution is needed.
-        val target = new URI(scheme, "default", "/", null, null)
-        val credential = provider.resolve(ctx, target)
-        credentialMap.put(scheme, credential)
+      try {
+        val providerOpt = CredentialProviderLoader.providerFor(scheme, credentialConfMap)
+        if (providerOpt.isPresent) {
+          val provider = providerOpt.get()
+          // Use a synthetic target URI with just the scheme for initial resolution.
+          // The full URI is passed in future versions when path-specific resolution is needed.
+          // The "synthetic" authority signals this is not a real endpoint but a placeholder
+          // for scheme-based provider selection.
+          val target = new URI(scheme, UserCredentialManager.SYNTHETIC_TARGET_AUTHORITY,
+            "/", null, null)
+          val credential = provider.resolve(ctx, target)
+          credentialMap.put(scheme, credential)
 
-        val expiry = credential.getExpiresAt
-        if (expiry != null) {
-          earliestExpiry = earliestExpiry match {
-            case Some(existing) if existing.isBefore(expiry) => Some(existing)
-            case _ => Some(expiry)
+          val expiry = credential.getExpiresAt
+          if (expiry != null) {
+            earliestExpiry = earliestExpiry match {
+              case Some(existing) if existing.isBefore(expiry) => Some(existing)
+              case _ => Some(expiry)
+            }
           }
+        } else {
+          logWarning(log"No credential provider found for scheme " +
+            log"${MDC(LogKeys.URI, scheme)}. Skipping.")
         }
-      } else {
-        logWarning(log"No credential provider found for scheme " +
-          log"${MDC(LogKeys.URI, scheme)}. Skipping.")
+      } catch {
+        case e: Exception =>
+          logWarning(log"Failed to resolve credentials for scheme " +
+            log"${MDC(LogKeys.URI, scheme)}. Skipping this provider.", e)
       }
     }
 
@@ -230,10 +243,16 @@ private[spark] class UserCredentialManager(
    * `spark.security.credentials.provider.<scheme>`. If no explicit configuration
    * exists, the method queries `CredentialProviderLoader` to discover all providers
    * registered via ServiceLoader and collects their supported schemes.
+   *
+   * Note: When using auto-discovery (no explicit config), multiple providers may
+   * support the same scheme. In that case, `CredentialProviderLoader.providerFor`
+   * will throw an `IllegalArgumentException` for that scheme. The caller
+   * (`resolveCredentials`) handles this gracefully via per-provider exception catching,
+   * logging a warning and continuing with remaining schemes.
    */
-  private def discoverSchemes(confMap: java.util.Map[String, String]): Set[String] = {
+  private def discoverSchemes(): Set[String] = {
     // Extract explicitly configured scheme -> provider mappings
-    val explicitSchemes = sparkConf.getAll
+    val explicitSchemes = credentialConfMap.asScala
       .filter { case (k, _) => k.startsWith("spark.security.credentials.provider.") }
       .map { case (k, _) => k.stripPrefix("spark.security.credentials.provider.") }
       .toSet
@@ -245,7 +264,7 @@ private[spark] class UserCredentialManager(
       // available on the classpath by probing CredentialProviderLoader.
       // This covers both built-in providers (e.g., connector/credential-aws for "s3a")
       // and third-party providers registered via ServiceLoader.
-      CredentialProviderLoader.discoverAllSchemes(confMap).asScala.toSet
+      CredentialProviderLoader.discoverAllSchemes(credentialConfMap).asScala.toSet
     }
   }
 
@@ -322,18 +341,29 @@ private[spark] class UserCredentialManager(
    */
   private[security] def serializeUserCredentials(credentials: UserCredentials): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
     try {
-      oos.writeObject(credentials)
-      oos.flush()
+      val oos = new ObjectOutputStream(bos)
+      try {
+        oos.writeObject(credentials)
+        oos.flush()
+      } finally {
+        oos.close()
+      }
       bos.toByteArray
     } finally {
-      oos.close()
+      bos.close()
     }
   }
 }
 
 private[spark] object UserCredentialManager {
+
+  /**
+   * Synthetic authority used in target URIs for scheme-based provider resolution.
+   * Providers should not rely on this value; it signals that no specific endpoint
+   * is targeted and only the URI scheme is meaningful.
+   */
+  private val SYNTHETIC_TARGET_AUTHORITY = "synthetic"
 
   /**
    * Default renewal interval when neither the identity token nor service credentials
@@ -366,17 +396,17 @@ private[spark] object UserCredentialManager {
       sparkConf: SparkConf,
       onCredentialsUpdate: Array[Byte] => Unit): Option[UserCredentialManager] = {
     if (!sparkConf.get(SECURITY_CREDENTIALS_ENABLED)) {
-      return None
-    }
+      None
+    } else {
+      val tokenFile = sparkConf.get(SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE).getOrElse {
+        throw new IllegalArgumentException(
+          s"${SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE.key} must be set when " +
+            s"${SECURITY_CREDENTIALS_ENABLED.key} is true")
+      }
 
-    val tokenFile = sparkConf.get(SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE).getOrElse {
-      throw new IllegalArgumentException(
-        s"${SECURITY_CREDENTIALS_IDENTITY_TOKEN_FILE.key} must be set when " +
-          s"${SECURITY_CREDENTIALS_ENABLED.key} is true")
+      val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))
+      Some(new UserCredentialManager(sparkConf, tokenIngestor, onCredentialsUpdate))
     }
-
-    val tokenIngestor = new FileTokenIngestor(Paths.get(tokenFile))
-    Some(new UserCredentialManager(sparkConf, tokenIngestor, onCredentialsUpdate))
   }
 
   /**
