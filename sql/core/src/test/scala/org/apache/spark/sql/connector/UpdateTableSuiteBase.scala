@@ -20,12 +20,9 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{sources, AnalysisException, Row}
-import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
-import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
-import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, RowLevelOperationWithOptions, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryTable, TableChange, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.write.{RowLevelOperationTable, UpdateSummary}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.connector.write.UpdateSummary
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
@@ -1234,27 +1231,6 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Seq(
         Row(1, 100, "hr"),
         Row(2, 200, "software")))
-  }
-
-  // asserts the given SQL options reached every layer that should carry them: the rewritten
-  // DataSourceV2Relation, the RowLevelOperationInfo passed to the operation builder, and the
-  // write builder's LogicalWriteInfo
-  protected def checkRowLevelOperationOptions(
-      func: => Unit,
-      expectedOptions: (String, String)*): Unit = {
-    val Seq(qe) = withQueryExecutionsCaptured(spark)(func)
-    val writeRelation = qe.optimizedPlan.collectFirst {
-      case rd: ReplaceData => rd.table
-      case wd: WriteDelta => wd.table
-    }.getOrElse(fail("couldn't find row-level operation in optimized plan"))
-      .asInstanceOf[DataSourceV2Relation]
-    val operation = writeRelation.table.asInstanceOf[RowLevelOperationTable].operation
-      .asInstanceOf[RowLevelOperationWithOptions]
-    expectedOptions.foreach { case (key, value) =>
-      assert(writeRelation.options.get(key) === value, s"relation option '$key'")
-      assert(operation.options.get(key) === value, s"row-level operation option '$key'")
-      assert(table.lastWriteInfo.options().get(key) === value, s"write option '$key'")
-    }
   }
 
   test("SPARK-57681: update with dynamic options") {
