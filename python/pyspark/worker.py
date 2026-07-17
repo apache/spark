@@ -3260,7 +3260,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 (grouping key, pandas.DataFrame) chunks.
 
                 This function must avoid materializing multiple Arrow
-                RecordBatches into memory at the same time. And data chunks
+                RecordBatches into memory at the same time, and data chunks
                 from the same grouping key should appear sequentially.
                 """
                 for batch_key, group_rows in itertools.groupby(row_stream(), key=lambda x: x[0]):
@@ -3437,7 +3437,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 (grouping key, data DataFrame, init-state DataFrame) chunks.
 
                 This function must avoid materializing multiple Arrow
-                RecordBatches into memory at the same time. And data chunks
+                RecordBatches into memory at the same time, and data chunks
                 from the same grouping key should appear sequentially.
                 """
                 for batch_key, group_rows in itertools.groupby(row_stream(), key=lambda x: x[0]):
@@ -3906,7 +3906,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 (grouping key, Row) tuples.
 
                 This function must avoid materializing multiple Arrow
-                RecordBatches into memory at the same time. And data chunks
+                RecordBatches into memory at the same time, and data chunks
                 from the same grouping key should appear sequentially.
                 """
                 for batch in data:
@@ -3919,71 +3919,52 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         row = DataRow(*(batch.column(i)[row_idx].as_py() for i in range(num_cols)))
                         yield row_key, row
 
-            def convert_results(
-                result_iter: Iterable[Tuple[Any, Any]],
-            ) -> Iterator["pa.RecordBatch"]:
-                # TODO(SPARK-XXXXX): add verification that elements in result_iter
+            def convert_results(result_rows: Iterable[Any]) -> Iterator["pa.RecordBatch"]:
+                # TODO(SPARK-XXXXX): add verification that elements in result_rows
                 # are indeed of type Row and conform to assigned cols
-                for packed in result_iter:
-                    iter_row, spark_type = packed[0], packed[1]
 
-                    # Convert spark type to arrow type
-                    # TODO: WE need to make this configurable, currently using default values.
-                    arrow_type = to_arrow_type(
-                        spark_type,
-                        timezone="UTC",
-                        prefers_large_types=False,
-                    )
+                # Convert spark type to arrow type
+                # TODO: we need to make this configurable, currently using default values.
+                arrow_type = to_arrow_type(
+                    return_type,
+                    timezone="UTC",
+                    prefers_large_types=False,
+                )
 
-                    rows_as_dict = [row.asDict(True) for row in iter_row]
+                rows_as_dict = [row.asDict(True) for row in result_rows]
 
-                    pdf_schema = pa.schema(list(arrow_type))
-                    record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
-                    yield ArrowBatchTransformer.wrap_struct(record_batch)
+                pdf_schema = pa.schema(list(arrow_type))
+                record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
+                yield ArrowBatchTransformer.wrap_struct(record_batch)
 
             for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
                 # This must be a generator expression - do not materialize.
                 values_gen = map(lambda x: x[1], group)
                 yield from convert_results(
-                    [
-                        (
-                            udf(
-                                stateful_processor_api_client,
-                                TransformWithStateInPandasFuncMode.PROCESS_DATA,
-                                key,
-                                values_gen,
-                            ),
-                            return_type,
-                        )
-                    ]
+                    udf(
+                        stateful_processor_api_client,
+                        TransformWithStateInPandasFuncMode.PROCESS_DATA,
+                        key,
+                        values_gen,
+                    )
                 )
 
             yield from convert_results(
-                [
-                    (
-                        udf(
-                            stateful_processor_api_client,
-                            TransformWithStateInPandasFuncMode.PROCESS_TIMER,
-                            None,
-                            iter([]),
-                        ),
-                        return_type,
-                    )
-                ]
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.PROCESS_TIMER,
+                    None,
+                    iter([]),
+                )
             )
 
             yield from convert_results(
-                [
-                    (
-                        udf(
-                            stateful_processor_api_client,
-                            TransformWithStateInPandasFuncMode.COMPLETE,
-                            None,
-                            iter([]),
-                        ),
-                        return_type,
-                    )
-                ]
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.COMPLETE,
+                    None,
+                    iter([]),
+                )
             )
 
         # profiling is not supported for UDF
@@ -4071,7 +4052,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 #     .add("inputData", dataSchema)
                 #     .add("initState", initStateSchema)
                 # We parse each batch into tuples of (key, inputData, initState).
-                # Each batch will have either init_data or input_data, not mix.
+                # Each batch will have either init_data or input_data, not both.
                 for batch in data:
                     input_result = extract_rows(batch, "inputData", key_offsets)
                     init_result = extract_rows(batch, "initState", init_key_offsets)
@@ -4092,7 +4073,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 chunks bounded by arrow_max_records_per_batch.
 
                 This function must avoid materializing multiple Arrow
-                RecordBatches into memory at the same time. And data chunks
+                RecordBatches into memory at the same time, and data chunks
                 from the same grouping key should appear sequentially.
                 """
                 for k, group_rows in itertools.groupby(row_stream(), key=lambda x: x[0]):
@@ -4114,74 +4095,55 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     if input_rows or init_rows:
                         yield (k, (iter(input_rows), iter(init_rows)))
 
-            def convert_results(
-                result_iter: Iterable[Tuple[Any, Any]],
-            ) -> Iterator["pa.RecordBatch"]:
-                # TODO(SPARK-XXXXX): add verification that elements in result_iter
+            def convert_results(result_rows: Iterable[Any]) -> Iterator["pa.RecordBatch"]:
+                # TODO(SPARK-XXXXX): add verification that elements in result_rows
                 # are indeed of type Row and conform to assigned cols
-                for packed in result_iter:
-                    iter_row, spark_type = packed[0], packed[1]
 
-                    # Convert spark type to arrow type
-                    # TODO: WE need to make this configurable, currently using default values.
-                    arrow_type = to_arrow_type(
-                        spark_type,
-                        timezone="UTC",
-                        prefers_large_types=False,
-                    )
+                # Convert spark type to arrow type
+                # TODO: we need to make this configurable, currently using default values.
+                arrow_type = to_arrow_type(
+                    return_type,
+                    timezone="UTC",
+                    prefers_large_types=False,
+                )
 
-                    rows_as_dict = [row.asDict(True) for row in iter_row]
+                rows_as_dict = [row.asDict(True) for row in result_rows]
 
-                    pdf_schema = pa.schema(list(arrow_type))
-                    record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
-                    yield ArrowBatchTransformer.wrap_struct(record_batch)
+                pdf_schema = pa.schema(list(arrow_type))
+                record_batch = pa.RecordBatch.from_pylist(rows_as_dict, schema=pdf_schema)
+                yield ArrowBatchTransformer.wrap_struct(record_batch)
 
             for key, group in itertools.groupby(generate_data_batches(), key=lambda x: x[0]):
                 # These must be generator expressions - do not materialize.
                 for _, (values_gen, init_states_gen) in group:
                     yield from convert_results(
-                        [
-                            (
-                                udf(
-                                    stateful_processor_api_client,
-                                    TransformWithStateInPandasFuncMode.PROCESS_DATA,
-                                    key,
-                                    values_gen,
-                                    init_states_gen,
-                                ),
-                                return_type,
-                            )
-                        ]
+                        udf(
+                            stateful_processor_api_client,
+                            TransformWithStateInPandasFuncMode.PROCESS_DATA,
+                            key,
+                            values_gen,
+                            init_states_gen,
+                        )
                     )
 
             yield from convert_results(
-                [
-                    (
-                        udf(
-                            stateful_processor_api_client,
-                            TransformWithStateInPandasFuncMode.PROCESS_TIMER,
-                            None,
-                            iter([]),
-                            iter([]),
-                        ),
-                        return_type,
-                    )
-                ]
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.PROCESS_TIMER,
+                    None,
+                    iter([]),
+                    iter([]),
+                )
             )
 
             yield from convert_results(
-                [
-                    (
-                        udf(
-                            stateful_processor_api_client,
-                            TransformWithStateInPandasFuncMode.COMPLETE,
-                            None,
-                            iter([]),
-                            iter([]),
-                        ),
-                        return_type,
-                    )
-                ]
+                udf(
+                    stateful_processor_api_client,
+                    TransformWithStateInPandasFuncMode.COMPLETE,
+                    None,
+                    iter([]),
+                    iter([]),
+                )
             )
 
         # profiling is not supported for UDF
