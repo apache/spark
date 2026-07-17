@@ -325,6 +325,35 @@ class ApproxTopKSuite extends SharedSparkSession {
          |""".stripMargin)
     checkAnswer(res, Row(Seq(Row("且", 3), Row("丕", 2), Row("世", 1))))
   }
+
+  test("SPARK-58096: approx_top_k_accumulate/estimate keeps ICU-collation-distinct " +
+    "non-ASCII values separate through the serde round-trip") {
+    val res = sql(
+      s"""SELECT approx_top_k_estimate(approx_top_k_accumulate(c), 3)
+         |FROM (SELECT CAST(col AS STRING COLLATE UNICODE_CI) AS c
+         |      FROM VALUES ('且'), ('且'), ('且'),
+         |                  ('丕'), ('丕'), ('世') AS t(col))
+         |""".stripMargin)
+    checkAnswer(res, Row(Seq(Row("且", 3), Row("丕", 2), Row("世", 1))))
+  }
+
+  test("SPARK-58096: approx_top_k_combine keeps ICU-collation-distinct non-ASCII values " +
+    "separate across sketches and a shuffle") {
+    withSQLConf("spark.sql.shuffle.partitions" -> "2") {
+      val sketches = sql(
+        s"""SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
+           |  FROM VALUES ('且'), ('且'), ('且'), ('丕') AS t(col)
+           |UNION ALL
+           |SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE UNICODE_CI)) AS sketch
+           |  FROM VALUES ('丕'), ('世') AS t(col)
+           |""".stripMargin).repartition(2)
+      sketches.createOrReplaceTempView("approx_top_k_sketches")
+      val res = sql(
+        "SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 100), 3) " +
+          "FROM approx_top_k_sketches")
+      checkAnswer(res, Row(Seq(Row("且", 3), Row("丕", 2), Row("世", 1))))
+    }
+  }
   // scalastyle:on nonascii
 
   test("SPARK-52588: accumulate and estimate of Decimal(4, 1)") {
