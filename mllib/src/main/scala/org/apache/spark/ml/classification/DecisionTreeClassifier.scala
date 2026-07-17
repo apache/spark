@@ -201,7 +201,7 @@ class DecisionTreeClassificationModel private[ml] (
   // For ml connect only
   private[ml] def this() = this("", Node.dummyNode, -1, -1)
 
-  private[spark] override def estimatedSize: Long = getEstimatedSize()
+  private[spark] override def estimatedSize: Long = estimateMatadataSize + getEstimatedSize()
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
