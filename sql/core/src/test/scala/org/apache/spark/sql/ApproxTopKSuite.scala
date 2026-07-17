@@ -64,9 +64,10 @@ class ApproxTopKSuite extends SharedSparkSession {
       Seq(Row(LocalDateTime.of(2025, 1, 1, 0, 0), 3),
         Row(LocalDateTime.of(2025, 1, 2, 0, 0), 1))), // Timestamp_ntz
     ("TIME'00:00:00', TIME'00:00:00', TIME'06:00:00', TIME'06:00:00', TIME'06:00:00', " +
-      "TIME'10:00:00', TIME'10:00:00', TIME'11:00:00'",
+      "TIME'08:30:00.123456', TIME'10:00:00', TIME'10:00:00', TIME'11:00:00'",
       Seq(Row(LocalTime.of(6, 0, 0), 3), Row(LocalTime.of(0, 0, 0), 2),
-        Row(LocalTime.of(10, 0, 0), 2), Row(LocalTime.of(11, 0, 0), 1))), // Time
+        Row(LocalTime.of(10, 0, 0), 2), Row(LocalTime.of(11, 0, 0), 1),
+        Row(LocalTime.of(8, 30, 0, 123456000), 1))), // Time
     ("CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +
       "CAST(0.0 AS DECIMAL(4, 1)), CAST(1.0 AS DECIMAL(4, 1)), " +
       "CAST(1.0 AS DECIMAL(4, 1)), CAST(2.0 AS DECIMAL(4, 1))",
@@ -521,9 +522,16 @@ class ApproxTopKSuite extends SharedSparkSession {
   // mutually widen and so only fail at approx_top_k_combine runtime, not at UNION analysis), so
   // it cannot join mixedDateTimeTypes: "among different ... types - fail at combine" below
   // asserts every pair in that Seq unions successfully and only fails at the runtime combine.
+  // The two TIME entries below (different precisions) do widen against each other at UNION
+  // (findWiderDateTimeType(TimeType(p1), TimeType(p2)) = TimeType(max(p1, p2))), mirroring
+  // mixedDateTimeTypes's own internal widening -- see
+  // "SPARK-57848: among different time precisions - fail at combine" below.
   val mixedTimeTypes: Seq[(DataType, String, Seq[String])] = Seq(
     (TimeType(), "TIME(6)",
-      Seq("TIME'12:00:00'", "TIME'12:00:00'", "TIME'13:00:00'"))
+      Seq("TIME'12:00:00'", "TIME'12:00:00'", "TIME'13:00:00'")),
+    (TimeType(3), "TIME(3)",
+      Seq("CAST('12:00:00.123' AS TIME(3))", "CAST('12:00:00.123' AS TIME(3))",
+        "CAST('13:00:00.123' AS TIME(3))"))
   )
 
   // positive tests for approx_top_k_combine on every types
@@ -634,6 +642,28 @@ class ApproxTopKSuite extends SharedSparkSession {
 
     checkMixedTypeError(mixedNumberTypes)
     checkMixedTypeError(mixedDateTimeTypes)
+  }
+
+  // TIME parallel of the test above: TIME(3) and TIME(6) widen to TIME(6) at UNION via
+  // findWiderDateTimeType, so the UNION succeeds, but the two sketches still carry their
+  // original, different itemDataType (time(3) vs time(6)), so combine fails at runtime.
+  test("SPARK-57848: among different time precisions - fail at combine") {
+    for (i <- 0 until mixedTimeTypes.size - 1) {
+      for (j <- i + 1 until mixedTimeTypes.size) {
+        val (type1, _, seq1) = mixedTimeTypes(i)
+        val (type2, _, seq2) = mixedTimeTypes(j)
+        withView("accumulation1", "accumulation2", "unioned") {
+          setupMixedTypeAccumulation(seq1, seq2)
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("SELECT approx_top_k_combine(acc, 30) as com FROM unioned;").collect()
+            },
+            condition = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
+            parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(type2))
+          )
+        }
+      }
+    }
   }
 
   // enumerate all combinations of number and datetime types
