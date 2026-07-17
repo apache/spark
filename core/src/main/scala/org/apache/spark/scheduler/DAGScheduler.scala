@@ -1482,17 +1482,25 @@ private[spark] class DAGScheduler(
    * gang reservation deferred to a later hardening step. Without that reservation a race between two
    * groups admitting concurrently can still transiently over-admit (each sees the other's slots as
    * free before either's tasks register as running); the reservation closes that race later. What
-   * this does guarantee now is that a group is never admitted against slots a busy neighbor already
-   * holds, which is the common single-group-on-a-busy-cluster hang.
+   * this does guarantee now is that a group is never admitted against slots a busy neighbor is
+   * already committed to (running or enqueued), which is the common single-group-on-a-busy-cluster
+   * hang.
+   *
+   * The check can be turned off with `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` (for
+   * deployments that admit capacity out-of-band, e.g. via a slot reservation), in which case this
+   * always returns None and the group is co-scheduled unconditionally.
    *
    * Returns Some((demand, freeSlots)) when the group does not fit, else None.
    */
   private def pipelinedGroupExceedsCapacity(stage: Stage): Option[(Int, Int)] = {
+    if (!sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)) {
+      return None
+    }
     val group = pipelinedGroupOf(stage)
     val demand = group.toSeq.map(_.numTasks).sum
     val totalSlots = maxConcurrentTasksForStage(stage)
-    val occupiedByOthers = runningTasksForOtherWork(stage, group)
-    val freeSlots = math.max(0, totalSlots - occupiedByOthers)
+    val outstandingForOthers = outstandingTasksForOtherWork(stage, group)
+    val freeSlots = math.max(0, totalSlots - outstandingForOthers)
     if (demand > freeSlots) Some((demand, freeSlots)) else None
   }
 
@@ -1507,15 +1515,18 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Tasks currently running, in `stage`'s resource profile, for work OTHER than the given pipelined
-   * `group` (whose own already-running members must not be charged against the group's admission).
-   * Resource-profile-scoped to match `maxConcurrentTasksForStage`. Extracted as a seam so tests can
-   * control occupancy without launching real tasks; returns 0 for a non-TaskSchedulerImpl backend.
+   * Outstanding tasks (running plus enqueued), in `stage`'s resource profile, for work OTHER than
+   * the given pipelined `group` (whose own members must not be charged against the group's own
+   * admission). Counting enqueued tasks, not just running ones, means a busy neighbor's queued
+   * backlog is charged against capacity too, so a group is not admitted against slots that other
+   * work is already committed to using. Resource-profile-scoped to match
+   * `maxConcurrentTasksForStage`. Extracted as a seam so tests can control occupancy without
+   * launching real tasks; returns 0 for a non-TaskSchedulerImpl backend.
    */
-  protected def runningTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
+  protected def outstandingTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
     taskScheduler match {
       case impl: TaskSchedulerImpl =>
-        impl.runningTasksForOtherWorkInProfile(stage.resourceProfileId, group.map(_.id))
+        impl.outstandingTasksForOtherWorkInProfile(stage.resourceProfileId, group.map(_.id))
       case _ => 0
     }
 

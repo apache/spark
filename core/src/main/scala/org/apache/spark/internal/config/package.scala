@@ -2006,6 +2006,21 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val PIPELINED_GROUP_SLOT_CHECK_ENABLED =
+    ConfigBuilder("spark.scheduler.pipelinedGroup.slotCheck.enabled")
+      .internal()
+      .doc("When true, before co-scheduling a pipelined-shuffle stage group the DAGScheduler " +
+        "checks that the group's total task demand fits in the currently free slots of its " +
+        "resource profile (total capacity minus the outstanding -- running plus enqueued -- " +
+        "tasks of other work), and fails the job with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT " +
+        "rather than co-scheduling a group that cannot fit and deadlocking. Set to false for " +
+        "deployments that admit capacity out-of-band (e.g. a slot reservation), which then own " +
+        "admission. Only applies to jobs that use a pipelined shuffle dependency.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
     ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
       .doc("The maximum number of tracked job groups that are cancelled with " +

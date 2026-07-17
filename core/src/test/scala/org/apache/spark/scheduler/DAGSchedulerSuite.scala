@@ -387,11 +387,12 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     @volatile var maxConcurrentTasksForTest: Int = 1000
     override protected def maxConcurrentTasksForStage(stage: Stage): Int = maxConcurrentTasksForTest
 
-    // Seam for the free-slot admission check (spec S4.1): occupancy by OTHER work. Default 0 so
-    // existing tests see a fully-free cluster; a test can set it to model a busy neighbor.
-    @volatile var runningTasksForOtherWorkForTest: (Stage, Set[Stage]) => Int = (_, _) => 0
-    override protected def runningTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
-      runningTasksForOtherWorkForTest(stage, group)
+    // Seam for the free-slot admission check (spec S4.1): outstanding (running + enqueued) task
+    // demand of OTHER work. Default 0 so existing tests see a fully-free cluster; a test can set it
+    // to model a busy neighbor.
+    @volatile var outstandingTasksForOtherWorkForTest: (Stage, Set[Stage]) => Int = (_, _) => 0
+    override protected def outstandingTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
+      outstandingTasksForOtherWorkForTest(stage, group)
 
     /**
      * Schedules shuffle merge finalize.
@@ -6646,13 +6647,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // producer(2) + consumer(2) = 4 tasks fits a 10-slot cluster in principle, but if 8 slots are
     // already occupied by OTHER work only 2 are free -- the group cannot co-fit right now and must
     // fail fast rather than queue forever. Under the old total-capacity check this would wrongly be
-    // admitted (4 <= 10) and then hang. runningTasksForOtherWork already excludes the group's own
-    // members, so we report 8 directly.
+    // admitted (4 <= 10) and then hang. outstandingTasksForOtherWork already excludes the group's
+    // own members, so we report 8 directly.
     val producerRdd = new MyRDD(sc, 2, Nil) // touch sc first so `scheduler` is initialized
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 10
     // 8 of 10 slots busy elsewhere -> 2 free
-    myScheduler.runningTasksForOtherWorkForTest = (_, _) => 8
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 8
     try {
       val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
       val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
@@ -6671,7 +6672,33 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
-      myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0
+      myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    }
+  }
+
+  test("pipelined shuffle: slot check can be disabled, admitting a group that exceeds capacity") {
+    // With spark.scheduler.pipelinedGroup.slotCheck.enabled=false the admission check is skipped
+    // entirely, so a group whose demand exceeds free slots is co-scheduled instead of failing fast.
+    // Deployments that admit capacity out-of-band (e.g. a slot reservation) rely on this.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
+    myScheduler.maxConcurrentTasksForTest = 2 // demand 4 > 2 slots: would fail if the check ran
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
+    val prev = sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)
+    sc.conf.set(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED, false)
+    try {
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      submit(consumerRdd, Array(0, 1))
+      assert(taskSets.size === 2,
+        "with the slot check disabled, the over-capacity group is co-scheduled, not rejected")
+      completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+      complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+      assert(results === Map(0 -> 42, 1 -> 43))
+      assertDataStructuresEmpty()
+    } finally {
+      myScheduler.maxConcurrentTasksForTest = 1000
+      sc.conf.set(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED, prev)
     }
   }
 
@@ -6685,7 +6712,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
-    myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0 // only the group's own work runs
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0 // only the group's own work runs
     try {
       val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
       val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
@@ -6698,7 +6725,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assertDataStructuresEmpty()
     } finally {
       myScheduler.maxConcurrentTasksForTest = 1000
-      myScheduler.runningTasksForOtherWorkForTest = (_, _) => 0
+      myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
     }
   }
 }

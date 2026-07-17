@@ -2752,32 +2752,37 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
   }
 
-  test("runningTasksForOtherWorkInProfile excludes given stages and is resource-profile-scoped") {
-    // Backs the pipelined-group free-slot admission check (DAGScheduler): it must report tasks
-    // running for OTHER work in a given resource profile, excluding the group's own member stages.
+  test("outstandingTasksForOtherWorkInProfile counts running + enqueued, excludes given stages, " +
+      "and is resource-profile-scoped") {
+    // Backs the pipelined-group slot admission check (DAGScheduler): it must report the OUTSTANDING
+    // (running + enqueued, i.e. numTasks - tasksSuccessful) task demand of OTHER work in a given
+    // resource profile, excluding the group's own member stages.
     val taskScheduler = setupScheduler()
+    // Only 3 total cores, but each stage has 4 tasks -> some tasks launch, the rest stay enqueued.
     val workerOffers = IndexedSeq(
-      new WorkerOffer("executor0", "host0", 4),
-      new WorkerOffer("executor1", "host1", 4))
+      new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 1))
 
-    // Stage 0 and stage 1 both in the DEFAULT profile; launch 2 tasks of each so both have running
-    // tasks. Distinct stageIds let us exclude one and count the other.
-    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
-    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 1, stageAttemptId = 0))
+    // Stage 0 and stage 1 both in the DEFAULT profile, 4 tasks each (8 total) but only 3 cores, so
+    // 3 launch and 5 remain enqueued. Distinct stageIds let us exclude one and count the other.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 1, stageAttemptId = 0))
     val launched = taskScheduler.resourceOffers(workerOffers).flatten
-    assert(launched.length === 4, "all four tasks should launch (4 cores per executor)")
+    assert(launched.length === 3, "only three tasks can run (3 cores); the other five are enqueued")
 
     val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-    // Nothing excluded: both stages' 4 tasks count.
-    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set.empty) === 4)
-    // Exclude stage 0 (as if it were the group's own member): only stage 1's 2 tasks remain.
-    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set(0)) === 2)
+    // Nothing excluded: all 8 tasks are outstanding (3 running + 5 enqueued) though only 3 run.
+    // The old running-only count would have reported 3 here; outstanding demand is what can hang a
+    // co-scheduled group, so it must be 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 8)
+    // Exclude stage 0 (as if it were the group's own member): only stage 1's 4 tasks remain.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 4)
     // Exclude both: zero "other" tasks.
-    assert(taskScheduler.runningTasksForOtherWorkInProfile(defaultRp, Set(0, 1)) === 0)
-    // A DIFFERENT (non-existent here) resource profile has no running tasks -- other-profile load
-    // must not be charged against this profile (finding A: RP-scoping).
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0, 1)) === 0)
+    // A DIFFERENT (non-existent here) resource profile has no outstanding tasks -- other-profile
+    // load must not be charged against this profile (RP-scoping).
     val otherRpId = defaultRp + 12345
-    assert(taskScheduler.runningTasksForOtherWorkInProfile(otherRpId, Set.empty) === 0,
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(otherRpId, Set.empty) === 0,
       "tasks in the default profile must not be counted against a different profile")
   }
 
