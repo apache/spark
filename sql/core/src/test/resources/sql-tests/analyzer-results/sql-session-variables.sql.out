@@ -2155,7 +2155,7 @@ Project [c1#x AS 2#x]
 +- LateralJoin lateral-subquery#x [var1#x], Inner
    :  +- SubqueryAlias TT
    :     +- Project [var1#x AS c1#x]
-   :        +- Project [outer(var1#x)]
+   :        +- Project [outer(var1#x) AS var1#x]
    :           +- OneRowRelation
    +- SubqueryAlias T
       +- LocalRelation [var1#x]

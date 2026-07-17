@@ -254,7 +254,8 @@ class ResolveSubquerySuite extends AnalysisTest {
     // SELECT (SELECT a) FROM t1
     checkAnalysis(
       Project(ScalarSubquery(t0.select($"a")).as("sub") :: Nil, t1),
-      Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
+      Project(ScalarSubquery(
+        Project(OuterReference(a).as(a.name) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
     )
     // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
     checkAnalysis(
@@ -272,6 +273,27 @@ class ResolveSubquerySuite extends AnalysisTest {
         CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0
       ), Seq(a, b)).as("sub") :: Nil, t1)
     )
+  }
+
+  test("SPARK-58171: alias a bare outer reference that is an Aggregate output") {
+    // SELECT * FROM t1, LATERAL (SELECT a, count(b) AS cnt FROM t2 GROUP BY a)
+    // The bare outer reference `a` in the Aggregate output must be aliased so it gets a fresh
+    // ExprId, instead of leaking the outer attribute's ExprId through the Aggregate output.
+    // The query is only resolved (not passed through CheckAnalysis) because a correlated
+    // aggregate output is otherwise rejected as an unsupported correlated reference.
+    val plan = lateralJoin(t1, t2.groupBy($"a")($"a", Count($"b").as("cnt")))
+    val resolved = getAnalyzer.execute(plan)
+    val aggregate = resolved.collectWithSubqueries { case a: Aggregate => a }.head
+    // The first output is the aliased outer reference; the outer attribute's ExprId is not
+    // leaked through the alias (the alias carries a fresh ExprId).
+    aggregate.aggregateExpressions.head match {
+      case alias @ Alias(o: OuterReference, name) =>
+        assert(name == a.name)
+        assert(o.exprId == a.exprId)
+        assert(alias.exprId != a.exprId)
+      case other =>
+        fail(s"Expected the outer reference to be wrapped in an Alias, but got: $other")
+    }
   }
 
   test("SPARK-47509: Incorrect results for subquery expressions in LambdaFunctions") {
