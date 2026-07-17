@@ -91,6 +91,13 @@ private[spark] trait ShuffleManager {
 
   /**
    * Remove a shuffle's metadata from the ShuffleManager.
+   *
+   * Implementations must treat an unknown or already-removed shuffleId as an idempotent no-op --
+   * returning false rather than throwing or mutating unrelated state. The id-only `RemoveShuffle`
+   * cleanup path cannot tell which manager owns a shuffle, so it broadcasts to every configured
+   * manager (see `SparkEnv.unregisterShuffleFromAllManagers`), including ones that never handled
+   * this shuffle.
+   *
    * @return true if the metadata removed successfully, otherwise false.
    */
   def unregisterShuffle(shuffleId: Int): Boolean
