@@ -35,7 +35,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
+import org.apache.spark.resource.{CpuAmount, ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
@@ -238,6 +238,62 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     assert(1 === taskDescriptions.length)
     assert("executor0" === taskDescriptions(0).executorId)
     assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: Scheduler correctly accounts for fractional CPUs per task") {
+    // With spark.task.cpus = 0.5, a single core can run 2 tasks concurrently.
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.5")
+    val singleCoreOffers =
+      IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(5))
+    val taskDescriptions = taskScheduler.resourceOffers(singleCoreOffers).flatten
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.forall(_.executorId == "executor0"))
+    assert(taskDescriptions.forall(td => td.cpus.toDouble == 0.5))
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: fractional CPUs (0.2) schedule the expected number of tasks") {
+    // 1.0 / 0.2 would floor to 4 with naive Double arithmetic; BigDecimal computes it exactly
+    // as 5, so all 5 task slots on a single core are used.
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.2")
+    val singleCoreOffers =
+      IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(10))
+    val taskDescriptions = taskScheduler.resourceOffers(singleCoreOffers).flatten
+    assert(5 === taskDescriptions.length)
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: fractional CPUs above 1 (1.5) schedule the expected number of tasks") {
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[2]",
+      config.CPUS_PER_TASK.key -> "1.5")
+    val offers = IndexedSeq(WorkerOffer("executor0", "host0", 4))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(5))
+    val taskDescriptions = taskScheduler.resourceOffers(offers).flatten
+    // floor(4 / 1.5) == 2 tasks fit on a 4-core executor
+    assert(2 === taskDescriptions.length)
+    assert(taskDescriptions.forall(td => td.cpus.toDouble == 1.5))
+    assert(!failedTaskSet)
+  }
+
+  test("SPARK-58192: calculateAvailableSlots saturates instead of overflowing Int") {
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[1]",
+      config.CPUS_PER_TASK.key -> "0.000000001")
+    // Each 4-core executor contributes floor(4 / 1e-9) clamped to Int.MaxValue; the sum over
+    // two executors must saturate at Int.MaxValue instead of wrapping negative.
+    val rpId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val fourCores = CpuAmount.normalize(BigDecimal(4))
+    val slots = TaskSchedulerImpl.calculateAvailableSlots(taskScheduler, sc.conf,
+      rpId, Array(rpId, rpId), Array(fourCores, fourCores),
+      Array(Map.empty[String, Int], Map.empty[String, Int]))
+    assert(slots === Int.MaxValue)
   }
 
   private def setupTaskSchedulerForLocalityTests(
@@ -1125,7 +1181,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
         // as we offer resources to the taskset -- each iteration either schedules
         // something, or it terminates that locality level, so the maximum number of
         // checks is numCores + numLocalityLevels
-        val numCoresOnAllOffers = offers.map(_.cores).sum
+        val numCoresOnAllOffers = offers.map(_.cores).sum.toInt
         val numLocalityLevels = TaskLocality.values.size
         val maxExcludelistChecks = numCoresOnAllOffers + numLocalityLevels
 

@@ -35,7 +35,7 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -232,7 +232,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case LaunchedExecutor(executorId) =>
         executorDataMap.get(executorId).foreach { data =>
-          data.freeCores = data.totalCores
+          data.freeCores = CpuAmount.normalize(BigDecimal(data.totalCores))
         }
         makeOffers(executorId)
 
@@ -747,7 +747,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         .values.toArray.map { executor =>
           (
             executor.resourceProfileId,
-            executor.totalCores,
+            CpuAmount.normalize(BigDecimal(executor.totalCores)),
             executor.resourcesInfo.map { case (name, rInfo) =>
               (name, rInfo.totalAddressesAmount)
             }
@@ -765,7 +765,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // this function is for testing only
   private[spark] def getExecutorAvailableCpus(
-      executorId: String): Option[Int] = synchronized {
+      executorId: String): Option[BigDecimal] = synchronized {
     executorDataMap.get(executorId).map(_.freeCores)
   }
 

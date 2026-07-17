@@ -717,6 +717,9 @@ See the [configuration page](configuration.html) for information on Spark config
     In other words, the recovery-mode executors replace the OOM-terminated executors to
     survive from the resource-hungry tasks for the remaining tasks and stages.
     If set to <code>false</code>, Spark will not use the recovery-mode executors.
+    Note that when <code>spark.task.cpus</code> is 0.5 or less, a recovery-mode executor
+    announces a single CPU core and therefore accepts
+    <code>floor(1 / spark.task.cpus)</code> concurrent tasks instead of only one.
   </td>
   <td>4.2.0</td>
 </tr>

@@ -35,7 +35,7 @@ import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys.{COUNT, PYTHON_WORKER_IDLE_TIMEOUT, SIZE, TASK_NAME, TIME, TOTAL_TIME}
-import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
+import org.apache.spark.internal.config.{BUFFER_SIZE, CPUS_PER_TASK, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.resource.ResourceProfile.{EXECUTOR_CORES_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
@@ -310,9 +310,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val memoryMb = Option(context.getLocalProperty(PYSPARK_MEMORY_LOCAL_PROPERTY)).map(_.toLong)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     // If OMP_NUM_THREADS is not explicitly set, override it with the number of task cpus.
-    // See SPARK-42613 for details.
+    // See SPARK-42613 for details. `spark.task.cpus` may be fractional, so round up to an integer
+    // number of threads; it is validated to be > 0, so the ceiling is always >= 1.
     if (conf.getOption("spark.executorEnv.OMP_NUM_THREADS").isEmpty) {
-      envVars.put("OMP_NUM_THREADS", conf.get("spark.task.cpus", "1"))
+      envVars.put("OMP_NUM_THREADS",
+        conf.get(CPUS_PER_TASK).setScale(0, BigDecimal.RoundingMode.CEILING).intValue.toString)
     }
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuseWorker) {

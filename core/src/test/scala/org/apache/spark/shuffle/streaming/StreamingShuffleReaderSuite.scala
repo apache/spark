@@ -62,7 +62,7 @@ class StreamingShuffleReaderSuite
       taskMemoryManager = taskMemoryManager,
       localProperties = properties,
       metricsSystem = mock[MetricsSystem],
-      cpus = 1)
+      cpuAmount = 1)
   }
 
   // A minimal DataMessage that is only used to exercise the iterator factory's type dispatch;

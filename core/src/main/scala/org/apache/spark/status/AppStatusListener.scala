@@ -29,6 +29,7 @@ import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.internal.config.Status._
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.resource.ResourceProfile.CPUS
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -53,7 +54,7 @@ private[spark] class AppStatusListener(
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
-  private var defaultCpusPerTask: Int = 1
+  private var defaultCpusPerTask: BigDecimal = CpuAmount.normalize(BigDecimal(1))
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -183,7 +184,10 @@ private[spark] class AppStatusListener(
       details.getOrElse("Classpath Entries", Nil),
       Nil)
 
-    defaultCpusPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
+    // Parse the raw property string straight into a BigDecimal so the default cpus per task is
+    // exact (spark.task.cpus may be fractional, e.g. 0.2), then normalize to the CPU scale.
+    defaultCpusPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key)
+      .map(v => CpuAmount.normalize(BigDecimal(v)))
       .getOrElse(defaultCpusPerTask)
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
@@ -222,10 +226,15 @@ private[spark] class AppStatusListener(
     exec.totalCores = event.executorInfo.totalCores
     val rpId = event.executorInfo.resourceProfileId
     val liveRP = liveResourceProfiles.get(rpId)
+    // Recover the exact BigDecimal from the Double amount via its string form (see
+    // ResourceProfile.getTaskCpus for why this must go through toString), then normalize.
     val cpusPerTask = liveRP.flatMap(_.taskResources.get(CPUS))
-      .map(_.amount.toInt).getOrElse(defaultCpusPerTask)
+      .map(tr => CpuAmount.normalize(BigDecimal(tr.amount.toString)))
+      .getOrElse(defaultCpusPerTask)
     val maxTasksPerExec = liveRP.flatMap(_.maxTasksPerExecutor)
-    exec.maxTasks = maxTasksPerExec.getOrElse(event.executorInfo.totalCores / cpusPerTask)
+    exec.maxTasks = maxTasksPerExec.getOrElse(
+      ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(event.executorInfo.totalCores)), cpusPerTask))
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.resources = event.executorInfo.resourcesInfo
     exec.attributes = event.executorInfo.attributes

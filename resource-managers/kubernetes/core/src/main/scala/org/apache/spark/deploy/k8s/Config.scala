@@ -598,7 +598,10 @@ private[spark] object Config extends Logging {
         "allocate the recovery-mode executors which accept only a single task per executor JVM. " +
         "In other words, the recovery-mode executors replace the OOM-terminated executors to " +
         "survive from the resource-hungry tasks for the remaining tasks and stages. " +
-        "If set to `false`, Spark will not use the recovery-mode executors.")
+        "If set to `false`, Spark will not use the recovery-mode executors. " +
+        "Note that when spark.task.cpus is 0.5 or less, a recovery-mode executor announces a " +
+        "single CPU core and therefore accepts floor(1 / spark.task.cpus) concurrent tasks " +
+        "instead of only one.")
       .version("4.2.0")
       .booleanConf
       .createOptional

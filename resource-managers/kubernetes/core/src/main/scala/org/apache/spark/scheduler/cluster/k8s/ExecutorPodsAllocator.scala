@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
 
@@ -135,6 +135,7 @@ class ExecutorPodsAllocator(
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
+    warnIfRecoveryModeCannotIsolateSingleTask()
     if (shouldWaitForDriverReadiness) {
       driverPod.foreach { pod =>
         // Wait until the driver pod is ready before starting executors, as the headless service
@@ -470,6 +471,28 @@ class ExecutorPodsAllocator(
 
   def setRecoveryMode(): Unit = {
     conf.setIfMissing(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    warnIfRecoveryModeCannotIsolateSingleTask()
+  }
+
+  // Recovery mode's single-task guarantee is enforced by announcing SPARK_EXECUTOR_CORES =
+  // ceil(spark.task.cpus), which must be a whole number. When the task cpus amount is 0.5 or
+  // less, the single announced core fits more than one task, so the guarantee cannot hold;
+  // log a prominent warning (at most once) instead of silently overcommitting recovery
+  // executors.
+  private val recoveryModeCpusWarned = new AtomicBoolean(false)
+
+  private def warnIfRecoveryModeCannotIsolateSingleTask(): Unit = {
+    val taskCpus = conf.get(CPUS_PER_TASK)
+    if (conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false) &&
+        taskCpus <= BigDecimal(0.5) && recoveryModeCpusWarned.compareAndSet(false, true)) {
+      val slots = ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(1)), taskCpus)
+      logWarning(log"Recovery mode is enabled while spark.task.cpus = " +
+        log"${MDC(LogKeys.NUM_TASK_CPUS, CpuAmount.toDisplayString(taskCpus))} is <= 0.5. A " +
+        log"recovery-mode executor announces a single core, so it accepts up to " +
+        log"${MDC(LogKeys.NUM_SLOTS, slots)} concurrent tasks instead of only one. Set " +
+        log"spark.task.cpus above 0.5 to restore single-task recovery executors.")
+    }
   }
 
   protected def requestNewExecutors(

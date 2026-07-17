@@ -48,7 +48,7 @@ import org.apache.spark.internal.config.{EXECUTOR_USER_CLASS_PATH_FIRST => EXECU
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.memory.{SparkOutOfMemoryError, TaskMemoryManager}
 import org.apache.spark.metrics.source.JVMCPUSource
-import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.{CpuAmount, ResourceInformation}
 import org.apache.spark.rpc.RpcTimeout
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.SerializerHelper
@@ -767,8 +767,12 @@ private[spark] class Executor(
         t.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
           // SPARK-32898: it's possible that a task is killed when taskStartTimeNs has the initial
           // value(=0) still. In this case, the executorRunTime should be considered as 0.
-          if (taskStartTimeNs > 0) (System.nanoTime() - taskStartTimeNs) * taskDescription.cpus
-          else 0))
+          if (taskStartTimeNs > 0) {
+            // Strip trailing zeros from the scale-9 cpus so this product stays in BigDecimal's
+            // compact (long-backed) form instead of inflating a long duration into a BigInteger.
+            (BigDecimal(System.nanoTime() - taskStartTimeNs) *
+              CpuAmount.stripTrailingZeros(taskDescription.cpus)).toLong
+          } else 0))
         t.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
       })
 
@@ -958,10 +962,15 @@ private[spark] class Executor(
           (taskStartTimeNs - deserializeStartTimeNs) + task.executorDeserializeTimeNs))
         task.metrics.setExecutorDeserializeCpuTime(
           (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime)
-        // We need to subtract Task.run()'s deserialization time to avoid double-counting
-        task.metrics.setExecutorRunTime(TimeUnit.NANOSECONDS.toMillis(
-          (taskFinishNs - taskStartTimeNs) * taskDescription.cpus
-            - task.executorDeserializeTimeNs))
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting.
+        // With a fractional cpus below 1 the scaled elapsed time can be smaller than the in-run
+        // deserialization time, so clamp at zero rather than reporting a negative run time.
+        task.metrics.setExecutorRunTime(math.max(0L, TimeUnit.NANOSECONDS.toMillis(
+          // Strip trailing zeros from the scale-9 cpus so this product stays in BigDecimal's
+          // compact (long-backed) form instead of inflating a long duration into a BigInteger.
+          (BigDecimal(taskFinishNs - taskStartTimeNs) *
+            CpuAmount.stripTrailingZeros(taskDescription.cpus)).toLong
+            - task.executorDeserializeTimeNs)))
         task.metrics.setExecutorCpuTime(
           (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime)
         task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)

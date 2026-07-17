@@ -378,7 +378,7 @@ private[spark] abstract class MockBackend(
   val env = SparkEnv.get
 
   /** Accessed by both scheduling and backend thread, so should be protected by this. */
-  var freeCores: Int = _
+  var freeCores: BigDecimal = _
 
   /**
    * Accessed by both scheduling and backend thread, so should be protected by this.
@@ -456,7 +456,7 @@ private[spark] class SingleCoreMockBackend(
   )
 }
 
-case class ExecutorTaskStatus(host: String, executorId: String, var freeCores: Int)
+case class ExecutorTaskStatus(host: String, executorId: String, var freeCores: BigDecimal)
 
 class MockRDD(
   sc: SparkContext,

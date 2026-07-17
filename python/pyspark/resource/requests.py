@@ -474,29 +474,36 @@ class TaskResourceRequests:
             if _requests is not None:
                 for k, v in _requests.items():
                     if k == self._CPUS:
-                        self._java_task_resource_requests.cpus(int(v.amount))
+                        # Pass the amount as a float so the fractional part survives; py4j
+                        # then selects the Double overload of TaskResourceRequests.cpus.
+                        self._java_task_resource_requests.cpus(float(v.amount))
                     else:
                         self._java_task_resource_requests.resource(v.resourceName, v.amount)
         else:
             self._java_task_resource_requests = None
             self._task_resources: Dict[str, TaskResourceRequest] = {}
 
-    def cpus(self, amount: int) -> "TaskResourceRequests":
+    def cpus(self, amount: float) -> "TaskResourceRequests":
         """
         Specify number of cpus per Task.
         This is a convenient API to add :class:`TaskResourceRequest` for cpus.
 
+        .. versionchanged:: 4.3.0
+            Accepts fractional amounts.
+
         Parameters
         ----------
-        amount : int
-            Number of cpus to allocate per Task.
+        amount : float
+            Number of cpus to allocate per Task. Any positive value is valid, including
+            fractional ones: below 1 (e.g. 0.5) to let multiple tasks share a CPU core,
+            or above 1 (e.g. 1.5).
 
         Returns
         -------
         :class:`TaskResourceRequests`
         """
         if self._java_task_resource_requests is not None:
-            self._java_task_resource_requests.cpus(amount)
+            self._java_task_resource_requests.cpus(float(amount))
         else:
             self._task_resources[self._CPUS] = TaskResourceRequest(self._CPUS, amount)
         return self

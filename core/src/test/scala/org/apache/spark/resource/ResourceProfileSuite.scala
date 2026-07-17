@@ -408,6 +408,38 @@ class ResourceProfileSuite extends SparkFunSuite with MockitoSugar {
     assert(msg.contains("The task resource amount 0.7 must be either <= 0.5, or a whole number"))
   }
 
+  test("SPARK-58192: fractional cpus amounts above 0.5 and above 1 are valid") {
+    // The "<= 0.5 or whole number" rule only applies to addressable custom resources; cpus is
+    // a plain quantity drawn from the core pool, so any amount of at least 1e-9 is valid.
+    Seq(0.7, 1.5, 2.5).foreach { amount =>
+      val ereqs = new ExecutorResourceRequests().cores(4)
+      val treqs = new TaskResourceRequests().cpus(amount)
+      val rp = new ResourceProfileBuilder().require(ereqs).require(treqs).build()
+      assert(rp.getTaskCpus.get == BigDecimal(amount.toString), s"for amount $amount")
+    }
+  }
+
+  test("SPARK-58192: cpus amounts that round to zero at the accounting scale are rejected") {
+    Seq(0.0, -1.0, 1e-10).foreach { amount =>
+      val e = intercept[AssertionError] {
+        new TaskResourceRequests().cpus(amount)
+      }
+      assert(e.getMessage.contains("must be at least 1e-9"), s"for amount $amount")
+    }
+  }
+
+  test("SPARK-58192: numTasksBasedOnCores clamps to [0, Int.MaxValue]") {
+    def numTasks(cores: String, cpusPerTask: String): Int = {
+      ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(cores)), CpuAmount.normalize(BigDecimal(cpusPerTask)))
+    }
+    assert(numTasks("4", "1.5") === 2)
+    assert(numTasks("1", "0.1") === 10)
+    // 4 / 1e-9 == 4e9 overflows Int; BigDecimal.intValue() would wrap it to a negative value
+    assert(numTasks("4", "0.000000001") === Int.MaxValue)
+    assert(numTasks("-1", "1") === 0)
+  }
+
   test("SPARK-45527 fractional TaskResourceRequests in TaskResourceProfile") {
     var treqs = new TaskResourceRequests().cpus(1).resource("gpu", 0.1)
     new ResourceProfileBuilder().require(treqs).build()

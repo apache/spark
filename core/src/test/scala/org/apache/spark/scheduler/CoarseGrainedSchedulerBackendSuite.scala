@@ -81,7 +81,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -95,7 +95,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
     val conf = new SparkConf()
-      .set(CPUS_PER_TASK, 2)
+      .set(CPUS_PER_TASK, BigDecimal(2))
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = new SparkContext(conf)
@@ -143,7 +143,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       val discoveryScript = createTempScriptWithExpectedOutput(
         dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
       val conf = new SparkConf()
-        .set(CPUS_PER_TASK, 1)
+        .set(CPUS_PER_TASK, BigDecimal(1))
         .setMaster("local-cluster[1, 20, 1024]")
         .setAppName("test")
         .set(WORKER_GPU_ID.amountConf, "4")
@@ -199,7 +199,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val discoveryScript = createTempScriptWithExpectedOutput(
           dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0", "1", "2", "3"]}""")
         val conf = new SparkConf()
-          .set(CPUS_PER_TASK, taskCpus)
+          .set(CPUS_PER_TASK, BigDecimal(taskCpus))
           .setMaster("local-cluster[1, 4, 1024]")
           .setAppName("test")
           .set(WORKER_GPU_ID.amountConf, "4")
@@ -216,7 +216,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         val numPartitions = Seq(4 / taskCpus, 4 / taskGpus).min
         val ret = sc.parallelize(1 to 20, numPartitions).mapPartitions { _ =>
           val tc = TaskContext.get()
-          assert(tc.cpus() == taskCpus)
+          assert(tc.cpuAmount() == taskCpus)
           val gpus = tc.resources()("gpu").addresses
           Iterator.single(gpus)
         }.collect()

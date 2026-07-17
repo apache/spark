@@ -116,7 +116,9 @@ private[spark] class TaskSchedulerImpl(
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
-  // CPUs to request per task
+  // CPUs to request per task, in the internal exact BigDecimal representation so that fractional
+  // values (e.g. 0.2) are accounted exactly. spark.task.cpus is a decimalConf, so conf.get returns
+  // the exact BigDecimal the user configured.
   val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
@@ -403,12 +405,17 @@ private[spark] class TaskSchedulerImpl(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
       shuffledOffers: Seq[WorkerOffer],
-      availableCpus: Array[Int],
+      availableCpus: Array[BigDecimal],
       availableResources: Array[ExecutorResourcesAmounts],
       tasks: IndexedSeq[ArrayBuffer[TaskDescription]])
     : (Boolean, Option[TaskLocality]) = {
     var noDelayScheduleRejects = true
     var minLaunchedLocality: Option[TaskLocality] = None
+    // Resolve the task cpus once per (task set, locality) round; the per-offer probes below
+    // would otherwise re-derive it for every slot.
+    val taskSetProf = sc.resourceProfileManager
+      .resourceProfileFromId(taskSet.taskSet.resourceProfileId)
+    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
     // nodes and executors that are excluded for the entire application have already been
     // filtered out by this point
     for (i <- shuffledOffers.indices) {
@@ -419,12 +426,10 @@ private[spark] class TaskSchedulerImpl(
       // check whether the task can be scheduled to the executor base on resource profile.
       if (sc.resourceProfileManager
         .canBeScheduled(taskSetRpID, shuffledOffers(i).resourceProfileId)) {
-        val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, availableCpus(i),
-          availableResources(i))
+        val taskResAssignmentsOpt = resourcesMeetTaskRequirements(taskSet, taskCpus,
+          availableCpus(i), availableResources(i))
         taskResAssignmentsOpt.foreach { taskResAssignments =>
           try {
-            val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
-            val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
               taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
             noDelayScheduleRejects &= !didReject
@@ -442,8 +447,8 @@ private[spark] class TaskSchedulerImpl(
               }
 
               minLaunchedLocality = minTaskLocality(minLaunchedLocality, Some(locality))
-              availableCpus(i) -= taskCpus
-              assert(availableCpus(i) >= 0)
+              availableCpus(i) = availableCpus(i) - taskCpus
+              assert(availableCpus(i).signum >= 0)
               availableResources(i).acquire(resources)
             }
           } catch {
@@ -479,12 +484,14 @@ private[spark] class TaskSchedulerImpl(
    */
   private def resourcesMeetTaskRequirements(
       taskSet: TaskSetManager,
-      availCpus: Int,
+      taskCpus: BigDecimal,
+      availCpus: BigDecimal,
       availWorkerResources: ExecutorResourcesAmounts): Option[Map[String, Map[String, Long]]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
-    val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(taskSetProf, conf)
-    // check if the ResourceProfile has cpus first since that is common case
+    // check if the ResourceProfile has cpus first since that is common case. Both values are in
+    // the internal exact BigDecimal representation, so this comparison is exact regardless of
+    // whether spark.task.cpus is fractional (e.g. 0.2).
     if (availCpus < taskCpus) return None
     // only look at the resource other than cpus
     availWorkerResources.assignAddressesCustomResources(taskSetProf)
@@ -547,8 +554,13 @@ private[spark] class TaskSchedulerImpl(
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
-    // close estimate
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    // close estimate. It is only a capacity hint, so cap it: with a tiny fractional
+    // spark.task.cpus the exact slot count can be huge and would preallocate a giant buffer.
+    val tasks = shuffledOffers.map { o =>
+      val sizeHint =
+        math.min(ResourceProfile.numTasksBasedOnCores(o.cores, CPUS_PER_TASK), 1024)
+      new ArrayBuffer[TaskDescription](sizeHint)
+    }
     val availableResources = shuffledOffers.map(_.resources).toArray
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val resourceProfileIds = shuffledOffers.map(o => o.resourceProfileId).toArray
@@ -706,7 +718,8 @@ private[spark] class TaskSchedulerImpl(
               }
               barrierPendingLaunchTasks.foreach { task =>
                 // revert all assigned resources
-                availableCpus(task.assignedOfferIndex) += task.assignedCores
+                availableCpus(task.assignedOfferIndex) =
+                  availableCpus(task.assignedOfferIndex) + task.assignedCores
                 availableResources(task.assignedOfferIndex).release(
                   task.assignedResources)
                 // re-add the task to the schedule pending list
@@ -1241,7 +1254,7 @@ private[spark] object TaskSchedulerImpl {
       conf: SparkConf,
       rpId: Int,
       availableRPIds: Array[Int],
-      availableCpus: Array[Int],
+      availableCpus: Array[BigDecimal],
       availableResources: Array[Map[String, Int]]): Int = {
     val resourceProfile = scheduler.sc.resourceProfileManager.resourceProfileFromId(rpId)
     val coresKnown = resourceProfile.isCoresLimitKnown
@@ -1257,10 +1270,10 @@ private[spark] object TaskSchedulerImpl {
     val cpusPerTask = ResourceProfile.getTaskCpusOrDefaultForProfile(resourceProfile, conf)
     val taskLimit = resourceProfile.taskResources.get(limitingResource).map(_.amount).get
 
-    availableCpus.zip(availableResources).zip(availableRPIds)
+    val totalSlots = availableCpus.zip(availableResources).zip(availableRPIds)
       .filter { case (_, id) => scheduler.sc.resourceProfileManager.canBeScheduled(rpId, id) }
       .map { case ((cpu, resources), _) =>
-        val numTasksPerExecCores = cpu / cpusPerTask
+        val numTasksPerExecCores = ResourceProfile.numTasksBasedOnCores(cpu, cpusPerTask)
         if (limitedByCpu) {
           numTasksPerExecCores
         } else {
@@ -1279,7 +1292,11 @@ private[spark] object TaskSchedulerImpl {
             resourceLimit
           }
         }
-      }.sum
+      }.foldLeft(0L)(_ + _)
+    // The per-executor slot counts are individually clamped to the Int range, but with a tiny
+    // fractional task cpus amount their sum can still overflow Int; saturate instead of
+    // wrapping so this never returns a negative slot count.
+    totalSlots.min(Int.MaxValue).max(0L).toInt
   }
 
   /**

@@ -52,7 +52,18 @@ class TaskResourceRequests() extends Serializable {
    *
    * @param amount Number of cpus to allocate per Task.
    */
-  def cpus(amount: Int): this.type = {
+  def cpus(amount: Int): this.type = cpus(amount.toDouble)
+
+  /**
+   * Specify number of cpus per Task.
+   * This is a convenient API to add [[TaskResourceRequest]] for cpus.
+   *
+   * @param amount Number of cpus to allocate per Task. Any positive value is valid, including
+   *               fractional ones: below 1 (e.g. 0.2) to let multiple tasks share a CPU core,
+   *               or above 1 (e.g. 1.5).
+   */
+  @Since("4.3.0")
+  def cpus(amount: Double): this.type = {
     val treq = new TaskResourceRequest(CPUS, amount)
     _taskResources.put(CPUS, treq)
     this

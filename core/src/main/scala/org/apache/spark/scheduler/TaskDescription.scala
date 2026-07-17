@@ -27,6 +27,7 @@ import scala.collection.mutable.{HashMap, Map}
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState}
+import org.apache.spark.resource.CpuAmount
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
@@ -55,7 +56,7 @@ private[spark] class TaskDescription(
     val partitionId: Int,
     val artifacts: JobArtifactSet,
     val properties: Properties,
-    val cpus: Int,
+    val cpus: BigDecimal,
     // resources is the total resources assigned to the task
     // Eg, Map("gpu" -> Map("0" -> ResourceAmountUtils.toInternalResource(0.7))):
     // assign 0.7 of the gpu address "0" to this task
@@ -113,8 +114,9 @@ private[spark] object TaskDescription {
       dataOut.write(bytes)
     }
 
-    // Write cpus.
-    dataOut.writeInt(taskDescription.cpus)
+    // Write cpus in its minimal (trailing-zero-trimmed) decimal string form; it is re-normalized
+    // to the fixed CPU scale on read, so fractional values round-trip exactly.
+    dataOut.writeUTF(CpuAmount.toDisplayString(taskDescription.cpus))
 
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
@@ -220,8 +222,8 @@ private[spark] object TaskDescription {
       properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
-    // Read cpus.
-    val cpus = dataIn.readInt()
+    // Read cpus and normalize to the fixed CPU accounting scale.
+    val cpus = CpuAmount.normalize(BigDecimal(dataIn.readUTF()))
 
     // Read resources.
     val resources = deserializeResources(dataIn)

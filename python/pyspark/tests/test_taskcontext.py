@@ -351,6 +351,12 @@ class TaskContextTestsWithResources(unittest.TestCase):
         cpus = rdd.map(lambda x: TaskContext.get().cpus()).take(1)[0]
         self.assertEqual(cpus, 2)
 
+    def test_cpu_amount(self):
+        """SPARK-58192: the exact cpu amount is available."""
+        rdd = self.sc.parallelize(range(10))
+        cpu_amount = rdd.map(lambda x: TaskContext.get().cpuAmount()).take(1)[0]
+        self.assertEqual(cpu_amount, 2.0)
+
     def test_resources(self):
         """Test that multiple resources are all available (SPARK-54929)."""
         rdd = self.sc.parallelize(range(10))
@@ -366,6 +372,26 @@ class TaskContextTestsWithResources(unittest.TestCase):
     def tearDown(self):
         os.unlink(self.gpuTempFile.name)
         os.unlink(self.fpgaTempFile.name)
+        self.sc.stop()
+
+
+class TaskContextTestsWithFractionalCpus(unittest.TestCase):
+    def setUp(self):
+        class_name = self.__class__.__name__
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.task.cpus", "0.5")
+        self.sc = SparkContext("local-cluster[1,1,1024]", class_name, conf=conf)
+
+    def test_fractional_cpu_amount(self):
+        """SPARK-58192: cpuAmount() exposes the exact fractional amount; cpus() rounds up."""
+        rdd = self.sc.parallelize(range(4), 2)
+        cpu_amount, cpus = rdd.map(
+            lambda x: (TaskContext.get().cpuAmount(), TaskContext.get().cpus())
+        ).take(1)[0]
+        self.assertEqual(cpu_amount, 0.5)
+        self.assertEqual(cpus, 1)
+
+    def tearDown(self):
         self.sc.stop()
 
 

@@ -28,17 +28,28 @@ import org.apache.spark.annotation.{Since, Stable}
  *
  * @param resourceName Resource name
  * @param amount Amount requesting as a Double to support fractional resource requests.
- *               Valid values are less than or equal to 1.0 or whole numbers. This essentially
- *               lets you configure X number of tasks to run on a single resource,
- *               ie amount equals 0.5 translates into 2 tasks per resource address.
+ *               For custom resources, valid values are less than or equal to 1.0 or whole
+ *               numbers, since a task's amount must map onto discrete resource addresses -
+ *               ie amount equals 0.5 translates into 2 tasks per resource address. CPUs
+ *               (resource name "cpus") are a plain quantity drawn from the executor's core
+ *               pool rather than an addressable resource, so any amount of at least 1e-9 is
+ *               valid, e.g. 1.5.
  */
 @Stable
 @Since("3.1.0")
 class TaskResourceRequest(val resourceName: String, val amount: Double)
   extends Serializable {
 
-  assert(amount <= 1.0 || amount % 1 == 0,
-    s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
+  if (resourceName == ResourceProfile.CPUS) {
+    // A positive amount below half of the internal accounting scale (1e-9) would silently
+    // round to zero cpus downstream; reject it here where the original value is still visible.
+    assert(!amount.isNaN && !amount.isInfinity &&
+      CpuAmount.normalize(BigDecimal(amount.toString)).signum > 0,
+      s"The cpus amount ${amount} must be at least 1e-9.")
+  } else {
+    assert(amount <= 1.0 || amount % 1 == 0,
+      s"The resource amount ${amount} must be either <= 1.0, or a whole number.")
+  }
 
   override def equals(obj: Any): Boolean = {
     obj match {

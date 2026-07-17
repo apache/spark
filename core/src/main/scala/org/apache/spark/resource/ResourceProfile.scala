@@ -67,9 +67,11 @@ class ResourceProfile(
    * Validate the ResourceProfile
    */
   protected def validate(): Unit = {
-    // The task.amount in ResourceProfile falls within the range of 0 to 0.5,
-    // or it's a whole number
-    for ((_, taskReq) <- taskResources) {
+    // The task.amount in ResourceProfile falls within the range of 0 to 0.5, or it's a whole
+    // number, so that it maps onto resource-address slots. CPUs are exempt: they are a plain
+    // quantity drawn from the executor's core pool rather than an addressable resource, so any
+    // positive amount is valid (e.g. 1.5).
+    for ((rName, taskReq) <- taskResources if rName != ResourceProfile.CPUS) {
       val taskAmount = taskReq.amount
       assert(taskAmount <= 0.5 || taskAmount % 1 == 0,
         s"The task resource amount ${taskAmount} must be either <= 0.5, or a whole number.")
@@ -99,8 +101,15 @@ class ResourceProfile(
     executorResources.get(ResourceProfile.CORES).map(_.amount.toInt)
   }
 
-  private[spark] def getTaskCpus: Option[Int] = {
-    taskResources.get(ResourceProfile.CPUS).map(_.amount.toInt)
+  // TaskResourceRequest.amount is a Double (the shared resource-request API). Recover the exact
+  // decimal from it via its string form: BigDecimal(amount.toString) is the exact decimal the
+  // user typed (e.g. 0.1), whereas BigDecimal(amount) would bake in the binary double
+  // (0.1000000000000000055...). Normalize to the fixed CPU accounting scale so the result
+  // matches every other cpus value. Cached because the scheduler reads it on every task-slot
+  // probe; @transient so it is recomputed on deserialization instead of being shipped.
+  @transient private[spark] lazy val getTaskCpus: Option[BigDecimal] = {
+    taskResources.get(ResourceProfile.CPUS)
+      .map(tr => CpuAmount.normalize(BigDecimal(tr.amount.toString)))
   }
 
   private[spark] def getPySparkMemory: Option[Long] = {
@@ -195,13 +204,13 @@ class ResourceProfile(
   private def calculateTasksAndLimitingResource(sparkConf: SparkConf): Unit = synchronized {
     val shouldCheckExecCores = shouldCheckExecutorCores(sparkConf)
     var (taskLimit, limitingResource) = if (shouldCheckExecCores) {
-      val cpusPerTask = taskResources.get(ResourceProfile.CPUS)
-        .map(_.amount).getOrElse(sparkConf.get(CPUS_PER_TASK).toDouble).toInt
+      val cpusPerTask = getTaskCpus.getOrElse(sparkConf.get(CPUS_PER_TASK))
       assert(cpusPerTask > 0, "CPUs per task configuration has to be > 0")
       val coresPerExecutor = getExecutorCores.getOrElse(sparkConf.get(EXECUTOR_CORES))
       _coresLimitKnown = true
       ResourceUtils.validateTaskCpusLargeEnough(sparkConf, coresPerExecutor, cpusPerTask)
-      val tasksBasedOnCores = coresPerExecutor / cpusPerTask
+      val tasksBasedOnCores = ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(coresPerExecutor)), cpusPerTask)
       // Note that if the cores per executor aren't set properly this calculation could be off,
       // we default it to just be 1 in order to allow checking of the rest of the custom
       // resources. We set the limit based on the other resources available.
@@ -401,7 +410,10 @@ object ResourceProfile extends Logging {
 
   private def getDefaultTaskResources(conf: SparkConf): Map[String, TaskResourceRequest] = {
     val cpusPerTask = conf.get(CPUS_PER_TASK)
-    val treqs = new TaskResourceRequests().cpus(cpusPerTask)
+    // TaskResourceRequest stores the amount as a Double (the custom-resource API contract);
+    // getTaskCpus recovers the exact BigDecimal from it via BigDecimal(amount.toString), so the
+    // BigDecimal -> Double -> BigDecimal round trip stays exact for any realistic value.
+    val treqs = new TaskResourceRequests().cpus(cpusPerTask.toDouble)
     ResourceUtils.addTaskResourceRequests(conf, treqs)
     treqs.requests
   }
@@ -465,8 +477,28 @@ object ResourceProfile extends Logging {
    * Get the number of cpus per task if its set in the profile, otherwise return the
    * cpus per task for the default profile.
    */
-  private[spark] def getTaskCpusOrDefaultForProfile(rp: ResourceProfile, conf: SparkConf): Int = {
+  private[spark] def getTaskCpusOrDefaultForProfile(
+      rp: ResourceProfile, conf: SparkConf): BigDecimal = {
     rp.getTaskCpus.getOrElse(conf.get(CPUS_PER_TASK))
+  }
+
+  /**
+   * Number of tasks that can run concurrently given the available cores and the number of cpus
+   * required per task. Both arguments are in the internal exact [[scala.math.BigDecimal]]
+   * representation. The division and floor are performed with [[scala.math.BigDecimal]] arithmetic,
+   * which is exact and avoids the floating point rounding errors that would otherwise make values
+   * like `1.0 / 0.1` floor to the wrong slot count.
+   */
+  private[spark] def numTasksBasedOnCores(cores: BigDecimal, cpusPerTask: BigDecimal): Int = {
+    assert(cpusPerTask > 0, "cpusPerTask must be > 0")
+    // floor(cores / cpusPerTask) using exact decimal arithmetic; a scale of 0 with FLOOR rounding
+    // yields the integer quotient (e.g. 1.0 / 0.1 == 10 exactly).
+    val quotient = BigDecimal(
+      cores.bigDecimal.divide(cpusPerTask.bigDecimal, 0, java.math.RoundingMode.FLOOR))
+    // Guard the Int conversion: BigDecimal.intValue() wraps modulo 2^32, so a tiny cpusPerTask
+    // (e.g. 1e-9) could turn a huge quotient into a negative task count. Clamp to
+    // [0, Int.MaxValue] so slot counts and barrier-stage checks always see a sane value.
+    quotient.min(Int.MaxValue).max(0).toInt
   }
 
   /**
