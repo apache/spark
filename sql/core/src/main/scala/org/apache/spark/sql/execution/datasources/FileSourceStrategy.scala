@@ -212,8 +212,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
-      // Predicates with both partition keys and attributes need to be evaluated after the scan.
-      val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
+      // Give the FileIndex a chance to decide which filters can be dropped from the final
+      // FilterExec above the scan. By default only partition-key filters are dropped.
+      val afterScanFilters = filterSet -- fsRelation.location.fullyPushedFilters(
+        partitionKeyFilters.filter(_.references.nonEmpty).toSeq, dataFilters)
       val maxToStringFields = fsRelation.sparkSession.conf.get(SQLConf.MAX_TO_STRING_FIELDS)
       logInfo(log"Post-Scan Filters: ${MDC(POST_SCAN_FILTERS,
         afterScanFilters.simpleString(maxToStringFields))}")

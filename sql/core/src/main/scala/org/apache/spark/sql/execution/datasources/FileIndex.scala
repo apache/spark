@@ -134,6 +134,35 @@ trait FileIndex {
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory]
 
   /**
+   * Given the `partitionKeyFilters` and remaining `dataFilters` Spark will use to prune
+   * files for this index, returns the filters that this index guarantees are fully applied for all
+   * returned rows. Only these are dropped from the row-level `FilterExec` above the
+   * scan; any filter not returned is still evaluated after the scan for correctness. By default
+   * only partition-key filters are considered fully pushed, preserving the standard file-source
+   * behavior.
+   *
+   * For example:
+   *  - An index that fully applies additional predicates (e.g. one that prunes on non-partition
+   *    columns) can override this to also return a subset of `dataFilters`.
+   *  - Conversely, an index must omit a filter that it only partially applies. With partition
+   *    evolution, not all data files are partitioned by a given partition column (e.g. older files
+   *    written under a previous partition spec). Such files may contain both matching and
+   *    non-matching rows for that column, so the partition filter is not fully pushed and must be
+   *    omitted.
+   *
+   * Note these filters are the same predicates that [[listFiles]] prunes with, but not necessarily
+   * the exact expressions [[listFiles]] receives. The planner may derive the [[listFiles]]
+   * arguments from these (e.g. decomposing struct-equality predicates into per-field predicates
+   * for pushdown, substituting scalar-subquery or dynamic-partition values, or omitting
+   * dynamic-pruning filters from the static listing). The filters passed here are the original,
+   * un-derived forms so that the returned subset can be matched against those in the `FilterExec`
+   * above the scan.
+   */
+  def fullyPushedFilters(
+      partitionKeyFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Seq[Expression] = partitionKeyFilters
+
+  /**
    * Returns the list of files that will be read when scanning this relation. This call may be
    * very expensive for large tables.
    * The strings returned are expected to be url-encoded paths.
