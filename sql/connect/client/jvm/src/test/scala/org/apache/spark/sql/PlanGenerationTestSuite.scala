@@ -2246,6 +2246,18 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     binary.select(fn.bitmap_or_agg(fn.col("bytes")))
   }
 
+  test("function inet_aton") {
+    complex.select(fn.inet_aton(fn.col("g")))
+  }
+
+  test("function inet_ntoa") {
+    simple.select(fn.inet_ntoa(fn.col("id")))
+  }
+
+  test("function try_inet_aton") {
+    complex.select(fn.try_inet_aton(fn.col("g")))
+  }
+
   private def temporalFunctionTest(name: String)(f: => Column): Unit = {
     test("function " + name) {
       temporals.select(f)

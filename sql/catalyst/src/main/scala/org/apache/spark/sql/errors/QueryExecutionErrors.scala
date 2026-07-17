@@ -3488,4 +3488,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("rangeStart" -> rangeStart, "rangeEnd" -> rangeEnd)
     )
   }
+
+  def invalidIpv4AddressError(input: UTF8String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_IPV4_ADDRESS",
+      messageParameters = Map("address" -> toSQLValue(input, StringType)))
+  }
+
+  def invalidIpv4LongError(value: Long): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_IPV4_LONG",
+      messageParameters = Map("value" -> value.toString))
+  }
 }

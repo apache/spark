@@ -5011,6 +5011,33 @@ object functions {
    */
   def bitmap_and_agg(col: Column): Column = Column.fn("bitmap_and_agg", col)
 
+  /**
+   * Converts an IPv4 address string to a 32-bit integer. Returns null if the input is invalid
+   * (non-ANSI mode).
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def inet_aton(col: Column): Column = Column.fn("inet_aton", col)
+
+  /**
+   * Converts a 32-bit integer to an IPv4 address string in dotted-decimal notation. Returns null
+   * if the value is out of valid IPv4 range in non-ANSI mode.
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def inet_ntoa(col: Column): Column = Column.fn("inet_ntoa", col)
+
+  /**
+   * This is a special version of `inet_aton` that performs the same operation, but returns NULL
+   * instead of raising an error if the input is not a valid IPv4 address.
+   *
+   * @group misc_funcs
+   * @since 4.3.0
+   */
+  def try_inet_aton(col: Column): Column = Column.fn("try_inet_aton", col)
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////

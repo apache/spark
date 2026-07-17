@@ -4250,6 +4250,18 @@
     ],
     "sqlState" : "22006"
   },
+  "INVALID_IPV4_ADDRESS" : {
+    "message" : [
+      "The input `<address>` is not a valid IPv4 address. An IPv4 address must consist of 1 to 4 dot-separated parts, each between 0 and 255, containing only decimal digits."
+    ],
+    "sqlState" : "22003"
+  },
+  "INVALID_IPV4_LONG" : {
+    "message" : [
+      "The input `<value>` is not a valid IPv4 integer representation. The value must be between 0 and 4294967295 (0xFFFFFFFF)."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
       "<fieldName> is not a valid identifier of Java and cannot be used as field name",

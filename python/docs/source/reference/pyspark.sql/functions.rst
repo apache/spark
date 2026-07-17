@@ -658,6 +658,9 @@ Misc Functions
     current_path
     current_schema
     current_user
+    inet_aton
+    inet_ntoa
+    try_inet_aton
     input_file_block_length
     input_file_block_start
     input_file_name
