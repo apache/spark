@@ -246,15 +246,6 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         return super().dump_stream(batches, stream)
 
 
-class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
-    """
-    Same as :class:`ArrowStreamUDFSerializer` but it does not flatten when loading batches.
-    """
-
-    def load_stream(self, stream):
-        return ArrowStreamSerializer.load_stream(self, stream)
-
-
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
