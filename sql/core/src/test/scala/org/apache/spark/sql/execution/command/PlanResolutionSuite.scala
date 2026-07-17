@@ -1513,6 +1513,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   None,
                   None,
                   None,
+                  false,
                   false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
@@ -1528,6 +1529,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                   Some("new comment"),
                   None,
                   None,
+                  false,
                   false))) =>
               assert(column.name == Seq("i"))
             case _ => fail("expect AlterColumns")
@@ -1545,6 +1547,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     None,
+                    false,
                     false),
                   AlterColumnSpec(
                     column2: ResolvedFieldName,
@@ -1553,6 +1556,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
                     None,
                     None,
                     Some(DefaultValueExpression(_, _, _)),
+                    false,
                     false))) =>
               assert(column1.name == Seq("i"))
               assert(column2.name == Seq("s"))
@@ -1641,6 +1645,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
+              false,
               false))) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
@@ -1656,6 +1661,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               Some(comment),
               None,
               None,
+              false,
               false))) =>
           assert(comment == "an index")
           assert(dataType == LongType)

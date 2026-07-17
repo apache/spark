@@ -3177,39 +3177,44 @@ class DataSourceV2SQLSuiteV1Filter
     withTable("t") {
       sql("CREATE TABLE t(k int COMMENT 'original comment', v string) USING json")
 
-      assert(columnComment("t", "k") === "original comment")
+      assert(columnComment("t", "k") === Some("original comment"))
 
       // Update an existing comment.
       sql("COMMENT ON COLUMN t.k IS 'new comment'")
-      assert(columnComment("t", "k") === "new comment")
+      assert(columnComment("t", "k") === Some("new comment"))
 
-      // IS NULL stores an empty comment string, consistent with COMMENT ON TABLE.
+      // IS NULL removes the comment entirely, so it becomes genuinely absent (not an empty string).
       sql("COMMENT ON COLUMN t.k IS NULL")
-      assert(columnComment("t", "k") === "")
+      assert(columnComment("t", "k").isEmpty)
 
       // Setting back to literal 'NULL' must keep the string value.
       sql("COMMENT ON COLUMN t.k IS 'NULL'")
-      assert(columnComment("t", "k") === "NULL")
+      assert(columnComment("t", "k") === Some("NULL"))
 
-      // Empty string comment is preserved.
+      // Empty string sets an empty comment, which is distinct from removing it.
       sql("COMMENT ON COLUMN t.k IS ''")
-      assert(columnComment("t", "k") === "")
+      assert(columnComment("t", "k") === Some(""))
 
       // Add comment to a column that didn't have one.
       sql("COMMENT ON COLUMN t.v IS 'comment for v'")
-      assert(columnComment("t", "v") === "comment for v")
+      assert(columnComment("t", "v") === Some("comment for v"))
     }
 
     // V2 non-session catalog table.
     withTable("testcat.ns1.ns2.t") {
       sql("CREATE TABLE testcat.ns1.ns2.t(k int COMMENT 'original', v string) USING foo")
-      assert(columnComment("testcat.ns1.ns2.t", "k") === "original")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("original"))
 
       sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS 'updated comment'")
-      assert(columnComment("testcat.ns1.ns2.t", "k") === "updated comment")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some("updated comment"))
 
+      // IS NULL removes the comment entirely.
       sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS NULL")
-      assert(columnComment("testcat.ns1.ns2.t", "k") === "")
+      assert(columnComment("testcat.ns1.ns2.t", "k").isEmpty)
+
+      // IS '' sets an empty comment, which remains present.
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.k IS ''")
+      assert(columnComment("testcat.ns1.ns2.t", "k") === Some(""))
     }
 
     // COMMENT ON COLUMN with only one identifier part is rejected.
@@ -3242,17 +3247,17 @@ class DataSourceV2SQLSuiteV1Filter
 
         // table.column
         sql("COMMENT ON COLUMN qualified_test.x IS 'with table.column'")
-        assert(columnComment("qualified_test", "x") === "with table.column")
+        assert(columnComment("qualified_test", "x") === Some("with table.column"))
 
         // database.table.column
         sql("COMMENT ON COLUMN comment_test_db.qualified_test.y IS 'with db.table.column'")
-        assert(columnComment("qualified_test", "y") === "with db.table.column")
+        assert(columnComment("qualified_test", "y") === Some("with db.table.column"))
 
         // catalog.database.table.column
         sql(
           "COMMENT ON COLUMN spark_catalog.comment_test_db.qualified_test.z IS " +
             "'with catalog.db.table.column'")
-        assert(columnComment("qualified_test", "z") === "with catalog.db.table.column")
+        assert(columnComment("qualified_test", "z") === Some("with catalog.db.table.column"))
       }
     }
 
@@ -3260,7 +3265,7 @@ class DataSourceV2SQLSuiteV1Filter
     withTable("testcat.ns1.ns2.qualified") {
       sql("CREATE TABLE testcat.ns1.ns2.qualified(c int) USING foo")
       sql("COMMENT ON COLUMN testcat.ns1.ns2.qualified.c IS 'v2 catalog.db.table.column'")
-      assert(columnComment("testcat.ns1.ns2.qualified", "c") === "v2 catalog.db.table.column")
+      assert(columnComment("testcat.ns1.ns2.qualified", "c") === Some("v2 catalog.db.table.column"))
     }
 
     // A view target is rejected: COMMENT ON COLUMN only supports tables.
@@ -3306,9 +3311,9 @@ class DataSourceV2SQLSuiteV1Filter
           | data IS 'data col',
           | point IS 'point col')""".stripMargin)
 
-      assert(columnComment("testcat.ns1.ns2.t", "id") === "id col")
-      assert(columnComment("testcat.ns1.ns2.t", "data") === "data col")
-      assert(columnComment("testcat.ns1.ns2.t", "point") === "point col")
+      assert(columnComment("testcat.ns1.ns2.t", "id") === Some("id col"))
+      assert(columnComment("testcat.ns1.ns2.t", "data") === Some("data col"))
+      assert(columnComment("testcat.ns1.ns2.t", "point") === Some("point col"))
 
       // Nested fields must be commented in a separate statement because the analyzer rejects
       // commenting on a parent column and its nested fields in the same command
@@ -3322,6 +3327,17 @@ class DataSourceV2SQLSuiteV1Filter
       val struct = pointField.dataType.asInstanceOf[StructType]
       assert(struct("x").getComment().contains("x field"))
       assert(struct("y").getComment().contains("y field"))
+
+      // IS NULL removes a column comment, making it genuinely absent.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (id IS NULL)")
+      assert(columnComment("testcat.ns1.ns2.t", "id").isEmpty)
+
+      // A nested field comment can likewise be removed with IS NULL.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.t COLUMN (point.x IS NULL)")
+      val pointAfter = spark.table("testcat.ns1.ns2.t").schema("point")
+        .dataType.asInstanceOf[StructType]
+      assert(pointAfter("x").getComment().isEmpty)
+      assert(pointAfter("y").getComment().contains("y field"))
     }
 
     // Deeply nested fields (struct within struct) can be commented via the COLUMN (...) form.
@@ -3366,13 +3382,12 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  private def columnComment(tableName: String, columnName: String): String = {
-    val rows = sql(s"DESCRIBE $tableName").filter(s"col_name = '$columnName'")
-      .select("comment").collect()
-    assert(rows.length == 1,
-      s"Expected exactly one column named '$columnName' in $tableName, found ${rows.length}")
-    val row = rows.head
-    if (row.isNullAt(0)) "" else row.getString(0)
+  // Returns the comment of a top-level column as stored in the table schema. Reads it from the
+  // StructField metadata (not DESCRIBE, which renders both an absent and an empty comment as the
+  // same empty string) so callers can distinguish a removed comment (None) from an empty one
+  // (Some("")).
+  private def columnComment(tableName: String, columnName: String): Option[String] = {
+    spark.table(tableName).schema(columnName).getComment()
   }
 
   test("SPARK-31015: star expression should work for qualified column names for v2 tables") {

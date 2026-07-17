@@ -200,7 +200,7 @@ public interface TableChange {
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
-   * @param newComment the new comment
+   * @param newComment the new comment, or null to remove the existing comment
    * @return a TableChange for the update
    */
   static TableChange updateColumnComment(String[] fieldNames, String newComment) {
@@ -693,6 +693,10 @@ public interface TableChange {
       return fieldNames;
     }
 
+    /**
+     * Returns the new comment of the column, or null to remove the existing comment (making the
+     * comment genuinely absent, as opposed to setting it to an empty string).
+     */
     public String newComment() {
       return newComment;
     }
@@ -703,7 +707,7 @@ public interface TableChange {
       if (o == null || getClass() != o.getClass()) return false;
       UpdateColumnComment that = (UpdateColumnComment) o;
       return Arrays.equals(fieldNames, that.fieldNames) &&
-        newComment.equals(that.newComment);
+        Objects.equals(newComment, that.newComment);
     }
 
     @Override
@@ -715,7 +719,9 @@ public interface TableChange {
 
     @Override
     public String toString() {
-      return "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " COMMENT";
+      return newComment == null
+              ? "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " DROP COMMENT"
+              : "ALTER COLUMN " + TableChange.fieldPath(fieldNames) + " COMMENT";
     }
   }
 

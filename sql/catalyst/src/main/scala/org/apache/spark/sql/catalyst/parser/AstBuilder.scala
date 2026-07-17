@@ -7287,6 +7287,13 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCommentColumn(ctx: CommentColumnContext): LogicalPlan = withOrigin(ctx) {
+    // Each column comment is either a new comment value, or `IS NULL` which removes the existing
+    // comment. `IS NULL` and `IS ''` are distinguished here: the former yields None (removal), the
+    // latter Some("") (an empty comment). The `comment` grammar rule is `stringLit | NULL`, so a
+    // missing `stringLit()` means `IS NULL`.
+    def commentOf(c: CommentContext): Option[String] =
+      Option(c.stringLit()).map(s => string(visitStringLit(s)))
+
     val (tableId, columnComments, commandName) = if (ctx.columnComment != null) {
       // COMMENT ON COLUMN table.column IS 'comment'
       val identifiers = visitMultipartIdentifier(ctx.columnComment.column)
@@ -7295,12 +7302,12 @@ class AstBuilder extends DataTypeAstBuilder
       }
       val tableId = identifiers.dropRight(1)
       val columnId = identifiers.takeRight(1)
-      (tableId, Seq((columnId, visitComment(ctx.columnComment.comment))), "COMMENT ON COLUMN")
+      (tableId, Seq((columnId, commentOf(ctx.columnComment.comment))), "COMMENT ON COLUMN")
     } else {
       // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
       val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
       val columns = ctx.columns.columnComment.asScala.map { c =>
-        (visitMultipartIdentifier(c.column), visitComment(c.comment))
+        (visitMultipartIdentifier(c.column), commentOf(c.comment))
       }.toSeq
       (tableId, columns, "COMMENT ON TABLE ... COLUMN")
     }
@@ -7315,9 +7322,10 @@ class AstBuilder extends DataTypeAstBuilder
         UnresolvedFieldName(column),
         newDataType = None,
         newNullability = None,
-        newComment = Some(comment),
+        newComment = comment,
         newPosition = None,
-        newDefaultExpression = None)
+        newDefaultExpression = None,
+        dropComment = comment.isEmpty)
     }
     AlterColumns(table, specs)
   }

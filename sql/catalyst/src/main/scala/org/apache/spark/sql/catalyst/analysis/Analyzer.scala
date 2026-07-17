@@ -4206,7 +4206,7 @@ class Analyzer(
       case a @ AlterColumns(table: ResolvedTable, specs) =>
         val resolvedSpecs = specs.map {
           case s @ AlterColumnSpec(
-              ResolvedFieldName(path, field), dataType, _, _, position, _, _) =>
+              ResolvedFieldName(path, field), dataType, _, _, position, _, _, _) =>
             val newDataType = dataType.flatMap { dt =>
               // Hive style syntax provides the column type, even if it may not have changed.
               val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)

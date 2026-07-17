@@ -1282,7 +1282,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           }
         }
         specs.foreach {
-          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
+          case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _, _) =>
             val fieldName = col.name.quoted
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)

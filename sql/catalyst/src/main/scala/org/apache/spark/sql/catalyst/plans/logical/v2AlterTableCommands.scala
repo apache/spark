@@ -218,6 +218,8 @@ case class RenameColumn(
  * @param newPosition new position of column if set
  * @param newDefaultExpression new default expression if set
  * @param dropDefault whether to drop the default expression
+ * @param dropComment whether to remove the existing comment (making it genuinely absent, as
+ *                    opposed to setting it to an empty string)
  */
 case class AlterColumnSpec(
     column: FieldName,
@@ -226,7 +228,8 @@ case class AlterColumnSpec(
     newComment: Option[String],
     newPosition: Option[FieldPosition],
     newDefaultExpression: Option[DefaultValueExpression],
-    dropDefault: Boolean = false) extends Expression with Unevaluable {
+    dropDefault: Boolean = false,
+    dropComment: Boolean = false) extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = Seq(column) ++ newPosition.toSeq ++
     newDefaultExpression.toSeq
@@ -274,8 +277,12 @@ case class AlterColumns(
       val nullabilityChange = spec.newNullability.map { nullable =>
         TableChange.updateColumnNullability(colName, nullable)
       }
-      val commentChange = spec.newComment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
+      val commentChange = if (spec.dropComment) {
+        Some(TableChange.updateColumnComment(colName, null: String))
+      } else {
+        spec.newComment.map { newComment =>
+          TableChange.updateColumnComment(colName, newComment)
+        }
       }
       val positionChange = spec.newPosition.map { newPosition =>
         require(newPosition.resolved,

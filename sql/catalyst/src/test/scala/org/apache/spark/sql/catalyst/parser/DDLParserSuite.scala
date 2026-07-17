@@ -3094,9 +3094,10 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
 
+    // `comment` is the new comment value, or None for `IS NULL` (which removes the comment).
     def alterColumnComment(
         tableIdent: Seq[String],
-        columnComments: Seq[(Seq[String], String)],
+        columnComments: Seq[(Seq[String], Option[String])],
         commandName: String): AlterColumns = {
       AlterColumns(
         UnresolvedTable(tableIdent, commandName),
@@ -3105,9 +3106,10 @@ class DDLParserSuite extends AnalysisTest {
             UnresolvedFieldName(column),
             newDataType = None,
             newNullability = None,
-            newComment = Some(comment),
+            newComment = comment,
             newPosition = None,
-            newDefaultExpression = None)
+            newDefaultExpression = None,
+            dropComment = comment.isEmpty)
         })
     }
 
@@ -3119,19 +3121,19 @@ class DDLParserSuite extends AnalysisTest {
     ).foreach { case (columnIdentifier, tableIdent, columnIdent) =>
       comparePlans(
         parsePlan(s"COMMENT ON COLUMN $columnIdentifier IS 'comment'"),
-        alterColumnComment(tableIdent, Seq((columnIdent, "comment")), "COMMENT ON COLUMN"))
+        alterColumnComment(tableIdent, Seq((columnIdent, Some("comment"))), "COMMENT ON COLUMN"))
     }
 
-    // COMMENT ON COLUMN: IS NULL and empty string both produce empty comment
+    // COMMENT ON COLUMN: IS NULL removes the comment (dropComment), while IS '' sets an empty one.
     comparePlans(
       parsePlan("COMMENT ON COLUMN a.b.c.d IS NULL"),
-      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "")), "COMMENT ON COLUMN"))
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), None)), "COMMENT ON COLUMN"))
     comparePlans(
       parsePlan("COMMENT ON COLUMN a.b.c.d IS ''"),
-      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "")), "COMMENT ON COLUMN"))
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), Some(""))), "COMMENT ON COLUMN"))
     comparePlans(
       parsePlan("COMMENT ON COLUMN a.b.c.d IS 'NULL'"),
-      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), "NULL")), "COMMENT ON COLUMN"))
+      alterColumnComment(Seq("a", "b", "c"), Seq((Seq("d"), Some("NULL"))), "COMMENT ON COLUMN"))
 
     // COMMENT ON COLUMN requires at least two identifier parts.
     checkError(
@@ -3148,7 +3150,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("COMMENT ON TABLE a.b COLUMN (c IS 'comment')"),
       alterColumnComment(
         Seq("a", "b"),
-        Seq((Seq("c"), "comment")),
+        Seq((Seq("c"), Some("comment"))),
         "COMMENT ON TABLE ... COLUMN"))
     comparePlans(
       parsePlan(
@@ -3159,9 +3161,17 @@ class DDLParserSuite extends AnalysisTest {
       alterColumnComment(
         Seq("a", "b"),
         Seq(
-          (Seq("c"), "comment 1"),
-          (Seq("c", "d"), "comment 2"),
-          (Seq("c", "d", "e"), "comment 3")),
+          (Seq("c"), Some("comment 1")),
+          (Seq("c", "d"), Some("comment 2")),
+          (Seq("c", "d", "e"), Some("comment 3"))),
+        "COMMENT ON TABLE ... COLUMN"))
+
+    // COMMENT ON TABLE ... COLUMN: IS NULL removes a column comment.
+    comparePlans(
+      parsePlan("COMMENT ON TABLE a.b COLUMN (c IS NULL, d IS 'keep')"),
+      alterColumnComment(
+        Seq("a", "b"),
+        Seq((Seq("c"), None), (Seq("d"), Some("keep"))),
         "COMMENT ON TABLE ... COLUMN"))
   }
 

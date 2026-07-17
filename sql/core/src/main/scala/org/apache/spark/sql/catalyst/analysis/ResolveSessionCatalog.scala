@@ -135,7 +135,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         dataType,
         nullable = true,
         builder.build())
-      AlterTableChangeColumnCommand(table.catalogTable.identifier, colName, newColumn)
+      AlterTableChangeColumnCommand(
+        table.catalogTable.identifier, colName, newColumn, dropComment = s.dropComment)
 
     case AlterTableClusterBy(ResolvedTable(catalog, _, table: V1Table, _), clusterBySpecOpt)
         if supportsV1Command(catalog) =>

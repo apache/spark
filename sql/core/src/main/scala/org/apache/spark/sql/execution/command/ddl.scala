@@ -381,7 +381,8 @@ case class AlterTableUnsetPropertiesCommand(
 case class AlterTableChangeColumnCommand(
     tableName: TableIdentifier,
     columnName: String,
-    newColumn: StructField) extends LeafRunnableCommand {
+    newColumn: StructField,
+    dropComment: Boolean = false) extends LeafRunnableCommand {
 
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -420,9 +421,15 @@ case class AlterTableChangeColumnCommand(
 
     val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
-        // Create a new column from the origin column with the new type and new comment.
-        val withNewTypeAndComment: StructField =
-          addComment(withNewType(field, newColumn.dataType), newColumn.getComment())
+        // Create a new column from the origin column with the new type and new comment. When
+        // `dropComment` is set (COMMENT ON COLUMN ... IS NULL), the comment is removed entirely
+        // rather than kept or set to an empty string.
+        val typedField = withNewType(field, newColumn.dataType)
+        val withNewTypeAndComment: StructField = if (dropComment) {
+          typedField.clearComment()
+        } else {
+          addComment(typedField, newColumn.getComment())
+        }
         // Create a new column from the origin column with the new current default value.
         // The default value is already validated by ResolveSessionCatalog, so we just need
         // to copy the CURRENT_DEFAULT metadata. Note: we preserve the original EXISTS_DEFAULT
