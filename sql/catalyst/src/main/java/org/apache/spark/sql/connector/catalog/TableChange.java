@@ -203,7 +203,7 @@ public interface TableChange {
    * @param newComment the new comment, or null to remove the existing comment
    * @return a TableChange for the update
    */
-  static TableChange updateColumnComment(String[] fieldNames, String newComment) {
+  static TableChange updateColumnComment(String[] fieldNames, @Nullable String newComment) {
     return new UpdateColumnComment(fieldNames, newComment);
   }
 
@@ -697,6 +697,7 @@ public interface TableChange {
      * Returns the new comment of the column, or null to remove the existing comment (making the
      * comment genuinely absent, as opposed to setting it to an empty string).
      */
+    @Nullable
     public String newComment() {
       return newComment;
     }

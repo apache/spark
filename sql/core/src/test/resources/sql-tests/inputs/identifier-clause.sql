@@ -226,6 +226,7 @@ DROP TABLE test_desc;
 CREATE TABLE test_comment(c1 INT, c2 STRING) USING CSV;
 COMMENT ON TABLE IDENTIFIER('test_comment') IS 'table comment';
 ALTER TABLE test_comment ALTER COLUMN IDENTIFIER('c1') COMMENT 'column comment';
+COMMENT ON TABLE IDENTIFIER('test_comment') COLUMN (c1 IS 'c1 comment', c2 IS 'c2 comment');
 DROP TABLE test_comment;
 
 -- Additional identifier tests with qualified table names in various commands

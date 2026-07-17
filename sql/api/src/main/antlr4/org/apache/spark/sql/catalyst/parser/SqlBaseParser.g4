@@ -395,7 +395,7 @@ statement
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
-    | COMMENT ON TABLE multipartIdentifier COLUMN
+    | COMMENT ON TABLE identifierReference COLUMN
         LEFT_PAREN columns=columnCommentList RIGHT_PAREN               #commentColumn
     | COMMENT ON COLUMN columnComment                                  #commentColumn
     | REFRESH TABLE identifierReference                                #refreshTable

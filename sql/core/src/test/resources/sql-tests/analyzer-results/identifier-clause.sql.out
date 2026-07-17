@@ -1678,6 +1678,12 @@ AlterTableChangeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`t
 
 
 -- !query
+COMMENT ON TABLE IDENTIFIER('test_comment') COLUMN (c1 IS 'c1 comment', c2 IS 'c2 comment')
+-- !query analysis
+AlterTableChangeColumnCommentsCommand `spark_catalog`.`identifier_clause_test_schema`.`test_comment`, [ALTER COLUMN c1 COMMENT, ALTER COLUMN c2 COMMENT]
+
+
+-- !query
 DROP TABLE test_comment
 -- !query analysis
 DropTable false, false

@@ -7294,30 +7294,7 @@ class AstBuilder extends DataTypeAstBuilder
     def commentOf(c: CommentContext): Option[String] =
       Option(c.stringLit()).map(s => string(visitStringLit(s)))
 
-    val (tableId, columnComments, commandName) = if (ctx.columnComment != null) {
-      // COMMENT ON COLUMN table.column IS 'comment'
-      val identifiers = visitMultipartIdentifier(ctx.columnComment.column)
-      if (identifiers.size < 2) {
-        throw new ParseException("INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER", ctx)
-      }
-      val tableId = identifiers.dropRight(1)
-      val columnId = identifiers.takeRight(1)
-      (tableId, Seq((columnId, commentOf(ctx.columnComment.comment))), "COMMENT ON COLUMN")
-    } else {
-      // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
-      val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
-      val columns = ctx.columns.columnComment.asScala.map { c =>
-        (visitMultipartIdentifier(c.column), commentOf(c.comment))
-      }.toSeq
-      (tableId, columns, "COMMENT ON TABLE ... COLUMN")
-    }
-
-    // Only tables are supported: downstream rules (ResolveFieldNameAndPosition, CheckAnalysis,
-    // DataSourceV2Strategy) all expect a ResolvedTable, so a view target must be rejected during
-    // resolution. UnresolvedTable resolves only to a table and reports EXPECT_TABLE_NOT_VIEW
-    // otherwise, matching COMMENT ON TABLE and ALTER TABLE ... ALTER COLUMN.
-    val table = UnresolvedTable(tableId, commandName)
-    val specs = columnComments.map { case (column, comment) =>
+    def alterColumnSpec(column: Seq[String], comment: Option[String]): AlterColumnSpec =
       AlterColumnSpec(
         UnresolvedFieldName(column),
         newDataType = None,
@@ -7326,8 +7303,31 @@ class AstBuilder extends DataTypeAstBuilder
         newPosition = None,
         newDefaultExpression = None,
         dropComment = comment.isEmpty)
+
+    // Only tables are supported: downstream rules (ResolveFieldNameAndPosition, CheckAnalysis,
+    // DataSourceV2Strategy) all expect a ResolvedTable, so a view target must be rejected during
+    // resolution. UnresolvedTable resolves only to a table and reports EXPECT_TABLE_NOT_VIEW
+    // otherwise, matching COMMENT ON TABLE and ALTER TABLE ... ALTER COLUMN.
+    if (ctx.columnComment != null) {
+      // COMMENT ON COLUMN table.column IS 'comment'
+      val identifiers = visitMultipartIdentifier(ctx.columnComment.column)
+      if (identifiers.size < 2) {
+        throw new ParseException("INVALID_SQL_SYNTAX.COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER", ctx)
+      }
+      val tableId = identifiers.dropRight(1)
+      val columnId = identifiers.takeRight(1)
+      val spec = alterColumnSpec(columnId, commentOf(ctx.columnComment.comment))
+      AlterColumns(UnresolvedTable(tableId, "COMMENT ON COLUMN"), Seq(spec))
+    } else {
+      // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
+      // The table target is an identifierReference, so it also supports IDENTIFIER(...) clauses.
+      val specs = ctx.columns.columnComment.asScala.map { c =>
+        alterColumnSpec(visitMultipartIdentifier(c.column), commentOf(c.comment))
+      }.toSeq
+      withIdentClause(
+        ctx.identifierReference,
+        tableId => AlterColumns(UnresolvedTable(tableId, "COMMENT ON TABLE ... COLUMN"), specs))
     }
-    AlterColumns(table, specs)
   }
 
   override def visitComment (ctx: CommentContext): String = {

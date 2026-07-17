@@ -3400,6 +3400,10 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(
         sql("DESCRIBE t data").filter("info_name = 'comment'").select("info_value"),
         Row("fresh comment"))
+
+      // The table target accepts an IDENTIFIER(...) clause, like COMMENT ON TABLE ... IS.
+      sql("COMMENT ON TABLE IDENTIFIER('t') COLUMN (id IS 'via identifier')")
+      assert(columnComment("t", "id") === Some("via identifier"))
     }
 
     // char/varchar columns keep their declared type while their comment is updated.
