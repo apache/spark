@@ -20,7 +20,7 @@ package org.apache.spark.deploy.security
 import java.time.Instant
 import java.util
 import java.util.Optional
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
@@ -421,6 +421,58 @@ class UserCredentialManagerSuite extends SparkFunSuite {
         manager.start()
       }
       assert(ex.getMessage.contains("No credential providers resolved any credentials"))
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("token rotation triggers new credential acquisition and propagation") {
+    val conf = createSparkConf()
+      .set(SECURITY_CREDENTIALS_RENEWAL_SAFETY_MARGIN, 1000L) // 1s
+      .set(SECURITY_CREDENTIALS_RENEWAL_MIN_INTERVAL, 500L)   // 0.5s
+    conf.set("spark.security.credentials.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+
+    // First token: user-A
+    val ctx1 = new UserContext(
+      "user-A", "https://issuer.example.com", "token-A",
+      Instant.now(), Instant.now().plusSeconds(2)) // expires in 2s
+
+    // Second token: user-B (simulating rotation)
+    val ctx2 = new UserContext(
+      "user-B", "https://issuer.example.com", "token-B",
+      Instant.now(), Instant.now().plusSeconds(300))
+
+    // TokenIngestor that returns ctx1 initially, then ctx2 after first call
+    val callCount = new AtomicInteger(0)
+    val rotatingIngestor = new TokenIngestor {
+      override def load(): Optional[UserContext] = {
+        if (callCount.getAndIncrement() == 0) Optional.of(ctx1)
+        else Optional.of(ctx2)
+      }
+    }
+
+    val callbacks = new java.util.concurrent.CopyOnWriteArrayList[Array[Byte]]()
+    val manager = new UserCredentialManager(
+      conf,
+      rotatingIngestor,
+      bytes => callbacks.add(bytes))
+
+    try {
+      val initial = manager.start()
+      assert(initial != null)
+      assert(callbacks.size() === 1, "Should have one callback from start()")
+
+      // Wait for renewal to fire (token expires in 2s, safety margin 1s → renews after ~1s)
+      Thread.sleep(2000)
+
+      // After renewal, a second callback should have been invoked with new credentials
+      assert(callbacks.size() >= 2,
+        s"Expected at least 2 callbacks (initial + renewal), got ${callbacks.size()}")
+
+      // Verify that the ingestor was called more than once (rotation detected)
+      assert(callCount.get() >= 2,
+        s"TokenIngestor should have been called at least twice, got ${callCount.get()}")
     } finally {
       manager.stop()
     }
