@@ -35,6 +35,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.config
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceAmountUtils, ResourceProfile, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceAmountUtils.ONE_ENTIRE_RESOURCE
 import org.apache.spark.resource.ResourceUtils._
@@ -2230,6 +2231,42 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
 
   private implicit def toInternalResource(resources: Map[String, Double]): Map[String, Long] =
     resources.map { case (k, v) => k -> ResourceAmountUtils.toInternalResource(v) }
+
+  test("SPARK-58187: availableCpus accounts for the increased cpus of an OOM retry") {
+    val taskScheduler = setupSchedulerWithMaster(
+      "local[4]",
+      config.OOM_RETRY_CPUS_INCREMENT.key -> "1",
+      config.CPUS_PER_TASK.key -> "1",
+      config.EXECUTOR_CORES.key -> "4")
+
+    val taskSet = FakeTask.createTaskSet(2)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
+
+    // Launch both tasks on a 4-core executor.
+    val first = taskScheduler.resourceOffers(
+      IndexedSeq(new WorkerOffer("executor0", "host0", 4))).flatten
+    assert(first.length === 2)
+    assert(first.forall(_.cpus === 1))
+
+    // OOM-fail task 0 so its retry needs 2 cpus.
+    val oom = new ExceptionFailure(
+      new SparkOutOfMemoryError(
+        "POINTER_ARRAY_OUT_OF_MEMORY", new java.util.HashMap[String, String]),
+      Seq.empty[AccumulableInfo])
+    val task0 = first.minBy(_.index)
+    failTask(task0.taskId, TaskState.FAILED, oom, tsm)
+
+    // Re-offer a 4-core executor. The retry launches with 2 cpus, and the scheduler decrements
+    // availableCpus by 2 (assert(availableCpus >= 0) must hold), verifying the bookkeeping uses
+    // the TaskDescription's actual cpus rather than the ResourceProfile default.
+    val retryDescs = taskScheduler.resourceOffers(
+      IndexedSeq(new WorkerOffer("executor0", "host0", 4))).flatten
+    assert(retryDescs.length === 1)
+    assert(retryDescs.head.index === 0)
+    assert(retryDescs.head.cpus === 2)
+    assert(!failedTaskSet)
+  }
 
   // 1 executor with 4 GPUS
   Seq(true, false).foreach { barrierMode =>

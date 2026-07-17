@@ -3182,6 +3182,38 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.5.0</td>
 </tr>
 <tr>
+  <td><code>spark.task.oomRetryCpusIncrement</code></td>
+  <td>0</td>
+  <td>
+    Number of additional CPUs to allocate for each retry of a task that failed due to
+    out-of-memory. Each OOM retry of a task gets
+    <code>spark.task.cpus + spark.task.oomRetryCpusIncrement * N</code> CPUs (N = number of
+    OOM failures of that task), capped at the executor's total core count. The extra CPUs
+    reduce concurrent tasks on the executor, increasing the retrying task's share of the
+    execution memory pool. If the executor lacks enough free CPUs, the retry waits for a
+    sufficient offer rather than falling back. Set to 0 to disable (retry with the same
+    resources). Does not apply to barrier stages. Note: for a true JVM heap OOM (executor
+    exited), the executor heap size is fixed, so this only indirectly helps; it most directly
+    helps SparkOutOfMemoryError (execution memory pool exhaustion).
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.task.oomRetryExecutorExitCodes</code></td>
+  <td>52</td>
+  <td>
+    Comma-separated list of executor exit codes treated as out-of-memory for
+    <code>spark.task.oomRetryCpusIncrement</code>. When an executor exits with one of these
+    codes, the tasks that were running on it have their OOM retry count incremented, so their
+    retries request more CPUs. The default is 52, the exit code Spark uses when an executor JVM
+    dies of an <code>OutOfMemoryError</code>. On YARN, a container that exceeds its memory limit
+    is killed with container exit codes -103 (virtual memory) and -104 (physical memory), so on
+    YARN consider setting this to <code>52,-103,-104</code>. Has no effect when
+    <code>spark.task.oomRetryCpusIncrement</code> is 0.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.task.resource.{resourceName}.amount</code></td>
   <td>1</td>
   <td>

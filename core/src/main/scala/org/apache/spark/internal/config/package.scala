@@ -32,7 +32,7 @@ import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{MavenUtils, Utils}
+import org.apache.spark.util.{MavenUtils, SparkExitCode, Utils}
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.MAX_BUFFER_SIZE_BYTES
 
 package object config {
@@ -739,6 +739,41 @@ package object config {
       .intConf
       .checkValue(_ > 0, "Number of cores to allocate for each task should be positive.")
       .createWithDefault(1)
+
+  private[spark] val OOM_RETRY_CPUS_INCREMENT =
+    ConfigBuilder("spark.task.oomRetryCpusIncrement")
+      .version("4.3.0")
+      .doc("Number of additional CPUs to allocate when retrying a task that failed due to " +
+        "out-of-memory. When a task fails with a SparkOutOfMemoryError (unable to acquire " +
+        "execution memory) or the executor exits with an OOM exit code, each subsequent retry " +
+        "of that task is allocated `spark.task.cpus + spark.task.oomRetryCpusIncrement * N` " +
+        "CPUs, where N is the number of OOM failures the task has experienced. The additional " +
+        "CPUs reduce the number of concurrent tasks on the executor, which increases the share " +
+        "of the execution memory pool available to the retrying task, improving the chance of " +
+        "success. The total CPUs per task is capped at the executor's total core count " +
+        "(spark.executor.cores or the ResourceProfile equivalent). If the executor does not " +
+        "currently have enough free CPUs to satisfy the request, the retry waits for an offer " +
+        "that does, rather than falling back to the default. Set to 0 (the default) to disable " +
+        "this feature and retry OOM tasks with the same resources as the original attempt. " +
+        "This feature does not apply to barrier stages.")
+      .intConf
+      .checkValue(_ >= 0, "OOM retry cpus increment must be non-negative (0 disables).")
+      .createWithDefault(0)
+
+  private[spark] val OOM_RETRY_EXECUTOR_EXIT_CODES =
+    ConfigBuilder("spark.task.oomRetryExecutorExitCodes")
+      .version("4.3.0")
+      .doc("Comma-separated list of executor exit codes that are treated as out-of-memory for " +
+        "the purpose of spark.task.oomRetryCpusIncrement. When an executor exits with one of " +
+        "these codes, the tasks that were running on it have their OOM retry count incremented " +
+        "(so their retries request more CPUs). The default is 52, the exit code Spark uses when " +
+        "an executor JVM dies of an OutOfMemoryError. On YARN, where a container that exceeds " +
+        "its memory limit is killed with the container exit codes -103 (virtual memory) and " +
+        "-104 (physical memory), consider setting this to `52,-103,-104`. Has no effect when " +
+        "spark.task.oomRetryCpusIncrement is 0.")
+      .intConf
+      .toSequence
+      .createWithDefault(Seq(SparkExitCode.OOM))
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
