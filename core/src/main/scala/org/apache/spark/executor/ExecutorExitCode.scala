@@ -33,12 +33,6 @@ object ExecutorExitCode {
   /** DiskStore failed to create a local temporary directory after many attempts. */
   val DISK_STORE_FAILED_TO_CREATE_DIR = 53
 
-  /** ExternalBlockStore failed to initialize after many attempts. */
-  val EXTERNAL_BLOCK_STORE_FAILED_TO_INITIALIZE = 54
-
-  /** ExternalBlockStore failed to create a local temporary directory after many attempts. */
-  val EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR = 55
-
   /**
    * Executor is unable to send heartbeats to the driver more than
    * "spark.executor.heartbeat.maxFailures" times.
@@ -59,11 +53,6 @@ object ExecutorExitCode {
       case OOM => "OutOfMemoryError"
       case DISK_STORE_FAILED_TO_CREATE_DIR =>
         "Failed to create local directory (bad spark.local.dir?)"
-      // TODO: replace external block store with concrete implementation name
-      case EXTERNAL_BLOCK_STORE_FAILED_TO_INITIALIZE => "ExternalBlockStore failed to initialize."
-      // TODO: replace external block store with concrete implementation name
-      case EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR =>
-        "ExternalBlockStore failed to create a local temporary directory."
       case HEARTBEAT_FAILURE =>
         "Unable to send heartbeats to driver."
       case BLOCK_MANAGER_REREGISTRATION_FAILED =>
