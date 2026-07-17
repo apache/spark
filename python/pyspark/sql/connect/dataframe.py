@@ -2334,7 +2334,9 @@ class DataFrame(ParentDataFrame):
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
-                    columnar_data = [column.to_pylist() for column in table.columns]
+                    columnar_data = [
+                        ArrowTableToRowsConversion._to_pylist(column) for column in table.columns
+                    ]
                     for i in range(0, table.num_rows):
                         values = [
                             field_converters[j](columnar_data[j][i])  # type: ignore[misc]
