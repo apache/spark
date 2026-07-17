@@ -437,7 +437,7 @@ class BlockManagerMasterEndpoint(
             if (!blockManagerIdByExecutor.contains(mapStatus.location.executorId)) {
               // Only a BlockingShuffleManager serves block-manager blocks; a pipelined shuffle is
               // served out-of-band and is not in the MapOutputTracker this loop iterates, so this
-              // resolves only regular shuffles (None when the default manager is not blocking).
+              // resolves only regular shuffles (None only before the manager is initialized).
               val blocksToDel = SparkEnv.get.shuffleBlockResolver
                 .map(_.getBlocksForShuffle(shuffleId, mapStatus.mapId))
                 .getOrElse(Seq.empty)

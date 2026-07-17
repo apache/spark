@@ -107,7 +107,7 @@ class SparkEnv (
    * shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type; to resolve a
    * block by id, use `shuffleBlockResolver`.
    */
-  def blockingShuffleManager: BlockingShuffleManager = _blockingShuffleManager
+  private[spark] def blockingShuffleManager: BlockingShuffleManager = _blockingShuffleManager
 
   /**
    * The [[PipelinedShuffleManager]] (configured by spark.shuffle.manager.incremental, defaulting to
@@ -115,7 +115,7 @@ class SparkEnv (
    * is read incrementally and served out-of-band, so this manager never provides a
    * [[ShuffleBlockResolver]] of its own.
    */
-  def pipelinedShuffleManager: PipelinedShuffleManager = _pipelinedShuffleManager
+  private[spark] def pipelinedShuffleManager: PipelinedShuffleManager = _pipelinedShuffleManager
 
   /**
    * The [[ShuffleBlockResolver]] used to resolve shuffle blocks by id (reads, push-merge, and
@@ -125,7 +125,7 @@ class SparkEnv (
    * served out-of-band and never resolved here. Callers that only need to resolve a block should
    * use this rather than reaching through a [[ShuffleManager]].
    */
-  def shuffleBlockResolver: Option[ShuffleBlockResolver] =
+  private[spark] def shuffleBlockResolver: Option[ShuffleBlockResolver] =
     Option(_blockingShuffleManager).map(_.shuffleBlockResolver)
 
   /**
@@ -151,7 +151,7 @@ class SparkEnv (
    * Whether a job may use a pipelined dependency at all is a separate, scheduler-level decision
    * (see the fail-fast checks in `DAGScheduler`); this method only picks the implementation.
    */
-  def shuffleManagerFor(dependency: ShuffleDependency[_, _, _]): ShuffleManager =
+  private[spark] def shuffleManagerFor(dependency: ShuffleDependency[_, _, _]): ShuffleManager =
     dependency match {
       case _: PipelinedShuffleDependency[_, _, _] =>
         _pipelinedShuffleManager
@@ -461,8 +461,7 @@ class SparkEnv (
     // blocking manager -- it is pipelined and rejected from that slot in initializeShuffleManager.
     // TODO: remove this MultiShuffleManager clause once MultiShuffleManager is removed and
     // streaming shuffles are served only through the incremental (pipelined) manager slot.
-    val blockingIsMulti =
-      ShuffleManager.getShuffleManagerClassName(conf) == classOf[MultiShuffleManager].getName
+    val blockingIsMulti = _blockingShuffleManager.isInstanceOf[MultiShuffleManager]
     if (incrementalIsStreaming || blockingIsMulti) {
       createStreamingShuffleOutputTracker()
     }
