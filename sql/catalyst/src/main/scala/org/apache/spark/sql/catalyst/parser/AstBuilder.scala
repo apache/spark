@@ -7317,7 +7317,8 @@ class AstBuilder extends DataTypeAstBuilder
       val tableId = identifiers.dropRight(1)
       val columnId = identifiers.takeRight(1)
       val spec = alterColumnSpec(columnId, commentOf(ctx.columnComment.comment))
-      AlterColumns(UnresolvedTable(tableId, "COMMENT ON COLUMN"), Seq(spec))
+      AlterColumns(
+        UnresolvedTable(tableId, "COMMENT ON COLUMN"), Seq(spec), fromCommentOn = true)
     } else {
       // COMMENT ON TABLE table COLUMN (column1 IS 'comment1', column2 IS 'comment2', ...)
       // The table target is an identifierReference, so it also supports IDENTIFIER(...) clauses.
@@ -7326,7 +7327,10 @@ class AstBuilder extends DataTypeAstBuilder
       }.toSeq
       withIdentClause(
         ctx.identifierReference,
-        tableId => AlterColumns(UnresolvedTable(tableId, "COMMENT ON TABLE ... COLUMN"), specs))
+        tableId =>
+          AlterColumns(
+            UnresolvedTable(tableId, "COMMENT ON TABLE ... COLUMN"), specs,
+            fromCommentOn = true))
     }
   }
 

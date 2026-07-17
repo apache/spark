@@ -85,8 +85,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // `COMMENT ON TABLE t COLUMN (a IS 'x', b IS 'y')` or `... (point.x IS 'x')`) cannot be
     // expressed by the single-column, top-level-only `AlterTableChangeColumnCommand`. Handle them
     // with a dedicated V1 command that applies all specs at once via `applySchemaChanges`.
-    case a @ AlterColumns(rt @ ResolvedTable(catalog, _, table: V1Table, _), specs)
-        if supportsV1Command(catalog) && a.resolved && isMultiOrNestedCommentOnly(specs) =>
+    // This is scoped to the `COMMENT ON ... COLUMN` syntax (`fromCommentOn`); the equivalent
+    // `ALTER TABLE ... ALTER COLUMN` multi-column / nested-field forms still fall through to the
+    // next case and keep their existing `UNSUPPORTED_FEATURE.TABLE_OPERATION` error on V1.
+    case a @ AlterColumns(rt @ ResolvedTable(catalog, _, table: V1Table, _), specs, _)
+        if a.fromCommentOn && supportsV1Command(catalog) && a.resolved &&
+          isMultiOrNestedCommentOnly(specs) =>
       // This rule rewrites AlterColumns into a command during resolution, before CheckAnalysis
       // gets to validate it, so re-run the "same column changed twice" check here (the same one
       // CheckAnalysis applies to the AlterColumns node on the V2 path). Use `a.failAnalysis` so the
@@ -100,7 +104,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       AlterTableChangeColumnCommentsCommand(table.catalogTable.identifier, a.changes)
 
-    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
+    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs, _)
         if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
       if (specs.size > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(

@@ -3110,7 +3110,8 @@ class DDLParserSuite extends AnalysisTest {
             newPosition = None,
             newDefaultExpression = None,
             dropComment = comment.isEmpty)
-        })
+        },
+        fromCommentOn = true)
     }
 
     // COMMENT ON COLUMN: last identifier part is the column name

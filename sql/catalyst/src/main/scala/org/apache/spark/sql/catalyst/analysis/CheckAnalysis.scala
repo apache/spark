@@ -1262,7 +1262,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
-      case AlterColumns(table: ResolvedTable, specs) =>
+      case AlterColumns(table: ResolvedTable, specs, _) =>
         AlterColumns.findRepeatedColumn(specs).foreach { name =>
           alter.failAnalysis(
             errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",

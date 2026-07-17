@@ -22,7 +22,7 @@ license: |
 ### Description
 
 The `COMMENT ON` statement sets or updates the comment on a database, a table, or
-one or more table columns. Setting the comment to `NULL` removes it.
+one or more table columns. Setting a column comment to `NULL` removes it.
 
 ### Syntax
 
@@ -64,8 +64,9 @@ COMMENT ON TABLE table_name COLUMN ( column_name IS comment [ , ... ] )
 
 * **comment**
 
-    A `STRING` literal or `NULL`. Setting the comment to `NULL` removes an existing
-    comment; an empty string `''` sets an empty comment.
+    A `STRING` literal or `NULL`. For a column, setting the comment to `NULL` removes
+    an existing comment, while an empty string `''` sets an empty comment. For a database
+    or table, both `NULL` and `''` set an empty comment.
 
 ### Examples
 

@@ -262,10 +262,16 @@ case class AlterColumnSpec(
 
 /**
  * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
+ *
+ * `fromCommentOn` records whether this plan was produced by a `COMMENT ON ... COLUMN` statement
+ * (as opposed to `ALTER TABLE ... ALTER COLUMN`). Both syntaxes build the same plan, but the V1
+ * session-catalog routing only extends the multi-column / nested-field comment support to the
+ * `COMMENT ON` form, so it must be able to tell the two apart after resolution.
  */
 case class AlterColumns(
     table: LogicalPlan,
-    specs: Seq[AlterColumnSpec]) extends AlterTableCommand {
+    specs: Seq[AlterColumnSpec],
+    fromCommentOn: Boolean = false) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
     specs.flatMap { spec =>
       val column = spec.column

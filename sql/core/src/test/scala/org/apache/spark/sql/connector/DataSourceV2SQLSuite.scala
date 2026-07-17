@@ -3458,6 +3458,46 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-54831: session-catalog V1 comment routing is scoped to COMMENT ON ... COLUMN") {
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+
+    // The dedicated V1 comment command only handles the `COMMENT ON ... COLUMN` syntax. The
+    // equivalent bulk / nested-field `ALTER TABLE ... ALTER COLUMN ... COMMENT` forms build the
+    // same `AlterColumns` plan but keep their pre-existing UNSUPPORTED_FEATURE.TABLE_OPERATION
+    // error on the session catalog, so this PR does not silently change ALTER TABLE behavior.
+    withTable("t") {
+      sql("CREATE TABLE t(id int, data string, point struct<x: double, y: double>) USING json")
+
+      // Bulk ALTER COLUMN comment change (multiple columns) is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col', data COMMENT 'data col'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN in bulk"))
+      assert(columnComment("t", "id").isEmpty)
+      assert(columnComment("t", "data").isEmpty)
+
+      // Nested-field ALTER COLUMN comment change is still unsupported on V1.
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("ALTER TABLE t ALTER COLUMN point.x COMMENT 'x field'")),
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`t`",
+          "operation" -> "ALTER COLUMN with qualified column"))
+      val struct = spark.table("t").schema("point").dataType.asInstanceOf[StructType]
+      assert(struct("x").getComment().isEmpty)
+
+      // The single-column, top-level ALTER COLUMN comment change keeps working on V1.
+      sql("ALTER TABLE t ALTER COLUMN id COMMENT 'id col'")
+      assert(columnComment("t", "id") === Some("id col"))
+    }
+  }
+
   test("SPARK-54831: COMMENT ON TABLE ... COLUMN cannot change parent and child fields in the " +
     "same command") {
     spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
