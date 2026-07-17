@@ -138,17 +138,20 @@ class UserCredentialManagerSuite extends SparkFunSuite {
   }
 
   test("deserialization rejects unauthorized classes (ObjectInputFilter)") {
-    // Serialize an arbitrary object (not UserCredentials)
+    // Serialize a class that is NOT in the allowed filter pattern.
+    // The filter allows org.apache.spark.security.**, java.util.**, java.time.**,
+    // java.lang.** but blocks everything else (including java.io.File).
     val bos = new java.io.ByteArrayOutputStream()
     val oos = new java.io.ObjectOutputStream(bos)
-    oos.writeObject(new java.util.ArrayList[String]())
+    oos.writeObject(new java.io.File("/tmp/malicious"))
     oos.close()
 
-    val ex = intercept[Exception] {
+    val ex = intercept[java.io.InvalidClassException] {
       UserCredentialManager.deserializeUserCredentials(bos.toByteArray)
     }
-    // Should fail due to ObjectInputFilter rejecting the class
-    assert(ex != null)
+    // ObjectInputFilter rejects classes not in the allowlist
+    assert(ex.getMessage.contains("REJECTED") || ex.getMessage.contains("filter"),
+      s"Expected filter rejection, got: ${ex.getMessage}")
   }
 
   test("computeRenewalDelay respects safetyMargin and minInterval") {
