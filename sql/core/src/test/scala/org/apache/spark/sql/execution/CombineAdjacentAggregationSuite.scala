@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -74,12 +75,6 @@ class CombineAdjacentAggregationSuite extends QueryTest
         numAggWithDisabled = 2,
         numAggWithEnabled = 1)
 
-      // combine adjacent sort aggregate
-      checkNumAggregation(
-        "SELECT v, max(k) FROM (SELECT /*+ repartition(v) */ * FROM t) GROUP BY v",
-        numAggWithDisabled = 2,
-        numAggWithEnabled = 1)
-
       // combine adjacent object hash aggregate
       checkNumAggregation(
         "SELECT k, collect_set(v) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k",
@@ -97,6 +92,76 @@ class CombineAdjacentAggregationSuite extends QueryTest
         "SELECT k, count(distinct v) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k",
         numAggWithDisabled = 4,
         numAggWithEnabled = 2)
+    }
+  }
+
+  test("Combine adjacent sort aggregate") {
+    // `max`/`min` over a string column produces a non-mutable aggregation buffer, so it cannot be
+    // planned as a hash or object-hash aggregate and Spark falls back to `SortAggregateExec`. This
+    // exercises the sort-aggregate rewrite branch specifically (a numeric `max` would be planned as
+    // a `HashAggregateExec`, leaving that branch untested).
+    withTempView("t") {
+      spark.range(20).selectExpr("id % 3 as k", "cast(id % 7 as string) as v")
+        .createOrReplaceTempView("t")
+      val query = "SELECT k, max(v) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
+
+      val expected = withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        val df = sql(query)
+        val aggs = collect(df.queryExecution.executedPlan) { case agg: BaseAggregateExec => agg }
+        // Two sort aggregates (partial + final), confirming the sort-aggregate branch is exercised.
+        assert(aggs.size == 2)
+        assert(aggs.forall(_.isInstanceOf[SortAggregateExec]))
+        df.collect()
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(query)
+        checkAnswer(df, expected)
+        val aggs = collect(df.queryExecution.executedPlan) { case agg: BaseAggregateExec => agg }
+        // Combined into a single `Complete` mode sort aggregate.
+        assert(aggs.size == 1)
+        assert(aggs.head.isInstanceOf[SortAggregateExec])
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Complete))
+      }
+    }
+  }
+
+  test("Do not combine adjacent aggregates with mismatched grouping expressions") {
+    // A grouping-expression mismatch normally forces `EnsureRequirements` to insert an Exchange
+    // between the partial and final aggregate, so the planner never produces an adjacent pair with
+    // differing grouping keys. To exercise the canonicalized grouping-equality guard in
+    // `isPartialAgg` directly, we take a genuinely adjacent partial/final pair (the input is
+    // already partitioned by `k`, so no Exchange is inserted between them) and rewrite the final
+    // aggregate's grouping expressions to mismatch. The rule must then refuse to combine the pair.
+    withTempView("t") {
+      spark.range(20).selectExpr("id % 3 as k", "id % 7 as v").createOrReplaceTempView("t")
+      val queryText = "SELECT k, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
+      // Build the physical plan with the rule disabled so the raw adjacent partial/final pair
+      // survives, and with AQE disabled so `executedPlan` is a plain tree we can rewrite.
+      val finalAgg = withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        collect(sql(queryText).queryExecution.executedPlan) {
+          case f: HashAggregateExec if f.child.isInstanceOf[HashAggregateExec] => f
+        }.head
+      }
+
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        // Sanity check: with matching grouping expressions, the adjacent pair is combined into one.
+        assert(collect(CombineAdjacentAggregation(finalAgg)) {
+          case agg: BaseAggregateExec => agg
+        }.size == 1)
+
+        // Mismatched grouping expressions: the same adjacent pair must not be combined. We copy the
+        // tags (including the `logicalLink`) from the original node so that `isPartialAgg` reaches
+        // the grouping-equality check rather than short-circuiting on a missing `logicalLink`.
+        val mismatched = finalAgg.copy(groupingExpressions = Nil)
+        mismatched.copyTagsFrom(finalAgg)
+        val result = CombineAdjacentAggregation(mismatched)
+        val aggs = collect(result) { case agg: BaseAggregateExec => agg }
+        assert(aggs.size == 2)
+        assert(aggs.head.aggregateExpressions.forall(_.mode == Final))
+      }
     }
   }
 
@@ -138,6 +203,12 @@ class CombineAdjacentAggregationSuite extends QueryTest
       // aggregate) must not combine them.
       checkNumAggregation(
         "SELECT k + 1, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k + 1",
+        numAggWithDisabled = 2,
+        numAggWithEnabled = 2)
+
+      // Same non-adjacency guard for an object-hash aggregate (`collect_set` is imperative).
+      checkNumAggregation(
+        "SELECT k + 1, collect_set(v) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k + 1",
         numAggWithDisabled = 2,
         numAggWithEnabled = 2)
     }
@@ -184,6 +255,29 @@ class CombineAdjacentAggregationSuite extends QueryTest
         assert(collect(df.queryExecution.executedPlan) {
           case agg: BaseAggregateExec => agg
         }.size == 1)
+      }
+
+      // A `count(distinct)` with a FILTER clause. The distinct-with-filter rewrite expands the
+      // input (adding a group id) and shuffles on the distinct key and again on the grouping key,
+      // so an Exchange sits between the partial and final aggregate. They are therefore not
+      // adjacent and the rule must not combine them; the FILTER must still produce correct results.
+      val distinctQuery =
+        """SELECT k, count(distinct v) FILTER (WHERE v > 5)
+          |FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k""".stripMargin
+      val distinctExpected =
+        withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+          val df = sql(distinctQuery)
+          assert(collect(df.queryExecution.executedPlan) {
+            case agg: BaseAggregateExec => agg
+          }.size == 4)
+          df.collect()
+        }
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        val df = sql(distinctQuery)
+        checkAnswer(df, distinctExpected)
+        assert(collect(df.queryExecution.executedPlan) {
+          case agg: BaseAggregateExec => agg
+        }.size == 4)
       }
     }
   }

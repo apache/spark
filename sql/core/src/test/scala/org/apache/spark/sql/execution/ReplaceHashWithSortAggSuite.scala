@@ -168,6 +168,39 @@ abstract class ReplaceHashWithSortAggSuiteBase
       }
     }
   }
+
+  test("SPARK-43317: Combined sort aggregate keeps the FILTER clause") {
+    // Regression test for the wrong-results bug this fix addresses: when the partial and final
+    // aggregate are merged into a single `Complete` mode aggregate that is then replaced with a
+    // `SortAggregateExec` (`replaceHashWithSortAgg=true`), the `FILTER (WHERE ...)` clause must be
+    // preserved. The filter only lives on the partial aggregate expressions, so combining must take
+    // the aggregate functions from the partial aggregate; otherwise the filter is silently dropped
+    // and the result is wrong. This drives the PR's own repro query end-to-end through the sort
+    // aggregate path.
+    withTempView("t1", "t2") {
+      spark.range(100).selectExpr("id as key").createOrReplaceTempView("t1")
+      spark.range(50).selectExpr("id as key").createOrReplaceTempView("t2")
+      val query =
+        """SELECT key, count(*) FILTER (WHERE key > 10) FROM (
+          |  SELECT /*+ SHUFFLE_MERGE(t1) */ t1.key AS key FROM t1 JOIN t2 ON t1.key = t2.key
+          |) GROUP BY key""".stripMargin
+
+      val expected = withSQLConf(
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false",
+          SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
+        sql(query).collect()
+      }
+
+      withSQLConf(
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+        val df = sql(query)
+        // Combined into a single `Complete` mode sort aggregate.
+        checkNumAggs(df, hashAggCount = 0, sortAggCount = 1)
+        checkAnswer(df, expected)
+      }
+    }
+  }
 }
 
 class ReplaceHashWithSortAggSuite extends ReplaceHashWithSortAggSuiteBase

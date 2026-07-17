@@ -77,7 +77,7 @@ object CombineAdjacentAggregation extends Rule[SparkPlan] {
   }
 
   /**
-   * Check if `partialAgg` to be partial aggregate of `finalAgg`.
+   * Check if `partialAgg` is the partial aggregate of `finalAgg`.
    */
   private def isPartialAgg(
       partialAgg: BaseAggregateExec,
