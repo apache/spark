@@ -526,11 +526,24 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def subqueries: Seq[PlanType] = _subqueries()
 
-  private val _subqueries = new TransientBestEffortLazyVal(() =>
+  private val _subqueries = new TransientBestEffortLazyVal(() => {
+    // Determine the plan family (the direct subclass of QueryPlan, e.g. LogicalPlan
+    // or SparkPlan) for this plan. In AQE, a SparkPlan can transiently hold
+    // PlanExpressions whose `.plan` is still a LogicalPlan (or vice-versa) because
+    // logical-to-physical planning runs separately for the main and sub-queries.
+    // Filtering by plan family prevents a `ClassCastException` on the cast below.
+    val planFamily: Class[_] = {
+      var c: Class[_] = getClass
+      while (c != null && c.getSuperclass != classOf[QueryPlan[_]]) {
+        c = c.getSuperclass
+      }
+      if (c != null) c else classOf[QueryPlan[_]]
+    }
     expressions.filter(_.containsPattern(PLAN_EXPRESSION)).flatMap(_.collect {
-      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+      case e: PlanExpression[_] if planFamily.isInstance(e.plan) =>
+        e.plan.asInstanceOf[PlanType]
     })
-  )
+  })
 
   /**
    * All the subqueries of the current plan node and all its children. Nested subqueries are also
