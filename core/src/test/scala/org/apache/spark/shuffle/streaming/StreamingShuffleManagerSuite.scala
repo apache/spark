@@ -98,15 +98,15 @@ class StreamingShuffleManagerSuite
 
   private def assertTrackerInitialized(
       defaultManager: Option[String] = None,
-      incrementalManager: String = "",
+      incrementalManager: Option[String] = None,
       expectPresent: Boolean): Unit = {
     val conf = new SparkConf()
-    // The default slot must be a BlockingShuffleManager; a pipelined manager
-    // (StreamingShuffleManager) goes in the incremental slot, which defaults to streaming. Set the
-    // incremental slot explicitly for every case (empty disables it) so the test is not affected by
-    // that default. The tracker is initialized when either slot requires it.
+    // The default slot must be a BlockingShuffleManager; the incremental slot holds a
+    // PipelinedShuffleManager and defaults to the streaming manager. Each is set only when the test
+    // provides it, so leaving the incremental slot unset exercises the streaming default. The
+    // tracker is initialized when either slot requires it.
     defaultManager.foreach(conf.set(SHUFFLE_MANAGER, _))
-    conf.set(SHUFFLE_MANAGER_INCREMENTAL, incrementalManager)
+    incrementalManager.foreach(conf.set(SHUFFLE_MANAGER_INCREMENTAL, _))
     withSpark(new SparkContext("local", "StreamingShuffleManagerSuite", conf)) { _ =>
       val tracker = SparkEnv.get.streamingShuffleOutputTracker
       assert(tracker.isDefined == expectPresent)
@@ -117,18 +117,21 @@ class StreamingShuffleManagerSuite
     }
   }
 
-  test("SparkEnv initializes the streaming shuffle tracker for an incremental " +
+  test("SparkEnv initializes the streaming shuffle tracker by default (streaming incremental " +
+      "manager)") {
+    // The incremental slot defaults to the streaming manager, so the tracker is present with no
+    // explicit configuration.
+    assertTrackerInitialized(expectPresent = true)
+  }
+
+  test("SparkEnv initializes the streaming shuffle tracker for an explicit incremental " +
       "StreamingShuffleManager") {
     assertTrackerInitialized(
-      incrementalManager = classOf[StreamingShuffleManager].getName, expectPresent = true)
+      incrementalManager = Some(classOf[StreamingShuffleManager].getName), expectPresent = true)
   }
 
   test("SparkEnv initializes the streaming shuffle tracker for a MultiShuffleManager default") {
     assertTrackerInitialized(
       defaultManager = Some(classOf[MultiShuffleManager].getName), expectPresent = true)
-  }
-
-  test("SparkEnv does not initialize the tracker when the incremental manager is disabled") {
-    assertTrackerInitialized(expectPresent = false)
   }
 }

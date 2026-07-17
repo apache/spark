@@ -178,27 +178,27 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
   }
 
   test("unregisterShuffleFromAllManagers is a no-op (not an NPE) before managers are initialized") {
-    // Disable the incremental slot (it defaults to streaming) so there is genuinely nothing to
-    // notify once the blocking manager is forced back to its pre-init null state below.
-    val without = new SparkConf(loadDefaults = false)
-      .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
-      .set(SHUFFLE_MANAGER_INCREMENTAL, "")
-    val env = startEnv(without)
+    val env = startEnv()
     // SPARK-45762 defers shuffle-manager init behind a latch (so user jars load first), leaving
-    // `_blockingShuffleManager` null until initializeShuffleManager runs. A RemoveShuffle RPC can
-    // arrive in that window; it must be skipped, not dereference the null manager. Reflectively
-    // reproduce the pre-init state, since a live SparkContext finishes init during startup.
-    val field = classOf[SparkEnv].getDeclaredField("_blockingShuffleManager")
-    field.setAccessible(true)
-    val original = field.get(env)
-    field.set(env, null)
+    // both managers null until initializeShuffleManager runs. A RemoveShuffle RPC can arrive in
+    // that window; it must be skipped, not dereference a null manager. Reflectively reproduce the
+    // pre-init state (both slots null), since a live SparkContext finishes init during startup.
+    val blockingField = classOf[SparkEnv].getDeclaredField("_blockingShuffleManager")
+    val pipelinedField = classOf[SparkEnv].getDeclaredField("_pipelinedShuffleManager")
+    blockingField.setAccessible(true)
+    pipelinedField.setAccessible(true)
+    val origBlocking = blockingField.get(env)
+    val origPipelined = pipelinedField.get(env)
+    blockingField.set(env, null)
+    pipelinedField.set(env, null)
     try {
       assert(!env.isShuffleManagerInitialized, "precondition: the manager must look uninitialized")
-      // No incremental manager is configured either, so there is nothing to notify: the call must
-      // return false without throwing. Before the null guard this threw NullPointerException.
+      // With both managers null there is nothing to notify: the call must return false without
+      // throwing. Before the null guards this threw NullPointerException.
       assert(!env.unregisterShuffleFromAllManagers(4242))
     } finally {
-      field.set(env, original)
+      blockingField.set(env, origBlocking)
+      pipelinedField.set(env, origPipelined)
     }
   }
 
@@ -210,20 +210,6 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     val dep = pipelinedDep(sc)
     assert(dep.shuffleHandle.isInstanceOf[RecordingShuffleManager.RecordingHandle])
     assert(dep.shuffleHandle.shuffleId === dep.shuffleId)
-  }
-
-  test("with the incremental manager disabled, a pipelined dependency falls back to the default") {
-    // The incremental slot defaults to the streaming manager; setting it empty disables it, so
-    // there is no pipelined manager and a pipelined dependency falls back to the blocking manager.
-    val without = new SparkConf(loadDefaults = false)
-      .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
-      .set(SHUFFLE_MANAGER_INCREMENTAL, "")
-    val env = startEnv(without)
-    // A regular dependency routes to the default manager.
-    assert(env.shuffleManagerFor(regularDep(sc)).isInstanceOf[DefaultRecordingManager])
-    // A pipelined dependency also routes to the default manager (served as an ordinary materialized
-    // shuffle) when the incremental manager is disabled.
-    assert(env.shuffleManagerFor(pipelinedDep(sc)).isInstanceOf[DefaultRecordingManager])
   }
 
   test("both managers are stopped when the SparkContext stops") {
