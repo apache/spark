@@ -28,6 +28,11 @@ import org.apache.spark.security._
 
 class UserCredentialManagerSuite extends SparkFunSuite {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    CredentialProviderLoader.resetForTesting()
+  }
+
   private def createSparkConf(): SparkConf = {
     new SparkConf(loadDefaults = false)
       .set(SECURITY_CREDENTIALS_ENABLED, true)
@@ -363,5 +368,61 @@ class UserCredentialManagerSuite extends SparkFunSuite {
     manager.start()
     // Should not throw
     manager.stop()
+  }
+
+  test("per-provider error isolation: one provider failure does not block others") {
+    // Configure two schemes: "fake" (will succeed) and "shared" (will trigger ambiguity
+    // because no explicit provider is set for it and both FakeCredentialProvider and
+    // AnotherFakeCredentialProvider support "shared").
+    // The per-provider catch should absorb the IllegalArgumentException for "shared"
+    // and still return credentials from "fake".
+    val conf = createSparkConf()
+    // Only set explicit provider for "fake", leave "shared" ambiguous
+    conf.set("spark.security.credentials.provider.fake",
+      "org.apache.spark.security.FakeCredentialProvider")
+    conf.set("spark.security.credentials.provider.shared", "nonexistent.Provider")
+
+    val ctx = createUserContext()
+    val callbackRef = new AtomicReference[Array[Byte]]()
+
+    val manager = new UserCredentialManager(
+      conf,
+      createIngestor(ctx),
+      bytes => callbackRef.set(bytes))
+
+    try {
+      val result = manager.start()
+      assert(result != null, "start() should return serialized credentials")
+
+      // Verify that "fake" credentials were resolved despite "shared" failing
+      val creds = UserCredentialManager.deserializeUserCredentials(result)
+      assert(creds.forScheme("fake").isPresent,
+        "Should have credentials for 'fake' scheme even though 'shared' failed")
+      assert(creds.forScheme("fake").get().getProperties.get("provider") === "fake")
+      // "shared" should NOT be present (its provider was not found)
+      assert(!creds.forScheme("shared").isPresent,
+        "'shared' scheme should not have credentials due to provider resolution failure")
+    } finally {
+      manager.stop()
+    }
+  }
+
+  test("per-provider error isolation: all providers fail throws IllegalStateException") {
+    // Configure only "shared" with a non-existent provider class
+    val conf = createSparkConf()
+    conf.set("spark.security.credentials.provider.shared", "nonexistent.Provider")
+
+    val ctx = createUserContext()
+
+    val manager = new UserCredentialManager(conf, createIngestor(ctx), _ => ())
+
+    try {
+      val ex = intercept[IllegalStateException] {
+        manager.start()
+      }
+      assert(ex.getMessage.contains("No credential providers resolved any credentials"))
+    } finally {
+      manager.stop()
+    }
   }
 }
