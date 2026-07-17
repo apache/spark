@@ -318,7 +318,7 @@ class PluginContainerSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensures the shuffle manager specified in configuration was
     // overridden by the Spark plugin.
-    assert(sc.env.defaultShuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
+    assert(sc.env.blockingShuffleManager.isInstanceOf[SetShuffleManagerPlugin.MyShuffleManager])
   }
 }
 

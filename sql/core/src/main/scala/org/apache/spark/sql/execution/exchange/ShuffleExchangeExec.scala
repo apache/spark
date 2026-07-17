@@ -300,10 +300,10 @@ object ShuffleExchangeExec {
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
     val conf = SparkEnv.get.conf
-    // This decision concerns the default (regular) shuffle path only. A pipelined shuffle is served
-    // by a separate incremental manager (see SparkEnv.shuffleManagerFor) and does not go through
-    // here, so inspect the default manager's type directly.
-    val shuffleManager = SparkEnv.get.defaultShuffleManager
+    // This decision concerns the regular (materialized) shuffle path only. A pipelined shuffle is
+    // served by a separate pipelined manager (see SparkEnv.shuffleManagerFor) and does not go
+    // through here, so inspect the blocking manager's type directly.
+    val shuffleManager = SparkEnv.get.blockingShuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.get(config.SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD)
     val numParts = partitioner.numPartitions

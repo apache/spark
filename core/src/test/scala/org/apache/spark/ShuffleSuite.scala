@@ -357,7 +357,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
   test("multiple simultaneous attempts for one task (SPARK-8029)") {
     sc = new SparkContext("local", "test", conf)
     val mapTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    val manager = sc.env.defaultShuffleManager
+    val manager = sc.env.blockingShuffleManager
 
     val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0L)
     val metricsSystem = sc.env.metricsSystem

@@ -32,12 +32,12 @@ import org.apache.spark.shuffle.streaming.StreamingShuffleManager
  * test can assert that [[SparkEnv.shuffleManagerFor]] routed a dependency to the correct manager.
  * Every instance registers itself in a process-wide registry keyed by class, because the two
  * managers live in private SparkEnv fields and a test otherwise has no reference to them.
- * Constructor takes (SparkConf, Boolean) to match how SparkEnv instantiates managers. It is a
- * [[BlockingShuffleManager]] because ShuffleManager is sealed and only its two subtypes may be
- * implemented; the routing tests never exercise the resolver, so it returns a mock.
+ * Constructor takes (SparkConf, Boolean) to match how SparkEnv instantiates managers. This base
+ * declares no shuffle kind; each concrete subclass mixes in [[BlockingShuffleManager]] or
+ * [[PipelinedShuffleManager]] so it is accepted in the corresponding SparkEnv slot.
  */
-private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean)
-  extends BlockingShuffleManager {
+private abstract class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean)
+  extends ShuffleManager {
   RecordingShuffleManager.register(this)
   val registered = mutable.ArrayBuffer[Int]()
   val unregistered = mutable.ArrayBuffer[Int]()
@@ -59,7 +59,6 @@ private class RecordingShuffleManager(conf: SparkConf, isDriver: Boolean)
     unregistered += shuffleId
     true
   }
-  override def shuffleBlockResolver: ShuffleBlockResolver = mock(classOf[ShuffleBlockResolver])
   override def stop(): Unit = stopped = true
 }
 
@@ -76,19 +75,24 @@ private object RecordingShuffleManager {
   }
 }
 
-// Distinct subclasses so SparkEnv instantiates two different classes (default vs incremental) and
-// tests can tell which one a dependency was routed to.
+// Distinct subclasses so SparkEnv instantiates two different classes (blocking vs pipelined) and
+// tests can tell which one a dependency was routed to. Each declares its kind so it is accepted in
+// the matching SparkEnv slot: the blocking manager (spark.shuffle.manager) must be a
+// BlockingShuffleManager, the pipelined manager (spark.shuffle.manager.incremental) a
+// PipelinedShuffleManager. The routing tests never exercise the resolver, so it returns a mock.
 private class DefaultRecordingManager(conf: SparkConf, isDriver: Boolean)
-  extends RecordingShuffleManager(conf, isDriver)
+  extends RecordingShuffleManager(conf, isDriver) with BlockingShuffleManager {
+  override def shuffleBlockResolver: ShuffleBlockResolver = mock(classOf[ShuffleBlockResolver])
+}
 private class IncrementalRecordingManager(conf: SparkConf, isDriver: Boolean)
-  extends RecordingShuffleManager(conf, isDriver)
+  extends RecordingShuffleManager(conf, isDriver) with PipelinedShuffleManager
 
 /**
  * Tests routing of shuffles to the default vs. incremental [[ShuffleManager]] by dependency type,
  * done natively in [[SparkEnv.shuffleManagerFor]] with no wrapping "router" manager. A
  * [[PipelinedShuffleDependency]] routes to the manager named by spark.shuffle.manager.incremental;
- * every other dependency routes to spark.shuffle.manager. `SparkEnv.defaultShuffleManager` remains
- * the plain default manager (nothing is installed "in front" of it). The id-only cleanup path
+ * every other dependency routes to spark.shuffle.manager. `SparkEnv.blockingShuffleManager` remains
+ * the plain configured manager (nothing is installed "in front" of it). The id-only cleanup path
  * (`unregisterShuffleFromAllManagers`) notifies both managers, since a shuffleId alone does not
  * identify the owner.
  */
@@ -121,11 +125,18 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
   }
 
-  test("defaultShuffleManager is the plain default manager (no wrapper is installed)") {
+  /** Walk an exception's cause chain to find the first cause of the given type, if any. */
+  private def findCause[T <: Throwable : reflect.ClassTag](t: Throwable): Option[T] = {
+    val cls = implicitly[reflect.ClassTag[T]].runtimeClass
+    Iterator.iterate(t)(_.getCause).takeWhile(_ != null)
+      .find(cls.isInstance).map(_.asInstanceOf[T])
+  }
+
+  test("blockingShuffleManager is the plain configured manager (no wrapper is installed)") {
     val env = startEnv()
-    // The default manager is exactly the configured one -- not a router/composite in front of it --
-    // so callers that inspect its type (e.g. ShuffleExchangeExec) see the real manager.
-    assert(env.defaultShuffleManager.isInstanceOf[DefaultRecordingManager])
+    // The blocking manager is exactly the configured one -- not a router/composite in front of it
+    // -- so callers that inspect its type (e.g. ShuffleExchangeExec) see the real manager.
+    assert(env.blockingShuffleManager.isInstanceOf[DefaultRecordingManager])
   }
 
   test("shuffleManagerFor routes a regular dependency to the default manager") {
@@ -171,10 +182,10 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
       .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
     val env = startEnv(without)
     // SPARK-45762 defers shuffle-manager init behind a latch (so user jars load first), leaving
-    // `_shuffleManager` null until initializeShuffleManager runs. A RemoveShuffle RPC can arrive in
-    // that window; it must be skipped, not dereference the null manager. Reflectively reproduce the
-    // pre-init state, since a live SparkContext finishes init during startup.
-    val field = classOf[SparkEnv].getDeclaredField("_shuffleManager")
+    // `_blockingShuffleManager` null until initializeShuffleManager runs. A RemoveShuffle RPC can
+    // arrive in that window; it must be skipped, not dereference the null manager. Reflectively
+    // reproduce the pre-init state, since a live SparkContext finishes init during startup.
+    val field = classOf[SparkEnv].getDeclaredField("_blockingShuffleManager")
     field.setAccessible(true)
     val original = field.get(env)
     field.set(env, null)
@@ -237,17 +248,34 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
   }
 
-  test("spark.shuffle.manager.incremental accepts the same short aliases as the default manager") {
+  test("spark.shuffle.manager.incremental resolves the same short aliases as the default manager") {
+    // "sort" is a short alias the incremental slot must resolve (to SortShuffleManager) rather than
+    // treat as a class name. SortShuffleManager is blocking, so it is rejected from the pipelined
+    // slot -- proving the alias resolved (a ClassNotFoundException would mean it did not). See the
+    // streaming-tracker test for a valid pipelined manager in this slot.
     val conf = new SparkConf(loadDefaults = false)
       .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
-      // "sort" is a short alias resolved to SortShuffleManager for the default manager; the
-      // incremental manager must resolve it the same way rather than treating it as a class name.
       .set(SHUFFLE_MANAGER_INCREMENTAL, "sort")
-    sc = new SparkContext("local", "test", conf)
-    // A pipelined dependency routes to the incremental manager, which is the alias-resolved
-    // SortShuffleManager -- not a crash from a "sort" ClassNotFoundException at startup.
-    assert(SparkEnv.get.shuffleManagerFor(pipelinedDep(sc))
-      .isInstanceOf[org.apache.spark.shuffle.sort.SortShuffleManager])
+    val e = intercept[Exception] {
+      sc = new SparkContext("local", "test", conf)
+    }
+    assert(findCause[IllegalArgumentException](e).exists(
+      _.getMessage.contains("must be a PipelinedShuffleManager")),
+      s"expected a PipelinedShuffleManager rejection, got: $e")
+  }
+
+  test("a blocking manager in the incremental slot is rejected at startup") {
+    val conf = new SparkConf(loadDefaults = false)
+      .set(SHUFFLE_MANAGER, classOf[DefaultRecordingManager].getName)
+      // DefaultRecordingManager is a BlockingShuffleManager; the pipelined slot must reject it, so
+      // a shuffle routed there can never write blocks unreachable through the block resolver.
+      .set(SHUFFLE_MANAGER_INCREMENTAL, classOf[DefaultRecordingManager].getName)
+    val e = intercept[Exception] {
+      sc = new SparkContext("local", "test", conf)
+    }
+    assert(findCause[IllegalArgumentException](e).exists(
+      _.getMessage.contains("must be a PipelinedShuffleManager")),
+      s"expected a PipelinedShuffleManager rejection, got: $e")
   }
 
   test("a bad incremental manager class name surfaces a clear error at startup") {
@@ -272,19 +300,26 @@ class PipelinedShuffleRoutingSuite extends SparkFunSuite with LocalSparkContext 
     assert(!streaming.isInstanceOf[BlockingShuffleManager])
   }
 
-  test("SparkEnv.shuffleBlockResolver is defined for a blocking default manager, empty otherwise") {
-    // Default manager is SortShuffleManager (blocking) -> a resolver is available.
+  test("SparkEnv.shuffleBlockResolver is defined for the blocking manager") {
+    // The blocking manager is SortShuffleManager -> a resolver is available. It is the only manager
+    // that produces block-manager blocks, so block resolution always comes from it.
     val blockingConf = new SparkConf(loadDefaults = false).set(SHUFFLE_MANAGER, "sort")
     sc = new SparkContext("local", "test", blockingConf)
     assert(SparkEnv.get.shuffleBlockResolver.isDefined,
-      "a blocking default manager must expose a shuffleBlockResolver")
-    sc.stop()
+      "the blocking manager must expose a shuffleBlockResolver")
+  }
 
-    // Default manager is StreamingShuffleManager (pipelined) -> no block-manager resolver.
+  test("a pipelined manager in the default slot is rejected at startup") {
+    // StreamingShuffleManager is pipelined; it cannot be the blocking manager, because block
+    // resolution (reads, push-merge, decommission migration) has no source otherwise. Rejecting it
+    // at startup means shuffleBlockResolver always has exactly one well-typed source.
     val pipelinedConf = new SparkConf(loadDefaults = false)
       .set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
-    sc = new SparkContext("local", "test", pipelinedConf)
-    assert(SparkEnv.get.shuffleBlockResolver.isEmpty,
-      "a pipelined default manager must not expose a shuffleBlockResolver")
+    val e = intercept[Exception] {
+      sc = new SparkContext("local", "test", pipelinedConf)
+    }
+    assert(findCause[IllegalArgumentException](e).exists(
+      _.getMessage.contains("must be a BlockingShuffleManager")),
+      s"expected a BlockingShuffleManager rejection, got: $e")
   }
 }
