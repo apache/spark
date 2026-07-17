@@ -27,31 +27,31 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
   private def checkRewriteAndResult(
       conditionalSql: String,
       filterSql: String): Unit = {
-    // Verify the rewrite produces the same result as the explicit FILTER form.
-    val withRewrite = withSQLConf(
-      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-      spark.sql(conditionalSql)
-    }
-    val withoutRewrite = withSQLConf(
-      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
-      spark.sql(conditionalSql)
-    }
-    val explicitFilter = spark.sql(filterSql)
+    val expectedRows = spark.sql(filterSql).collect()
 
-    // Rewritten query should match explicit FILTER query.
-    checkAnswer(withRewrite, explicitFilter)
-    // Non-rewritten query should also match explicit FILTER query.
-    checkAnswer(withoutRewrite, explicitFilter)
+    // Verify the rewrite produces the same result as the explicit FILTER form.
+    withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+      checkAnswer(spark.sql(conditionalSql), expectedRows)
+    }
+
+    // Verify the non-rewritten form also matches the explicit FILTER form.
+    withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      checkAnswer(spark.sql(conditionalSql), expectedRows)
+    }
   }
 
-  private def hasFilterClause(plan: LogicalPlan): Boolean = {
+  private def hasUserConditionFilter(plan: LogicalPlan): Boolean = {
     val aggregateExpressions = plan.collect {
       case a: Aggregate => a.aggregateExpressions
     }.flatten
     val aggregateExprs = aggregateExpressions.flatMap {
       _.collect { case ae: AggregateExpression => ae }
     }
-    aggregateExprs.exists(_.filter.isDefined)
+    // The Expand rewrite adds gid-routing filters to every distinct aggregate; we only
+    // care about user-condition filters introduced by the IF/CASE canonicalization.
+    aggregateExprs.flatMap(_.filter).exists(_.references.exists(_.name != "gid"))
   }
 
   test("rewrite COUNT(DISTINCT IF(cond, col, NULL)) correctness") {
@@ -221,23 +221,32 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
           "cast(id * 100 as int) as col2")
         .createOrReplaceTempView("t")
 
-      val sqlText = "SELECT key, COUNT(DISTINCT IF(col1 > 10, col2, 0)) FROM t GROUP BY key"
+      // Two counts so mayNeedtoRewrite fires and the non-null-else guard is exercised.
+      val sqlText =
+        """SELECT key,
+          |  COUNT(DISTINCT IF(col1 > 10, col2, 0)),
+          |  COUNT(DISTINCT IF(col1 > 20, col2, 0))
+          |FROM t GROUP BY key""".stripMargin
 
-      val withRewrite = withSQLConf(
-        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-        spark.sql(sqlText)
-      }
-      val withoutRewrite = withSQLConf(
+      // Collect the conf-off result as the semantic baseline; the conf-on query must match it.
+      val withoutRewriteRows = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
-        spark.sql(sqlText)
+        spark.sql(sqlText).collect()
+      }
+      withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        checkAnswer(spark.sql(sqlText), withoutRewriteRows)
       }
 
-      // They should produce the same result.
-      checkAnswer(withRewrite, withoutRewrite)
-
-      // There should be no FILTER clause when switch is enabled.
-      assert(!hasFilterClause(withRewrite.queryExecution.optimizedPlan),
-        "Non-null ELSE branch should not produce AggregateExpression with FILTER")
+      // When the switch is enabled, the non-null ELSE branch must not be canonicalized
+      // into a user-condition FILTER; only the internal gid-routing filters introduced
+      // by the Expand rewrite may be present.
+      val hasFilter = withSQLConf(
+        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+        hasUserConditionFilter(spark.sql(sqlText).queryExecution.optimizedPlan)
+      }
+      assert(!hasFilter,
+        "Non-null ELSE branch should not produce a user-condition FILTER clause")
     }
   }
 
@@ -251,7 +260,7 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
         .createOrReplaceTempView("t")
 
       // Two conditional distinct counts on the same base column trigger canonicalization,
-      // so the optimized plan must contain FILTER clauses.
+      // so the optimized plan must contain user-condition FILTER clauses.
       val hasFilter = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
         val df = spark.sql(
@@ -259,10 +268,10 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
             |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)) as cnt1,
             |  COUNT(DISTINCT IF(col1 > 5, col2, NULL)) as cnt2
             |FROM t GROUP BY key""".stripMargin)
-        hasFilterClause(df.queryExecution.optimizedPlan)
+        hasUserConditionFilter(df.queryExecution.optimizedPlan)
       }
 
-      assert(hasFilter, "Optimized plan should contain AggregateExpression with FILTER clause")
+      assert(hasFilter, "Optimized plan should contain user-condition FILTER clause")
     }
   }
 }
