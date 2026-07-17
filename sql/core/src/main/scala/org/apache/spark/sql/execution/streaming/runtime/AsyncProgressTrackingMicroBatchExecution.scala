@@ -64,9 +64,9 @@ class AsyncProgressTrackingMicroBatchExecution(
   = ThreadUtils.newDaemonSingleThreadExecutorWithRejectedExecutionHandler(
     AsyncProgressTrackingMicroBatchExecution.ASYNC_LOG_WRITE_THREAD_NAME,
     if (trigger.isInstanceOf[RealTimeTrigger]) {
-      // Two tasks can be buffered, one in the active task and one in the queue.
-      // This is to make sure we finish completion commit of the last batch before starting
-      // the offset commit of the new batch.
+      // Queue capacity 1; with the active task, at most 2 writes are in flight. This bounds
+      // buffering so the completion commit of the last batch finishes before the offset commit
+      // of the new batch starts.
       1
     } else {
       2 // One for offset commit and one for completion commit.

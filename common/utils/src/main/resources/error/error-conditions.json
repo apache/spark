@@ -7399,11 +7399,6 @@
           "The checkpointing interval for async progress tracking must be set to 0, which means each progress update is checkpointed. Set option asyncProgressTrackingCheckpointIntervalMs to 0 in DataStreamWriter options and retry your query."
         ]
       },
-      "ASYNC_PROGRESS_TRACKING_NOT_SUPPORTED" : {
-        "message" : [
-          "Async progress tracking is not supported in real-time mode. Set option asyncProgressTrackingEnabled to false and retry your query."
-        ]
-      },
       "IDENTICAL_SOURCES_IN_UNION_NOT_SUPPORTED" : {
         "message" : [
           "Real-time mode does not support union on two or more identical streaming data sources in a single query. This includes scenarios such as referencing the same source DataFrame more than once, or using two data sources with identical configurations for some sources. For Kafka, avoid reusing the same DataFrame and create different ones. Sources provided in the query: <sources>"
