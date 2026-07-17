@@ -235,12 +235,29 @@ class DataFrameAggregateSuite extends SharedSparkSession
   }
 
   test("SPARK-38983: grouping functions in boolean expressions report type mismatch") {
-    Seq(grouping("course"), grouping_id("course", "year")).foreach { groupingExpr =>
-      val error = intercept[AnalysisException] {
-        courseSales.cube("course", "year").agg(groupingExpr && lit(true)).collect()
+    Seq(
+      courseSales.cube("course", "year"),
+      courseSales.rollup("course", "year"),
+      courseSales.groupingSets(
+        Seq(Seq(Column("course"), Column("year")), Seq()),
+        Column("course"),
+        Column("year"))
+    ).foreach { groupedData =>
+      Seq(
+        (grouping("course"), "\"INT\""),
+        (grouping_id("course", "year"), "\"BIGINT\"")
+      ).foreach { case (groupingExpr, leftType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            groupedData.agg(groupingExpr && lit(true)).collect()
+          },
+          condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+          parameters = Map(
+            "left" -> leftType,
+            "right" -> "\"BOOLEAN\"",
+            "sqlExpr" -> "\"\\(.+ AND true\\)\""),
+          matchPVals = true)
       }
-      assert(error.getCondition === "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES")
-      assert(!error.getMessage.contains("grouping()/grouping_id() can only be used"))
     }
   }
 
