@@ -70,7 +70,7 @@ private[spark] class UserCredentialManager(
   private val consecutiveFailures = new AtomicInteger(0)
   private val maxBackoffMs: Long = TimeUnit.MINUTES.toMillis(10)
 
-  private var renewalExecutor: ScheduledExecutorService = _
+  @volatile private var renewalExecutor: ScheduledExecutorService = _
 
   // Pre-compute the filtered credential configuration map (SparkConf is immutable).
   private val credentialConfMap: java.util.Map[String, String] = sparkConf.getAll
@@ -417,13 +417,17 @@ private[spark] object UserCredentialManager {
    */
   def deserializeUserCredentials(bytes: Array[Byte]): UserCredentials = {
     val bis = new java.io.ByteArrayInputStream(bytes)
-    val ois = new ObjectInputStream(bis)
     try {
-      ois.setObjectInputFilter(
-        ObjectInputFilter.Config.createFilter(DESERIALIZATION_FILTER))
-      ois.readObject().asInstanceOf[UserCredentials]
+      val ois = new ObjectInputStream(bis)
+      try {
+        ois.setObjectInputFilter(
+          ObjectInputFilter.Config.createFilter(DESERIALIZATION_FILTER))
+        ois.readObject().asInstanceOf[UserCredentials]
+      } finally {
+        ois.close()
+      }
     } finally {
-      ois.close()
+      bis.close()
     }
   }
 }
