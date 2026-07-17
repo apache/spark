@@ -5517,6 +5517,13 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 bitmap_count.__doc__ = pysparkfuncs.bitmap_count.__doc__
 
 
+def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_contains", bitmap, bit_position)
+
+
+bitmap_contains.__doc__ = pysparkfuncs.bitmap_contains.__doc__
+
+
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("bitmap_or_agg", col)
 

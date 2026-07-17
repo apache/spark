@@ -31069,6 +31069,44 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Column:
+    """
+    Returns true if the bit at the given position is set in the bitmap.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    bitmap : :class:`~pyspark.sql.Column` or column name
+        The input bitmap (BinaryType).
+    bit_position : :class:`~pyspark.sql.Column` or column name
+        The bit position to check (LongType, 0 to 32767).
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("01", "00")], ["a", "b"])
+    >>> df.select(
+    ...     sf.bitmap_contains(sf.to_binary(df.a, sf.lit("hex")), sf.lit(0)),
+    ...     sf.bitmap_contains(sf.to_binary(df.b, sf.lit("hex")), sf.lit(0)),
+    ... ).show()
+    +--------------------------------------+--------------------------------------+
+    |bitmap_contains(to_binary(a, hex), 0) |bitmap_contains(to_binary(b, hex), 0)|
+    +--------------------------------------+--------------------------------------+
+    |                                  true|                                 false|
+    +--------------------------------------+--------------------------------------+
+    """
+    return _invoke_function_over_columns("bitmap_contains", bitmap, bit_position)
+
+
+@_try_remote_functions
 def bitmap_or_agg(col: "ColumnOrName") -> Column:
     """
     Returns a bitmap that is the bitwise OR of all of the bitmaps from the input column.

@@ -92,4 +92,59 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     setBitmapBits(bitmap, bitmap.length - 1, 0x67)
     assert(BitmapExpressionUtils.bitmapCount(bitmap) == 15L)
   }
+
+  test("bitmap_contains with bit set") {
+    val bitmap = createBitmap()
+    bitmap(0) = 0x01.toByte
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 0))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 1))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 7))
+  }
+
+  test("bitmap_contains with multiple bits") {
+    val bitmap = createBitmap()
+    bitmap(0) = 0x82.toByte // bits 1 and 7 set
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 0))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 1))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 7))
+  }
+
+  test("bitmap_contains at boundaries") {
+    val bitmap = createBitmap()
+    // Last byte, last bit (position = NUM_BITS - 1 = 32767)
+    bitmap(bitmap.length - 1) = 0x80.toByte
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 1))
+    // Last byte, first bit (position = NUM_BITS - 8 = 32760)
+    bitmap(bitmap.length - 1) = 0x01.toByte
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 8))
+  }
+
+  test("bitmap_contains with empty bitmap") {
+    val bitmap = createBitmap()
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 0))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, 100))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 1))
+  }
+
+  test("bitmap_contains with out-of-range position") {
+    val bitmap = createBitmap()
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, -1))
+    assert(!BitmapExpressionUtils.bitmapContains(bitmap, Long.MaxValue))
+  }
+
+  test("bitmap_contains with short bitmap") {
+    val shortBitmap = Array[Byte](0x01)
+    assert(BitmapExpressionUtils.bitmapContains(shortBitmap, 0))
+    // Position beyond short bitmap length should return false
+    assert(!BitmapExpressionUtils.bitmapContains(shortBitmap, 8))
+    assert(!BitmapExpressionUtils.bitmapContains(shortBitmap, BitmapExpressionUtils.NUM_BITS - 1))
+  }
+
+  test("bitmap_contains with all-ones bitmap") {
+    val bitmap = Array.fill[Byte](BitmapExpressionUtils.NUM_BYTES)(0xFF.toByte)
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 0))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, 1028))
+    assert(BitmapExpressionUtils.bitmapContains(bitmap, BitmapExpressionUtils.NUM_BITS - 1))
+  }
 }

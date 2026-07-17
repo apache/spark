@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType, StructType}
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",
@@ -141,6 +141,45 @@ case class BitmapCount(child: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): BitmapCount =
     copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(bitmap, bit_position) - Returns true if the bit at the given position is set in the
+    bitmap, false otherwise.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(X '01', 0L);
+       true
+      > SELECT _FUNC_(X '01', 1L);
+       false
+      > SELECT _FUNC_(X '10', 4L);
+       true
+  """,
+  since = "4.3.0",
+  group = "misc_funcs")
+case class BitmapContains(left: Expression, right: Expression)
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, LongType)
+
+  override def dataType: DataType = BooleanType
+
+  override def prettyName: String = "bitmap_contains"
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[BitmapExpressionUtils],
+    BooleanType,
+    "bitmapContains",
+    Seq(left, right),
+    Seq(BinaryType, LongType),
+    returnNullable = false)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): BitmapContains =
+    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(

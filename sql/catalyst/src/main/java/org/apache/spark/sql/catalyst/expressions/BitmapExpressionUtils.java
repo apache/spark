@@ -57,6 +57,26 @@ public class BitmapExpressionUtils {
     }
   }
 
+  /**
+   * Checks whether the bit at the given position is set in the bitmap.
+   *
+   * @param bitmap the bitmap byte array (fixed {@link #NUM_BYTES} bytes)
+   * @param bitPosition the bit position to check (0 to {@link #NUM_BITS} - 1)
+   * @return true if the bit is set; false if the bit is clear,
+   *         the position is out of range, or the bitmap is too short
+   */
+  public static boolean bitmapContains(byte[] bitmap, long bitPosition) {
+    if (bitPosition < 0 || bitPosition >= NUM_BITS) {
+      return false;
+    }
+    int bytePos = (int) (bitPosition / 8);
+    if (bytePos >= bitmap.length) {
+      return false;
+    }
+    int bit = (int) (bitPosition % 8);
+    return (bitmap[bytePos] & (1 << bit)) != 0;
+  }
+
   /** Performs bitwise AND on both bitmaps and writes the result into bitmap1. */
   public static void bitmapAndMerge(byte[] bitmap1, byte[] bitmap2) {
     int minLen = java.lang.Math.min(bitmap1.length, bitmap2.length);

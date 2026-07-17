@@ -653,6 +653,7 @@ Misc Functions
     assert_true
     bitmap_bit_position
     bitmap_bucket_number
+    bitmap_contains
     bitmap_count
     current_catalog
     current_database
