@@ -2608,7 +2608,7 @@ class JDBCSuite extends SharedSparkSession {
       .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
   }
 
-  test("DatabricksDialect syntax error detection") {
+  test("SPARK-58193: DatabricksDialect syntax error detection") {
     val dialect = DatabricksDialect()
     assert(dialect.isSyntaxErrorBestEffort(
       new SQLException("[parse_syntax_error] Syntax error at or near 'SQL'", "07000")))
