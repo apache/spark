@@ -3737,6 +3737,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             """
             key = tuple(s[0] for s in key_series)
 
+            values: Iterable
             if state.hasTimedOut:
                 # On timeout the UDF is called with an empty DataFrame instead
                 # of an empty iterator.
@@ -3849,7 +3850,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         def func(
             split_index: int,
-            batches: Iterator["pa.RecordBatch"],
+            data: Iterator["pa.RecordBatch"],
         ) -> Iterator["pa.RecordBatch"]:
             """Apply applyInPandasWithState UDF.
 
@@ -3864,9 +3865,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             def result_and_state_stream() -> Iterator[tuple]:
                 # The same state object is reused across all chunks of a group,
                 # so grouping by it is equivalent to grouping by key.
-                for state, group in itertools.groupby(
-                    gen_data_and_state(batches), key=lambda x: x[1]
-                ):
+                for state, group in itertools.groupby(gen_data_and_state(data), key=lambda x: x[1]):
                     # These must stay lazy - do not materialize the data chunks.
                     data_gen = (data_pandas for data_pandas, _ in group)
                     # Consume the first chunk to extract the grouping key series.
