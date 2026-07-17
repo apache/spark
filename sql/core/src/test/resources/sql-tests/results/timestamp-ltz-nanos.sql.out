@@ -1128,6 +1128,78 @@ struct<v:timestamp_ltz(9),next_v:timestamp_ltz(9)>
 
 
 -- !query
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(8)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456780
+
+
+-- !query
+SELECT date_format('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456700
+
+
+-- !query
+SELECT date_format(TIMESTAMP_LTZ '2020-01-01 21:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_char(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_char('2020-01-01 13:24:35.123456789' :: timestamp_ltz(7), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(7)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+2020-01-01 13:24:35.123456700
+
+
+-- !query
+SELECT to_varchar('2020-01-01 13:24:35.123456789' :: timestamp_ltz(8), 'HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(8)), HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+13:24:35.123456780
+
+
+-- !query
+SELECT date_format(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(TIMESTAMP_LTZ '1960-01-01 05:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+1960-01-01 05:24:35.123456789
+
+
+-- !query
+SELECT date_format(NULL :: timestamp_ltz(9), 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<date_format(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss.SSSSSSSSS):string>
+-- !query output
+NULL
+
+
+-- !query
 SELECT date_trunc('SECOND', TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789 UTC')
 -- !query schema
 struct<date_trunc(SECOND, TIMESTAMP_LTZ '2020-01-01 04:34:56.123456789'):timestamp_ltz(9)>
