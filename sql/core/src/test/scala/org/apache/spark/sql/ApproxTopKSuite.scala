@@ -644,7 +644,7 @@ class ApproxTopKSuite extends SharedSparkSession {
     checkMixedTypeError(mixedDateTimeTypes)
   }
 
-  // TIME parallel of the test above: TIME(3) and TIME(6) widen to TIME(6) at UNION via
+  // TIME counterpart to the test above: TIME(3) and TIME(6) widen to TIME(6) at UNION via
   // findWiderDateTimeType, so the UNION succeeds, but the two sketches still carry their
   // original, different itemDataType (time(3) vs time(6)), so combine fails at runtime.
   test("SPARK-57848: among different time precisions - fail at combine") {
