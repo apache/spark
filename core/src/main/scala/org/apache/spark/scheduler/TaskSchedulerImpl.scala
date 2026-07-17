@@ -161,25 +161,27 @@ private[spark] class TaskSchedulerImpl(
   }
 
   /**
-   * The number of tasks currently running for the given resource profile that belong to work
-   * OTHER than the stages in `excludeStageIds`. Used by the pipelined-group free-slot admission
-   * check (see DAGScheduler): it must compare the group's demand against the slots left free by
-   * everything else running in the SAME resource profile, so it excludes the group's own already-
-   * running members (whose tasks would otherwise be charged against the group's own admission).
+   * The number of outstanding tasks for the given resource profile that belong to work OTHER than
+   * the stages in `excludeStageIds`. "Outstanding" is the not-yet-completed demand of each task set
+   * -- running plus enqueued (`numTasks - tasksSuccessful`) -- not just the tasks actively running,
+   * so a neighbor's queued backlog is charged against capacity too. Used by the pipelined-group
+   * slot admission check (see DAGScheduler): it compares the group's demand against the slots free
+   * by everything else in the SAME resource profile, so it excludes the group's own members (whose
+   * tasks would otherwise be charged against the group's own admission).
    *
-   * Computed from the TaskSetManagers so it is resource-profile-scoped and consistently filters
-   * zombie attempts, and taken under a single lock so the count is one consistent snapshot (both
-   * the per-profile total and the excluded members are read together).
+   * Computed from the TaskSetManagers so it is resource-profile-scoped, and taken under a single
+   * lock so the count is one consistent snapshot (both the per-profile total and the excluded
+   * members are read together).
    */
-  def runningTasksForOtherWorkInProfile(
+  def outstandingTasksForOtherWorkInProfile(
       resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
     taskSetsByStageIdAndAttempt.iterator.flatMap { case (stageId, attempts) =>
       if (excludeStageIds.contains(stageId)) {
         Iterator.empty
       } else {
         attempts.valuesIterator
-          .filter(tsm => !tsm.isZombie && tsm.taskSet.resourceProfileId == resourceProfileId)
-          .map(_.runningTasks)
+          .filter(_.taskSet.resourceProfileId == resourceProfileId)
+          .map(tsm => math.max(0, tsm.numTasks - tsm.tasksSuccessful))
       }
     }.sum
   }
