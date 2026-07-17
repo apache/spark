@@ -80,8 +80,6 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
             AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
             val (leftOperand, rightOperand, normalizedOp) =
               AsOfJoin.normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
-            AsOfJoinValidation.validateMatchConditionPlannerSupport(
-              joinBase, leftOperand, rightOperand)
             val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
               AsOfJoin.materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
             joinBase.copy(
@@ -158,30 +156,6 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
           "type1" -> toSQLType(leftExpr.dataType),
           "type2" -> toSQLType(rightExpr.dataType)))
     }
-  }
-
-  def validateMatchConditionPlannerSupport(
-      join: AsOfJoin,
-      leftOperand: Expression,
-      rightOperand: Expression): Unit = {
-    if (!areScalarSubtractBasedOperands(leftOperand, rightOperand)) {
-      join.failAnalysis(
-        errorClass = "AS_OF_JOIN.UNSUPPORTED_MATCH_CONDITION_OPERAND",
-        messageParameters = Map(
-          "type1" -> toSQLType(leftOperand.dataType),
-          "type2" -> toSQLType(rightOperand.dataType)))
-    }
-  }
-
-  /**
-   * Until multi-column sort-merge ASOF execution lands (SPARK-58124), the planner can only
-   * consume MATCH_CONDITION plans whose `orderExpression` is a scalar `Subtract`. STRING and
-   * composite operands use other distance expressions that `findFromOrder` cannot parse.
-   */
-  private def areScalarSubtractBasedOperands(
-      leftExpr: Expression,
-      rightExpr: Expression): Boolean = {
-    AsOfJoin.supportsSubtract(leftExpr.dataType) && AsOfJoin.supportsSubtract(rightExpr.dataType)
   }
 
   /**

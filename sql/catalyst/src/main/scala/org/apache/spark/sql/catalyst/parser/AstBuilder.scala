@@ -2554,6 +2554,8 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def asOfMatchConditionInvalidOperatorText(expr: Expression): String = expr match {
     case EqualTo(_, _) => "="
+    case Not(EqualTo(_, _)) => "<>"
+    case EqualNullSafe(_, _) => "<=>"
     case And(_, _) => "AND"
     case Or(_, _) => "OR"
     case _ => expr.prettyName
@@ -2567,7 +2569,7 @@ class AstBuilder extends DataTypeAstBuilder
       base: LogicalPlan,
       criteria: AsofJoinCriteriaContext): AsOfJoin = {
     if (!conf.sqlAsOfJoinEnabled) {
-      throw QueryParsingErrors.sqlAsofJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
+      throw QueryParsingErrors.sqlAsOfJoinDisabled(SQLConf.SQL_ASOF_JOIN_ENABLED.key, ctx)
     }
     val joinType = Option(ctx.asofJoinType) match {
       case None => Inner

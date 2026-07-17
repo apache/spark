@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.internal.SQLConf
@@ -25,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 /**
  * SQL ASOF JOIN surface tests (parser, analysis, and feature gating).
  * Execution semantics and complex MATCH_CONDITION types are covered by
- * `AsOfJoinSortMergeSQLSuite`, which requires sort-merge ASOF join.
+ * `AsOfJoinSortMergeSQLSuite`.
  */
 class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
 
@@ -84,7 +86,25 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
           stop = 114)))
   }
 
-  test("SQL ASOF JOIN requires sort-merge conf") {
+  test("valid TIMESTAMP MATCH_CONDITION passes analysis") {
+    setupTradeQuoteViews()
+    val sqlText =
+      """
+        |SELECT t.trade_time, q.quote_time
+        |FROM trades t ASOF JOIN quotes q
+        |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+        |  ON t.symbol = q.symbol
+        |""".stripMargin
+    val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
+      case j: AsOfJoin => j
+    }.get
+    assert(asOfJoin.asOfCondition.resolved)
+    assert(asOfJoin.leftSortExprs.nonEmpty)
+    assert(asOfJoin.rightSortExprs.nonEmpty)
+    assert(asOfJoin.matchLeftOperand.isEmpty)
+  }
+
+  test("SQL ASOF JOIN uses sort-merge without DataFrame sort-merge conf") {
     setupTradeQuoteViews()
     val sqlText =
       """
@@ -94,69 +114,8 @@ class AsOfJoinSQLSuite extends QueryTest with SharedSparkSession {
         |  ON t.symbol = q.symbol
         |""".stripMargin
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException](sql(sqlText)),
-        condition = "AS_OF_JOIN.SORT_MERGE_REQUIRED",
-        parameters = Map("config" -> SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key),
-        queryContext = Array(
-          ExpectedContext(
-            fragment = """ASOF JOIN quotes q
-                         |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-                         |  ON t.symbol = q.symbol""".stripMargin,
-            start = 49,
-            stop = 140)))
-    }
-  }
-
-  test("valid TIMESTAMP MATCH_CONDITION passes analysis with sort-merge enabled") {
-    setupTradeQuoteViews()
-    val sqlText =
-      """
-        |SELECT t.trade_time, q.quote_time
-        |FROM trades t ASOF JOIN quotes q
-        |  MATCH_CONDITION (t.trade_time >= q.quote_time)
-        |  ON t.symbol = q.symbol
-        |""".stripMargin
-    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
-      val asOfJoin = sql(sqlText).queryExecution.analyzed.collectFirst {
-        case j: AsOfJoin => j
-      }.get
-      assert(asOfJoin.asOfCondition.resolved)
-      assert(asOfJoin.leftSortExprs.nonEmpty)
-      assert(asOfJoin.rightSortExprs.nonEmpty)
-      assert(asOfJoin.matchLeftOperand.isEmpty)
-    }
-  }
-
-  test("MATCH_CONDITION rejects STRING operands until composite sort-merge lands") {
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW left_s(k) AS VALUES ('c')
-        |""".stripMargin)
-    sql(
-      """
-        |CREATE OR REPLACE TEMP VIEW right_s(k) AS VALUES ('a'), ('b')
-        |""".stripMargin)
-    val sqlText =
-      """
-        |SELECT l.k
-        |FROM left_s l ASOF JOIN right_s r
-        |  MATCH_CONDITION (l.k >= r.k)
-        |""".stripMargin
-    withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[AnalysisException](sql(sqlText)),
-        condition = "AS_OF_JOIN.UNSUPPORTED_MATCH_CONDITION_OPERAND",
-        sqlState = Some("42604"),
-        parameters = Map(
-          "type1" -> "\"STRING\"",
-          "type2" -> "\"STRING\""),
-        queryContext = Array(
-          ExpectedContext(
-            fragment = """ASOF JOIN right_s r
-                         |  MATCH_CONDITION (l.k >= r.k)""".stripMargin,
-            start = 26,
-            stop = 75)))
+      checkAnswer(sql(sqlText), Row(Timestamp.valueOf("2026-06-29 10:00:05"),
+        Timestamp.valueOf("2026-06-29 10:00:00")))
     }
   }
 
