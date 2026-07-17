@@ -78,7 +78,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamCoGroupSerializer,
-    ApplyInPandasWithStateSerializer,
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
 )
@@ -87,6 +86,8 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     DataType,
+    IntegerType,
+    LongType,
     MapType,
     Row,
     StringType,
@@ -530,97 +531,6 @@ def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf
     return lambda p, m, k, v: [(wrapped(p, m, k, v), return_type)]
 
 
-def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
-    """
-    Provides a new lambda instance wrapping user function of applyInPandasWithState.
-
-    The lambda instance receives (key series, iterator of value series, state) and performs
-    some conversion to be adapted with the signature of user function.
-
-    See the function doc of inner function `wrapped` for more details on what adapter does.
-    See the function doc of `mapper` function for
-    `eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE` for more details on
-    the input parameters of lambda function.
-
-    The lambda instance returns a tuple (iterator, return_type).
-    """
-
-    def wrapped(key_series, value_series_gen, state):
-        """
-        Provide an adapter of the user function performing below:
-
-        - Extract the first value of all columns in key series and produce as a tuple.
-        - If the state has timed out, call the user function with empty pandas DataFrame.
-        - If not, construct a new generator which converts each element of value series to
-          pandas DataFrame (lazy evaluation), and call the user function with the generator
-        - Verify each element of returned iterator to check the schema of pandas DataFrame.
-        """
-        import pandas as pd
-
-        key = tuple(s[0] for s in key_series)
-
-        if state.hasTimedOut:
-            # Timeout processing pass empty iterator. Here we return an empty DataFrame instead.
-            values = [
-                pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns),
-            ]
-        else:
-            values = (pd.concat(x, axis=1) for x in value_series_gen)
-
-        result_iter = f(key, values, state)
-
-        def verify_element(result):
-            if not isinstance(result, pd.DataFrame):
-                raise PySparkTypeError(
-                    errorClass="UDF_RETURN_TYPE",
-                    messageParameters={
-                        "expected": "iterator of pandas.DataFrame",
-                        "actual": "iterator of {}".format(type(result).__name__),
-                    },
-                )
-            # the number of columns of result have to match the return type
-            # but it is fine for result to have no columns at all if it is empty
-            if not (
-                len(result.columns) == len(return_type)
-                or (len(result.columns) == 0 and result.empty)
-            ):
-                raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
-                    messageParameters={
-                        "expected": str(len(return_type)),
-                        "actual": str(len(result.columns)),
-                    },
-                )
-
-            return result
-
-        if isinstance(result_iter, pd.DataFrame):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={
-                    "expected": "iterable of pandas.DataFrame",
-                    "actual": type(result_iter).__name__,
-                },
-            )
-
-        try:
-            iter(result_iter)
-        except TypeError:
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={"expected": "iterable", "actual": type(result_iter).__name__},
-            )
-
-        result_iter_with_validation = (verify_element(x) for x in result_iter)
-
-        return (
-            result_iter_with_validation,
-            state,
-        )
-
-    return lambda k, v, s: [(wrapped(k, v, s), return_type)]
-
-
 def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
     if len(kwargs_offsets):
         keys = list(kwargs_offsets.keys())
@@ -792,7 +702,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         num_udf_args = len(inspect.getfullargspec(chained_func).args)
         return func, args_offsets, return_type, num_udf_args
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        return args_offsets, wrap_grouped_map_pandas_udf_with_state(func, return_type, runner_conf)
+        return func, args_offsets, return_type
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF:
         return func, args_offsets, return_type
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
@@ -2018,17 +1928,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = ArrowStreamCoGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-            ser = ApplyInPandasWithStateSerializer(
-                timezone=runner_conf.timezone,
-                safecheck=runner_conf.safecheck,
-                assign_cols_by_name=runner_conf.assign_cols_by_name,
-                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
-                state_object_schema=eval_conf.state_value_schema,
-                arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch,
-                prefers_large_var_types=runner_conf.use_large_var_types,
-                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
-            )
         elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
             ser = TransformWithStateInPySparkRowSerializer(
                 arrow_max_records_per_batch=runner_conf.arrow_max_records_per_batch
@@ -3681,6 +3580,340 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
+        import pyarrow as pa
+        import pandas as pd
+        from pyspark.sql.streaming.state import GroupState
+
+        assert num_udfs == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
+
+        # See FlatMapGroupsInPandasWithStateExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes.
+        f, arg_offsets, return_type = udfs[0]
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        key_offsets = parsed_offsets[0][0]
+        value_offsets = parsed_offsets[0][1]
+
+        state_object_schema = eval_conf.state_value_schema
+
+        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        arrow_max_records_per_batch = (
+            arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
+        )
+
+        pickle_ser = CPickleSerializer()
+
+        # The output RecordBatch has three struct fields, accessed by position
+        # (_0/_1/_2, not by name): a count column indicating how many data and
+        # state rows are present, the UDF output data, and the serialized state.
+        result_count_df_type = StructType(
+            [
+                StructField("dataCount", IntegerType()),
+                StructField("stateCount", IntegerType()),
+            ]
+        )
+        result_state_df_type = StructType(
+            [
+                StructField("properties", StringType()),
+                StructField("keyRowAsUnsafe", BinaryType()),
+                StructField("object", BinaryType()),
+                StructField("oldTimeoutTimestamp", LongType()),
+            ]
+        )
+
+        def to_pandas(batch: "pa.RecordBatch") -> list:
+            return ArrowBatchTransformer.to_pandas(
+                batch,
+                timezone=runner_conf.timezone,
+                struct_in_pandas="dict",
+                ndarray_as_list=False,
+                prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                df_for_struct=False,
+            )
+
+        def construct_state(state_info_col: dict) -> GroupState:
+            """Construct a state instance from the value of the state info column."""
+            state_properties = json.loads(state_info_col["properties"])
+            state_info_col_object = state_info_col["object"]
+            if state_info_col_object:
+                state_object = pickle_ser.loads(state_info_col_object)
+            else:
+                state_object = None
+            state_properties["optionalValue"] = state_object
+            return GroupState(
+                keyAsUnsafe=state_info_col["keyRowAsUnsafe"],
+                valueSchema=state_object_schema,
+                **state_properties,
+            )
+
+        def gen_data_and_state(
+            batches: Iterator["pa.RecordBatch"],
+        ) -> Iterator[tuple]:
+            """Deserialize ArrowRecordBatches into (list of pandas.Series, state) chunks.
+
+            Each batch carries the data columns plus a trailing state-info
+            column. For every state-info row, the matching data slice is cut
+            out via its (startOffset, numRows) and converted to pandas. A single
+            state instance is reused across all chunks of one grouping key (the
+            key appears sequentially and its last chunk is flagged), so grouping
+            the output by the state object is equivalent to grouping by key.
+            This must not materialize multiple Arrow RecordBatches at once.
+            """
+            state_for_current_group = None
+
+            for batch in batches:
+                batch_schema = batch.schema
+                data_schema = pa.schema([batch_schema[i] for i in range(0, len(batch_schema) - 1)])
+                state_schema = pa.schema([batch_schema[-1]])
+
+                batch_columns = batch.columns
+                data_columns = batch_columns[0:-1]
+                state_column = batch_columns[-1]
+
+                data_batch = pa.RecordBatch.from_arrays(data_columns, schema=data_schema)
+                state_batch = pa.RecordBatch.from_arrays([state_column], schema=state_schema)
+
+                state_pandas = to_pandas(state_batch)[0]
+
+                for state_idx in range(0, len(state_pandas)):
+                    state_info_col = state_pandas.iloc[state_idx]
+
+                    if not state_info_col:
+                        # no more data with grouping key + state
+                        break
+
+                    data_start_offset = state_info_col["startOffset"]
+                    num_data_rows = state_info_col["numRows"]
+                    is_last_chunk = state_info_col["isLastChunk"]
+
+                    if state_for_current_group:
+                        # reuse the state already built for this group
+                        state = state_for_current_group
+                    else:
+                        # first occurrence of this group, construct a new state
+                        state = construct_state(state_info_col)
+
+                    if is_last_chunk:
+                        # last chunk for this group, drop the cached state
+                        state_for_current_group = None
+                    elif not state_for_current_group:
+                        # more chunks expected for this group, cache the state
+                        state_for_current_group = state
+
+                    data_batch_for_group = data_batch.slice(data_start_offset, num_data_rows)
+                    yield (to_pandas(data_batch_for_group), state)
+
+        def verify_element(result: "pd.DataFrame") -> "pd.DataFrame":
+            if not isinstance(result, pd.DataFrame):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterator of pandas.DataFrame",
+                        "actual": "iterator of {}".format(type(result).__name__),
+                    },
+                )
+            # The number of columns of the result must match the return type,
+            # but an empty result with no columns at all is acceptable.
+            if not (
+                len(result.columns) == len(return_type)
+                or (len(result.columns) == 0 and result.empty)
+            ):
+                raise PySparkRuntimeError(
+                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
+                    messageParameters={
+                        "expected": str(len(return_type)),
+                        "actual": str(len(result.columns)),
+                    },
+                )
+            return result
+
+        def apply_udf_to_group(key_series: list, value_series_gen, state: GroupState):
+            """Adapt the deserialized chunks to the user function signature.
+
+            Extract the scalar grouping key, convert each chunk of value Series
+            into a pandas DataFrame (lazily), invoke the UDF, and validate that
+            every returned element is a pandas.DataFrame conforming to the
+            return type.
+            """
+            key = tuple(s[0] for s in key_series)
+
+            if state.hasTimedOut:
+                # On timeout the UDF is called with an empty DataFrame instead
+                # of an empty iterator.
+                values = [
+                    pd.DataFrame(columns=pd.concat(next(value_series_gen), axis=1).columns),
+                ]
+            else:
+                values = (pd.concat(x, axis=1) for x in value_series_gen)
+
+            result_iter = f(key, values, state)
+
+            if isinstance(result_iter, pd.DataFrame):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterable of pandas.DataFrame",
+                        "actual": type(result_iter).__name__,
+                    },
+                )
+            try:
+                iter(result_iter)
+            except TypeError:
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterable",
+                        "actual": type(result_iter).__name__,
+                    },
+                )
+
+            return (verify_element(x) for x in result_iter)
+
+        def construct_state_pdf(state: GroupState) -> "pd.DataFrame":
+            """Construct a single-row pandas DataFrame from the state instance."""
+            state_properties = state.json().encode("utf-8")
+            state_key_row_as_binary = state._keyAsUnsafe
+            if state.exists:
+                state_object = pickle_ser.dumps(state._value_schema.toInternal(state._value))
+            else:
+                state_object = None
+            state_old_timeout_timestamp = state.oldTimeoutTimestamp
+
+            state_dict = {
+                "properties": [state_properties],
+                "keyRowAsUnsafe": [state_key_row_as_binary],
+                "object": [state_object],
+                "oldTimeoutTimestamp": [state_old_timeout_timestamp],
+            }
+            return pd.DataFrame.from_dict(state_dict)
+
+        def construct_record_batch(
+            pdfs: list,
+            pdf_data_cnt: int,
+            pdf_schema: StructType,
+            state_pdfs: list,
+            state_data_cnt: int,
+        ) -> "pa.RecordBatch":
+            """Construct a count/data/state RecordBatch from output DataFrames and states.
+
+            Arrow RecordBatch requires all columns to have the same number of
+            rows, so data and state are padded with empty rows to the max of the
+            two counts; the count column records the real (unpadded) sizes.
+            """
+            max_data_cnt = max(1, max(pdf_data_cnt, state_data_cnt))
+
+            # Only the first row of the count column is meaningful; the rest
+            # repeat the same values for friendlier compression.
+            count_dict = {
+                "dataCount": [pdf_data_cnt] * max_data_cnt,
+                "stateCount": [state_data_cnt] * max_data_cnt,
+            }
+            count_pdf = pd.DataFrame.from_dict(count_dict)
+
+            empty_row_cnt_in_data = max_data_cnt - pdf_data_cnt
+            empty_row_cnt_in_state = max_data_cnt - state_data_cnt
+
+            empty_rows_pdf = pd.DataFrame(
+                dict.fromkeys(pdf_schema.names),
+                index=[x for x in range(0, empty_row_cnt_in_data)],
+            )
+            empty_rows_state = pd.DataFrame(
+                columns=["properties", "keyRowAsUnsafe", "object", "oldTimeoutTimestamp"],
+                index=[x for x in range(0, empty_row_cnt_in_state)],
+            )
+
+            pdfs.append(empty_rows_pdf)
+            state_pdfs.append(empty_rows_state)
+
+            merged_pdf = pd.concat(pdfs, ignore_index=True)
+            merged_state_pdf = pd.concat(state_pdfs, ignore_index=True)
+
+            # Fields map to _0=count, _1=output data, _2=state data.
+            data = [count_pdf, merged_pdf, merged_state_pdf]
+            schema = StructType(
+                [
+                    StructField("_0", result_count_df_type),
+                    StructField("_1", pdf_schema),
+                    StructField("_2", result_state_df_type),
+                ]
+            )
+            return PandasToArrowConversion.convert(
+                data,
+                schema,
+                timezone=runner_conf.timezone,
+                safecheck=runner_conf.safecheck,
+                arrow_cast=True,
+                assign_cols_by_name=runner_conf.assign_cols_by_name,
+                int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+            )
+
+        def func(
+            split_index: int,
+            batches: Iterator["pa.RecordBatch"],
+        ) -> Iterator["pa.RecordBatch"]:
+            """Apply applyInPandasWithState UDF.
+
+            The input batches carry the data columns plus a trailing state-info
+            column. Chunks are regrouped by grouping key (via the reused state
+            object), the UDF is invoked once per key with a lazy iterator of
+            data DataFrames and its state, and the output DataFrames plus updated
+            state are batched into count/data/state RecordBatches bounded by
+            arrow_max_records_per_batch.
+            """
+
+            def result_and_state_stream() -> Iterator[tuple]:
+                # The same state object is reused across all chunks of a group,
+                # so grouping by it is equivalent to grouping by key.
+                for state, group in itertools.groupby(
+                    gen_data_and_state(batches), key=lambda x: x[1]
+                ):
+                    # These must stay lazy - do not materialize the data chunks.
+                    data_gen = (data_pandas for data_pandas, _ in group)
+                    # Consume the first chunk to extract the grouping key series.
+                    first_elem = next(data_gen)
+                    key_series = [first_elem[o] for o in key_offsets]
+                    value_series_gen = (
+                        [x[o] for o in value_offsets]
+                        for x in itertools.chain([first_elem], data_gen)
+                    )
+                    yield (apply_udf_to_group(key_series, value_series_gen, state), state)
+
+            pdfs: list = []
+            state_pdfs: list = []
+            pdf_data_cnt = 0
+            state_data_cnt = 0
+
+            for result_iter, state in result_and_state_stream():
+                for pdf in result_iter:
+                    # Ignore empty pandas DataFrames.
+                    if len(pdf) > 0:
+                        pdf_data_cnt += len(pdf)
+                        pdfs.append(pdf)
+
+                        # Flush a batch once the record threshold is exceeded.
+                        if pdf_data_cnt > arrow_max_records_per_batch:
+                            yield construct_record_batch(
+                                pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
+                            )
+                            pdfs = []
+                            state_pdfs = []
+                            pdf_data_cnt = 0
+                            state_data_cnt = 0
+
+                # The state must be captured after the result iterator is fully
+                # consumed, so the UDF has run and the state is up to date.
+                state_pdfs.append(construct_state_pdf(state))
+                state_data_cnt += 1
+
+            # Flush the trailing batch if it has any data or state left.
+            if pdf_data_cnt > 0 or state_data_cnt > 0:
+                yield construct_record_batch(
+                    pdfs, pdf_data_cnt, return_type, state_pdfs, state_data_cnt
+                )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     if eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF:
         # We assume there is only one UDF here because grouped map doesn't
         # support combining multiple UDFs.
@@ -3740,40 +3973,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             else:
                 # mode == PROCESS_TIMER or mode == COMPLETE
                 return f(stateful_processor_api_client, mode, None, iter([]))
-
-    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
-        # We assume there is only one UDF here because grouped map doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
-        # distinguish between grouping attributes and data attributes
-        arg_offsets, f = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
-
-        def mapper(a):
-            """
-            The function receives (iterator of data, state) and performs extraction of key and
-            value from the data, with retaining lazy evaluation.
-
-            See `load_stream` in `ApplyInPandasWithStateSerializer` for more details on the input
-            and see `wrap_grouped_map_pandas_udf_with_state` for more details on how output will
-            be used.
-            """
-            from itertools import chain
-
-            state = a[1]
-            data_gen = (x[0] for x in a[0])
-
-            # We know there should be at least one item in the iterator/generator.
-            # Consume the first element to extract keys
-            first_elem = next(data_gen)
-            keys = [first_elem[o] for o in parsed_offsets[0][0]]
-
-            # This must be generator comprehension - do not materialize.
-            vals = ([x[o] for o in parsed_offsets[0][1]] for x in chain([first_elem], data_gen))
-
-            return f(keys, vals, state)
 
     else:
 
