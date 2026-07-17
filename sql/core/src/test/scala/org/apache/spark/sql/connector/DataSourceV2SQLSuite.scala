@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3356,6 +3356,27 @@ class DataSourceV2SQLSuiteV1Filter
       assert(outerStruct("inner").getComment().contains("inner struct"))
       val innerStruct = outerStruct("inner").dataType.asInstanceOf[StructType]
       assert(innerStruct("leaf").getComment().contains("leaf field"))
+    }
+
+    // A nested field inside an array element (`points.element.y`) can be commented and removed,
+    // matching the reach of `ALTER TABLE ... ALTER COLUMN points.element.y COMMENT`.
+    withTable("testcat.ns1.ns2.arr") {
+      sql(
+        "CREATE TABLE testcat.ns1.ns2.arr(" +
+          "id int, points array<struct<x: double, y: double>>) USING foo")
+
+      def yField(): StructField = {
+        val elem = spark.table("testcat.ns1.ns2.arr").schema("points")
+          .dataType.asInstanceOf[ArrayType].elementType.asInstanceOf[StructType]
+        elem("y")
+      }
+
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS 'y in array')")
+      assert(yField().getComment().contains("y in array"))
+
+      // IS NULL removes the array-element field comment.
+      sql("COMMENT ON TABLE testcat.ns1.ns2.arr COLUMN (points.element.y IS NULL)")
+      assert(yField().getComment().isEmpty)
     }
   }
 
