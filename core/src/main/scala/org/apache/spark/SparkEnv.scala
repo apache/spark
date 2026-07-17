@@ -101,7 +101,7 @@ class SparkEnv (
   private val shuffleManagerInitLatch = new CountDownLatch(1)
 
   /**
-   * The [[BlockingShuffleManager]] (configured by spark.shuffle.manager), which serves all regular,
+   * The `BlockingShuffleManager` (configured by spark.shuffle.manager), which serves all regular,
    * materialized shuffle dependencies and owns block-by-id resolution. Use this when the intent is
    * specifically the blocking manager -- e.g. inspecting its concrete type. To serve a specific
    * shuffle's reads/writes, use `shuffleManagerFor`, which routes by dependency type; to resolve a
@@ -110,20 +110,20 @@ class SparkEnv (
   private[spark] def blockingShuffleManager: BlockingShuffleManager = _blockingShuffleManager
 
   /**
-   * The [[PipelinedShuffleManager]] (configured by spark.shuffle.manager.incremental, defaulting to
+   * The `PipelinedShuffleManager` (configured by spark.shuffle.manager.incremental, defaulting to
    * the built-in streaming manager) that serves pipelined shuffle dependencies. A pipelined shuffle
    * is read incrementally and served out-of-band, so this manager never provides a
-   * [[ShuffleBlockResolver]] of its own.
+   * `ShuffleBlockResolver` of its own.
    */
   private[spark] def pipelinedShuffleManager: PipelinedShuffleManager = _pipelinedShuffleManager
 
   /**
-   * The [[ShuffleBlockResolver]] used to resolve shuffle blocks by id (reads, push-merge, and
+   * The `ShuffleBlockResolver` used to resolve shuffle blocks by id (reads, push-merge, and
    * decommission migration), or `None` before the shuffle manager is initialized. Block resolution
    * is only ever needed for regular, materialized shuffles, so it always comes from the blocking
    * manager (the only manager that produces block-manager-addressed blocks); a pipelined shuffle is
    * served out-of-band and never resolved here. Callers that only need to resolve a block should
-   * use this rather than reaching through a [[ShuffleManager]].
+   * use this rather than reaching through a `ShuffleManager`.
    */
   private[spark] def shuffleBlockResolver: Option[ShuffleBlockResolver] =
     Option(_blockingShuffleManager).map(_.shuffleBlockResolver)
@@ -138,7 +138,7 @@ class SparkEnv (
   def shuffleManager: ShuffleManager = _blockingShuffleManager
 
   /**
-   * The [[ShuffleManager]] that serves the given shuffle, chosen by dependency type: a
+   * The `ShuffleManager` that serves the given shuffle, chosen by dependency type: a
    * [[PipelinedShuffleDependency]] is served by the pipelined manager
    * (spark.shuffle.manager.incremental, defaulting to the built-in streaming manager), every other
    * [[ShuffleDependency]] by the blocking manager (spark.shuffle.manager). This is the single
