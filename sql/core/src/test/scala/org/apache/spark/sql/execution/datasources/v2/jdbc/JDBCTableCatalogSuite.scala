@@ -230,7 +230,7 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
   }
 
   test("DatabricksDialect recognizes syntax errors in messages") {
-    val exception = new SQLException("[PARSE_SYNTAX_ERROR] Syntax error at or near 'SQL'", "07000")
+    val exception = new SQLException("[parse_syntax_error] Syntax error at or near 'SQL'", "07000")
     val dialect = JdbcDialects.get("jdbc:databricks://account.cloud.databricks.com")
     assert(dialect.isSyntaxErrorBestEffort(exception))
   }

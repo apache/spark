@@ -55,10 +55,12 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     case _ => None
   }
 
-  // The driver may report SYNTAX_ERROR only in the message.
+  // See https://docs.databricks.com/aws/en/error-messages/sqlstates.
+  // The driver may report syntax errors with a non-class-42 SQLState.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
     Option(exception.getSQLState).exists(_.startsWith("42")) ||
-      Option(exception.getMessage).exists(_.contains("SYNTAX_ERROR"))
+      Option(exception.getMessage)
+        .exists(_.toUpperCase(Locale.ROOT).contains("SYNTAX_ERROR"))
   }
 
   override def quoteIdentifier(colName: String): String = {
