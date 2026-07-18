@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.optimizer
+package org.apache.spark.sql.execution.planmerging
 
 import scala.collection.mutable
 
@@ -62,8 +62,8 @@ object PlanMerger {
 
   // Global counter for generating unique names for propagated filter attributes across all
   // PlanMerger instances.
-  private[optimizer] val curId = new java.util.concurrent.atomic.AtomicLong()
-  private[optimizer] def newId: Long = curId.getAndIncrement()
+  private[planmerging] val curId = new java.util.concurrent.atomic.AtomicLong()
+  private[planmerging] def newId: Long = curId.getAndIncrement()
 }
 
 /**
