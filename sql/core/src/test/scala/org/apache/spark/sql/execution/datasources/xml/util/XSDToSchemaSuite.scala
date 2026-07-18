@@ -130,6 +130,86 @@ class XSDToSchemaSuite extends SharedSparkSession {
     assert(parsedSchema === expectedSchema)
   }
 
+  test("SPARK-56486: extendDecimalPrecision widens decimals and caps at max precision") {
+    val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "decimal-with-restriction.xsd")))
+    val widenedSchema = XSDToSchema.extendDecimalPrecision(parsedSchema)
+    // decimal_type_3 (12, 6) -> (18, 6); the other two are already at precision 38 (the cap)
+    // and so are left unchanged.
+    val expectedSchema = buildSchema(
+      field("decimal_type_3", DecimalType(18, 6), nullable = false),
+      field("decimal_type_1", DecimalType(38, 18), nullable = false),
+      field("decimal_type_2", DecimalType(38, 2), nullable = false)
+    )
+    assert(widenedSchema === expectedSchema)
+  }
+
+  test("SPARK-56486: extendDecimalPrecision recurses into nested struct and array decimals") {
+    val xsdString =
+      """<?xml version="1.0" encoding="UTF-8" ?>
+        |<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+        |  <xs:element name="root">
+        |    <xs:complexType>
+        |      <xs:sequence>
+        |        <xs:element name="nested">
+        |          <xs:complexType>
+        |            <xs:sequence>
+        |              <xs:element name="amount">
+        |                <xs:simpleType>
+        |                  <xs:restriction base="xs:decimal">
+        |                    <xs:totalDigits value="20"/>
+        |                    <xs:fractionDigits value="5"/>
+        |                  </xs:restriction>
+        |                </xs:simpleType>
+        |              </xs:element>
+        |            </xs:sequence>
+        |          </xs:complexType>
+        |        </xs:element>
+        |        <xs:element name="prices" maxOccurs="unbounded">
+        |          <xs:simpleType>
+        |            <xs:restriction base="xs:decimal">
+        |              <xs:totalDigits value="10"/>
+        |              <xs:fractionDigits value="2"/>
+        |            </xs:restriction>
+        |          </xs:simpleType>
+        |        </xs:element>
+        |      </xs:sequence>
+        |    </xs:complexType>
+        |  </xs:element>
+        |</xs:schema>
+        |""".stripMargin
+    val widenedSchema = XSDToSchema.extendDecimalPrecision(XSDToSchema.read(xsdString))
+    val expectedSchema = StructType(StructField("root",
+      StructType(
+        StructField("nested",
+          StructType(StructField("amount", DecimalType(25, 5), false) :: Nil), false) ::
+        StructField("prices", ArrayType(DecimalType(12, 2)), false) :: Nil),
+      false) :: Nil)
+    assert(widenedSchema === expectedSchema)
+  }
+
+  test("SPARK-56486: extendDecimalPrecision respects an explicit maxPrecision") {
+    val xsdString =
+      """<?xml version="1.0" encoding="UTF-8" ?>
+        |<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+        |  <xs:element name="amount">
+        |    <xs:simpleType>
+        |      <xs:restriction base="xs:decimal">
+        |        <xs:totalDigits value="20"/>
+        |        <xs:fractionDigits value="5"/>
+        |      </xs:restriction>
+        |    </xs:simpleType>
+        |  </xs:element>
+        |</xs:schema>
+        |""".stripMargin
+    val parsedSchema = XSDToSchema.read(xsdString)
+    // read() leaves only 20 - 5 = 15 integer digits, which is where the silent truncation occurs.
+    assert(parsedSchema === buildSchema(field("amount", DecimalType(20, 5), nullable = false)))
+    val widenedSchema = XSDToSchema.extendDecimalPrecision(parsedSchema, maxPrecision = 22)
+    // p + s = 25, but the explicit cap of 22 wins.
+    val expectedSchema = buildSchema(field("amount", DecimalType(22, 5), nullable = false))
+    assert(widenedSchema === expectedSchema)
+  }
+
   test("Test ref attribute / Issue 617") {
     val parsedSchema = XSDToSchema.read(new Path(testFile(resDir + "ref-attribute.xsd")))
     val expectedSchema = buildSchema(

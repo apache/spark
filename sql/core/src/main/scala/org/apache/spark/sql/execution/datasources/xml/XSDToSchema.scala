@@ -66,6 +66,39 @@ object XSDToSchema extends Logging{
     getStructType(xmlSchema)
   }
 
+  /**
+   * Widens every [[DecimalType]] in the given schema so that decimals inferred from an XSD's
+   * `totalDigits`/`fractionDigits` facets can hold their full integer range without silent
+   * truncation. `read` maps `totalDigits=t, fractionDigits=f` to `DecimalType(t, f)`, which is
+   * correct per the W3C XML Schema spec but leaves only `t - f` integer digits. Because Spark's
+   * decimal scale is fixed while the XSD `fractionDigits` facet is only a maximum, values that
+   * use fewer fractional digits and more integer digits overflow the precision and are silently
+   * read as null. This opt-in utility raises each `DecimalType(p, s)` to
+   * `DecimalType(min(maxPrecision, p + s), s)`, recursing into nested struct fields and array
+   * elements. It does not change `read`'s default inference, so existing callers are unaffected.
+   *
+   * @param schema the schema returned by `read`
+   * @param maxPrecision the maximum precision a widened decimal may reach; must not exceed
+   *                     [[DecimalType.MAX_PRECISION]]
+   * @return a copy of the schema with decimal precisions widened
+   */
+  def extendDecimalPrecision(
+      schema: StructType,
+      maxPrecision: Int = DecimalType.MAX_PRECISION): StructType = {
+    StructType(schema.map { field =>
+      field.copy(dataType = extendDecimalType(field.dataType, maxPrecision))
+    })
+  }
+
+  private def extendDecimalType(dataType: DataType, maxPrecision: Int): DataType = dataType match {
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType(math.min(maxPrecision, precision + scale), scale)
+    case struct: StructType =>
+      extendDecimalPrecision(struct, maxPrecision)
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(extendDecimalType(elementType, maxPrecision), containsNull)
+    case other => other
+  }
 
   private def getStructField(xmlSchema: XmlSchema, schemaType: XmlSchemaType): StructField = {
     schemaType match {
