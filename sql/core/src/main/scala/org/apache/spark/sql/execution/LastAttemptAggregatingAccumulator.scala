@@ -24,6 +24,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{AccumulatorV2, LastAttemptAccumulator, Utils}
 
+// resultExpressions/conf are re-declared as ctor params so Scala emits non-transient subclass
+// fields; the base class marks them @transient, but these duplicates survive task serialization
+// and keep copyAndReset()/outputSchema working on executors.
 class LastAttemptAggregatingAccumulator private[execution](
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
@@ -44,9 +47,10 @@ class LastAttemptAggregatingAccumulator private[execution](
     conf)
   with LastAttemptAccumulator[InternalRow, InternalRow, InternalRow] {
 
-  // Snapshot the schema before task serialization drops transient result expressions. On the driver,
-  // the last-attempt merge path compares this accumulator with copies returned from tasks; those
-  // task-side copies may no longer be able to lazily rebuild AggregatingAccumulator.schema.
+  // Snapshot the schema before task serialization drops transient result expressions. On
+  // the driver, the last-attempt merge path compares this accumulator with copies returned
+  // from tasks; those task-side copies may no longer be able to lazily rebuild
+  // AggregatingAccumulator.schema.
   private val outputSchema = schema
 
   override protected def partialMergeVal: InternalRow = {
