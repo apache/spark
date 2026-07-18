@@ -2,171 +2,230 @@
 Section A - MIN (non-invertible)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 MIN sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MIN naive (current, baseline)                      4350           4380          30          0.1       16592.3       1.0X
-MIN segtree (default)                               433            442          10          0.6        1652.8      10.0X
-MIN segtree (blockSize=256)                        2259           2266           9          0.1        8617.9       1.9X
+MIN naive (current, baseline)                      3311           3407          96          0.1       12628.8       1.0X
+MIN segtree (default)                               306            318          12          0.9        1165.4      10.8X
+MIN monotonic deque (new)                           108            116           9          2.4         411.1      30.7X
 
 
 ================================================================================================
 Section A - MAX (non-invertible)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 MAX sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-MAX naive (current, baseline)                      4113           4124          21          0.1       15690.6       1.0X
-MAX segtree (default)                               415            420           3          0.6        1582.0       9.9X
-MAX segtree (blockSize=256)                        2279           2288           9          0.1        8692.0       1.8X
+MAX naive (current, baseline)                      4072           5071        1101          0.1       15533.0       1.0X
+MAX segtree (default)                               436           1207        1260          0.6        1664.2       9.3X
+MAX monotonic deque (new)                           110            122          13          2.4         419.9      37.0X
 
 
 ================================================================================================
 Section A - SUM (Spark has no inverse; full recompute)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM sliding window, W=1001, 256K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive (current, baseline)                      4828           4870          61          0.1       18418.4       1.0X
-SUM segtree (default)                               431            436           6          0.6        1643.9      11.2X
-SUM segtree (blockSize=256)                        2286           2295          13          0.1        8720.2       2.1X
+SUM naive (current, baseline)                      3335           3421         113          0.1       12723.3       1.0X
+SUM segtree (default)                               290            299          13          0.9        1105.5      11.5X
+SUM monotonic deque (new)                          3298           3352          33          0.1       12580.8       1.0X
 
 
 ================================================================================================
 Section A - COUNT
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 COUNT sliding window, W=1001, 256K rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-COUNT naive (current, baseline)                    3867           3883          13          0.1       14751.9       1.0X
-COUNT segtree (default)                             415            417           3          0.6        1582.8       9.3X
-COUNT segtree (blockSize=256)                      2216           2220           7          0.1        8453.8       1.7X
+COUNT naive (current, baseline)                    2840           2930         101          0.1       10835.0       1.0X
+COUNT segtree (default)                             256            266           6          1.0         978.2      11.1X
+COUNT monotonic deque (new)                        2854           2903          39          0.1       10888.2       1.0X
 
 
 ================================================================================================
 Section A - AVG (multi-buffer)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 AVG sliding window, W=1001, 192K rows:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-AVG naive (current, baseline)                      4483           4495          14          0.0       22804.2       1.0X
-AVG segtree (default)                               426            435           8          0.5        2165.9      10.5X
-AVG segtree (blockSize=256)                        1551           1566          18          0.1        7890.5       2.9X
+AVG naive (current, baseline)                      3612           3635          24          0.1       18373.9       1.0X
+AVG segtree (default)                               265            280          19          0.7        1345.4      13.7X
+AVG monotonic deque (new)                          3681           3721          35          0.1       18724.5       1.0X
 
 
 ================================================================================================
 Section A - STDDEV_SAMP (multi-buffer, stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 STDDEV_SAMP sliding window, W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-STDDEV_SAMP naive (current, baseline)                         97349          97405          59          0.0       48674.4       1.0X
-STDDEV_SAMP segtree (default)                                  5628           5631           3          0.4        2813.9      17.3X
-STDDEV_SAMP segtree (blockSize=256)                          113685         113987         289          0.0       56842.3       0.9X
+STDDEV_SAMP naive (current, baseline)                        100017         102789        2613          0.0       50008.7       1.0X
+STDDEV_SAMP segtree (default)                                  3838           3949          96          0.5        1918.9      26.1X
+STDDEV_SAMP monotonic deque (new)                            105070         106957        3147          0.0       52534.8       1.0X
 
 
 ================================================================================================
 Section B - W=10 scaling (stress: Pareto loss zone)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM scaling, W=11, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=11                                     1003           1012           8          2.0         501.6       1.0X
-SUM segtree (default) W=11                         2378           2384           9          0.8        1188.8       0.4X
+SUM naive W=11                                      841            875          58          2.4         420.6       1.0X
+SUM segtree (default) W=11                         1675           1720          49          1.2         837.5       0.5X
 
 
 ================================================================================================
 Section B - W=50 scaling (stress: Pareto loss zone)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM scaling, W=51, 2M rows (stress):      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=51                                     2377           2395          24          0.8        1188.5       1.0X
-SUM segtree (default) W=51                         2667           2683          17          0.7        1333.7       0.9X
+SUM naive W=51                                     1938           2019          92          1.0         969.2       1.0X
+SUM segtree (default) W=51                         2124           2146          39          0.9        1061.8       0.9X
 
 
 ================================================================================================
 Section B - W=201 scaling
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM scaling, W=201, 1M rows:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=201                                    3588           3620          39          0.3        3588.1       1.0X
-SUM segtree (default) W=201                        1465           1474          10          0.7        1465.1       2.4X
+SUM naive W=201                                    3018           3113          96          0.3        3018.0       1.0X
+SUM segtree (default) W=201                        1110           1147          31          0.9        1110.3       2.7X
 
 
 ================================================================================================
 Section B - W=4001 scaling (stress, + bs=256 cross-block)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM scaling, W=4001, 2M rows (stress):    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-SUM naive W=4001                                 129657         129727          67          0.0       64828.5       1.0X
-SUM segtree (default) W=4001                       3834           3858          24          0.5        1916.8      33.8X
-SUM segtree (blockSize=256) W=4001               110788         111483         748          0.0       55393.8       1.2X
+SUM naive W=4001                                 100129         102428        2149          0.0       50064.5       1.0X
+SUM segtree (default) W=4001                       2690           2728          40          0.7        1345.0      37.2X
+SUM segtree (blockSize=256) W=4001                90352          92143        1901          0.0       45175.8       1.1X
 
 
 ================================================================================================
 Section F - spill regression guard (String, stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 MAX String spill guard, W=1001, 1M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------
-MAX naive (String)                                        88459          88494          43          0.0       88459.0       1.0X
-MAX segtree default (String)                               3213           3227          21          0.3        3213.4      27.5X
+MAX naive (String)                                          422            451          27          2.4         422.1       1.0X
+MAX segtree default (String)                                401            415          12          2.5         400.9       1.1X
 
 
 ================================================================================================
 Section C - N-sweep small (stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM N-sweep (segtree-only), W=1001, 2M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=2M                                     3314           3319           6          0.6        1657.1       1.0X
+SUM segtree (default) N=2M                                     2328           2449         186          0.9        1163.8       1.0X
 
 
 ================================================================================================
 Section C - N-sweep mid (stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM N-sweep (segtree-only), W=1001, 8M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=8M                                    15970          16004          42          0.5        1996.3       1.0X
+SUM segtree (default) N=8M                                    11966          12081         181          0.7        1495.7       1.0X
 
 
 ================================================================================================
 Section C - N-sweep large (stress)
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1011-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
 SUM N-sweep (segtree-only), W=1001, 16M rows (stress):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------
-SUM segtree (default) N=16M                                    38877          38998         121          0.4        2429.8       1.0X
+SUM segtree (default) N=16M                                    30038          30672         574          0.5        1877.4       1.0X
 
 
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Worst-Case: Increasing)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
+MIN sliding window (Increasing), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Increasing)                                     3315           3379          65          0.6        1657.4       1.0X
+MIN monotonic deque (Increasing)                              536            561          27          3.7         268.0       6.2X
+
+
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Best-Case: Decreasing)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
+MIN sliding window (Decreasing), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Decreasing)                                     3171           3197          24          0.6        1585.6       1.0X
+MIN monotonic deque (Decreasing)                              523            528           4          3.8         261.3       6.1X
+
+
+================================================================================================
+Section G - MIN Monotonic Deque vs Segment Tree (Random)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
+MIN sliding window (Random), W=100001, 2M rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+MIN segtree (Random)                                     3364           3834         574          0.6        1681.8       1.0X
+MIN monotonic deque (Random)                              553            579          22          3.6         276.3       6.1X
+
+================================================================================================
+Section H - MIN W=11 scaling (stress, 2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
+MIN sliding window, W=11, 2M rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MIN naive (current, baseline)                       935            994          62          2.1         467.5       1.0X
+MIN segtree (default)                              1716           1747          30          1.2         857.9       0.5X
+MIN monotonic deque (new)                           555            574          20          3.6         277.7       1.7X
+
+
+================================================================================================
+Section H - MAX W=11 scaling (stress, 2M rows)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 23.0.1+11 on Mac OS X 15.1.1
+Apple M1
+MAX sliding window, W=11, 2M rows:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+MAX naive (current, baseline)                       793            804          12          2.5         396.5       1.0X
+MAX segtree (default)                              1756           2061         387          1.1         878.0       0.5X
+MAX monotonic deque (new)                           689            706          23          2.9         344.6       1.2X

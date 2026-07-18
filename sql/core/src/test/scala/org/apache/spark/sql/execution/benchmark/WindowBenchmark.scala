@@ -146,15 +146,17 @@ object WindowBenchmark extends SqlBasedBenchmark {
     def runSectionA(
         aggFn: String, iters: Int, rows: Long, halfW: Int, stressMark: String): Unit = {
       val frame = frameFor(halfW)
-      val dNaive = digest(aggFn, frame)
-      val dSeg = digest(aggFn, frame, SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
-      val dSegBs = digest(aggFn, frame,
-        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-        SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256")
+      val dNaive = digest(aggFn, frame,
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false")
+      val dSeg = digest(aggFn, frame,
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
+      val dMonotonic = digest(aggFn, frame,
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true")
       require(dNaive == dSeg,
         s"$aggFn segtree digest mismatch: naive=$dNaive seg=$dSeg")
-      require(dNaive == dSegBs,
-        s"$aggFn segtree (bs=256) digest mismatch: naive=$dNaive seg=$dSegBs")
+      require(dNaive == dMonotonic,
+        s"$aggFn monotonic deque digest mismatch: naive=$dNaive monotonic=$dMonotonic")
 
       val W = 2 * halfW + 1
       val benchmark = new Benchmark(
@@ -162,24 +164,26 @@ object WindowBenchmark extends SqlBasedBenchmark {
         rows, output = output)
       val nNaive = s"$aggFn naive (current, baseline)"
       val nSeg = s"$aggFn segtree (default)"
-      val nSegBs = s"$aggFn segtree (blockSize=256)"
-      allCaseNames ++= Seq(nNaive, nSeg, nSegBs)
+      val nMonotonic = s"$aggFn monotonic deque (new)"
+      allCaseNames ++= Seq(nNaive, nSeg, nMonotonic)
 
       benchmark.addCase(nNaive, numIters = iters) { _ =>
         currentCase = nNaive
-        spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
-      }
-      benchmark.addCase(nSeg, numIters = iters) { _ =>
-        currentCase = nSeg
-        withSQLConf(SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
+        withSQLConf(SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false") {
           spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
         }
       }
-      benchmark.addCase(nSegBs, numIters = iters) { _ =>
-        currentCase = nSegBs
+      benchmark.addCase(nSeg, numIters = iters) { _ =>
+        currentCase = nSeg
         withSQLConf(
-          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true",
-          SQLConf.WINDOW_SEGMENT_TREE_BLOCK_SIZE.key -> "256") {
+          SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
+          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
+        }
+      }
+      benchmark.addCase(nMonotonic, numIters = iters) { _ =>
+        currentCase = nMonotonic
+        withSQLConf(SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true") {
           spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
         }
       }
@@ -274,15 +278,64 @@ object WindowBenchmark extends SqlBasedBenchmark {
       benchmark.run()
     }
 
+    def setupIncreasingTable(n: Long): Unit = {
+      spark.range(n)
+        .selectExpr("id", "cast(id as int) as v")
+        .coalesce(1)
+        .createOrReplaceTempView("t")
+    }
+
+    def setupDecreasingTable(n: Long): Unit = {
+      spark.range(n)
+        .selectExpr("id", s"cast(($n - id) as int) as v")
+        .coalesce(1)
+        .createOrReplaceTempView("t")
+    }
+
+    def runSectionG(
+        aggFn: String, iters: Int, rows: Long, halfW: Int, pattern: String): Unit = {
+      val frame = frameFor(halfW)
+      val dSeg = digest(aggFn, frame,
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+        SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true")
+      val dMonotonic = digest(aggFn, frame,
+        SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true")
+      require(dSeg == dMonotonic,
+        s"$aggFn $pattern digest mismatch: seg=$dSeg monotonic=$dMonotonic")
+
+      val W = 2 * halfW + 1
+      val benchmark = new Benchmark(
+        s"$aggFn sliding window ($pattern), W=$W, ${rowsLabel(rows)} rows",
+        rows, output = output)
+      val nSeg = s"$aggFn segtree ($pattern)"
+      val nMonotonic = s"$aggFn monotonic deque ($pattern)"
+      allCaseNames ++= Seq(nSeg, nMonotonic)
+
+      benchmark.addCase(nSeg, numIters = iters) { _ =>
+        currentCase = nSeg
+        withSQLConf(
+          SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "false",
+          SQLConf.WINDOW_SEGMENT_TREE_ENABLED.key -> "true") {
+          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
+        }
+      }
+      benchmark.addCase(nMonotonic, numIters = iters) { _ =>
+        currentCase = nMonotonic
+        withSQLConf(SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED.key -> "true") {
+          spark.sql(s"SELECT $aggFn(v) $frame FROM t").noop()
+        }
+      }
+      benchmark.run()
+    }
+
     try {
       if (smokeMode) {
         setupIntTable(smokeRowCount)
         runBenchmark("SMOKE: Section A MIN") {
           runSectionA("MIN", ITERS_STRESS, smokeRowCount, smokeHalfW, "")
         }
-        runBenchmark("SMOKE: Section B SUM W sweep point") {
-          runSectionB(
-            smokeHalfW, stressBs = smokeHalfW >= 2000, smokeRowCount, ITERS_STRESS, "")
+        runBenchmark("SMOKE: Section A MAX") {
+          runSectionA("MAX", ITERS_STRESS, smokeRowCount, smokeHalfW, "")
         }
       } else {
         setupIntTable(A_N_INT)
@@ -342,6 +395,29 @@ object WindowBenchmark extends SqlBasedBenchmark {
         setupIntTable(C_N_LARGE)
         runBenchmark("Section C - N-sweep large (stress)") {
           runSectionC(C_N_LARGE)
+        }
+
+        setupIncreasingTable(2000000L)
+        runBenchmark("Section G - MIN Monotonic Deque vs Segment Tree (Worst-Case: Increasing)") {
+          runSectionG("MIN", ITERS_NORMAL, 2000000L, 50000, "Increasing")
+        }
+
+        setupDecreasingTable(2000000L)
+        runBenchmark("Section G - MIN Monotonic Deque vs Segment Tree (Best-Case: Decreasing)") {
+          runSectionG("MIN", ITERS_NORMAL, 2000000L, 50000, "Decreasing")
+        }
+
+        setupIntTable(2000000L)
+        runBenchmark("Section G - MIN Monotonic Deque vs Segment Tree (Random)") {
+          runSectionG("MIN", ITERS_NORMAL, 2000000L, 50000, "Random")
+        }
+
+        setupIntTable(2000000L)
+        runBenchmark("Section H - MIN W=11 scaling (stress, 2M rows)") {
+          runSectionA("MIN", ITERS_STRESS, 2000000L, 5, "")
+        }
+        runBenchmark("Section H - MAX W=11 scaling (stress, 2M rows)") {
+          runSectionA("MAX", ITERS_STRESS, 2000000L, 5, "")
         }
       }
 
