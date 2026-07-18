@@ -167,6 +167,7 @@ class BitmapExpressionUtilsSuite extends SparkFunSuite {
     // "empty bitmap" test above which uses a zero-filled NUM_BYTES array.
     assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, 0))
     assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, 100))
-    assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap, BitmapExpressionUtils.NUM_BITS - 1))
+    assert(!BitmapExpressionUtils.bitmapContains(zeroLengthBitmap,
+      BitmapExpressionUtils.NUM_BITS - 1))
   }
 }

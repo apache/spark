@@ -31097,11 +31097,11 @@ def bitmap_contains(bitmap: "ColumnOrName", bit_position: "ColumnOrName") -> Col
     ...     sf.bitmap_contains(sf.to_binary(df.a, sf.lit("hex")), sf.lit(0)),
     ...     sf.bitmap_contains(sf.to_binary(df.b, sf.lit("hex")), sf.lit(0)),
     ... ).show()
-    +--------------------------------------+--------------------------------------+
-    |bitmap_contains(to_binary(a, hex), 0) |bitmap_contains(to_binary(b, hex), 0)|
-    +--------------------------------------+--------------------------------------+
-    |                                  true|                                 false|
-    +--------------------------------------+--------------------------------------+
+    +-------------------------------------+-------------------------------------+
+    |bitmap_contains(to_binary(a, hex), 0)|bitmap_contains(to_binary(b, hex), 0)|
+    +-------------------------------------+-------------------------------------+
+    |                                 true|                                false|
+    +-------------------------------------+-------------------------------------+
     """
     return _invoke_function_over_columns("bitmap_contains", bitmap, bit_position)
 

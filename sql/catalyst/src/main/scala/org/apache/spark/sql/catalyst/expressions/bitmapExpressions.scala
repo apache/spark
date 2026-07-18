@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType, NumericType, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType,
+  LongType, NumericType, StructType}
 
 @ExpressionDescription(
   usage = "_FUNC_(child) - Returns the bucket number for the given input child expression.",

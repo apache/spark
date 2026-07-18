@@ -1,2 +1,2 @@
-Project [static_invoke(BitmapExpressionUtils.bitmapContains(bytes#0, 0)) AS bitmap_contains(bytes, 0)#0]
+Project [static_invoke(BitmapExpressionUtils.bitmapContains(bytes#0, cast(0 as bigint))) AS bitmap_contains(bytes, 0)#0]
 +- LocalRelation <empty>, [id#0L, bytes#0]
