@@ -2786,4 +2786,28 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
       "tasks in the default profile must not be counted against a different profile")
   }
 
+  test("outstandingTasksForOtherWorkInProfile does not double-count a zombie + live attempt") {
+    // A retried/killed stage can have both a zombie (superseded) attempt and a live attempt in the
+    // map at once; the live attempt re-runs the zombie's outstanding tasks, so only the live
+    // attempt's demand should count. Counting both would inflate occupancy and could spuriously
+    // fail a pipelined group with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT.
+    val taskScheduler = setupScheduler()
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+
+    // Attempt 0 of stage 0: 4 tasks, none started. Mark it zombie (as if superseded).
+    val attempt0 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(attempt0)
+    taskScheduler.taskSetManagerForAttempt(0, 0).get.isZombie = true
+
+    // Attempt 1 of the SAME stage: the live retry, also 4 tasks.
+    val attempt1 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 1)
+    taskScheduler.submitTasks(attempt1)
+
+    // Both attempts are in the map, but only the live attempt's 4 tasks are outstanding -- not 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 4,
+      "a zombie attempt must not be counted alongside its live retry")
+    // Excluding the stage (as the group's own member) drops both attempts.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 0)
+  }
+
 }
