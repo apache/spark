@@ -100,6 +100,36 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_DRIVER_UI_SERVICE_ENABLED =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.enabled")
+      .doc("If true, Spark will create a dedicated Kubernetes Service for the Spark driver " +
+        "Web UI (separate from the headless driver service). When enabled, after the driver " +
+        "Web UI starts, Spark will patch the Service's targetPort to match the actual bound " +
+        "UI port, which allows using `spark.ui.port=0` (random port). Requires the driver's " +
+        "ServiceAccount to have `patch services` permission.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_UI_SERVICE_TYPE =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.type")
+      .doc("K8s Service type for the dedicated Spark driver Web UI Service " +
+        s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
+        "Supported values: ClusterIP, NodePort, LoadBalancer.")
+      .version("4.3.0")
+      .stringConf
+      .checkValues(Set("ClusterIP", "NodePort", "LoadBalancer"))
+      .createWithDefault("ClusterIP")
+
+  val KUBERNETES_DRIVER_UI_SERVICE_NAME =
+    ConfigBuilder("spark.kubernetes.driver.ui.service.name")
+      .doc("Optional override for the dedicated Spark driver Web UI Service name " +
+        s"(only applies when ${KUBERNETES_DRIVER_UI_SERVICE_ENABLED.key}=true). " +
+        "If unset, Spark derives the name as `<resourceNamePrefix>-ui-svc`.")
+      .version("4.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
