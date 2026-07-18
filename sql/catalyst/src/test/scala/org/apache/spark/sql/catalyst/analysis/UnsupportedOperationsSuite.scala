@@ -65,6 +65,31 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     streamRelation.select($"`count(*)`"),
     Seq("with streaming source", "start"))
 
+  private val emptyTableSpec = TableSpec(
+    properties = Map.empty,
+    provider = None,
+    options = Map.empty,
+    location = None,
+    comment = None,
+    collation = None,
+    serde = None,
+    external = false)
+
+  assertSupportedInBatchPlan(
+    "streaming table definition with streaming source",
+    CreateStreamingTableAsSelect(
+      name = batchRelation,
+      columns = Nil,
+      partitioning = Nil,
+      tableSpec = emptyTableSpec,
+      query = streamRelation,
+      originalText = "",
+      ifNotExists = false))
+
+  assertSupportedInBatchPlan(
+    "flow definition with streaming source",
+    CreateFlowCommand(batchRelation, streamRelation, comment = None))
+
 
   /*
     =======================================================================================

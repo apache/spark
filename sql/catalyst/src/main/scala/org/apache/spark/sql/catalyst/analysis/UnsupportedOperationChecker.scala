@@ -37,7 +37,16 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
  */
 object UnsupportedOperationChecker extends Logging {
 
+  private def isPipelineDefinition(plan: LogicalPlan): Boolean = plan match {
+    case _: CreateStreamingTableAsSelect | _: CreateStreamingTableAutoCdc |
+        _: CreateFlowCommand => true
+    case _ => false
+  }
+
   def checkForBatch(plan: LogicalPlan): Unit = {
+    if (isPipelineDefinition(plan)) {
+      return
+    }
     plan.foreachUp {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start(), or " +
