@@ -102,7 +102,9 @@ case class AdaptiveSparkPlanExec(
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) =>
         CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
-      case _ => SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+      case _ => SimpleCostEvaluator(
+        conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
+        conf.costEvaluatorCountLocalSortEnabled)
     }
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
@@ -125,11 +127,22 @@ case class AdaptiveSparkPlanExec(
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
+      // Must run before `ReplaceHashWithSortAgg`: converting a sort merge join to a shuffled hash
+      // join drops its child ordering, which `ReplaceHashWithSortAgg` would otherwise rely on to
+      // turn a hash aggregate into a sort aggregate.
+      ConvertSortMergeJoinToShuffledHashJoin(ensureRequirements),
+      // `CombineAdjacentAggregation` must run before `ReplaceHashWithSortAgg`: it combines a pair
+      // of adjacent partial and final aggregate into a single `Complete` mode aggregate, which
+      // `ReplaceHashWithSortAgg` can then replace with a sort aggregate when the ordering allows.
+      CombineAdjacentAggregation,
       ReplaceHashWithSortAgg,
-      RemoveRedundantSorts,
       RemoveRedundantWindowGroupLimits,
       DisableUnnecessaryBucketedScan,
-      OptimizeSkewedJoin(ensureRequirements)
+      OptimizeSkewedJoin(ensureRequirements),
+      // `RemoveRedundantSorts` runs after `OptimizeSkewedJoin` so that it can also clean up the
+      // local sort left dangling right below the extra shuffle that skew join optimization may
+      // insert between two joins.
+      RemoveRedundantSorts
     ) ++ context.session.sessionState.adaptiveRulesHolder.queryStagePrepRules
   }
 

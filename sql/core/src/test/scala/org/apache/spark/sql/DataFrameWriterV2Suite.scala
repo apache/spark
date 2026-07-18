@@ -155,6 +155,53 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
       Seq())
   }
 
+  test("SPARK-57223: Append: extra column with special-char name is quoted correctly in error") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").withColumnRenamed("data", "b.c")
+          .writeTo("testcat.table_name").append()
+      },
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "extraColumns" -> "`b.c`")
+    )
+  }
+
+  test("SPARK-57223: by-position insert with extra nested struct field with special-char " +
+    "name is quoted correctly in error") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, info struct<a: bigint>) USING foo")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("INSERT INTO testcat.table_name " +
+          "SELECT id, named_struct('a', id, 'b.c', id) AS info FROM range(1)")
+      },
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "colName" -> "`info`",
+        "extraFields" -> "`b.c`")
+    )
+  }
+
+  test("SPARK-57223: by-position insert with missing nested struct field with special-char " +
+    "name is quoted correctly in error") {
+    spark.sql("CREATE TABLE testcat.table_name " +
+      "(id bigint, info struct<a: bigint, `b.c`: bigint>) USING foo")
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("INSERT INTO testcat.table_name " +
+          "SELECT id, named_struct('a', id) AS info FROM range(1)")
+      },
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "colName" -> "`info`",
+        "missingFields" -> "`b.c`")
+    )
+  }
+
   test("Append: fail if table does not exist") {
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("testcat.table_name").append()

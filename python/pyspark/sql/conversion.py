@@ -18,6 +18,7 @@
 import array
 import datetime
 import decimal
+import functools
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence, Union, overload
 
 import pyspark
@@ -981,6 +982,148 @@ class ArrowTableToRowsConversion:
     """
 
     @staticmethod
+    @functools.cache
+    def _should_manual_bulk() -> bool:
+        """
+        Whether ``_to_pylist`` should convert nested columns manually in bulk.
+
+        Internal helper for ``_to_pylist`` only; do not use externally. Returns True
+        when the installed PyArrow still materializes one Scalar per element in
+        ``to_pylist`` (apache/arrow#50326, fix expected in PyArrow 25.0.1 — adjust the
+        version below if it ships in a different release) and NumPy (used for the
+        offsets and validity buffers) is available.
+
+        This method and the manual bulk paths in ``_to_pylist`` should be removed once
+        the minimum supported PyArrow version contains the fix.
+        """
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("25.0.1"):
+            # Native to_pylist converts without per-element Scalars.
+            return False
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return False
+        return True
+
+    @staticmethod
+    def _to_pylist(column: Union["pa.Array", "pa.ChunkedArray"]) -> List[Any]:
+        """
+        Equivalent to ``column.to_pylist()``, but converts (nested) list, struct and map
+        columns in bulk instead of one scalar at a time. Structs become dicts (with
+        a fallback to ``to_pylist`` for duplicate field names, which raise ``ValueError``
+        there) and maps become lists of ``(key, value)`` tuples, matching
+        ``StructScalar.as_py`` and ``MapScalar.as_py`` exactly.
+
+        Internal helper for the worker and ``convert`` call sites; do not use
+        externally.
+
+        ``Array.to_pylist()`` materializes one Scalar per element; for list types each row
+        additionally allocates a C++ scalar, a Python Scalar wrapper and a Python Array
+        wrapper for the row's values before converting elements one by one, which is
+        several times slower than converting the flattened child values in a single pass
+        and slicing the resulting Python list per row (see apache/arrow#50326). The values
+        themselves are still converted by Arrow's own ``to_pylist``, so results are exactly
+        identical: ``None`` stays ``None`` and values inside numeric lists stay Python ints,
+        unlike a pandas round trip which would coerce them to floats/NaN. NumPy is used
+        only for the offsets (non-null integers) and the validity bitmap (booleans), so no
+        value coercion can occur.
+
+        This method should be removed (its call sites reverting to plain
+        ``column.to_pylist()``) once the minimum supported PyArrow version includes the
+        fix for apache/arrow#50326.
+        """
+        import pyarrow as pa
+
+        if not ArrowTableToRowsConversion._should_manual_bulk():
+            return column.to_pylist()
+
+        if isinstance(column, pa.ChunkedArray):
+            result = []
+            for chunk in column.chunks:
+                result.extend(ArrowTableToRowsConversion._to_pylist(chunk))
+            return result
+
+        if len(column) == 0:
+            return []
+
+        if pa.types.is_map(column.type):
+            # Maps have the same offsets layout as lists; each row becomes a
+            # list of (key, value) tuples, matching MapScalar.as_py.
+            n = len(column)
+            offsets = column.offsets.to_numpy(zero_copy_only=True).tolist()
+            start = offsets[0]
+            length = offsets[-1] - start
+            keys = ArrowTableToRowsConversion._to_pylist(column.keys.slice(start, length))
+            items = ArrowTableToRowsConversion._to_pylist(column.items.slice(start, length))
+            if column.null_count == 0:
+                return [
+                    list(
+                        zip(
+                            keys[offsets[i] - start : offsets[i + 1] - start],
+                            items[offsets[i] - start : offsets[i + 1] - start],
+                        )
+                    )
+                    for i in range(n)
+                ]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            return [
+                (
+                    list(
+                        zip(
+                            keys[offsets[i] - start : offsets[i + 1] - start],
+                            items[offsets[i] - start : offsets[i + 1] - start],
+                        )
+                    )
+                    if valid[i]
+                    else None
+                )
+                for i in range(n)
+            ]
+
+        elif pa.types.is_list(column.type) or pa.types.is_large_list(column.type):
+            n = len(column)
+            # List offset buffers never carry a validity bitmap, so this conversion is
+            # always zero-copy; zero_copy_only=True asserts that invariant and would
+            # fail loudly if a future Arrow list variant ever violated it.
+            offsets = column.offsets.to_numpy(zero_copy_only=True).tolist()
+            start = offsets[0]
+            flat = ArrowTableToRowsConversion._to_pylist(
+                column.values.slice(start, offsets[-1] - start)
+            )
+            if column.null_count == 0:
+                return [flat[offsets[i] - start : offsets[i + 1] - start] for i in range(n)]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            return [
+                flat[offsets[i] - start : offsets[i + 1] - start] if valid[i] else None
+                for i in range(n)
+            ]
+
+        elif pa.types.is_struct(column.type):
+            n = len(column)
+            names = [column.type.field(i).name for i in range(column.type.num_fields)]
+            if len(set(names)) != len(names):
+                # StructScalar.as_py raises ValueError on duplicate field names;
+                # let the generic path surface the same error.
+                return column.to_pylist()
+            fields = [
+                ArrowTableToRowsConversion._to_pylist(column.field(i))
+                for i in range(column.type.num_fields)
+            ]
+            if column.null_count == 0:
+                if not names:
+                    return [{} for _ in range(n)]
+                return [dict(zip(names, row)) for row in zip(*fields)]
+            valid = column.is_valid().to_numpy(zero_copy_only=False).tolist()
+            if not names:
+                return [{} if m else None for m in valid]
+            return [dict(zip(names, row)) if m else None for row, m in zip(zip(*fields), valid)]
+
+        return column.to_pylist()
+
+    @staticmethod
     def _need_converter(dataType: DataType) -> bool:
         if isinstance(dataType, NullType):
             return True
@@ -1306,7 +1449,11 @@ class ArrowTableToRowsConversion:
             ]
 
             columnar_data = [
-                [conv(v) for v in column.to_pylist()] if conv is not None else column.to_pylist()
+                (
+                    [conv(v) for v in ArrowTableToRowsConversion._to_pylist(column)]
+                    if conv is not None
+                    else ArrowTableToRowsConversion._to_pylist(column)
+                )
                 for column, conv in zip(table.columns, field_converters)
             ]
 

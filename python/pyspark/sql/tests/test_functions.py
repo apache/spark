@@ -3507,7 +3507,16 @@ class FunctionsTestsMixin:
 
     def test_variant_expressions(self):
         df = self.spark.createDataFrame(
-            [Row(json="""{ "a" : 1 }""", path="$.a"), Row(json="""{ "b" : 2 }""", path="$.b")]
+            [
+                Row(json="""{ "a" : 1 }""", path="$.a", newpath="$.z", arr="[1, 2]", arrpath="$"),
+                Row(
+                    json="""{ "b" : 2 }""",
+                    path="$.b",
+                    newpath="$.z",
+                    arr="[[3], 4]",
+                    arrpath="$[0]",
+                ),
+            ]
         )
         v = F.parse_json(df.json)
 
@@ -3521,6 +3530,44 @@ class FunctionsTestsMixin:
         check(
             df.select(F.to_json(F.variant_delete(v, F.lit(None)))),
             ['{"a":1}', '{"b":2}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_insert(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(df.select(F.to_json(F.try_variant_insert(v, df.path, F.lit(9)))), [None, None])
+        check(df.select(F.to_json(F.try_variant_insert(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        check(
+            df.select(F.to_json(F.variant_set(v, "$.z", F.lit(9), False))),
+            ['{"a":1}', '{"b":2}'],
+        )
+        check(df.select(F.to_json(F.variant_set(v, "$.z", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_set(v, df.newpath, F.lit(9)))),
+            ['{"a":1,"z":9}', '{"b":2,"z":9}'],
+        )
+        arr = F.parse_json(df.arr)
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(9)))),
+            ["[1,2,9]", "[[3],4,9]"],
+        )
+        check(df.select(F.to_json(F.variant_array_append(arr, "$", F.lit(None)))), [None, None])
+        check(
+            df.select(F.to_json(F.variant_array_append(arr, df.arrpath, F.lit(9)))),
+            ["[1,2,9]", "[[3,9],4]"],
         )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])

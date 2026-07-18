@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
+import org.apache.spark.sql.internal.SQLConf
 
 object ShufflePartitionsUtil extends Logging {
   final val SMALL_PARTITION_FACTOR = 0.2
@@ -47,7 +48,10 @@ object ShufflePartitionsUtil extends Logging {
       advisoryTargetSize: Long,
       minNumPartitions: Int,
       minPartitionSize: Long,
-      shuffleStageIds: Seq[Int] = Seq.empty): Seq[Seq[ShufflePartitionSpec]] = {
+      shuffleStageIds: Seq[Int] = Seq.empty,
+      maxReducerPartitionsPerTask: Int =
+        SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK.defaultValue.get
+  ): Seq[Seq[ShufflePartitionSpec]] = {
     assert(mapOutputStatistics.length == inputPartitionSpecs.length)
 
     if (mapOutputStatistics.isEmpty) {
@@ -66,14 +70,21 @@ object ShufflePartitionsUtil extends Logging {
       log"${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, actual target size " +
       log"${MDC(LogKeys.TARGET_SIZE, targetSize)}, minimum partition size: " +
       log"${MDC(LogKeys.PARTITION_SIZE, minPartitionSize)}")
+    if (maxReducerPartitionsPerTask < Int.MaxValue) {
+      logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_IDS, shuffleIds)}), maximum reducer " +
+        log"partitions per task: " +
+        log"${MDC(LogKeys.MAX_NUM_PARTITIONS, maxReducerPartitionsPerTask)}")
+    }
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {
       coalescePartitionsWithoutSkew(
-        mapOutputStatistics, targetSize, minPartitionSize, shuffleStageIds)
+        mapOutputStatistics, targetSize, minPartitionSize, shuffleStageIds,
+        maxReducerPartitionsPerTask)
     } else {
       coalescePartitionsWithSkew(
-        mapOutputStatistics, inputPartitionSpecs, targetSize, minPartitionSize, shuffleStageIds)
+        mapOutputStatistics, inputPartitionSpecs, targetSize, minPartitionSize, shuffleStageIds,
+        maxReducerPartitionsPerTask)
     }
   }
 
@@ -81,7 +92,8 @@ object ShufflePartitionsUtil extends Logging {
       mapOutputStatistics: Seq[Option[MapOutputStatistics]],
       targetSize: Long,
       minPartitionSize: Long,
-      shuffleStageIds: Seq[Int]): Seq[Seq[ShufflePartitionSpec]] = {
+      shuffleStageIds: Seq[Int],
+      maxReducerPartitionsPerTask: Int): Seq[Seq[ShufflePartitionSpec]] = {
     // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
     // we should skip it when calculating the `partitionStartIndices`.
     val validMetrics = mapOutputStatistics.flatten
@@ -104,7 +116,8 @@ object ShufflePartitionsUtil extends Logging {
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
     val newPartitionSpecs = coalescePartitionsAndGetSpecs(
-      0, numPartitions, validMetrics, targetSize, minPartitionSize)
+      0, numPartitions, validMetrics, targetSize, minPartitionSize,
+      maxReducerPartitionsPerTask)
     if (newPartitionSpecs.length < numPartitions) {
       attachDataSize(mapOutputStatistics, newPartitionSpecs)
     } else {
@@ -117,7 +130,8 @@ object ShufflePartitionsUtil extends Logging {
       inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
       targetSize: Long,
       minPartitionSize: Long,
-      shuffleStageIds: Seq[Int]): Seq[Seq[ShufflePartitionSpec]] = {
+      shuffleStageIds: Seq[Int],
+      maxReducerPartitionsPerTask: Int): Seq[Seq[ShufflePartitionSpec]] = {
     // Do not coalesce if any of the map output stats are missing or if not all shuffles have
     // partition specs, which should not happen in practice.
     if (!mapOutputStatistics.forall(_.isDefined) || !inputPartitionSpecs.forall(_.isDefined)) {
@@ -166,6 +180,7 @@ object ShufflePartitionsUtil extends Logging {
             validMetrics,
             targetSize,
             minPartitionSize,
+            maxReducerPartitionsPerTask,
             allowReturnEmpty = true)
           newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
             .foreach(spec => spec._1 ++= spec._2)
@@ -197,6 +212,7 @@ object ShufflePartitionsUtil extends Logging {
         validMetrics,
         targetSize,
         minPartitionSize,
+        maxReducerPartitionsPerTask,
         allowReturnEmpty = true)
       newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
         .foreach(spec => spec._1 ++= spec._2)
@@ -247,6 +263,7 @@ object ShufflePartitionsUtil extends Logging {
       mapOutputStatistics: Seq[MapOutputStatistics],
       targetSize: Long,
       minPartitionSize: Long,
+      maxReducerPartitionsPerTask: Int,
       allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
     // `minPartitionSize` is useful for cases like [64MB, 0.5MB, 64MB]: we can't do coalesce,
     // because merging 0.5MB to either the left or right partition will exceed the target size.
@@ -264,6 +281,10 @@ object ShufflePartitionsUtil extends Logging {
       }
     }
 
+    def isWithinMaxReducerPartitions(rangeStart: Int, rangeEnd: Int): Boolean = {
+      rangeEnd - rangeStart <= maxReducerPartitionsPerTask
+    }
+
     while (i < end) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
       var totalSizeOfCurrentPartition = 0L
@@ -273,13 +294,21 @@ object ShufflePartitionsUtil extends Logging {
         j += 1
       }
 
-      // If including the `totalSizeOfCurrentPartition` would exceed the target size and the
-      // current size has reached the `minPartitionSize`, then start a new coalesced partition.
-      if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {
+      // The reducer-partition limit is a hard bound, so it takes precedence over the size-based
+      // packing and minimum partition size. Advance the split point even for an empty range so
+      // empty reducer partitions count toward the bound without creating an empty task.
+      if (i > latestSplitPoint && i - latestSplitPoint >= maxReducerPartitionsPerTask) {
+        createPartitionSpec()
+        latestSplitPoint = i
+        latestPartitionSize = coalescedSize
+        coalescedSize = totalSizeOfCurrentPartition
+      } else if (i > latestSplitPoint &&
+          coalescedSize + totalSizeOfCurrentPartition > targetSize) {
         if (coalescedSize < minPartitionSize) {
           // the current partition size is below `minPartitionSize`.
           // pack it with the smaller one between the two adjacent partitions (before and after).
-          if (latestPartitionSize > 0 && latestPartitionSize < totalSizeOfCurrentPartition) {
+          if (latestPartitionSize > 0 && latestPartitionSize < totalSizeOfCurrentPartition &&
+              isWithinMaxReducerPartitions(partitionSpecs.last.startReducerIndex, i)) {
             // pack with the before partition.
             partitionSpecs(partitionSpecs.length - 1) =
               CoalescedPartitionSpec(partitionSpecs.last.startReducerIndex, i)
@@ -304,7 +333,8 @@ object ShufflePartitionsUtil extends Logging {
       i += 1
     }
 
-    if (coalescedSize < minPartitionSize && latestPartitionSize > 0) {
+    if (coalescedSize < minPartitionSize && latestPartitionSize > 0 &&
+        isWithinMaxReducerPartitions(partitionSpecs.last.startReducerIndex, end)) {
       // pack with the last partition.
       partitionSpecs(partitionSpecs.length - 1) =
         CoalescedPartitionSpec(partitionSpecs.last.startReducerIndex, end)

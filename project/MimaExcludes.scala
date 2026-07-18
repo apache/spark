@@ -43,7 +43,11 @@ object MimaExcludes {
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
-      "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel")
+      "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-57987] Add desc field to the SQL REST API Node case class
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.sql.Node$")
   )
 
   // Exclude rules for 4.2.x from 4.1.0
@@ -85,7 +89,10 @@ object MimaExcludes {
     // methods of V2ExpressionSQLBuilder. MySQLDialect is private, so this is not a public API.
     ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitStartsWith"),
     ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitEndsWith"),
-    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitContains")
+    ProblemFilters.exclude[InaccessibleMethodProblem]("org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder.visitContains"),
+    // [SPARK-57491][CORE] Add PostStatusUpdateListener to TaskContext for stale push detection
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addPostStatusUpdateListener"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.invokePostStatusUpdateListeners")
   )
 
   // Exclude rules for 4.1.x from 4.0.0

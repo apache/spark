@@ -371,7 +371,7 @@ case class SecondsOfTimeWithFraction(child: Expression)
     }
     StaticInvoke(
       classOf[DateTimeUtils.type],
-      DecimalType(8, 6),
+      DecimalType(2 + precision, precision),
       "getSecondsOfTimeWithFraction",
       Seq(child, Literal(precision)),
       Seq(child.dataType, IntegerType))

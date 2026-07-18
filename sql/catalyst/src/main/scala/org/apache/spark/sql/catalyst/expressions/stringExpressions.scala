@@ -1129,8 +1129,10 @@ object StringTranslate {
    * Build a translation dictionary from Strings. This method assumes that the input strings are
    * already valid. The result dictionary maps each character in `matching` to the corresponding
    * character in `replace`. If `replace` is shorter than `matching`, the extra characters in
-   * `matching` will be mapped to null terminator, which causes characters to get deleted during
-   * translation. If `replace` is longer than `matching`, the extra characters will be ignored.
+   * `matching` will be mapped to the empty string, which causes those characters to get deleted
+   * during translation. If `replace` is longer than `matching`, the extra characters will be
+   * ignored. Note that the empty string is used as the deletion marker so that a literal `U+0000`
+   * in `replace` is preserved as a one-character replacement rather than triggering deletion.
    */
   private def buildDict(matching: String, replace: String): JMap[String, String] = {
     val dict = new HashMap[String, String]()
@@ -1144,12 +1146,12 @@ object StringTranslate {
         j += repCharCount
         repStr
       } else {
-        "\u0000"
+        "" // deletion marker
       }
 
       val matchCharCount = Character.charCount(matching.codePointAt(i))
       val matchStr = matching.substring(i, i + matchCharCount)
-      if (null == dict.get(matchStr)) {
+      if (!dict.containsKey(matchStr)) {
         dict.put(matchStr, rep)
       }
       i += matchCharCount
@@ -1288,7 +1290,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
 
 trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
-  protected def srcStr: Expression
+  private[sql] def srcStr: Expression
   protected def trimStr: Option[Expression]
   protected def direction: String
 

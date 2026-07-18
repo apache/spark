@@ -223,8 +223,12 @@ abstract class PercentileBase
       // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toDoubleValue(lowerKey)
     } else {
-      // Linear interpolation to get the exact percentile
-      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+      // Linear interpolation to get the exact percentile. Computed as lower + fraction *
+      // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for adjacent
+      // values straddling zero near Double.MaxValue, an extreme case where the old form was also
+      // inaccurate.
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
   }
 

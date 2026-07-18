@@ -91,6 +91,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       },
       condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
       parameters = Map("relationId" -> "`t`"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.readStream.table("t@20190129003758000")
+      },
+      condition = "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+      parameters = Map("relationId" -> "`t`"))
   }
 
   test("read: stream table API with temp view") {

@@ -1394,8 +1394,8 @@ class DataFrame(ParentDataFrame):
                 min_non_nulls = None
             else:
                 raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
-                    messageParameters={"arg_name": "how", "arg_value": str(how)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "how", "allowed_values": "['any', 'all']"},
                 )
 
         if thresh is not None:
@@ -2334,7 +2334,9 @@ class DataFrame(ParentDataFrame):
         def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
-                    columnar_data = [column.to_pylist() for column in table.columns]
+                    columnar_data = [
+                        ArrowTableToRowsConversion._to_pylist(column) for column in table.columns
+                    ]
                     for i in range(0, table.num_rows):
                         values = [
                             field_converters[j](columnar_data[j][i])  # type: ignore[misc]

@@ -21,7 +21,8 @@ import java.time.ZoneId
 
 import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
-import org.apache.parquet.schema.Type
+import org.apache.parquet.schema.{LogicalTypeAnnotation, Type}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -46,7 +47,9 @@ import org.apache.spark.sql.types.{DataType, StructType, TimestampLTZNanosType, 
  *   - Type gates: declaring Parquet support (supportDataType)
  *   - Schema clipping: declaring internal struct schema for column pruning
  *
- * NOT yet on the trait (deferred to follow-ups): filter-pushdown predicates.
+ * Filter pushdown is handled separately, in the companion object rather than on this trait,
+ * because it is keyed on the Parquet file's on-disk encoding (a reverse lookup), not on the
+ * Spark DataType: see [[ParquetTypeOps.filterOpsFor]] and [[ParquetFilterOps]].
  *
  * DISPATCH PATTERN: Framework FIRST at all integration sites. Each Parquet infrastructure
  * method wraps itself with:
@@ -278,4 +281,30 @@ private[parquet] object ParquetTypeOps {
       dt: DataType, descriptor: ColumnDescriptor): java.lang.Boolean =
     apply(dt).map(o => java.lang.Boolean.valueOf(o.supportsLazyDictionaryDecoding(descriptor)))
       .orNull
+
+  /**
+   * Reverse lookup for filter pushdown: given a Parquet field's logical annotation and
+   * primitive type (from the file schema), returns the framework filter ops that owns that
+   * encoding, if any. Used by `ParquetFilters` (via its FrameworkFilterOps extractor) so
+   * framework types participate in predicate pushdown with no per-type changes there.
+   *
+   * Only the primitive name + logical annotation are matched, not the type length. That is
+   * sufficient today because every registered ops is a fixed-width primitive (getTypeLength == 0),
+   * so length carries no information. A future FIXED_LEN_BYTE_ARRAY-backed ops would need length
+   * added to the key to disambiguate widths.
+   */
+  private[parquet] def filterOpsFor(
+      logicalTypeAnnotation: LogicalTypeAnnotation,
+      primitiveTypeName: PrimitiveTypeName): Option[ParquetFilterOps] =
+    filterOpsList.find { ops =>
+      ops.primitiveTypeName == primitiveTypeName &&
+        ops.logicalTypeAnnotation == logicalTypeAnnotation
+    }
+
+  /**
+   * Registration point for filter pushdown: every framework type that supports Parquet
+   * predicate pushdown lists its [[ParquetFilterOps]] here. This is what `filterOpsFor`
+   * scans, so a new type participates in pushdown by adding its ops to this Seq.
+   */
+  private val filterOpsList: Seq[ParquetFilterOps] = Seq(TimeTypeParquetOps.filterOps)
 }

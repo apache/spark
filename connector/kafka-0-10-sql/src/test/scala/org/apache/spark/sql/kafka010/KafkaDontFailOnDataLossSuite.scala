@@ -232,13 +232,15 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       // This test deliberately creates, deletes and recreates topics as fast as it can while a
       // query is running. With Kafka metadata refreshed every 1ms, an offset fetch can race a
       // concurrent topic deletion and hit UnknownTopicOrPartitionException. That is transient and
-      // expected here, so the offset reader retries; but the default retry budget (3 attempts x
-      // 1s) can be exhausted during a burst of churn, letting the exception surface and fail the
-      // query even though failOnDataLoss=false. Give the reader more retries at a short interval so
-      // the test's own churn (a deleted topic is typically recreated within a second) is ridden out
-      // without exhausting the budget and without materially slowing the query.
-      .option("fetchOffset.numRetries", "10")
-      .option("fetchOffset.retryIntervalMs", "500")
+      // expected here (failOnDataLoss=false): the offset reader just needs to keep retrying until
+      // the metadata refresh drops the deleted topic from the pattern subscription, after which the
+      // fetch succeeds. A bounded retry budget can still be exhausted during a burst of churn under
+      // CI load (a previous 10 x 500ms = 5s budget still flaked), letting the exception surface and
+      // fail the query. Give the reader a retry budget that comfortably outlasts the test's own
+      // stress loop (20s below) so it rides out any churn window instead of giving up; when the
+      // loop ends, query.stop() interrupts any in-flight retry cleanly.
+      .option("fetchOffset.numRetries", "60")
+      .option("fetchOffset.retryIntervalMs", "1000")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]

@@ -269,6 +269,47 @@ class ApproxTopKSuite extends SharedSparkSession {
     checkAnswer(res, Row(Seq(Row("c", 4), Row("d", 2))))
   }
 
+  Seq("UTF8_LCASE", "UNICODE_CI").foreach { collation =>
+    test(s"SPARK-58069: approx_top_k returns an actual value, not the collation key ($collation)") {
+      val res = sql(
+        s"""SELECT approx_top_k(c, 2)
+           |FROM (SELECT CAST(col AS STRING COLLATE $collation) AS c
+           |      FROM VALUES ('HELLO'), ('HELLO'), ('HELLO'), ('world') AS t(col))
+           |""".stripMargin)
+      checkAnswer(res, Row(Seq(Row("HELLO", 3), Row("world", 1))))
+    }
+
+    test("SPARK-58069: approx_top_k_accumulate/estimate returns an actual value, " +
+      s"not the collation key ($collation)") {
+      val res = sql(
+        s"""SELECT approx_top_k_estimate(approx_top_k_accumulate(c), 2)
+           |FROM (SELECT CAST(col AS STRING COLLATE $collation) AS c
+           |      FROM VALUES ('HELLO'), ('HELLO'), ('HELLO'), ('world') AS t(col))
+           |""".stripMargin)
+      checkAnswer(res, Row(Seq(Row("HELLO", 3), Row("world", 1))))
+    }
+
+    test("SPARK-58069: approx_top_k_combine merges collation-equal values across sketches " +
+      s"and a shuffle ($collation)") {
+      withSQLConf("spark.sql.shuffle.partitions" -> "2") {
+        val sketches = sql(
+          s"""SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE $collation)) AS sketch
+             |  FROM VALUES ('HELLO'), ('HELLO') AS t(col)
+             |UNION ALL
+             |SELECT approx_top_k_accumulate(CAST(col AS STRING COLLATE $collation)) AS sketch
+             |  FROM VALUES ('hello'), ('WORLD') AS t(col)
+             |""".stripMargin).repartition(2)
+        sketches.createOrReplaceTempView("approx_top_k_sketches")
+        val res = sql(
+          "SELECT approx_top_k_estimate(approx_top_k_combine(sketch, 100), 2) " +
+            "FROM approx_top_k_sketches")
+        val items = res.collect()(0).getSeq[Row](0)
+          .map(r => (r.getString(0).toLowerCase(java.util.Locale.ROOT), r.getLong(1))).toSet
+        assert(items === Set(("hello", 3L), ("world", 1L)))
+      }
+    }
+  }
+
   test("SPARK-52588: accumulate and estimate of Decimal(4, 1)") {
     val res = sql("SELECT approx_top_k_estimate(approx_top_k_accumulate(expr, 10)) " +
       "FROM VALUES CAST(0.0 AS DECIMAL(4, 1)), CAST(0.0 AS DECIMAL(4, 1)), " +

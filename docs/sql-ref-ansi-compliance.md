@@ -423,15 +423,18 @@ Below is a list of all the keywords in Spark SQL.
 |ANTI|non-reserved|strict-non-reserved|non-reserved|
 |ANY|reserved|non-reserved|reserved|
 |ANY_VALUE|non-reserved|non-reserved|non-reserved|
+|APPLY|non-reserved|non-reserved|non-reserved|
 |APPROX|non-reserved|non-reserved|non-reserved|
 |ARCHIVE|non-reserved|non-reserved|non-reserved|
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
 |ASC|non-reserved|non-reserved|non-reserved|
 |ASENSITIVE|non-reserved|non-reserved|non-reserved|
+|ASOF|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
+|AUTO|non-reserved|non-reserved|non-reserved|
 |BEGIN|non-reserved|non-reserved|non-reserved|
 |BERNOULLI|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
@@ -456,6 +459,7 @@ Below is a list of all the keywords in Spark SQL.
 |CAST|reserved|non-reserved|reserved|
 |CATALOG|non-reserved|non-reserved|non-reserved|
 |CATALOGS|non-reserved|non-reserved|non-reserved|
+|CDC|non-reserved|non-reserved|non-reserved|
 |CHANGE|non-reserved|non-reserved|non-reserved|
 |CHANGES|non-reserved|non-reserved|non-reserved|
 |CHAR|non-reserved|non-reserved|reserved|
@@ -638,6 +642,7 @@ Below is a list of all the keywords in Spark SQL.
 |MACRO|non-reserved|non-reserved|non-reserved|
 |MAP|non-reserved|non-reserved|non-reserved|
 |MATCHED|non-reserved|non-reserved|non-reserved|
+|MATCH_CONDITION|non-reserved|non-reserved|non-reserved|
 |MATERIALIZED|non-reserved|non-reserved|non-reserved|
 |MAX|non-reserved|non-reserved|non-reserved|
 |MEASURE|non-reserved|non-reserved|non-reserved|
@@ -744,6 +749,7 @@ Below is a list of all the keywords in Spark SQL.
 |SELECT|reserved|non-reserved|reserved|
 |SEMI|non-reserved|strict-non-reserved|non-reserved|
 |SEPARATED|non-reserved|non-reserved|non-reserved|
+|SEQUENCE|non-reserved|non-reserved|non-reserved|
 |SERDE|non-reserved|non-reserved|non-reserved|
 |SERDEPROPERTIES|non-reserved|non-reserved|non-reserved|
 |SESSION_USER|reserved|non-reserved|reserved|

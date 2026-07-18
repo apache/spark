@@ -26,8 +26,6 @@ PYTEST_BUILD="pytest"
 
 PYTHON_EXECUTABLE="${PYTHON_EXECUTABLE:-python3}"
 
-BLACK_BUILD="$PYTHON_EXECUTABLE -m black"
-
 function exit_with_usage {
   set +x
   echo "lint-python - linter for Python"
@@ -44,9 +42,6 @@ while (( "$#" )); do
   case $1 in
     --compile)
       COMPILE_TEST=true
-      ;;
-    --black)
-      BLACK_TEST=true
       ;;
     --custom-pyspark-error)
       PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
@@ -74,7 +69,7 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
   RUFF_TEST=true
@@ -329,34 +324,6 @@ ruff checks failed."
 
 }
 
-function black_test {
-    local BLACK_REPORT=
-    local BLACK_STATUS=
-
-    # Skip check if black is not installed.
-    $PYTHON_EXECUTABLE -c 'import black' &> /dev/null
-    if [ $? -ne 0 ]; then
-        echo "The Python library providing 'black' module was not found. Skipping black checks for now."
-        echo
-        return
-    fi
-
-    echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging python/benchmarks) 2>&1)
-    BLACK_STATUS=$?
-
-    if [ "$BLACK_STATUS" -ne 0 ]; then
-        echo "black checks failed:"
-        echo "$BLACK_REPORT"
-        echo "Please run 'dev/reformat-python' script."
-        echo "$BLACK_STATUS"
-        exit "$BLACK_STATUS"
-    else
-        echo "black checks passed."
-        echo
-    fi
-}
-
 function pyspark_custom_errors_check_test {
     local PYSPARK_CUSTOM_ERRORS_CHECK_REPORT=
     local PYSPARK_CUSTOM_ERRORS_CHECK_STATUS=
@@ -384,9 +351,6 @@ PYTHON_SOURCE="$(git ls-files '*.py')"
 
 if [[ "$COMPILE_TEST" == "true" ]]; then
     compile_python_test "$PYTHON_SOURCE"
-fi
-if [[ "$BLACK_TEST" == "true" ]]; then
-    black_test
 fi
 if [[ "$PYSPARK_CUSTOM_ERRORS_CHECK_TEST" == "true" ]]; then
     pyspark_custom_errors_check_test
