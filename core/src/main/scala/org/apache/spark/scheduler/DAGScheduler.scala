@@ -985,28 +985,50 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * Reject a job that enables speculation and uses a pipelined shuffle: a speculative copy of a
-   * producer would race a consumer already reading the producer's partial output, with no commit
-   * barrier protecting the read (spec S9). Checked up front, before any stage is created, so a
-   * rejection leaves no partial scheduler state. Used by the result-job path (handleJobSubmitted);
-   * the map-stage-job path rejects a pipelined dependency outright (see handleMapStageSubmitted),
-   * which subsumes speculation. Returns true (and fails the job via `listener`) if rejected; false
-   * otherwise. Inert for jobs without a pipelined dependency.
+   * Reject a job that uses a pipelined shuffle in combination with a cluster feature that a
+   * pipelined group cannot support. Checked up front, before any stage is created, so a rejection
+   * leaves no partial scheduler state. Used by the result-job path (handleJobSubmitted); the
+   * map-stage-job path rejects a pipelined dependency outright (see handleMapStageSubmitted), which
+   * subsumes these. Returns true (and fails the job via `listener`) if rejected; false otherwise.
+   * The RDD-graph walk runs only when a relevant feature is enabled and is inert for jobs without a
+   * pipelined dependency.
+   *
+   * Rejected combinations:
+   *  - Speculation: a speculative copy of a producer would race a consumer already reading the
+   *    producer's partial output, with no commit barrier protecting the read (spec S9).
+   *  - Dynamic allocation: a pipelined group is gang-scheduled (all member stages must run at
+   *    once), and the free-slot admission check measures currently-active executors. Under dynamic
+   *    allocation a job can start before any executor has spun up, so the group would be failed
+   *    with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT against a transient 0-slot snapshot even though
+   *    the cluster would soon have capacity. Barrier scheduling forbids the same combination
+   *    (checkBarrierStageWithDynamicAllocation); pipelined groups do likewise.
    */
-  private def rejectSpeculationWithPipelinedShuffle(
+  private def rejectUnsupportedPipelinedJob(
       jobId: Int,
       finalRDD: RDD[_],
       listener: JobListener): Boolean = {
-    if (sc.conf.get(config.SPECULATION_ENABLED) && rddGraphHasPipelinedDependency(finalRDD)) {
-      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: speculation is incompatible with " +
-        log"pipelined shuffle dependencies")
+    // Only walk the RDD graph if a relevant feature is on, then only once.
+    val speculationOn = sc.conf.get(config.SPECULATION_ENABLED)
+    val dynAllocOn = Utils.isDynamicAllocationEnabled(sc.conf)
+    if ((speculationOn || dynAllocOn) && rddGraphHasPipelinedDependency(finalRDD)) {
+      if (speculationOn) {
+        logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: speculation is incompatible with " +
+          log"pipelined shuffle dependencies")
+        listener.jobFailed(new SparkException(
+          "Speculative execution is not supported for a job that uses a pipelined shuffle " +
+            s"dependency. Disable ${config.SPECULATION_ENABLED.key} for such jobs."))
+        return true
+      }
+      // dynAllocOn
+      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: dynamic allocation is incompatible " +
+        log"with pipelined shuffle dependencies")
       listener.jobFailed(new SparkException(
-        "Speculative execution is not supported for a job that uses a pipelined shuffle " +
-          s"dependency. Disable ${config.SPECULATION_ENABLED.key} for such jobs."))
-      true
-    } else {
-      false
+        "Dynamic allocation is not supported for a job that uses a pipelined shuffle dependency: " +
+          "a pipelined stage group must be co-scheduled against a known cluster size. Disable " +
+          s"${config.DYN_ALLOCATION_ENABLED.key} for such jobs."))
+      return true
     }
+    false
   }
 
   /** Invoke `.partitions` on the given RDD and all of its ancestors  */
@@ -1724,12 +1746,13 @@ private[spark] class DAGScheduler(
       return
     }
 
-    // A job that uses a pipelined shuffle runs its producer and consumer stages concurrently, so a
-    // speculative copy of a producer would race a consumer already reading the producer's partial
-    // output, with no commit barrier protecting the read. Reject such a job up front -- before any
-    // stages are created, so no partial scheduler state is left behind. (Inert for jobs without
-    // any pipelined dependency.)
-    if (rejectSpeculationWithPipelinedShuffle(jobId, finalRDD, listener)) {
+    // A job that uses a pipelined shuffle co-schedules its producer and consumer stages, which is
+    // incompatible with speculation (a speculative producer copy would race a consumer reading its
+    // partial output) and with dynamic allocation (the gang-scheduling slot check would fail
+    // against a not-yet-warmed cluster). Reject such a job up front -- before any stages are
+    // created, so no partial scheduler state is left behind. (Inert for jobs without any pipelined
+    // dependency.)
+    if (rejectUnsupportedPipelinedJob(jobId, finalRDD, listener)) {
       return
     }
 

@@ -6492,6 +6492,51 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("pipelined shuffle: dynamic allocation is rejected for a job with a pipelined dependency") {
+    // A pipelined group is gang-scheduled and its slot check measures currently-active executors;
+    // under dynamic allocation a job can start before any executor is up, so the check would fail
+    // the group against a transient 0-slot snapshot. Reject the combo (barrier does the same).
+    // DYN_ALLOCATION_TESTING lets isDynamicAllocationEnabled report true under a local master.
+    sc.conf.set(config.DYN_ALLOCATION_ENABLED, true)
+    sc.conf.set(config.DYN_ALLOCATION_TESTING, true)
+    try {
+      val producerRdd = new MyRDD(sc, 2, Nil)
+      val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+      val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submit(consumerRdd, Array(0, 1), listener = failListener)
+      assert(failure.get() != null,
+        "job with pipelined dependency + dynamic allocation should be rejected")
+      assert(failure.get().getMessage.contains("Dynamic allocation is not supported"))
+      assert(taskSets.isEmpty)
+      assertDataStructuresEmpty()
+    } finally {
+      sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
+      sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
+    }
+  }
+
+  test("regular shuffle job with dynamic allocation enabled is NOT rejected (path is inert)") {
+    // The dynamic-allocation fail-fast must apply only to jobs with a pipelined dependency; a plain
+    // regular-shuffle job with dynamic allocation on runs normally.
+    sc.conf.set(config.DYN_ALLOCATION_ENABLED, true)
+    sc.conf.set(config.DYN_ALLOCATION_TESTING, true)
+    try {
+      val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+      val reduceRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0, 1))
+      assert(taskSets.nonEmpty, "regular-shuffle job must not be rejected under dynamic allocation")
+    } finally {
+      sc.conf.set(config.DYN_ALLOCATION_ENABLED, false)
+      sc.conf.set(config.DYN_ALLOCATION_TESTING, false)
+    }
+  }
+
   test("pipelined shuffle: submitting a pipelined dependency as a map-stage job is rejected") {
     // A map-stage job (SparkContext.submitMapStage, e.g. AQE's ShuffleExchangeExec) materializes a
     // shuffle to produce map-output statistics. A PipelinedShuffleDependency cannot serve that --

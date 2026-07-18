@@ -169,9 +169,10 @@ private[spark] class TaskSchedulerImpl(
    * by everything else in the SAME resource profile, so it excludes the group's own members (whose
    * tasks would otherwise be charged against the group's own admission).
    *
-   * Computed from the TaskSetManagers so it is resource-profile-scoped, and taken under a single
-   * lock so the count is one consistent snapshot (both the per-profile total and the excluded
-   * members are read together).
+   * Computed from the TaskSetManagers so it is resource-profile-scoped, skips zombie (superseded)
+   * attempts so a retried stage is not double-counted, and is taken under a single lock so the
+   * count is one consistent snapshot (both the per-profile total and the excluded members are read
+   * together).
    */
   def outstandingTasksForOtherWorkInProfile(
       resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
@@ -180,7 +181,11 @@ private[spark] class TaskSchedulerImpl(
         Iterator.empty
       } else {
         attempts.valuesIterator
-          .filter(_.taskSet.resourceProfileId == resourceProfileId)
+          // Skip zombie attempts (superseded by a retry/kill): a stage can have both a zombie and a
+          // live attempt in this map at once, and the live attempt already re-runs the zombie's
+          // outstanding tasks -- counting both would double-count that stage's demand. Matches the
+          // !isZombie filtering used elsewhere on this map.
+          .filter(tsm => !tsm.isZombie && tsm.taskSet.resourceProfileId == resourceProfileId)
           .map(tsm => math.max(0, tsm.numTasks - tsm.tasksSuccessful))
       }
     }.sum
