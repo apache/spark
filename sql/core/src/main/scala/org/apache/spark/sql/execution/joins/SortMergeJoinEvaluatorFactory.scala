@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Predicate, Projection, RowOrdering, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 
@@ -45,20 +45,6 @@ class SortMergeJoinEvaluatorFactory(
     new SortMergeJoinEvaluator
 
   private class SortMergeJoinEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
-
-    private[this] val streamedPlan = joinType match {
-      case _: InnerLike | LeftOuter | FullOuter | LeftExistence(_) => left
-      case RightOuter => right
-      case x => throw new IllegalArgumentException(
-        s"SortMergeJoinEvaluatorFactory.streamedPlan should not take $x as the JoinType")
-    }
-
-    private[this] val bufferedPlan = joinType match {
-      case _: InnerLike | LeftOuter | FullOuter | LeftExistence(_) => right
-      case RightOuter => left
-      case x => throw new IllegalArgumentException(
-        s"SortMergeJoinEvaluatorFactory.bufferedPlan should not take $x as the JoinType")
-    }
 
     private def cleanupResources(): Unit = {
       IndexedSeq(left, right).foreach(_.cleanupResources())
