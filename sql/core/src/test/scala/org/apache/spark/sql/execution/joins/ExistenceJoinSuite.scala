@@ -193,6 +193,14 @@ class ExistenceJoinSuite extends SharedSparkSession {
       LessThan(right.col("d").expr, Literal(4.0)))
   }
 
+  // Condition: a = c (equi-key) AND b < 3.0 (left-only): the residual conjunct references
+  // only the streamed side, so the split hoists it entirely and restCondition is None.
+  private lazy val leftOnlyResidualCondition = {
+    And(
+      EqualTo(left.col("a").expr, right.col("c").expr),
+      LessThan(left.col("b").expr, Literal(3.0)))
+  }
+
   protected def testWithSplitStreamedSideCondOnAndOff(
       testName: String)(f: String => Unit): Unit = {
     Seq("false", "true").foreach { configValue =>
@@ -579,6 +587,76 @@ class ExistenceJoinSuite extends SharedSparkSession {
       Row(null, null, false),
       Row(null, 5.0, false),
       Row(6, null, false)))
+
+  // Left-only residual: the only residual conjunct references the streamed side, so the
+  // split hoists it entirely and restCondition is None. These cases cover the fully-hoisted
+  // shape (SortMergeJoinExec codegen's conditionForCodegen = None branch and the
+  // interpreted always-true rest walk). The expected answers happen to match the
+  // mixed-condition ones above because d < 4.0 is true for every equi-match in the
+  // fixtures; the point of these cases is the restCondition = None code shape.
+
+  // LeftAnti: (2, 1.0) matches -> dropped; (3, 3.0) fails the hoisted b < 3.0; (6, null)
+  // evaluates it to null; null keys never match.
+  testExistenceJoin(
+    "test left-only residual condition for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // LeftOuter: (2, 1.0) matches both right (2, 3.0) rows (2 left rows -> 4 output rows);
+  // everything else is emitted null-padded, including (3, 3.0) which fails the hoisted
+  // b < 3.0 and (6, null) for which it is null.
+  testExistenceJoin(
+    "test left-only residual condition for left outer join",
+    LeftOuter,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, null, null),
+      Row(1, 2.0, null, null),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(3, 3.0, null, null),
+      Row(null, null, null, null),
+      Row(null, 5.0, null, null),
+      Row(6, null, null, null)))
+
+  // ExistenceJoin with the same left-only residual condition: exists=true only for (2, 1.0).
+  testExistenceJoin(
+    "test left-only residual condition for existence join",
+    ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, false),
+      Row(1, 2.0, false),
+      Row(2, 1.0, true),
+      Row(2, 1.0, true),
+      Row(3, 3.0, false),
+      Row(null, null, false),
+      Row(null, 5.0, false),
+      Row(6, null, false)))
+
+  // Inner join is outside the split whitelist: with a fully streamed-side-only residual,
+  // nothing may be hoisted and the results must be identical with the split config on and
+  // off.
+  testExistenceJoin(
+    "test left-only residual condition for inner join",
+    Inner,
+    left,
+    right,
+    Some(leftOnlyResidualCondition),
+    Seq(
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0)))
 
   // RightOuter streams the right side, so here d < 4.0 is the streamed-side-only conjunct
   // and IS hoistable (the mirror of the left-streamed cases above). The hash joins use

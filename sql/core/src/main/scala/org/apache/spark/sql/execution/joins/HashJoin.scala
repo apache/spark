@@ -348,7 +348,7 @@ trait HashJoin extends JoinCodegenSupport {
         lazy val matched = hashedRelation.getValue(key)
         // If streamed-only condition is false/null, the full condition can never be true,
         // so the row is guaranteed emitted (no probe needed).
-        key.anyNull || matched == null || !boundStreamedOnlyCondition(current) ||
+        key.anyNull || !boundStreamedOnlyCondition(current) || matched == null ||
           (restCondition.isDefined && !boundRestCondition(joinedRow(current, matched)))
       }
     } else {
@@ -357,7 +357,7 @@ trait HashJoin extends JoinCodegenSupport {
         lazy val buildIter = hashedRelation.get(key)
         // If streamed-only condition is false/null, the full condition can never be true,
         // so the row is guaranteed emitted (no probe needed).
-        key.anyNull || buildIter == null || !boundStreamedOnlyCondition(current) ||
+        key.anyNull || !boundStreamedOnlyCondition(current) || buildIter == null ||
           (restCondition.isDefined && !buildIter.exists {
             row => boundRestCondition(joinedRow(current, row))
           })

@@ -942,7 +942,7 @@ object SQLConf {
         "the hash-bucket or merge walk. This avoids evaluating expensive streamed-side-only " +
         "predicates once per matched buffered row.")
       .version("4.3.0")
-      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
