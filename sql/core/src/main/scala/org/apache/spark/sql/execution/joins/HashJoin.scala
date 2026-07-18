@@ -41,7 +41,7 @@ private[joins] case class HashedRelationInfo(
     keyIsUnique: Boolean,
     isEmpty: Boolean)
 
-trait HashJoin extends JoinCodegenSupport with PredicateHelper {
+trait HashJoin extends JoinCodegenSupport {
   assert(leftKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
   assert(rightKeys.forall(key => UnsafeRowUtils.isBinaryStable(key.dataType)))
 
@@ -159,17 +159,8 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
    */
   protected lazy val (streamedOnlyCondition, restCondition):
       (Option[Expression], Option[Expression]) = {
-    if (condition.isDefined && conf.splitStreamedSideJoinCondition &&
-        (joinType match {
-          case LeftAnti | LeftOuter | RightOuter | _: ExistenceJoin => true
-          case _ => false
-        })) {
-      val conjuncts = splitConjunctivePredicates(condition.get)
-      val (streamedOnly, rest) = conjuncts.partition(_.references.subsetOf(streamedPlan.outputSet))
-      (streamedOnly.reduceOption(And), rest.reduceOption(And))
-    } else {
-      (None, condition)
-    }
+    StreamedSideJoinCondition.split(
+      condition, joinType, streamedPlan, conf.splitStreamedSideJoinCondition)
   }
 
   @transient protected[this] lazy val boundStreamedOnlyCondition = streamedOnlyCondition.map {
@@ -416,6 +407,34 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
     boundExpr.genCode(ctx)
   }
 
+  /**
+   * Generates code evaluating the hoisted streamed-only condition, if any. Returns the
+   * generated code and the name of the boolean variable it declares, which holds whether the
+   * streamed row may satisfy the full join condition. Returns ("", "") when no streamed-only
+   * condition was hoisted.
+   *
+   * Callers must fold the boolean into their probe-skip condition instead of emitting a row
+   * and returning early: HashJoin's doConsume is inlined into the streamed producer's row
+   * loop, where a bare `return` would skip the producer's loop-cursor write-back (batching
+   * producers such as ColumnarToRowExec would reprocess the same batch). Folding also keeps
+   * a single consume site per streamed row, so lazy streamed variables are materialized in
+   * the same scope as all their uses.
+   */
+  protected def genStreamedOnlyCheck(
+      ctx: CodegenContext,
+      input: Seq[ExprCode]): (String, String) = {
+    streamedOnlyCondition match {
+      case Some(expr) =>
+        val ev = genStreamedOnlyCondition(ctx, expr, input)
+        val passed = ctx.freshName("streamedOnlyPassed")
+        (s"""
+           |${ev.code}
+           |boolean $passed = !${ev.isNull} && ${ev.value};
+         """.stripMargin, passed)
+      case None => ("", "")
+    }
+  }
+
   override def doProduce(ctx: CodegenContext): String = {
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
@@ -542,29 +561,16 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
       case BuildRight => input ++ buildVars
     }
 
-    // Variables for the guard-false path: emit the streamed row with null build side.
-    // They must be separate ExprCode instances so that the shared resultVars used in the
-    // main path are not consumed/cleared by the guard-false consume.
-    val defaultBuildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
-    val defaultResultVars = buildSide match {
-      case BuildLeft => defaultBuildVars ++ input
-      case BuildRight => input ++ defaultBuildVars
+    // Fold the hoisted streamed-only predicate (if any) into the probe below: a streamed row
+    // that fails it cannot match, so the probe is skipped and the regular path emits the row
+    // with a null build side. See genStreamedOnlyCheck for why this must not be an early
+    // emit + return.
+    val (streamedOnlyCheckCode, streamedOnlyPassed) = genStreamedOnlyCheck(ctx, input)
+    val skipProbe = if (streamedOnlyPassed.nonEmpty) {
+      s"$anyNull || !$streamedOnlyPassed"
+    } else {
+      anyNull
     }
-
-    // Early-return guard: if streamed-only predicate is false/null, full condition is false
-    // and the row is emitted with null build side, so skip the probe entirely.
-    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
-      val ev = genStreamedOnlyCondition(ctx, expr, input)
-      s"""
-         |${ev.code}
-         |if (${ev.isNull} || !${ev.value}) {
-         |  UnsafeRow $matched = null;
-         |  $numOutput.add(1);
-         |  ${consume(ctx, defaultResultVars)}
-         |  return;
-         |}
-       """.stripMargin
-    }.getOrElse("")
 
     if (keyIsUnique) {
       val resetWhenConditionFails = if (hasRestCondition) {
@@ -581,9 +587,9 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// find matches from HashedRelation
-         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |UnsafeRow $matched = $skipProbe ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |${checkCondition.trim}
          |$resetWhenConditionFails
          |$numOutput.add(1);
@@ -611,9 +617,10 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// find matches from HashRelation
-         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |$iteratorCls $matches = $skipProbe ?
+         |  null : ($iteratorCls)$relationTerm.get(${keyEv.value});
          |boolean $found = false;
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |while ($matches != null && $matches.hasNext() || !$found) {
@@ -706,19 +713,16 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
         (dummy, "", Nil)
     }
 
-    // Early-return guard: if streamed-only predicate is false/null, full condition is false
-    // and the row is guaranteed emitted, so skip the probe entirely.
-    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
-      val ev = genStreamedOnlyCondition(ctx, expr, input)
-      s"""
-         |${ev.code}
-         |if (${ev.isNull} || !${ev.value}) {
-         |  $numOutput.add(1);
-         |  ${consume(ctx, input)}
-         |  return;
-         |}
-       """.stripMargin
-    }.getOrElse("")
+    // Fold the hoisted streamed-only predicate (if any) into the probe below: a streamed row
+    // that fails it is guaranteed to be emitted, so the probe is skipped and the regular
+    // !found path emits the row. See genStreamedOnlyCheck for why this must not be an early
+    // emit + return.
+    val (streamedOnlyCheckCode, streamedOnlyPassed) = genStreamedOnlyCheck(ctx, input)
+    val probeAllowed = if (streamedOnlyPassed.nonEmpty) {
+      s"!($anyNull) && $streamedOnlyPassed"
+    } else {
+      s"!($anyNull)"
+    }
 
     if (keyIsUnique) {
       val found = ctx.freshName("found")
@@ -726,9 +730,9 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
          |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// Check if the key has nulls.
-         |if (!($anyNull)) {
+         |if ($probeAllowed) {
          |  // Check if the HashedRelation exists.
          |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |  if ($matched != null) {
@@ -751,9 +755,9 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
          |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// Check if the key has nulls.
-         |if (!($anyNull)) {
+         |if ($probeAllowed) {
          |  // Check if the HashedRelation exists.
          |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
          |  if ($matches != null) {
@@ -802,22 +806,16 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
         s"$existsVar = true;"
     }
 
-    // Early-return guard: if streamed-only predicate is false/null, full condition is false
-    // and the exists flag is false, so skip the probe entirely.
-    val existsFalseResultVar = input ++ Seq(ExprCode.forNonNullValue(
-      JavaCode.variable(existsVar, BooleanType)))
-    val streamedOnlyGuard = streamedOnlyCondition.map { expr =>
-      val ev = genStreamedOnlyCondition(ctx, expr, input)
-      s"""
-         |${ev.code}
-         |if (${ev.isNull} || !${ev.value}) {
-         |  $existsVar = false;
-         |  $numOutput.add(1);
-         |  ${consume(ctx, existsFalseResultVar)}
-         |  return;
-         |}
-       """.stripMargin
-    }.getOrElse("")
+    // Fold the hoisted streamed-only predicate (if any) into the probe below: a streamed row
+    // that fails it yields exists = false, so the probe is skipped and the single emit below
+    // produces the row. See genStreamedOnlyCheck for why this must not be an early emit +
+    // return.
+    val (streamedOnlyCheckCode, streamedOnlyPassed) = genStreamedOnlyCheck(ctx, input)
+    val probeAllowed = if (streamedOnlyPassed.nonEmpty) {
+      s"!($anyNull) && $streamedOnlyPassed"
+    } else {
+      s"!($anyNull)"
+    }
 
     val resultVar = input ++ Seq(ExprCode.forNonNullValue(
       JavaCode.variable(existsVar, BooleanType)))
@@ -827,9 +825,9 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
          |boolean $existsVar = false;
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// find matches from HashedRelation
-         |if (!($anyNull)) {
+         |if ($probeAllowed) {
          |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |  if ($matched != null) {
          |    $checkCondition
@@ -845,9 +843,9 @@ trait HashJoin extends JoinCodegenSupport with PredicateHelper {
          |boolean $existsVar = false;
          |// generate join key for stream side
          |${keyEv.code}
-         |$streamedOnlyGuard
+         |$streamedOnlyCheckCode
          |// find matches from HashRelation
-         |if (!($anyNull)) {
+         |if ($probeAllowed) {
          |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
          |  if ($matches != null) {
          |    while (!$existsVar && $matches.hasNext()) {

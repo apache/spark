@@ -43,7 +43,7 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends ShuffledJoin with PredicateHelper {
+    isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -128,17 +128,8 @@ case class SortMergeJoinExec(
    */
   private lazy val (streamedOnlyCondition, restCondition):
       (Option[Expression], Option[Expression]) = {
-    if (condition.isDefined && conf.splitStreamedSideJoinCondition &&
-        (joinType match {
-          case LeftAnti | LeftOuter | RightOuter | _: ExistenceJoin => true
-          case _ => false
-        })) {
-      val conjuncts = splitConjunctivePredicates(condition.get)
-      val (streamedOnly, rest) = conjuncts.partition(_.references.subsetOf(streamedPlan.outputSet))
-      (streamedOnly.reduceOption(And), rest.reduceOption(And))
-    } else {
-      (None, condition)
-    }
+    StreamedSideJoinCondition.split(
+      condition, joinType, streamedPlan, conf.splitStreamedSideJoinCondition)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
