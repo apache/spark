@@ -244,7 +244,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
         Column("year"))
     ).foreach { groupedData =>
       Seq(
-        (grouping("course"), "\"INT\""),
+        (grouping("course"), "\"TINYINT\""),
         (grouping_id("course", "year"), "\"BIGINT\"")
       ).foreach { case (groupingExpr, leftType) =>
         checkError(
@@ -256,6 +256,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
             "left" -> leftType,
             "right" -> "\"BOOLEAN\"",
             "sqlExpr" -> "\"\\(.+ AND true\\)\""),
+          context = ExpectedContext(
+            fragment = "amp$amp",
+            callSitePattern = getCurrentClassCallSitePattern),
           matchPVals = true)
       }
     }
