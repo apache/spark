@@ -711,4 +711,28 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     )
   }
+
+  test("RegExpReplace and RegExpExtractBase are stateful and produce fresh copies") {
+    val s = Literal("hello world")
+    val p = Literal("(\\w+)")
+    val r = Literal("X")
+
+    val replace = RegExpReplace(s, p, r)
+    assert(replace.stateful, "RegExpReplace.stateful should be true")
+    val replaceCopy = replace.freshCopyIfContainsStatefulExpression()
+    assert(replaceCopy ne replace,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpReplace")
+
+    val extract = RegExpExtract(s, p, Literal(1))
+    assert(extract.stateful, "RegExpExtract.stateful should be true")
+    val extractCopy = extract.freshCopyIfContainsStatefulExpression()
+    assert(extractCopy ne extract,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtract")
+
+    val extractAll = RegExpExtractAll(s, p, Literal(1))
+    assert(extractAll.stateful, "RegExpExtractAll.stateful should be true")
+    val extractAllCopy = extractAll.freshCopyIfContainsStatefulExpression()
+    assert(extractAllCopy ne extractAll,
+      "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtractAll")
+  }
 }

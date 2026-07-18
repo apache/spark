@@ -86,8 +86,14 @@ case class NamedLambdaVariable(
 
   override def qualifier: Seq[String] = Seq.empty
 
+  override def stateful: Boolean = true
+
   override def newInstance(): NamedExpression =
     copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
+
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NamedLambdaVariable =
+    copy(value = new AtomicReference())
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)

@@ -2268,4 +2268,23 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("StringTranslate and FormatNumber are stateful and produce fresh copies") {
+    val src = Literal("aeiou")
+    val matching = Literal("aeiou")
+    val replace = Literal("12345")
+    val translate = StringTranslate(src, matching, replace)
+    assert(translate.stateful, "StringTranslate.stateful should be true")
+    val translateCopy = translate.freshCopyIfContainsStatefulExpression()
+    assert(translateCopy ne translate,
+      "freshCopyIfContainsStatefulExpression should return a new instance for StringTranslate")
+
+    val num = Literal(1234567.89)
+    val fmt = Literal(2)
+    val formatNumber = FormatNumber(num, fmt)
+    assert(formatNumber.stateful, "FormatNumber.stateful should be true")
+    val formatNumberCopy = formatNumber.freshCopyIfContainsStatefulExpression()
+    assert(formatNumberCopy ne formatNumber,
+      "freshCopyIfContainsStatefulExpression should return a new instance for FormatNumber")
+  }
 }

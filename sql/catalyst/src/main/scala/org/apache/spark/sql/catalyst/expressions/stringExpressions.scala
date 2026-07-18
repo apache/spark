@@ -1184,6 +1184,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
   @transient private var dict: JMap[String, String] = _
+  override def stateful: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -3489,6 +3490,7 @@ case class FormatNumber(x: Expression, d: Expression)
   // as a decimal separator.
   @transient
   private lazy val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  override def stateful: Boolean = true
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     right.dataType match {
