@@ -1511,12 +1511,12 @@ private[spark] class DAGScheduler(
    * reservation, would deadlock -- so we fail fast with a clear error.
    *
    * Demand is compared against FREE slots, not total capacity (spec S4.1): free = total capacity
-   * minus the tasks already running for OTHER work (other groups and regular jobs) in the SAME
-   * resource profile. Comparing against total capacity would admit a group that fits the cluster in
-   * principle but cannot co-fit right now beside a busy neighbor, then hang. Occupancy excludes the
-   * group's OWN already-running members (e.g. a producer submitted just before its consumer is
-   * admitted) -- otherwise the group would be charged for its own slots and could fail a check it
-   * actually fits.
+   * minus what OTHER work (other groups and regular jobs) has outstanding -- running plus enqueued
+   * -- in the SAME resource profile. Comparing against total capacity would admit a group that
+   * fits the cluster in principle but cannot co-fit right now beside a busy neighbor, then hang.
+   * Occupancy excludes the group's OWN already-running members (e.g. a producer submitted just
+   * before its consumer is admitted) -- otherwise the group would be charged for its own slots
+   * and could fail a check it actually fits.
    *
    * Occupancy is resource-profile-scoped to match `totalSlots` (which is per-profile): counting
    * other profiles' running tasks against one profile's capacity would spuriously reject a fitting
@@ -1957,9 +1957,9 @@ private[spark] class DAGScheduler(
 
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
               // Best-effort slot check: the whole pipelined group must run at once, so its demand
-              // must fit in the currently-FREE slots (total capacity minus what other work is
-              // already running; spec S4.1). If it cannot, fail fast with a clear error rather than
-              // deadlock (there is no out-of-band slot reservation in v1).
+              // must fit in the currently-FREE slots (total capacity minus what other work has
+              // outstanding -- running plus enqueued; spec S4.1). If it cannot, fail fast with a
+              // clear error rather than deadlock (there is no out-of-band slot reservation in v1).
               pipelinedGroupExceedsCapacity(stage) match {
                 case Some((demand, freeSlots)) =>
                   abortStage(stage, s"Cannot co-schedule pipelined stage group: needs $demand " +
