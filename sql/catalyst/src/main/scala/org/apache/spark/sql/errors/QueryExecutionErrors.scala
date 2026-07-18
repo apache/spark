@@ -2539,7 +2539,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
       messageParameters = Map(
-        "parameter" -> (toSQLId("key") + ", " + toSQLId("message")),
+        "parameter" -> toSQLId("key"),
         "functionName" -> toSQLId("hmac"),
         "detailMessage" -> detailMessage))
   }

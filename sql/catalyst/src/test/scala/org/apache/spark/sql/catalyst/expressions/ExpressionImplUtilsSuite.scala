@@ -456,7 +456,7 @@ class ExpressionImplUtilsSuite extends SparkFunSuite {
       },
       condition = "INVALID_PARAMETER_VALUE.HMAC_CRYPTO_ERROR",
       parameters = Map(
-        "parameter" -> "`key`, `message`",
+        "parameter" -> "`key`",
         "functionName" -> "`hmac`",
         "detailMessage" -> ".*"),
       matchPVals = true)
