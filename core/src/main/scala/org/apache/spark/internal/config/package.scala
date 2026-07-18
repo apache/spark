@@ -1687,6 +1687,7 @@ package object config {
         "same renewal and distribution lifecycle as Kerberos delegation token providers. " +
         "Providers that require Kerberos self-gate via delegationTokensRequired.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
