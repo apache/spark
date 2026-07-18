@@ -1,0 +1,185 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.joins
+
+import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+
+/**
+ * Tests for streamed-side join condition hoisting in whole-stage codegen. The
+ * generated-code shape under test requires all of the following:
+ *  - spark.sql.join.splitStreamedSideJoinCondition = true
+ *  - a join type that preserves streamed rows (LeftOuter, RightOuter, LeftAnti, ExistenceJoin)
+ *  - a broadcast hash join, so the scan and the join share one whole-stage. Sort-merge and
+ *    shuffled hash joins are out of scope here: their streamed side crosses a Sort or an
+ *    exchange, which advances its cursor before running the inlined consume code, and the
+ *    sort-merge guard is folded into the match condition rather than emitted as an early
+ *    return. ExistenceJoinSuite covers those join implementations functionally, with the
+ *    config on and off.
+ *  - a batching streamed producer (vectorized parquet scan -> ColumnarToRowExec) whose loop
+ *    cursor is only written back after the inlined consume code
+ *  - a streamed column (pad) not referenced by the join keys/condition, so
+ *    WholeStageCodegenExec.consume does not wrap the join's doConsume in a function
+ *  - a residual filter that references pad (pad % 2 = 0 is not pushed into the scan), so pad
+ *    is materialized before the join's doConsume and the generated code compiles
+ *
+ * Expected results are produced by running the same query with the hoisting disabled. The
+ * LIMIT below ORDER BY on the hoisting-enabled run is load-bearing: an early-returning guard
+ * makes the generated code reprocess the same batch forever; the limit is what makes the
+ * query terminate (with wrong results).
+ */
+class SplitStreamedSideJoinConditionSuite extends QueryTest with SharedSparkSession {
+
+  // streamed_t: (id, a, pad) with id 0..7, a = id, pad = id * 10
+  // build_t:    (bid, b) with bid 0..3, b = bid * 100
+  private def withStreamedAndBuildTables(f: => Unit): Unit = {
+    withTempPath { path =>
+      spark.range(8).selectExpr("id", "id AS a", "id * 10 AS pad")
+        .write.parquet(path.getCanonicalPath + "/streamed")
+      spark.range(4).selectExpr("id AS bid", "id * 100 AS b")
+        .write.parquet(path.getCanonicalPath + "/build")
+      spark.read.parquet(path.getCanonicalPath + "/streamed")
+        .createOrReplaceTempView("streamed_t")
+      spark.read.parquet(path.getCanonicalPath + "/build")
+        .createOrReplaceTempView("build_t")
+      f
+    }
+  }
+
+  // Compares the query with hoisting enabled against the same query with hoisting disabled,
+  // sorting both sides by all columns.
+  private def checkQuery(query: String): Unit = {
+    val expected = withSQLConf(SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> "false") {
+      sortByAllColumns(spark.sql(query)).collect().toSeq
+    }
+    val df = spark.sql(query)
+    assert(df.queryExecution.executedPlan.toString.contains("BroadcastHashJoin"),
+      s"expected a broadcast hash join in ${df.queryExecution.executedPlan}")
+    checkAnswer(sortByAllColumns(df.limit(100)), expected)
+  }
+
+  private def sortByAllColumns(df: DataFrame): DataFrame = {
+    val cols = df.columns.toSeq
+    df.orderBy(cols.head, cols.tail: _*)
+  }
+
+  private def testWithCodegenOnAndOff(testName: String)(
+      query: => String,
+      codegenOnly: Boolean = false): Unit = {
+    testWithWholeStageCodegenOnAndOff(testName) { _ =>
+      val confs = Seq(
+        SQLConf.SPLIT_STREAMED_SIDE_JOIN_CONDITION.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") ++
+        (if (codegenOnly) Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") else Nil)
+      withSQLConf(confs: _*) {
+        withStreamedAndBuildTables {
+          checkQuery(query)
+        }
+      }
+    }
+  }
+
+  // The streamed-only condition a < 5 is false for ids 5..7, so the hoisted guard fires on
+  // those rows. pad is selected but not referenced by the join.
+
+  testWithCodegenOnAndOff(
+    "left outer join, unique build key")(
+    """
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid
+      |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+      |LEFT OUTER JOIN (SELECT DISTINCT bid FROM build_t) b
+      |ON s.id = b.bid AND s.a < 5
+    """.stripMargin)
+
+  testWithCodegenOnAndOff(
+    "left outer join, non-unique build key")(
+    """
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid, b.b
+      |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+      |LEFT OUTER JOIN (SELECT bid, b FROM build_t UNION ALL SELECT bid, b FROM build_t) b
+      |ON s.id = b.bid AND s.a < 5
+    """.stripMargin)
+
+  // The "compiles without pre-materialized column" variants drop the residual filter, so pad
+  // stays lazy through the join and is only materialized by the join's own consume code. They
+  // exercise how the generated guard / probe code scopes that materialization: if pad's
+  // declaration lands in a different (nested) scope than its uses, the generated code does
+  // not compile. CODEGEN_ONLY turns the silent fallback to interpreted execution into an
+  // error so these tests actually assert compilation succeeds.
+  testWithCodegenOnAndOff(
+    "left outer join compiles without pre-materialized column")(
+    """
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad, b.bid, b.b
+      |FROM streamed_t s
+      |LEFT OUTER JOIN build_t b
+      |ON s.id = b.bid AND s.a < 5
+    """.stripMargin,
+    codegenOnly = true)
+
+  testWithCodegenOnAndOff(
+    "right outer join")(
+    """
+      |SELECT /*+ BROADCAST(b) */ b.bid, b.b, s.id, s.a, s.pad
+      |FROM build_t b
+      |RIGHT OUTER JOIN (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+      |ON b.bid = s.id AND s.a < 5
+    """.stripMargin)
+
+  testWithCodegenOnAndOff(
+    "left anti join")(
+    """
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad
+      |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+      |LEFT ANTI JOIN build_t b
+      |ON s.id = b.bid AND s.a < 5
+    """.stripMargin)
+
+  testWithCodegenOnAndOff(
+    "left anti join compiles without pre-materialized column")(
+    """
+      |SELECT /*+ BROADCAST(b) */ s.id, s.a, s.pad
+      |FROM streamed_t s
+      |LEFT ANTI JOIN build_t b
+      |ON s.id = b.bid AND s.a < 5
+    """.stripMargin,
+    codegenOnly = true)
+
+  // The EXISTS flag is projected (not filtered on) so guard-fired rows (ids 5..7) are
+  // emitted via the guard path with e = false, making any replay of those rows visible as
+  // duplicates. Filtering on EXISTS instead would drop them and mask a premature return in
+  // the guard: the stage buffer stays empty, BufferedRowIterator.hasNext treats that as
+  // end-of-stream, and since the abandoned rows produce no output anyway, the query would
+  // return the right answer for the wrong reason.
+  testWithCodegenOnAndOff(
+    "existence join")(
+    """
+      |SELECT s.id, s.a, s.pad,
+      |  EXISTS (SELECT /*+ BROADCAST(b) */ 1 FROM build_t b WHERE b.bid = s.id AND s.a < 5) AS e
+      |FROM (SELECT * FROM streamed_t WHERE pad % 2 = 0) s
+    """.stripMargin)
+
+  testWithCodegenOnAndOff(
+    "existence join compiles without pre-materialized column")(
+    """
+      |SELECT s.id, s.a, s.pad,
+      |  EXISTS (SELECT /*+ BROADCAST(b) */ 1 FROM build_t b WHERE b.bid = s.id AND s.a < 5) AS e
+      |FROM streamed_t s
+    """.stripMargin,
+    codegenOnly = true)
+}

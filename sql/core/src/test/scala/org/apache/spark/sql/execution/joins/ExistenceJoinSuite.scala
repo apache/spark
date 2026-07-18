@@ -178,7 +178,7 @@ class ExistenceJoinSuite extends SharedSparkSession {
   }
 
   // Condition: a = c (equi-key) AND b < 3.0 (left-only) AND d < 4.0 (right-only)
-  private lazy val leftOnlyResidualCondition = {
+  private lazy val mixedResidualCondition = {
     And(
       And(
         EqualTo(left.col("a").expr, right.col("c").expr),
@@ -462,11 +462,11 @@ class ExistenceJoinSuite extends SharedSparkSession {
   // (null, 5.0): b=5.0 >= 3.0 -> emitted
   // (6, null): b=null -> emitted
   testExistenceJoin(
-    "test left-only residual condition for left anti join",
+    "test mixed residual condition for left anti join",
     LeftAnti,
     left,
     right,
-    Some(leftOnlyResidualCondition),
+    Some(mixedResidualCondition),
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(null, null), Row(null, 5.0), Row(6, null)))
 
   // LeftOuter: rows where b < 3.0 and right match with d < 4.0 get matched; others emitted as
@@ -478,11 +478,11 @@ class ExistenceJoinSuite extends SharedSparkSession {
   // For (1,2.0): no equi-match -> emitted as (1,2.0,null,null)
   // Null keys are emitted as null-padded.
   testExistenceJoin(
-    "test left-only residual condition for left outer join",
+    "test mixed residual condition for left outer join",
     LeftOuter,
     left,
     right,
-    Some(leftOnlyResidualCondition),
+    Some(mixedResidualCondition),
     Seq(
       Row(1, 2.0, null, null),
       Row(1, 2.0, null, null),
@@ -497,11 +497,11 @@ class ExistenceJoinSuite extends SharedSparkSession {
 
   // ExistenceJoin with the same left-only residual condition: exists=true only for (2,1.0).
   testExistenceJoin(
-    "test left-only residual condition for existence join",
+    "test mixed residual condition for existence join",
     ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
     left,
     right,
-    Some(leftOnlyResidualCondition),
+    Some(mixedResidualCondition),
     Seq(
       Row(1, 2.0, false),
       Row(1, 2.0, false),
@@ -511,5 +511,112 @@ class ExistenceJoinSuite extends SharedSparkSession {
       Row(null, null, false),
       Row(null, 5.0, false),
       Row(6, null, false)))
+
+  // Inner join is outside the split whitelist: nothing is hoisted and the results must be
+  // identical with the split config on and off.
+  testExistenceJoin(
+    "test mixed residual condition for inner join",
+    Inner,
+    left,
+    right,
+    Some(mixedResidualCondition),
+    Seq(
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0)))
+
+  // Right-only residual: nothing is hoistable (the only residual conjunct references the
+  // non-streamed side), so d < 4.0 must stay in the join condition and the results must be
+  // identical with the split config on and off. Compared to the mixed condition above, the
+  // b < 3.0 conjunct is gone, so (3, 3.0) now matches.
+
+  // LeftAnti: (2, 1.0) and (3, 3.0) match -> dropped; (6, null) has a key match but d is
+  // null -> no qualifying match -> emitted.
+  testExistenceJoin(
+    "test right-only residual condition for left anti join",
+    LeftAnti,
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(null, null), Row(null, 5.0), Row(6, null)))
+
+  // LeftOuter: (2, 1.0) matches both right (2, 3.0) rows (2 left rows -> 4 output rows);
+  // (3, 3.0) matches (3, 2.0); everything else is emitted null-padded, including (6, null)
+  // whose key match has d = null.
+  testExistenceJoin(
+    "test right-only residual condition for left outer join",
+    LeftOuter,
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, null, null),
+      Row(1, 2.0, null, null),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(2, 1.0, 2, 3.0),
+      Row(3, 3.0, 3, 2.0),
+      Row(null, null, null, null),
+      Row(null, 5.0, null, null),
+      Row(6, null, null, null)))
+
+  // ExistenceJoin with the same right-only residual condition: exists=true for (2, 1.0) and
+  // (3, 3.0).
+  testExistenceJoin(
+    "test right-only residual condition for existence join",
+    ExistenceJoin(AttributeReference("exists", BooleanType, false)()),
+    left,
+    right,
+    Some(rightOnlyResidualCondition),
+    Seq(
+      Row(1, 2.0, false),
+      Row(1, 2.0, false),
+      Row(2, 1.0, true),
+      Row(2, 1.0, true),
+      Row(3, 3.0, true),
+      Row(null, null, false),
+      Row(null, 5.0, false),
+      Row(6, null, false)))
+
+  // RightOuter streams the right side, so here d < 4.0 is the streamed-side-only conjunct
+  // and IS hoistable (the mirror of the left-streamed cases above). The hash joins use
+  // BuildLeft so that the right side is the streamed one; right rows with no qualifying
+  // left match are emitted null-padded.
+  testWithSplitStreamedSideCondOnAndOff(
+      "test right-only residual condition for right outer join") { _ =>
+    val join = Join(left.logicalPlan, right.logicalPlan,
+      Inner, Some(rightOnlyResidualCondition), JoinHint.NONE)
+    ExtractEquiJoinKeys.unapply(join).foreach {
+      case (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val expected = Seq(
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(2, 1.0, 2, 3.0),
+            Row(3, 3.0, 3, 2.0),
+            Row(null, null, 4, 1.0),
+            Row(null, null, null, null),
+            Row(null, null, null, 5.0),
+            Row(null, null, 6, null))
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              SortMergeJoinExec(leftKeys, rightKeys, RightOuter, boundCondition, l, r)),
+            expected, sortAnswers = true)
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              BroadcastHashJoinExec(
+                leftKeys, rightKeys, RightOuter, BuildLeft, boundCondition, l, r)),
+            expected, sortAnswers = true)
+          checkAnswer2(left, right, (l: SparkPlan, r: SparkPlan) =>
+            EnsureRequirements.apply(
+              ShuffledHashJoinExec(
+                leftKeys, rightKeys, RightOuter, BuildLeft, boundCondition, l, r)),
+            expected, sortAnswers = true)
+        }
+    }
+  }
 
 }
