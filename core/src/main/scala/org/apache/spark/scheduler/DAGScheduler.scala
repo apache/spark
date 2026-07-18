@@ -1583,6 +1583,11 @@ private[spark] class DAGScheduler(
    * failure must fail the whole group rather than resubmit one stage; the task scheduler keys its
    * fail-fast behavior off this (via TaskSet.isPipelined). False for any stage in a job with no
    * pipelined dependency.
+   *
+   * NOTE: this is deliberately defined here alongside the other group-topology helpers
+   * (`isPipelinedProducer`, `pipelinedGroupOf`) but is first consumed by the group-atomic failure
+   * handling added in a later PR of this stack (`TaskSet.isPipelined` and the member-failure
+   * fail-fast, spec S6). It reads as unused when this change is viewed alone; that is expected.
    */
   private def isPipelinedGroupMember(stage: Stage): Boolean = {
     if (isPipelinedProducer(stage)) {
