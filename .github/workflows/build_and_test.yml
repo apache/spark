@@ -1217,6 +1217,7 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
+    - run: echo "$GITHUB_WORKSPACE"
     - name: Register javadoc problem matcher
       run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build
@@ -1243,7 +1244,8 @@ jobs:
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
         set -o pipefail
-        bundle exec jekyll build 2>&1 | tee /tmp/docs-build.log
+        bundle exec jekyll build 2>&1 \
+          | tee "$GITHUB_WORKSPACE/docs-build.log"
     - name: Remove javadoc problem matcher
       if: always()
       run: echo "::remove-matcher owner=javadoc-doclint::"
@@ -1252,17 +1254,17 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: docs-build-log
-        path: /tmp/docs-build.log
+        path: ${{ github.workspace }}/docs-build.log
         retention-days: 3
     - name: Upload workspace root
       if: always()
-      run: echo "$GITHUB_WORKSPACE" > /tmp/workspace-root.txt
+      run: echo "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/workspace-root.txt"
     - name: Upload workspace root artifact
       if: always()
       uses: actions/upload-artifact@v7
       with:
         name: docs-workspace-root
-        path: /tmp/workspace-root.txt
+        path: ${{ github.workspace }}/workspace-root.txt
         retention-days: 3
     - name: Tar documentation
       if: github.repository != 'apache/spark'
