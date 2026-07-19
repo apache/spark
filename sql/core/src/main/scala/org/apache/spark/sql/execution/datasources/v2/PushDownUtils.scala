@@ -98,8 +98,14 @@ object PushDownUtils extends Logging {
         // push (a predicate used for pruning yet also returned for post-scan re-evaluation, e.g. a
         // parquet row group filter) would evaluate a non-deterministic predicate twice with
         // different results. Keep them as post-scan filters, matching the
-        // SupportsPushDownCatalystFilters branch below.
-        val (deterministicFilters, nonDeterministicFilters) = filters.partition(_.deterministic)
+        // SupportsPushDownCatalystFilters branch below. The legacy config restores the old behavior
+        // of pushing them (for sources that fully enforce such predicates, e.g. JDBC).
+        val (deterministicFilters, nonDeterministicFilters) =
+          if (SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_NON_DETERMINISTIC_V2_FILTER_PUSHDOWN)) {
+            (filters, Seq.empty[Expression])
+          } else {
+            filters.partition(_.deterministic)
+          }
         // Divide the filters into those translatable and untranslatable to data source filters.
         // For the translated filters, we will try to push them down to the data source,
         // and the data source will return the filters that it cannot guarantee to be true
