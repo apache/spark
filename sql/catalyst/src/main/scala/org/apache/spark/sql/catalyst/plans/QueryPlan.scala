@@ -709,6 +709,26 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
     var id = -1
     val allAttributesSeq = this.allAttributes
     mapExpressions {
+      // A no-op rename alias - i.e. `Alias(attr, attr.name)` with metadata that matches the
+      // child attribute's metadata - is exactly the shape that `RemoveRedundantAliases` strips
+      // whenever the underlying attribute is not on its exclude list. Such an alias can still
+      // survive to this point even though it is semantically redundant, e.g. because it sits on
+      // the first child of a `Union` (SPARK-39887 protects the first child's attributes for
+      // correctness) while the exact same alias was stripped from a sibling branch that
+      // references the same underlying attribute (e.g. via a de-duplicated CTE/self-join).
+      // That leaves two semantically-identical branches with different shapes: one still
+      // wrapped in the alias, the other already a bare `AttributeReference`. Left alone, this
+      // asymmetry makes their canonical forms differ, which defeats exchange/subquery reuse.
+      // Canonicalize the no-op alias exactly like the bare attribute it is equivalent to, so
+      // both shapes converge on the same canonical form.
+      case a @ Alias(attr: Attribute, name) if name == attr.name && a.metadata == attr.metadata =>
+        if (allAttributesSeq.indexOf(attr.exprId) == -1) {
+          id += 1
+          attr.withExprId(ExprId(id)).canonicalized
+        } else {
+          QueryPlan.normalizeExpressions(attr, allAttributesSeq)
+        }
+
       case a: Alias =>
         id += 1
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
