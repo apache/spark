@@ -131,6 +131,12 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new GeographyWriter(dt, vector, children.toArray)
+      // The Arrow view types are readable through ArrowColumnVector but have no field writers.
+      // Their Spark types resolve to the non-view vector cases above, so without this case they
+      // would fall through to UNSUPPORTED_DATATYPE naming a fully supported Spark type; report
+      // the offending Arrow type instead.
+      case (_, vector @ (_: ViewVarCharVector | _: ViewVarBinaryVector | _: ListViewVector)) =>
+        throw ExecutionErrors.unsupportedArrowTypeError(vector.getField.getType)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }

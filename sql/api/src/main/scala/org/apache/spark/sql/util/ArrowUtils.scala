@@ -94,6 +94,8 @@ private[sql] object ArrowUtils {
     case ArrowType.Binary.INSTANCE => BinaryType
     case ArrowType.LargeUtf8.INSTANCE => StringType
     case ArrowType.LargeBinary.INSTANCE => BinaryType
+    case ArrowType.Utf8View.INSTANCE => StringType
+    case ArrowType.BinaryView.INSTANCE => BinaryType
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
     case ts: ArrowType.Timestamp
@@ -516,7 +518,7 @@ private[sql] object ArrowUtils {
         val keyType = fromArrowField(elementField.getChildren.get(0))
         val valueType = fromArrowField(elementField.getChildren.get(1))
         MapType(keyType, valueType, elementField.getChildren.get(1).isNullable)
-      case ArrowType.List.INSTANCE =>
+      case ArrowType.List.INSTANCE | ArrowType.ListView.INSTANCE =>
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
