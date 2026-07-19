@@ -256,10 +256,10 @@ class DataFrameAggregateSuite extends SharedSparkSession
             "left" -> leftType,
             "right" -> "\"BOOLEAN\"",
             "sqlExpr" -> "\"\\(.+ AND true\\)\""),
-          context = ExpectedContext(
+          matchPVals = true,
+          queryContext = Array(ExpectedContext(
             fragment = "amp$amp",
-            callSitePattern = getCurrentClassCallSitePattern),
-          matchPVals = true)
+            callSitePattern = getCurrentClassCallSitePattern)))
       }
     }
   }
