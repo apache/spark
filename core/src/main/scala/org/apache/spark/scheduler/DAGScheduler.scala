@@ -724,9 +724,12 @@ private[spark] class DAGScheduler(
    * incremental reads. Rejecting here (before the stage is used) keeps a misuse from silently
    * mis-scheduling. Inert for a regular ShuffleDependency.
    *
-   * Group-level idioms (fan-out to more than one consumer, mixed resource profiles, a regular
-   * shuffle internal to a group) are checked separately where the group is co-scheduled, since they
-   * are properties of the group rather than a single producer stage.
+   * Group-level idioms are handled elsewhere, since they are properties of the group rather than a
+   * single producer stage: fan-out (a producer with more than one consumer) is rejected up front
+   * at job submission by `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created);
+   * mixed resource profiles and a regular shuffle internal to a group are structural invariants
+   * that do not arise for v1's single-profile, all-pipelined job shape and so are not checked
+   * (see `checkPipelinedGroupsSupportedInRDDGraph`).
    */
   private def checkPipelinedProducerSupported(shuffleDep: ShuffleDependency[_, _, _]): Unit = {
     if (!shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
