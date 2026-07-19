@@ -7103,15 +7103,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val producerStageId = taskSets.head.stageId
     val producerStage =
       scheduler.stageIdToStage(producerStageId).asInstanceOf[ShuffleMapStage]
-    // Producer completes on hostA-exec (both partitions).
+    // Producer completes on hostA (both partitions). makeMapStatus("hostA") registers the output
+    // under executor id "hostA-exec" (makeBlockManagerId appends "-exec"), so the ExecutorLost
+    // below -- which loses executor id "hostA-exec" -- actually matches the registered output.
     complete(taskSets.head, Seq(
-      (Success, makeMapStatus("hostA-exec", 2)),
-      (Success, makeMapStatus("hostA-exec", 2))))
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostA", 2))))
     assert(producerStage.isAvailable)
     val taskSetsAfterProducer = taskSets.size
 
-    // Lose the executor that ran the producer. For a regular shuffle this would strip the outputs
-    // and flip isAvailable -> resubmit; for a pipelined shuffle it must be inert.
+    // Lose the executor that ran the producer ("hostA-exec"). For a regular shuffle this would
+    // strip the outputs and flip isAvailable -> resubmit; for a pipelined shuffle it must be inert.
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
 
     assert(producerStage.isAvailable,

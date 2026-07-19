@@ -3112,7 +3112,7 @@ private[spark] class DAGScheduler(
           // jobs sharing that executor must not keep stale MapOutputTracker entries (with an
           // external shuffle service, an ExecutorLost would NOT clean these, so this is the only
           // proactive channel). Safe for the pipelined shuffle itself: it registers no map outputs
-          // in the tracker (S6), so this can only strip regular/durable outputs.
+          // in the tracker (S4), so this can only strip regular/durable outputs.
           unregisterOutputsOnFetchFailedExecutor(bmAddress, task)
           abortStage(failedStage,
             s"A pipelined group member failed with a fetch failure: $failureMessage", None)
