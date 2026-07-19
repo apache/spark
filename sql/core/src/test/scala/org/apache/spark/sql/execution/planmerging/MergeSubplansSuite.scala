@@ -19,11 +19,18 @@ package org.apache.spark.sql.execution.planmerging
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, CreateNamedStruct, GetStructField, If, Literal, Or, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Ascending, Attribute, CreateNamedStruct, Expression, ExprId, GetStructField, If, Literal, Or, ScalarSubquery, SortOrder}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownLimit, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsScanMerging}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanRelationPushDown}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class MergeSubplansSuite extends PlanTest {
 
@@ -1966,4 +1973,625 @@ class MergeSubplansSuite extends PlanTest {
       comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
     }
   }
+
+  // ---- SPARK-40259: generic DSv2 scan merge ----
+
+  private val v2Table = new TestV2Table(StructType(Seq(
+    StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))))
+
+  /** A `DataSourceV2ScanRelation` over `table` projecting only the given columns. */
+  private def v2ScanReadingOn(table: TestV2Table, cols: Seq[String]): DataSourceV2ScanRelation = {
+    val fullOutput = toAttributes(table.schema())
+    val relation =
+      DataSourceV2Relation(table, fullOutput, None, None, CaseInsensitiveStringMap.empty())
+    val output = cols.map(c => fullOutput.find(_.name == c).get)
+    val scan = TestV2Scan(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
+    DataSourceV2ScanRelation(relation, scan, output)
+  }
+
+  /** A `DataSourceV2ScanRelation` over [[v2Table]] projecting only the given columns. */
+  private def v2ScanReading(cols: String*): DataSourceV2ScanRelation =
+    v2ScanReadingOn(v2Table, cols)
+
+  /** Like [[v2ScanReading]] but the scan does NOT implement `SupportsScanMerging`. */
+  private def v2ScanReadingNoMerge(cols: String*): DataSourceV2ScanRelation = {
+    val s = v2ScanReading(cols: _*)
+    s.copy(scan = TestV2ScanNoMerge(s.scan.readSchema()))
+  }
+
+  private def v2Scans(plan: LogicalPlan): Seq[DataSourceV2ScanRelation] =
+    plan.collectWithSubqueries { case s: DataSourceV2ScanRelation => s }
+
+  /**
+   * Normalizes a merged plan so `comparePlans` can match it: (1) drops each DSv2 scan's
+   * dynamically-built Scan to a schema-only placeholder (the pushed describe() strings are asserted
+   * separately), and (2) resets the nested DataSourceV2Relation's output exprIds to a positional
+   * scheme. The reset is needed because `DataSourceV2ScanRelation` is a `LeafNode`, so its
+   * `relation` is a constructor arg rather than a child -- PlanTest's `normalizeExprIds` never
+   * recurses into it, and those exprIds otherwise differ between the expected and actual plans.
+   */
+  private def normalizeScans(plan: LogicalPlan): LogicalPlan = plan.transformWithSubqueries {
+    case s: DataSourceV2ScanRelation =>
+      val fixedRelation = s.relation.copy(
+        output = s.relation.output.zipWithIndex.map { case (a, i) => a.withExprId(ExprId(i)) })
+      s.copy(relation = fixedRelation, scan = TestV2Scan(s.scan.readSchema()))
+  }
+
+  // Normalize merged DSv2 scans before the standard comparison (a no-op on plans without them),
+  // so tests can call plain comparePlans. See normalizeScans for why this is needed.
+  override protected def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = true): Unit =
+    super.comparePlans(normalizeScans(plan1), normalizeScans(plan2), checkAnalysis)
+
+  test("SPARK-40259: merge DSv2 scans that differ only in projected columns") {
+    val sub1 = ScalarSubquery(v2ScanReading("a").groupBy()(sum($"a").as("sum_a")))
+    val sub2 = ScalarSubquery(v2ScanReading("b").groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: the two scans fuse into one reading {a, b}, feeding a single aggregate. No filters,
+    // so no OR-widen propagation.
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+    val mergedSubquery = mergedScan
+      .groupBy()(sum($"a").as("sum_a"), sum($"b").as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans when a pushdown is merge-blocking") {
+    val sub1 = ScalarSubquery(v2ScanReading("a").groupBy()(sum($"a").as("sum_a")))
+    val blockingScan = v2ScanReading("b").copy(hasMergeBlockingPushdown = true)
+    val sub2 = ScalarSubquery(blockingScan.groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // A merge-blocking pushdown declines the merge: the plan is left unchanged.
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-40259: merge DSv2 scans with different filters via OR-widen propagation") {
+    val sub1 = ScalarSubquery(
+      v2ScanReading("a").where($"a" > 1).groupBy()(sum($"a").as("sum_a")))    // cp
+    val sub2 = ScalarSubquery(
+      v2ScanReading("b").where($"b" > 2).groupBy()(sum($"b").as("sum_b")))    // np
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: the two scans fuse into one reading {a, b}; the differing filters become
+    // propagatedFilter aliases OR-widened in a Filter, and each side's aggregate carries its
+    // filter as a FILTER clause (np = sub2 gets id 0, cp = sub1 gets id 1).
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b"))
+    val npFilterAlias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("sum_a"),
+        sum($"b", Some(npFilter)).as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      // Additional: the merged scan re-pushes OR(a > 1, b > 2) for row-group pruning, which the
+      // structural comparison above normalizes out.
+      val pushed = v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed
+      assert(pushed.nonEmpty && pushed.mkString.contains("a") && pushed.mkString.contains("b"),
+        s"expected an OR pruning predicate over a and b pushed to the merged scan, got: $pushed")
+    }
+  }
+
+  test("SPARK-40259: merge proceeds without pruning when the source rejects the pruning") {
+    val rejecting = new TestV2Table(
+      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))),
+      acceptsFilters = false)
+    val s1 = v2ScanReadingOn(rejecting, Seq("a"))
+    val s2 = v2ScanReadingOn(rejecting, Seq("b"))
+    val sub1 = ScalarSubquery(s1.where(s1.output.head > 1).groupBy()(sum($"a").as("sum_a")))
+    val sub2 = ScalarSubquery(s2.where(s2.output.head > 2).groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: the same OR-widen merge as the accepting case -- only the pushed pruning differs
+    // (a rejecting source records none). np = sub2 -> id 0, cp = sub1 -> id 1.
+    val mergedScan = v2ScanReadingOn(rejecting, Seq("a", "b"))
+    val npFilterAlias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("sum_a"),
+        sum($"b", Some(npFilter)).as("sum_b"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_a"), $"sum_a",
+        Literal("sum_b"), $"sum_b")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      // Phase 2 degrades gracefully: the merge happens; a rejecting source records no pruning.
+      assert(v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed.isEmpty,
+        "a rejecting source must not record any pushed pruning predicate")
+    }
+  }
+
+  test("SPARK-40259: do not merge when a strict pushed filter is not re-enforced on rebuild") {
+    // The scans claim a strict filter on "a" (in pushedFilters), but the source enforces nothing
+    // strictly (empty strictColumns -> everything is best-effort). Re-pushing the "strict" filter
+    // would leave it merely best-effort with nothing above to re-check it, so the merge must abort.
+    val bestEffort = new TestV2Table(StructType(Seq(
+      StructField("a", IntegerType), StructField("b", IntegerType), StructField("c", StringType))))
+    val s1 = v2ScanReadingOn(bestEffort, Seq("a", "b"))
+    val s2 = v2ScanReadingOn(bestEffort, Seq("a", "c"))
+    val sub1 = ScalarSubquery(
+      s1.copy(pushedFilters = Seq(s1.output.find(_.name == "a").get > 0))
+        .groupBy()(sum($"b").as("sum_b")))
+    val sub2 = ScalarSubquery(
+      s2.copy(pushedFilters = Seq(s2.output.find(_.name == "a").get > 0))
+        .groupBy()(sum($"c").as("max_c")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // A strict filter the rebuilt scan cannot re-enforce declines the merge: plan left unchanged.
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans that do not opt into SupportsScanMerging") {
+    val sub1 = ScalarSubquery(v2ScanReadingNoMerge("a").groupBy()(sum($"a").as("sum_a")))
+    val sub2 = ScalarSubquery(v2ScanReadingNoMerge("b").groupBy()(sum($"b").as("sum_b")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Scans that do not implement SupportsScanMerging decline the merge: plan left unchanged.
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-40259: merge DSv2 scans with identical filters re-pushes the pruning") {
+    // Identical post-scan filter (a > 1), differing columns: the two scans fuse and the identical
+    // condition is re-pushed to the merged scan for row-group pruning (Phase 2, single condition).
+    val sub1 = ScalarSubquery(
+      v2ScanReading("a", "b").where($"a" > 1).groupBy()(sum($"b").as("sum_b")))
+    val sub2 = ScalarSubquery(
+      v2ScanReading("a", "c").where($"a" > 1).groupBy()(sum($"c").as("sum_c")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: the identical filter a > 1 kept as a single Filter above the merged scan {a, b, c};
+    // no OR-widen (the conditions match). The aggregates read b and c.
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a", "b", "c"))
+    val mergedSubquery = mergedScan.where($"a" > 1)
+      .groupBy()(sum($"b").as("sum_b"), sum($"c").as("sum_c"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_b"), $"sum_b",
+        Literal("sum_c"), $"sum_c")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, correctAnswer.analyze)
+    // Additional: the identical a > 1 is re-pushed to the merged scan for pruning.
+    val pushed = v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed
+    assert(pushed.nonEmpty && pushed.mkString.contains("a"),
+      s"expected the identical filter a > 1 to be re-pushed to the merged scan, got: $pushed")
+  }
+
+  test("SPARK-40259: merge three DSv2 scans with differing filters re-pushes the full OR") {
+    // Three-way merge exercises the tagged (MERGED_FILTER_TAG) branch: the leaf re-merge rebuilds
+    // the scan strict-only each round, so the tagged branch must re-establish the full 3-way OR.
+    val t = new TestV2Table(StructType(Seq(StructField("a", IntegerType),
+      StructField("b", IntegerType), StructField("d", IntegerType))))
+    val sub1 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("a")).where($"a" > 1).groupBy()(sum($"a").as("s1")))
+    val sub2 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("b")).where($"b" > 2).groupBy()(sum($"b").as("s2")))
+    val sub3 = ScalarSubquery(
+      v2ScanReadingOn(t, Seq("d")).where($"d" > 3).groupBy()(sum($"d").as("s3")))
+    val originalQuery = testRelation.select(sub1, sub2, sub3)
+
+    // Expected: one merged scan reading {a, b, d}; step 1 merges sub1 (cp) + sub2 (np) ->
+    // propagatedFilter_0 = b > 2 (np), _1 = a > 1 (cp); step 2 merges sub3 (np) -> _2 = d > 3,
+    // extending the OR. Each aggregate carries its side's FILTER.
+    val mergedScan = v2ScanReadingOn(t, Seq("a", "b", "d"))
+    val npFilter0Alias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilter0Alias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter1Alias = Alias($"d" > 3, "propagatedFilter_2")()
+    val npFilter0 = npFilter0Alias.toAttribute
+    val cpFilter0 = cpFilter0Alias.toAttribute
+    val npFilter1 = npFilter1Alias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilter0Alias, cpFilter0Alias, npFilter1Alias): _*)
+      .where(Or(Or(npFilter0, cpFilter0), npFilter1))
+      .groupBy()(
+        sum($"a", Some(cpFilter0)).as("s1"),
+        sum($"b", Some(npFilter0)).as("s2"),
+        sum($"d", Some(npFilter1)).as("s3"))
+      .select(CreateNamedStruct(Seq(
+        Literal("s1"), $"s1",
+        Literal("s2"), $"s2",
+        Literal("s3"), $"s3")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      // Additional: the merged scan carries the full 3-way OR pruning over a, b and d.
+      val pushed = v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed.mkString
+      assert(pushed.contains("a") && pushed.contains("b") && pushed.contains("d"),
+        s"expected an OR pruning over a, b and d pushed to the merged scan, got: $pushed")
+    }
+  }
+
+  test("SPARK-40259: a non-deterministic filter conjunct is not pushed as a pruning predicate") {
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      // Bare non-grouping aggregates (joined) go through the Aggregate extraction path, which --
+      // unlike the ScalarSubquery path -- does not gate on determinism, so the OR-widen pruning
+      // predicate carries a non-deterministic conjunct into the scan-merge Phase 2.
+      val agg1 = v2ScanReading("a").where(($"a" > 1) && (rand(0) < Literal(0.5)))
+        .groupBy()(sum($"a").as("s1"))
+      val agg2 = v2ScanReading("b").where($"b" > 2).groupBy()(sum($"b").as("s2"))
+      val originalQuery = agg1.join(agg2)
+
+      val scans = v2Scans(Optimize.execute(originalQuery.analyze))
+      assert(scans.length == 1, "the scans should still be fused")
+      val pushed = scans.head.scan.asInstanceOf[TestV2Scan].pushed.mkString
+      // Pruning predicate `(a > 1 AND rand() < 0.5) OR (b > 2)` is non-deterministic as a whole.
+      // A source that prunes on it uses its own rand() draw, while the enclosing Filter re-checks
+      // exactness with a different draw, so pruned rows would be lost. Best-effort pruning degrades
+      // gracefully: the predicate is dropped rather than weakened, so nothing is pushed and no
+      // rand() reaches the source. The merge itself is unaffected.
+      assert(!pushed.contains("RAND"),
+        s"the non-deterministic rand() conjunct must not be pushed as pruning, got: $pushed")
+      assert(pushed.isEmpty,
+        s"a non-deterministic pruning predicate must be dropped wholesale, got: $pushed")
+    }
+  }
+
+  test("SPARK-40259: merge DSv2 scans that pushed the same strict filters (re-push path)") {
+    // A source that fully enforces (strict) predicates on column "a".
+    val strictOnA = new TestV2Table(
+      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType),
+        StructField("c", StringType))),
+      strictColumns = Set("a"))
+    val s1 = v2ScanReadingOn(strictOnA, Seq("a", "b"))
+    val s2 = v2ScanReadingOn(strictOnA, Seq("a", "c"))
+    val sub1 = ScalarSubquery(
+      s1.copy(pushedFilters = Seq(s1.output.find(_.name == "a").get > 0))
+        .groupBy()(sum($"b").as("sum_b")))
+    val sub2 = ScalarSubquery(
+      s2.copy(pushedFilters = Seq(s2.output.find(_.name == "a").get > 0))
+        .groupBy()(sum($"c").as("max_c")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: one merged scan reading {a, b, c} that keeps the strict a > 0 in pushedFilters; the
+    // two aggregates read b and c. No post-scan filter, so no OR-widen.
+    val mergedScan0 = v2ScanReadingOn(strictOnA, Seq("a", "b", "c"))
+    val mergedScan = mergedScan0.copy(
+      pushedFilters = Seq(mergedScan0.output.find(_.name == "a").get > 0))
+    val mergedSubquery = mergedScan
+      .groupBy()(sum($"b").as("sum_b"), sum($"c").as("max_c"))
+      .select(CreateNamedStruct(Seq(
+        Literal("sum_b"), $"sum_b",
+        Literal("max_c"), $"max_c")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, correctAnswer.analyze)
+    // Additional: the strict a > 0 is re-enforced on the merged scan (normalized out above).
+    assert(v2Scans(optimized).head.pushedFilters.nonEmpty,
+      "the merged relation must carry the strict pushed filters")
+  }
+
+  test("SPARK-40259: merge scans with equal strict filters and differing post-scan filters") {
+    // Mixed source: "p" is fully enforced (strict), "a"/"b" are best-effort. Both sides push
+    // the same strict filter p > 0 and carry a differing post-scan filter (a > 1 / b > 2). The
+    // scans fuse on the equal strict p; the differing post-scan filters OR-widen above the
+    // merged scan, so the rebuild re-pushes p > 0 (strict) and (a > 1 OR b > 2) (pruning) at
+    // once -- the only path that drives buildMergedScan with both non-empty.
+    val mixed = new TestV2Table(
+      StructType(Seq(StructField("p", IntegerType), StructField("a", IntegerType),
+        StructField("b", IntegerType))),
+      strictColumns = Set("p"))
+    val s1 = v2ScanReadingOn(mixed, Seq("p", "a"))
+    val s2 = v2ScanReadingOn(mixed, Seq("p", "b"))
+    val sub1 = ScalarSubquery(
+      s1.copy(pushedFilters = Seq(s1.output.find(_.name == "p").get > 0))
+        .where($"a" > 1).groupBy()(sum($"a").as("s1")))
+    val sub2 = ScalarSubquery(
+      s2.copy(pushedFilters = Seq(s2.output.find(_.name == "p").get > 0))
+        .where($"b" > 2).groupBy()(sum($"b").as("s2")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: one merged scan reading {p, a, b} that keeps p > 0 strict (pushedFilters), with
+    // the differing post-scan filters OR-widened above it (np = sub2 -> id 0, cp = sub1 -> id 1).
+    val mergedScan0 = v2ScanReadingOn(mixed, Seq("p", "a", "b"))
+    val mergedScan = mergedScan0.copy(
+      pushedFilters = Seq(mergedScan0.output.find(_.name == "p").get > 0))
+    val npFilterAlias = Alias($"b" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("s1"),
+        sum($"b", Some(npFilter)).as("s2"))
+      .select(CreateNamedStruct(Seq(
+        Literal("s1"), $"s1",
+        Literal("s2"), $"s2")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      // Additional: p stays strict (in pushedFilters) and the OR (a, b) is re-pushed as pruning,
+      // both normalized out of the structural comparison above.
+      val mergedResult = v2Scans(optimized).head
+      assert(mergedResult.pushedFilters.exists(_.references.exists(_.name == "p")),
+        s"the strict filter on p must stay enforced; got ${mergedResult.pushedFilters}")
+      val pushed = mergedResult.scan.asInstanceOf[TestV2Scan].pushed.mkString
+      assert(pushed.contains("a") && pushed.contains("b"),
+        s"the differing post-scan filters must be re-pushed as OR pruning, got: $pushed")
+    }
+  }
+
+  test("SPARK-40259: a fully pushed non-deterministic filter blocks merging") {
+    // A source that fully enforces every pushed predicate. V2ScanRelationPushDown drops a
+    // non-deterministic filter from pushedFilters (that field is deterministic-only) but records
+    // it as a merge-blocking pushdown, since a rebuilt merged scan could neither see nor re-apply
+    // it -- fusing two such scans would silently drop each side's independent rand() draw. A
+    // deterministic filter, by contrast, lands in pushedFilters and stays mergeable.
+    val enforcing = new TestV2Table(StructType(Seq(
+      StructField("a", IntegerType), StructField("b", IntegerType))), enforceAll = true)
+    def pushDown(mkCondition: DataSourceV2Relation => Expression): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation(
+        enforcing, toAttributes(enforcing.schema()), None, None, CaseInsensitiveStringMap.empty())
+      V2ScanRelationPushDown(Filter(mkCondition(relation), relation))
+        .collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    }
+
+    val nonDet = pushDown(_ => rand(0) < Literal(0.5))
+    assert(nonDet.hasMergeBlockingPushdown,
+      "a fully pushed non-deterministic filter must block merging")
+    assert(nonDet.pushedFilters.isEmpty,
+      "a non-deterministic filter must not appear in the deterministic pushedFilters")
+
+    val det = pushDown(_.output.head > 0)
+    assert(!det.hasMergeBlockingPushdown,
+      "a fully pushed deterministic filter must not block merging")
+    assert(det.pushedFilters.nonEmpty,
+      "a fully pushed deterministic filter must land in pushedFilters")
+  }
+
+  test("SPARK-40259: do not merge DSv2 scans that report key-grouped partitioning or ordering") {
+    // The rebuilt merged scan does not reconstruct reported partitioning/ordering, so a scan
+    // reporting either declines the merge (checked on both the np and cp side) -- the plan is left
+    // unchanged -- rather than silently dropping it. Preserving them across a merge is a deferred
+    // follow-up. (The plain-scan merge is already covered by the projected-columns test above.)
+    def assertDeclines(withField: DataSourceV2ScanRelation => DataSourceV2ScanRelation): Unit =
+      Seq(
+        (withField(v2ScanReading("a")), v2ScanReading("b")),
+        (v2ScanReading("a"), withField(v2ScanReading("b")))).foreach { case (npScan, cpScan) =>
+        val q = testRelation.select(
+          ScalarSubquery(npScan.groupBy()(sum($"a").as("sa"))),
+          ScalarSubquery(cpScan.groupBy()(sum($"b").as("sb"))))
+        comparePlans(Optimize.execute(q.analyze), q.analyze)
+      }
+
+    assertDeclines(s => s.copy(keyGroupedPartitioning = Some(Seq(s.output.head))))
+    assertDeclines(s => s.copy(ordering = Some(Seq(SortOrder(s.output.head, Ascending)))))
+  }
+
+  test("SPARK-40259: merge DSv2 scans reading identical columns but differing filters") {
+    // Both scans read only "a", so the column union adds nothing (the np-only set is empty); the
+    // merge is driven purely by the differing filters, and the OR is still re-pushed for pruning.
+    // (sub1 is cp, sub2 is np.)
+    val sub1 = ScalarSubquery(v2ScanReading("a").where($"a" > 1).groupBy()(sum($"a").as("s1")))
+    val sub2 = ScalarSubquery(v2ScanReading("a").where($"a" > 2).groupBy()(sum($"a").as("s2")))
+    val originalQuery = testRelation.select(sub1, sub2)
+
+    // Expected: one merged scan reading just {a} (np-only set empty), the differing filters
+    // OR-widened above it (np = sub2 -> id 0, cp = sub1 -> id 1).
+    val mergedScan = v2ScanReadingOn(v2Table, Seq("a"))
+    val npFilterAlias = Alias($"a" > 2, "propagatedFilter_0")()
+    val cpFilterAlias = Alias($"a" > 1, "propagatedFilter_1")()
+    val npFilter = npFilterAlias.toAttribute
+    val cpFilter = cpFilterAlias.toAttribute
+    val mergedSubquery = mergedScan
+      .select(mergedScan.output ++ Seq(npFilterAlias, cpFilterAlias): _*)
+      .where(Or(npFilter, cpFilter))
+      .groupBy()(
+        sum($"a", Some(cpFilter)).as("s1"),
+        sum($"a", Some(npFilter)).as("s2"))
+      .select(CreateNamedStruct(Seq(
+        Literal("s1"), $"s1",
+        Literal("s2"), $"s2")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+
+    withSQLConf(
+        SQLConf.MERGE_SUBPLANS_FILTER_PROPAGATION_ENABLED.key -> "true",
+        SQLConf.MERGE_SUBPLANS_SYMMETRIC_FILTER_PROPAGATION_ENABLED.key -> "true") {
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+      val pushed = v2Scans(optimized).head.scan.asInstanceOf[TestV2Scan].pushed.mkString
+      assert(pushed.contains("a"), s"the OR over a should be re-pushed as pruning, got: $pushed")
+    }
+  }
+
+  test("SPARK-40259: merge three DSv2 scans that pushed the same strict filter") {
+    // Round-2 merge feeds the already-merged relation back through samePushedFilters. All three
+    // scans carry the same strict a > 0, so they fuse into a single scan reading a, b, c, d.
+    val strictOnA = new TestV2Table(
+      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType),
+        StructField("c", IntegerType), StructField("d", IntegerType))),
+      strictColumns = Set("a"))
+    def strictSub(col: String): ScalarSubquery = {
+      val s = v2ScanReadingOn(strictOnA, Seq("a", col))
+      ScalarSubquery(
+        s.copy(pushedFilters = Seq(s.output.find(_.name == "a").get > 0))
+          .groupBy()(sum(s.output.find(_.name == col).get).as(s"agg_$col")))
+    }
+    val originalQuery = testRelation.select(strictSub("b"), strictSub("c"), strictSub("d"))
+
+    // Expected: one merged scan reading {a, b, c, d} keeping the shared strict a > 0; three
+    // aggregates read b, c and d. No post-scan filter, so no OR-widen.
+    val mergedScan0 = v2ScanReadingOn(strictOnA, Seq("a", "b", "c", "d"))
+    val mergedScan = mergedScan0.copy(
+      pushedFilters = Seq(mergedScan0.output.find(_.name == "a").get > 0))
+    val mergedSubquery = mergedScan
+      .groupBy()(sum($"b").as("agg_b"), sum($"c").as("agg_c"), sum($"d").as("agg_d"))
+      .select(CreateNamedStruct(Seq(
+        Literal("agg_b"), $"agg_b",
+        Literal("agg_c"), $"agg_c",
+        Literal("agg_d"), $"agg_d")).as("mergedValue"))
+    val analyzedMergedSubquery = mergedSubquery.analyze
+    val correctAnswer = WithCTE(
+      testRelation.select(
+        extractorExpression(0, analyzedMergedSubquery.output, 0),
+        extractorExpression(0, analyzedMergedSubquery.output, 1),
+        extractorExpression(0, analyzedMergedSubquery.output, 2)),
+      Seq(definitionNode(analyzedMergedSubquery, 0)))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, correctAnswer.analyze)
+    assert(v2Scans(optimized).head.pushedFilters.exists(_.references.exists(_.name == "a")),
+      "the merged scan must keep the shared strict filter on a")
+  }
+
+  test("SPARK-40259: a pushed limit blocks merging (hasBlockingPushdown classification)") {
+    // hasBlockingPushdown flags a pushed limit/offset/sample/sort as merge-blocking; exercise the
+    // limit term through the real pushdown (the others are analogous). The stub opts into limit
+    // pushdown, so V2ScanRelationPushDown records pushedLimit on the resulting scan relation.
+    val relation = DataSourceV2Relation(
+      v2Table, toAttributes(v2Table.schema()), None, None, CaseInsensitiveStringMap.empty())
+    val pushed = V2ScanRelationPushDown(Limit(Literal(1), relation))
+      .collectFirst { case s: DataSourceV2ScanRelation => s }.get
+    assert(pushed.hasMergeBlockingPushdown,
+      "a pushed limit must be recorded as a merge-blocking pushdown")
+  }
+}
+
+/**
+ * Minimal readable DSv2 table whose scan opts into merging, for scan-merge tests.
+ *
+ * A pushed predicate that references only columns in `strictColumns` is fully enforced (strict):
+ * accepted by the source and NOT returned as a post-scan filter. Any other predicate is
+ * best-effort (stats): accepted for row-group pruning but returned so it is re-checked above the
+ * scan. When `acceptsFilters` is false the source rejects everything: nothing is accepted and
+ * every predicate is returned (used to exercise the "no pruning recovery" path). When `enforceAll`
+ * is true the source fully enforces every accepted predicate (nothing is returned as a post-scan
+ * filter), including reference-less ones such as a non-deterministic filter.
+ */
+private class TestV2Table(
+    tableSchema: StructType,
+    acceptsFilters: Boolean = true,
+    strictColumns: Set[String] = Set.empty,
+    enforceAll: Boolean = false)
+  extends Table with SupportsRead {
+  override def name(): String = "test_v2_table"
+  override def schema(): StructType = tableSchema
+  override def capabilities(): java.util.Set[TableCapability] =
+    java.util.Collections.singleton(TableCapability.BATCH_READ)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new TestV2ScanBuilder(tableSchema, acceptsFilters, strictColumns, enforceAll)
+}
+
+private class TestV2ScanBuilder(
+    tableSchema: StructType,
+    acceptsFilters: Boolean,
+    strictColumns: Set[String],
+    enforceAll: Boolean)
+  extends ScanBuilder with SupportsPushDownRequiredColumns with SupportsPushDownV2Filters
+    with SupportsPushDownLimit {
+  private var prunedSchema: StructType = tableSchema
+  private var accepted: Array[Predicate] = Array.empty  // strict UNION stats (pushedPredicates)
+
+  override def pruneColumns(requiredSchema: StructType): Unit = prunedSchema = requiredSchema
+
+  // Opts into limit pushdown so V2ScanRelationPushDown records a merge-blocking pushedLimit.
+  override def pushLimit(limit: Int): Boolean = true
+
+  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+    if (!acceptsFilters) {
+      predicates // reject everything: nothing accepted, all returned as post-scan
+    } else if (enforceAll) {
+      accepted = predicates
+      Array.empty // fully enforce every accepted predicate, including reference-less ones
+    } else {
+      accepted = predicates
+      predicates.filterNot(isStrict) // stats predicates are re-checked above the scan
+    }
+  }
+
+  private def isStrict(p: Predicate): Boolean =
+    p.references().nonEmpty &&
+      p.references().forall(r => strictColumns.contains(r.fieldNames().mkString(".")))
+
+  override def pushedPredicates(): Array[Predicate] = accepted
+  override def build(): Scan = TestV2Scan(prunedSchema, accepted.map(_.describe()).toSeq)
+}
+
+/** `pushed` records the `describe()` of the predicates pushed to the scan, for test assertions. */
+private case class TestV2Scan(schema: StructType, pushed: Seq[String] = Seq.empty)
+  extends Scan with SupportsScanMerging {
+  override def readSchema(): StructType = schema
+}
+
+private case class TestV2ScanNoMerge(schema: StructType) extends Scan {
+  override def readSchema(): StructType = schema
 }

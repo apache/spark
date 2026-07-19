@@ -1271,33 +1271,34 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "pushedFilters should not contain the unsupported filter on column j")
   }
 
-  test("pushedFilters are remapped by ProjectionOverSchema after nested schema pruning") {
+  test("pushedFilters keep the relation-level struct type after nested schema pruning") {
     val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
     // NestedSchemaScanBuilder pushes GreaterThan on "s.a".
-    // Selecting only s.a triggers nested schema pruning: s goes from struct<a,b> to struct<a>.
+    // Selecting only s.a triggers nested schema pruning: the scan output narrows s to struct<a>,
+    // but pushedFilters records the fully-pushed filter against the relation's pre-pruning schema,
+    // so its struct column keeps the full type struct<a, b>.
     val q = df.select($"s.a").filter($"s.a" > 3)
     checkAnswer(q, (4 until 10).map(i => Row(i)))
 
     val scanRelation = getScanRelation(q)
     assert(scanRelation.pushedFilters.nonEmpty,
       "pushedFilters should be non-empty")
-    // Find the struct attribute referenced by the pushed filter.
-    // Before remapping it would have type struct<a,b>; after remapping, struct<a>.
     val structAttrs = scanRelation.pushedFilters
       .flatMap(_.collect { case a: AttributeReference if a.name == "s" => a })
     assert(structAttrs.nonEmpty, "pushed filter should reference struct column s")
-    val prunedStructType = structAttrs.head.dataType.asInstanceOf[StructType]
-    assert(prunedStructType.fieldNames.toSeq == Seq("a"),
-      s"struct column in pushed filter should be pruned to struct<a> but was $prunedStructType")
+    val structType = structAttrs.head.dataType.asInstanceOf[StructType]
+    assert(structType.fieldNames.toSeq == Seq("a", "b"),
+      s"struct column in pushed filter should keep type struct<a, b> but was $structType")
   }
 
-  test("pushedFilters drops filters referencing pruned nested struct fields") {
+  test("pushedFilters keep filters referencing pruned nested struct fields") {
     // Disable constraint propagation so IsNotNull(s.a) is not added as a post-scan
     // filter (it would keep field a alive in the struct).
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
-      // Filter on s.a but select only s.b. Column pruning narrows s to struct<b>,
-      // so the pushed filter on s.a can't be remapped and should be dropped.
+      // Filter on s.a but select only s.b. Column pruning narrows the scan output's s to struct<b>,
+      // but pushedFilters keeps the fully-pushed filter on s.a (against the relation schema) so a
+      // later scan merge can re-enforce it.
       val q = df.filter($"s.a" > 3).select($"s.b")
       checkAnswer(q, (4 until 10).map(i => Row(-i)))
 
@@ -1306,8 +1307,8 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
         filter.collect { case a: AttributeReference if a.name == "s" => a }
           .flatMap(_.dataType.asInstanceOf[StructType].fieldNames)
       }
-      assert(!referencedStructFields.contains("a"),
-        "pushedFilters should not reference pruned nested field a")
+      assert(referencedStructFields.contains("a"),
+        "pushedFilters should keep the filter referencing nested field a")
     }
   }
 
@@ -1334,6 +1335,32 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "Two instances should not be equal before canonicalization")
     assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
       "Canonicalized instances with equivalent pushedFilters should be equal")
+  }
+
+  test("scan canonicalization distinguishes different pushedFilters") {
+    // Negative counterpart to the test above: two scans of the same relation whose pushedFilters
+    // differ must NOT canonicalize equal. This inequality is what lets MergeSubplans tell the two
+    // scans apart; if they compared equal it could treat them as identical and apply one side's
+    // filter to both -- a wrong-answer bug.
+    val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
+
+    val relation1 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val relation2 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val scan1 = relation1.table.asReadable.newScanBuilder(relation1.options).build()
+    val scan2 = relation2.table.asReadable.newScanBuilder(relation2.options).build()
+
+    val filter1 = CatalystGreaterThan(relation1.output.head, CatalystLiteral(3))
+    val filter2 = CatalystGreaterThan(relation2.output.head, CatalystLiteral(5))
+
+    val scanRelation1 = DataSourceV2ScanRelation(relation1, scan1, relation1.output,
+      pushedFilters = Seq(filter1))
+    val scanRelation2 = DataSourceV2ScanRelation(relation2, scan2, relation2.output,
+      pushedFilters = Seq(filter2))
+
+    assert(scanRelation1.canonicalized != scanRelation2.canonicalized,
+      "Canonicalized instances with different pushedFilters must not be equal")
   }
 
   test("pushedFilters excludes non-deterministic filters") {
@@ -1376,20 +1403,23 @@ class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper 
       "non-deterministic filter should be retained as a post-scan Filter")
   }
 
-  test("pushedFilters drops filters referencing pruned columns") {
+  test("pushedFilters keep filters referencing pruned columns") {
     // Disable constraint propagation so IsNotNull(i) is not added (it would keep
     // column i in the scan output). This simulates a connector that pushes IsNotNull.
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
       val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
-      // i > 3 is fully pushed; selecting only j causes column pruning to drop i.
+      // i > 3 is fully pushed; selecting only j causes column pruning to drop i from the scan
+      // output, but pushedFilters keeps the fully-pushed filter on i (against the relation schema)
+      // so a later scan merge can re-enforce it.
       val q = df.filter($"i" > 3).select($"j")
       checkAnswer(q, (4 until 10).map(i => Row(-i)))
 
       val scanRelation = getScanRelation(q)
       assert(!scanRelation.output.exists(_.name == "i"),
         "column i should be pruned from scan output")
-      assert(scanRelation.pushedFilters.isEmpty,
-        "pushedFilters should drop filters referencing pruned columns")
+      val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+      assert(referencedCols.contains("i"),
+        "pushedFilters should keep the filter referencing the pruned column i")
     }
   }
 
