@@ -6130,6 +6130,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(scheduler.runningStages.isEmpty)
     assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
+    assert(scheduler.dependentStageMap.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
   }
 
@@ -6552,17 +6553,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("pipelined shuffle: the group's own running members are not charged against its admission") {
-    // Occupancy for the free-slot check counts only OTHER work: the group's own already-running
-    // producer must not be charged, or a group that exactly fills free capacity would be wrongly
-    // rejected. Model a full cluster where the ONLY running tasks are this group's own: 4 total
-    // slots, other-work occupancy = 0 (the seam excludes the group) -> free = 4 >= demand 4 ->
-    // admitted. The exclusion itself is unit-tested against TaskSchedulerImpl separately; here we
-    // assert the DAGScheduler admits a demand==capacity group when nothing else is running.
+  test("pipelined shuffle: a group whose demand exactly equals free capacity is admitted") {
+    // Boundary: demand == free capacity must be admitted, not rejected by an off-by-one (the check
+    // is `demand > freeSlots`, not `>=`). 4 total slots, other-work occupancy 0 -> free 4 >= demand
+    // 4 -> admitted. NOTE: the DAGScheduler up-front admission (rejectUnadmittablePipelinedGroup)
+    // passes excludeStageIds = Set.empty (no job stage exists yet at admission time), so the
+    // group's-own-members exclusion is NOT exercised here; that exclusion is genuinely covered by
+    // TaskSchedulerImplSuite ("outstandingTasksForOtherWorkInProfile excludes the given stages").
     val producerRdd = new MyRDD(sc, 2, Nil)
     val myScheduler = scheduler.asInstanceOf[MyDAGScheduler]
     myScheduler.maxConcurrentTasksForTest = 4
-    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0 // only the group's own work runs
+    myScheduler.outstandingTasksForOtherWorkForTest = (_, _) => 0
     try {
       val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
       val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
