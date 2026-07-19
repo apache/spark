@@ -5,12 +5,11 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "([/a-zA-Z]\\S+):(\\d+):(\\d+):\\s+([^:]+):\\s+(reference not found)",
+          "regexp": "(?:^|(?<=\\s))([/a-zA-Z](?:(?!/target/)\\S)*):(\\d+):(\\d+):\\s+error:\\s+(.+)",
           "file": 1,
           "line": 2,
           "column": 3,
-          "severity": 4,
-          "message": 5
+          "message": 4
         }
       ]
     }
