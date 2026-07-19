@@ -985,6 +985,35 @@ private[spark] class DAGScheduler(
   }
 
   /**
+   * Classifies the shuffle boundaries in the RDD graph rooted at `finalRDD` by kind, walking the
+   * RDD dependency graph directly (before any stages are created). Returns whether the graph
+   * contains any [[PipelinedShuffleDependency]] and whether it contains any regular (non-pipelined)
+   * `ShuffleDependency`. Narrow dependencies are not boundaries and are ignored.
+   *
+   * v1 (M1, real-time-mode scope) supports a job that is either ALL-regular or ALL-pipelined: a
+   * job whose shuffle graph mixes a pipelined shuffle with a regular one is rejected fail-fast
+   * (see `handleJobSubmitted`). Restricting to a single kind makes the whole job one pipelined
+   * group when pipelined, so gang admission can be decided up front before any stage is submitted.
+   */
+  private def classifyJobShuffleKinds(finalRDD: RDD[_]): (Boolean, Boolean) = {
+    var hasPipelined = false
+    var hasRegular = false
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      rdd.dependencies.foreach { dep =>
+        dep match {
+          case _: PipelinedShuffleDependency[_, _, _] => hasPipelined = true
+          case _: ShuffleDependency[_, _, _] => hasRegular = true
+          case _ => // narrow dependency: not a boundary
+        }
+        // Descend through every edge (shuffle and narrow) so a pipelined boundary behind a regular
+        // one -- or vice versa -- anywhere in the graph is still detected. traverseRDDGraph dedups.
+        enqueue(dep.rdd)
+      }
+    }
+    (hasPipelined, hasRegular)
+  }
+
+  /**
    * Reject a job that uses a pipelined shuffle in combination with a cluster feature that a
    * pipelined group cannot support. Checked up front, before any stage is created, so a rejection
    * leaves no partial scheduler state. Used by the result-job path (handleJobSubmitted); the
@@ -1472,106 +1501,97 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * The full pipelined group `stage` belongs to: the connected component of the stage graph over
-   * pipelined edges (both the producers `stage` reads through a [[PipelinedShuffleDependency]] and,
-   * transitively, their pipelined producers/consumers). Walks `parents` and the shuffle-map stages
-   * of pipelined dependencies. Returns just `stage` if it has no pipelined edge.
+   * The total concurrent-task demand of an all-pipelined job, computed from the RDD graph BEFORE
+   * any stage is created (so a rejection based on it leaves no partial scheduler state, exactly as
+   * the barrier slot check and the speculation/DA reject do). Because a v1 job is either
+   * all-regular or all-pipelined, an all-pipelined job's whole stage graph is one pipelined group;
+   * its members are the final result stage plus every pipelined producer. Each member's task count
+   * is its RDD's partition count (`rdd.partitions.length`), matching how `createShuffleMapStage`
+   * derives `numTasks`. `finalNumPartitions` is the result stage's task count (the number of
+   * partitions the job runs, which may be a subset of `finalRDD.partitions`).
    */
-  private def pipelinedGroupOf(stage: Stage): Set[Stage] = {
-    val group = new HashSet[Stage]
-    val toVisit = new ListBuffer[Stage]
-    toVisit += stage
-    while (toVisit.nonEmpty) {
-      val s = toVisit.remove(0)
-      if (group.add(s)) {
-        // Pipelined producers this stage reads (direct pipelined parent shuffle-map stages).
-        s.parents.foreach {
-          case m: ShuffleMapStage
-              if m.shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]] => toVisit += m
-          case _ =>
-        }
-        // Pipelined consumers/producers reachable the other direction: any known stage co-scheduled
-        // with s via a pipelined edge. We only have parent links, so also pull in stages whose
-        // pipelined parent is s (search the created stages).
-        stageIdToStage.valuesIterator.foreach { other =>
-          if (!group.contains(other) && other.parents.contains(s) &&
-              isPipelinedProducer(s)) {
-            toVisit += other
-          }
-        }
+  private def pipelinedJobConcurrentTaskDemand(finalRDD: RDD[_], finalNumPartitions: Int): Int = {
+    var demand = finalNumPartitions
+    traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] => demand += pd.rdd.partitions.length
+        case _ => // regular/narrow deps do not occur in an all-pipelined job's group
       }
+      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
     }
-    group.toSet
+    demand
   }
 
   /**
-   * Best-effort admission check for a pipelined group: all its member stages must run concurrently,
-   * so the cluster must have enough task slots for the whole group at once. If the group's demand
-   * exceeds what is currently available it can never be co-resident and, lacking an out-of-band slot
-   * reservation, would deadlock -- so we fail fast with a clear error.
+   * Up-front gang admission for an all-pipelined job (v1 / M1), checked BEFORE any stage exists.
+   * Because a v1 job is either all-regular or all-pipelined (mixed jobs are already rejected), an
+   * all-pipelined job's whole stage graph is one pipelined group with no regular prefix, so its
+   * full demand is known up front and the group is ready to admit immediately. Checking here
+   * (rather than in `submitStage` once a producer is already running) is true all-or-nothing gang
+   * admission: the whole group is admitted, or the job is failed before any member runs, so a
+   * member is never left running while a sibling cannot get slots -- and, like the barrier slot
+   * check, a rejection leaves no partial scheduler state.
    *
-   * Demand is compared against FREE slots, not total capacity (spec S4.1): free = total capacity
-   * minus what OTHER work (other groups and regular jobs) has outstanding -- running plus enqueued
-   * -- in the SAME resource profile. Comparing against total capacity would admit a group that
-   * fits the cluster in principle but cannot co-fit right now beside a busy neighbor, then hang.
-   * Occupancy excludes the group's OWN already-running members (e.g. a producer submitted just
-   * before its consumer is admitted) -- otherwise the group would be charged for its own slots
-   * and could fail a check it actually fits.
-   *
-   * Occupancy is resource-profile-scoped to match `totalSlots` (which is per-profile): counting
-   * other profiles' running tasks against one profile's capacity would spuriously reject a fitting
-   * group whenever an unrelated profile is busy. v1 requires a group to be single-profile (spec S9),
-   * so the whole group shares `stage`'s profile.
-   *
-   * This is best-effort, checked once when the group is first co-scheduled; it is NOT the atomic
-   * gang reservation deferred to a later hardening step. Without that reservation a race between two
-   * groups admitting concurrently can still transiently over-admit (each sees the other's slots as
-   * free before either's tasks register as running); the reservation closes that race later. What
-   * this does guarantee now is that a group is never admitted against slots a busy neighbor is
-   * already committed to (running or enqueued), which is the common single-group-on-a-busy-cluster
-   * hang.
+   * Free-slot accounting follows spec S4.1: demand vs. total capacity (`maxNumConcurrentTasks` for
+   * the default profile -- v1 requires a single-profile group, spec S9) minus what OTHER work
+   * (other jobs) has outstanding -- running plus enqueued -- in that profile. Counting enqueued,
+   * not just running, tasks charges a busy neighbor's queued backlog against capacity too, so a
+   * group is not admitted against slots other work is already committed to. Fails the job via
+   * `listener` with no retry -- a transient shortfall is the caller's to retry (e.g. the streaming
+   * batch loop reruns the batch). Returns true (job failed) if it does not fit.
    *
    * The check can be turned off with `spark.scheduler.pipelinedGroup.slotCheck.enabled=false` (for
-   * deployments that admit capacity out-of-band, e.g. via a slot reservation), in which case this
-   * always returns None and the group is co-scheduled unconditionally.
-   *
-   * Returns Some((demand, freeSlots)) when the group does not fit, else None.
+   * deployments that admit capacity out-of-band, e.g. via a slot reservation).
    */
-  private def pipelinedGroupExceedsCapacity(stage: Stage): Option[(Int, Int)] = {
+  private def rejectUnadmittablePipelinedGroup(
+      jobId: Int, finalRDD: RDD[_], partitions: Array[Int], listener: JobListener): Boolean = {
     if (!sc.conf.get(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED)) {
-      return None
+      return false
     }
-    val group = pipelinedGroupOf(stage)
-    val demand = group.toSeq.map(_.numTasks).sum
-    val totalSlots = maxConcurrentTasksForStage(stage)
-    val outstandingForOthers = outstandingTasksForOtherWork(stage, group)
+    val rp = sc.resourceProfileManager.defaultResourceProfile
+    val demand = pipelinedJobConcurrentTaskDemand(finalRDD, partitions.length)
+    val totalSlots = maxConcurrentTasksForProfile(rp.id)
+    // No stage of this job exists yet, so it has no outstanding tasks of its own to exclude; only
+    // other concurrent jobs' outstanding demand is charged, resource-profile-scoped.
+    val outstandingForOthers = outstandingTasksForOtherWork(rp.id, Set.empty)
     val freeSlots = math.max(0, totalSlots - outstandingForOthers)
-    if (demand > freeSlots) Some((demand, freeSlots)) else None
+    if (demand > freeSlots) {
+      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: pipelined stage group needs " +
+        log"${MDC(NUM_TASKS, demand)} concurrent task slots but only " +
+        log"${MDC(NUM_SLOTS, freeSlots)} are free")
+      listener.jobFailed(new SparkException(
+        errorClass = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
+        messageParameters = scala.collection.immutable.Map(
+          "numTasks" -> demand.toString, "numSlots" -> freeSlots.toString),
+        cause = null))
+      true
+    } else {
+      false
+    }
   }
 
   /**
-   * The cluster's total concurrent-task capacity for `stage`'s resource profile. Extracted as a
+   * The cluster's total concurrent-task capacity for the given resource profile. Extracted as a
    * seam so tests can control it without changing the cluster's core count. Production reads it
    * from the scheduler backend, exactly as barrier's slot check does.
    */
-  protected def maxConcurrentTasksForStage(stage: Stage): Int = {
-    val rp = sc.resourceProfileManager.resourceProfileFromId(stage.resourceProfileId)
+  protected def maxConcurrentTasksForProfile(rpId: Int): Int = {
+    val rp = sc.resourceProfileManager.resourceProfileFromId(rpId)
     sc.maxNumConcurrentTasks(rp)
   }
 
   /**
-   * Outstanding tasks (running plus enqueued), in `stage`'s resource profile, for work OTHER than
-   * the given pipelined `group` (whose own members must not be charged against the group's own
-   * admission). Counting enqueued tasks, not just running ones, means a busy neighbor's queued
-   * backlog is charged against capacity too, so a group is not admitted against slots that other
-   * work is already committed to using. Resource-profile-scoped to match
-   * `maxConcurrentTasksForStage`. Extracted as a seam so tests can control occupancy without
+   * Outstanding tasks (running plus enqueued) in the given resource profile, for work OTHER than
+   * the stages in `excludeStageIds`. Counting enqueued tasks, not just running ones, means a busy
+   * neighbor's queued backlog is charged against capacity too, so a group is not admitted against
+   * slots that other work is already committed to using. Resource-profile-scoped to match
+   * `maxConcurrentTasksForProfile`. Extracted as a seam so tests can control occupancy without
    * launching real tasks; returns 0 for a non-TaskSchedulerImpl backend.
    */
-  protected def outstandingTasksForOtherWork(stage: Stage, group: Set[Stage]): Int =
+  protected def outstandingTasksForOtherWork(rpId: Int, excludeStageIds: Set[Int]): Int =
     taskScheduler match {
       case impl: TaskSchedulerImpl =>
-        impl.outstandingTasksForOtherWorkInProfile(stage.resourceProfileId, group.map(_.id))
+        impl.outstandingTasksForOtherWorkInProfile(rpId, excludeStageIds)
       case _ => 0
     }
 
@@ -1761,6 +1781,31 @@ private[spark] class DAGScheduler(
       return
     }
 
+    // v1 (M1, real-time-mode scope) supports a job that is either ALL-regular or ALL-pipelined,
+    // not a mix. A job whose shuffle graph combines a pipelined shuffle with a regular one is
+    // rejected up front (before any stage is created). Restricting to a single kind makes an
+    // all-pipelined job's whole stage graph one pipelined group with no regular prefix, so gang
+    // admission is decided up front (see the slot check below) rather than mid-DAG once a producer
+    // is already running. Mixed / mid-DAG groups are a later milestone.
+    val (hasPipelined, hasRegular) = classifyJobShuffleKinds(finalRDD)
+    if (hasPipelined && hasRegular) {
+      logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: a job mixing a pipelined shuffle with " +
+        log"a regular shuffle is not supported")
+      listener.jobFailed(new SparkException(
+        "A job that mixes a pipelined shuffle dependency with a regular shuffle dependency is " +
+          "not supported: v1 requires a job to be either all-regular or all-pipelined."))
+      return
+    }
+
+    // Gang admission for an all-pipelined job: the whole stage graph is one pipelined group, so
+    // check up front (before any stage is created) that the cluster can run the entire group
+    // concurrently. If it cannot fit, fail the job now -- no partial scheduler state, and no member
+    // ever left running while a sibling waits on slots (true all-or-nothing gang admission). Inert
+    // for a regular job (no pipelined dependency).
+    if (hasPipelined && rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
+      return
+    }
+
     var finalStage: ResultStage = null
     try {
       // New stage creation may throw an exception if, for example, jobs are run on a
@@ -1926,12 +1971,13 @@ private[spark] class DAGScheduler(
               submitStage(parent)
             }
 
-            // Submitting a parent can abort the job during this recursion: for a pipelined chain
-            // A->B->C, submitStage(C) recurses into submitStage(B) whose group slot-check covers the
-            // whole component {A,B,C} and may abortStage(B), which cleans up A/B/C (including this
-            // stage) and fails the job. If that happened, `stage` is no longer registered; do not
-            // proceed to co-schedule or re-park it (re-parking would re-insert a job-less stage into
-            // waitingStages -- a scheduler-state leak). Inert for a non-aborting submit.
+            // Submitting a parent can abort the job during this recursion (e.g. a parent that has
+            // exhausted its stage attempts hits abortStage, which cleans up all of the job's stages
+            // including this one and fails the job). If that happened, `stage` is no longer
+            // registered; do not proceed to co-schedule or re-park it (re-parking would re-insert a
+            // job-less stage into waitingStages -- a scheduler-state leak). Inert for a
+            // non-aborting submit. (Pipelined group admission is decided up front in
+            // handleJobSubmitted, so it cannot abort the group from within this recursion.)
             if (!stageIdToStage.contains(stage.id)) {
               logInfo(log"${MDC(STAGE, stage)} was removed during parent submission (its job was " +
                 log"aborted); not co-scheduling or re-parking it")
@@ -1956,32 +2002,22 @@ private[spark] class DAGScheduler(
               pipelinedMissing.nonEmpty && pipelinedMissing.forall(runningStages.contains)
 
             if (regularMissing.isEmpty && allPipelinedParentsRunning) {
-              // Best-effort slot check: the whole pipelined group must run at once, so its demand
-              // must fit in the currently-FREE slots (total capacity minus what other work has
-              // outstanding -- running plus enqueued; spec S4.1). If it cannot, fail fast with a
-              // clear error rather than deadlock (there is no out-of-band slot reservation in v1).
-              pipelinedGroupExceedsCapacity(stage) match {
-                case Some((demand, freeSlots)) =>
-                  abortStage(stage, s"Cannot co-schedule pipelined stage group: needs $demand " +
-                    s"concurrent task slots but only $freeSlots are currently free.",
-                    Some(new SparkException(
-                      errorClass = "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT",
-                      messageParameters = scala.collection.immutable.Map(
-                        "numTasks" -> demand.toString, "numSlots" -> freeSlots.toString),
-                      cause = null)))
-                case None =>
-                  logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
-                    log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
-                  // Record that this stage is co-scheduled with still-running pipelined producers,
-                  // so its successful completions are deferred until those producers finish (S5).
-                  val deferral =
-                    pipelinedConsumerDeferrals.getOrElseUpdate(stage, DeferredCompletion())
-                  deferral.pendingProducers ++= pipelinedMissing
-                  submitMissingTasks(stage, jobId.get)
-                  // This stage is now running; if it is itself the pipelined producer of a waiting
-                  // consumer, co-schedule that consumer too.
-                  submitWaitingPipelinedChildStages(stage)
-              }
+              // The whole group's capacity was already admitted up front (handleJobSubmitted ->
+              // rejectUnadmittablePipelinedGroup) before any member was submitted, so the group is
+              // known to fit; just co-schedule this consumer with its running producer(s). No slot
+              // check here -- that would re-measure capacity against a mid-flight snapshot and is
+              // unnecessary once admission is decided up front (v1 gang admission).
+              logInfo(log"Submitting ${MDC(STAGE, stage)} concurrently with its running " +
+                log"pipelined producer(s) ${MDC(MISSING_PARENT_STAGES, pipelinedMissing)}")
+              // Record that this stage is co-scheduled with still-running pipelined producers,
+              // so its successful completions are deferred until those producers finish (S5).
+              val deferral =
+                pipelinedConsumerDeferrals.getOrElseUpdate(stage, DeferredCompletion())
+              deferral.pendingProducers ++= pipelinedMissing
+              submitMissingTasks(stage, jobId.get)
+              // This stage is now running; if it is itself the pipelined producer of a waiting
+              // consumer, co-schedule that consumer too.
+              submitWaitingPipelinedChildStages(stage)
             } else {
               waitingStages += stage
             }
