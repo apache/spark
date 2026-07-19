@@ -521,6 +521,8 @@ case class StructsToJson(
   override protected def withNewChildInternal(newChild: Expression): StructsToJson =
     copy(child = newChild)
 
+  override def stateful: Boolean = true
+
   @transient
   private lazy val evaluator = StructsToJsonEvaluator(options, inputSchema, timeZoneId)
 
@@ -587,6 +589,8 @@ case class SchemaOfJson(
       super.checkInputDataTypes()
     }
   }
+
+  override def stateful: Boolean = true
 
   @transient
   private lazy val evaluator: SchemaOfJsonEvaluator = SchemaOfJsonEvaluator(options)

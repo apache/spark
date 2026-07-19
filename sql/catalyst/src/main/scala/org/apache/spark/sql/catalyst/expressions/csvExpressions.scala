@@ -188,6 +188,8 @@ case class SchemaOfCsv(
   override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
     copy(child = newChild)
 
+  override def stateful: Boolean = true
+
   @transient
   private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
 
