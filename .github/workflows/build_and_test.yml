@@ -1217,6 +1217,8 @@ jobs:
         gem install bundler -v 2.4.22
         cd docs
         bundle install --retry=100
+    - name: Register javadoc problem matcher
+      run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
@@ -1239,7 +1241,18 @@ jobs:
         echo "SKIP_RDOC: $SKIP_RDOC"
         echo "SKIP_SQLDOC: $SKIP_SQLDOC"
         cd docs
-        bundle exec jekyll build
+        set -o pipefail
+        bundle exec jekyll build 2>&1 | tee /tmp/docs-build.log
+    - name: Remove javadoc problem matcher
+      if: always()
+      run: echo "::remove-matcher owner=javadoc-doclint::"
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: docs-build-log
+        path: /tmp/docs-build.log
+        retention-days: 3
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site

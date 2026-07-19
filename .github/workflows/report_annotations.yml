@@ -37,9 +37,11 @@ name: Report annotations
 on:
   workflow_run:
     workflows:
-      - "Documentation"
+      # These must match the `name:` field of the source workflow exactly.
+      # There is no way to reference a workflow by filename.
+      - "Build and test"
       # Add other workflows here as needed, e.g.:
-      # - "Build"
+      # - "Build and test using Maven"
       # - "Linters, licenses, and dependencies"
     types:
       - completed
@@ -56,8 +58,6 @@ jobs:
     steps:
       - name: Checkout Spark
         uses: actions/checkout@v6
-        # with:
-        #   sparse-checkout: .github/problem-matchers
 
       - name: Download build logs
         id: download-logs
@@ -69,46 +69,23 @@ jobs:
           pattern: "*-build-log"
           merge-multiple: true
 
-      - name: Download workspace root
-        id: download-root
-        uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
-          pattern: "*-workspace-root"
-          merge-multiple: true
-
       - name: Replay logs through problem matchers
         if: steps.download-logs.outcome == 'success'
         run: |
-          # Read the fork's workspace root so we can strip it from paths.
-          if [ -f workspace-root.txt ]; then
-            ws_root=$(cat workspace-root.txt | tr -d '\n')
-            echo "Stripping workspace root: $ws_root"
-          else
-            ws_root=""
-          fi
-
           # Register all available problem matchers.
           for matcher in .github/problem-matchers/*.json; do
             echo "::add-matcher::$matcher"
           done
 
-          # Replay each build log with the fork's workspace prefix stripped
-          # so paths are relative to the repo root.
+          # Replay each build log so the runner creates annotations.
           for log in *.log; do
             [ -f "$log" ] || continue
             echo "--- Replaying $log ---"
-            if [ -n "$ws_root" ]; then
-              sed "s|${ws_root}/| |g" "$log"
-            else
-              cat "$log"
-            fi
+            cat "$log"
           done
 
           # Clean up matchers.
           for matcher in .github/problem-matchers/*.json; do
             owner=$(python3 -c "import json; print(json.load(open('$matcher'))['problemMatcher'][0]['owner'])")
-            echo "::remove-matcher owner=$owner::"          
+            echo "::remove-matcher owner=$owner::"
           done
