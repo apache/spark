@@ -1220,6 +1220,7 @@ jobs:
     - name: Register javadoc problem matcher
       run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build
+      shell: bash
       run: |
         # We need this link to make sure `python3` points to `python3.12` which contains the prerequisite packages.
         ln -s "$(which python3.12)" "/usr/local/bin/python3"
