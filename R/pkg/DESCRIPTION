@@ -7,7 +7,7 @@ Authors@R:
     person(family = "The Apache Software Foundation",
            email = "dev@spark.apache.org",
            role = c("aut", "cre", "cph"))
-License: Apache License (== 2.0)
+License: Apache License (== 2.0) + file LICENSE + file NOTICE
 URL: https://www.apache.org https://spark.apache.org
 BugReports: https://spark.apache.org/contributing.html
 SystemRequirements: Java (>= 8, < 18)
