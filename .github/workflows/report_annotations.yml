@@ -39,12 +39,12 @@ name: Report annotations
 on:
   workflow_run:
     workflows:
-      # These must match the `name:` field of the source workflow exactly.
-      # There is no way to reference a workflow by filename.
-      - "Build and test"
-      # Add other workflows here as needed, e.g.:
+      # These must match the `name:` field of the top-level (caller) workflow
+      # exactly. build_and_test.yml is a reusable workflow (workflow_call only)
+      # so it never appears as a standalone run; the caller is what fires here.
+      - "Build"
+      # Add other callers here as needed, e.g.:
       # - "Build and test using Maven"
-      # - "Linters, licenses, and dependencies"
     types:
       - completed
 
