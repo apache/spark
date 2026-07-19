@@ -6768,6 +6768,46 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
 
+  test("pipelined shuffle: a multi-producer consumer's buffered successes are dropped when one " +
+      "producer fails (no stale replay via a sibling)") {
+    // Isaac-review probe (group-atomic drop across MULTIPLE producers). Consumer C reads TWO
+    // pipelined producers P1 and P2 (a join; pure all-PG, no regular shuffle). C finishes early ->
+    // its successes are buffered against BOTH producers. If P1 then fails, the whole group must be
+    // torn down and C's buffered successes DROPPED -- they depended on P1's (now-invalid) output.
+    // The concern: releaseDeferredPipelinedConsumers evaluates producerFailed per finishing
+    // producer, so a naive impl could remove P1 (parents still has P2, no drop), then later see P2
+    // "succeed" and REPLAY. Verify the shipped stack drops instead (group abort tears C down).
+    val rddP1 = new MyRDD(sc, 2, Nil)
+    val psdP1 = new PipelinedShuffleDependency(rddP1, new HashPartitioner(2))
+    val rddP2 = new MyRDD(sc, 2, Nil)
+    val psdP2 = new PipelinedShuffleDependency(rddP2, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(psdP1, psdP2), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = results.put(index, result)
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
+    // P1, P2, and C are all co-scheduled (pure all-PG join, admitted up front).
+    assert(taskSets.size === 3, s"expected P1, P2, consumer co-scheduled, got ${taskSets.size}")
+    val tsP1 = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rddP1).get
+    val tsC = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd).get
+
+    // Consumer finishes early -> buffered against both P1 and P2.
+    complete(tsC, Seq((Success, 42), (Success, 43)))
+    assert(results.isEmpty, "consumer completions should be buffered while producers run")
+    assert(scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd),
+      "consumer should be deferred against its two producers")
+
+    // P1 fails. The group is torn down; C's buffered successes must be DROPPED, never replayed --
+    // even though P2 has not (and now will not) complete.
+    failed(tsP1, "producer P1 blew up")
+    assert(failure.get() != null, "the job must fail when a pipelined producer fails")
+    assert(results.isEmpty,
+      "a multi-producer consumer's buffered successes must be dropped when any producer fails")
+    assertDataStructuresEmpty()
+  }
+
   test("pipelined shuffle: a deferred consumer task fires its TaskEnd exactly once (at replay)") {
     // A deferred CompletionEvent must have its side effects (task-end listener event, accumulator
     // update) applied exactly once -- at replay -- not once when buffered and again when replayed.
@@ -7445,8 +7485,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus.waitUntilEmpty()
       assert(!endedTaskIds.containsKey(bufferedTaskId),
         "the buffered consumer completion must not post its TaskEnd while deferred")
-      assert(scheduler.dependentStageMap.get(
-        scheduler.stageIdToStage(consumerTaskSet.stageId)).exists(_.delayedTaskCompletionEvents.nonEmpty),
+      assert(scheduler.dependentStageMap.get(scheduler.stageIdToStage(consumerTaskSet.stageId))
+        .exists(_.delayedTaskCompletionEvents.nonEmpty),
         "the consumer's successful completion must be buffered while its producer runs")
 
       // The consumer's OTHER task now hits a FetchFailed. For a pipelined group member this aborts
@@ -7544,7 +7584,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
       val readsRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
       // A narrow-dep child of the reading RDD, in the SAME stage, that is reliably checkpointed,
-      // and is the result RDD (no regular shuffle after -- that would be a separately-rejected mix).
+      // and is the result RDD (no regular shuffle after -- that would be separately rejected).
       val checkpointedRdd = new MyCheckpointRDD(sc, 2, List(new OneToOneDependency(readsRdd)))
       checkpointedRdd.checkpoint()
       assert(checkpointedRdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]]))
@@ -7567,7 +7607,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val union = new MyRDD(sc, 2,
       List(new OneToOneDependency(consumerA), new OneToOneDependency(consumerB)),
       tracker = mapOutputTracker)
-    assertPipelinedUnsupported(submitAndCaptureFailure(union, Array(0, 1)), "more than one consumer")
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(union, Array(0, 1)), "more than one consumer")
     assertDataStructuresEmpty()
   }
 
