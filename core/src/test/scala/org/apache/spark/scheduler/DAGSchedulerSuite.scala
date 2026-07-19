@@ -6712,7 +6712,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
     // Deferred while the producer runs.
-    assert(scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd))
+    assert(scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd))
     assert(results.isEmpty)
 
     val producerStage =
@@ -6723,7 +6723,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // (ShuffleMapStage && !producerFailed && !isAvailable) and must NOT release the consumer.
     assert(!producerStage.isAvailable, "precondition: producer not yet available")
     scheduler.markStageAsFinished(producerStage, errorMessage = None, willRetry = false)
-    assert(scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd),
+    assert(scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd),
       "a not-yet-available pipelined producer must NOT release its deferred consumers (it is " +
         "about to resubmit; releasing would apply results against soon-to-be-recomputed output)")
     assert(results.isEmpty,
@@ -6735,7 +6735,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.runningStages += producerStage
     completeShuffleMapStageSuccessfully(producerStageId, 0, 2)
     assert(producerStage.isAvailable)
-    assert(!scheduler.pipelinedConsumerDeferrals.keys.exists(_.rdd eq consumerRdd),
+    assert(!scheduler.dependentStageMap.keys.exists(_.rdd eq consumerRdd),
       "deferral released once the producer is genuinely done (available)")
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty()

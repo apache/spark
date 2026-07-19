@@ -177,15 +177,15 @@ private[spark] class DAGScheduler(
    * S5, group-observable completion). We buffer such events here and replay them once every
    * pipelined producer the consumer was waiting on has finished.
    *
-   * Keyed by the consumer stage. `pendingProducers` is the set of its pipelined producer stages not
-   * yet finished; `bufferedEvents` are its Success CompletionEvents held until then. Entries exist
-   * only for stages that were co-scheduled with a not-yet-finished pipelined producer, so this is
-   * empty for any job without a pipelined dependency.
+   * Keyed by the consumer stage. `parents` is the set of its pipelined producer stages not yet
+   * finished; `delayedTaskCompletionEvents` are its Success CompletionEvents held until then.
+   * Entries exist only for stages that were co-scheduled with a not-yet-finished pipelined
+   * producer, so this is empty for any job without a pipelined dependency.
    */
-  private[scheduler] case class DeferredCompletion(
-      pendingProducers: HashSet[Stage] = new HashSet[Stage],
-      bufferedEvents: ListBuffer[CompletionEvent] = new ListBuffer[CompletionEvent])
-  private[scheduler] val pipelinedConsumerDeferrals = new HashMap[Stage, DeferredCompletion]
+  private[scheduler] case class DependentStageInfo(
+      parents: HashSet[Stage] = new HashSet[Stage],
+      delayedTaskCompletionEvents: ListBuffer[CompletionEvent] = new ListBuffer[CompletionEvent])
+  private[scheduler] val dependentStageMap = new HashMap[Stage, DependentStageInfo]
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
@@ -1134,8 +1134,8 @@ private[spark] class DAGScheduler(
                 // Drop any pipelined-completion deferral keyed on this stage (as consumer), and
                 // remove it from other consumers' pending-producer sets (as producer), so no
                 // deferral outlives its job (e.g. on job abort before the producers finished).
-                pipelinedConsumerDeferrals -= stage
-                pipelinedConsumerDeferrals.values.foreach(_.pendingProducers -= stage)
+                dependentStageMap -= stage
+                dependentStageMap.values.foreach(_.parents -= stage)
               }
               // data structures based on StageId
               stageIdToStage -= stageId
@@ -2012,8 +2012,8 @@ private[spark] class DAGScheduler(
               // Record that this stage is co-scheduled with still-running pipelined producers,
               // so its successful completions are deferred until those producers finish (S5).
               val deferral =
-                pipelinedConsumerDeferrals.getOrElseUpdate(stage, DeferredCompletion())
-              deferral.pendingProducers ++= pipelinedMissing
+                dependentStageMap.getOrElseUpdate(stage, DependentStageInfo())
+              deferral.parents ++= pipelinedMissing
               submitMissingTasks(stage, jobId.get)
               // This stage is now running; if it is itself the pipelined producer of a waiting
               // consumer, co-schedule that consumer too.
@@ -2823,12 +2823,12 @@ private[spark] class DAGScheduler(
     // the side effects normally. This deferral check must therefore precede updateAccumulators and
     // postTaskEnd. Inert for jobs with no pipelined dependency (the map is empty).
     if (event.reason == Success) {
-      pipelinedConsumerDeferrals.get(stage) match {
-        case Some(deferral) if deferral.pendingProducers.nonEmpty =>
+      dependentStageMap.get(stage) match {
+        case Some(deferral) if deferral.parents.nonEmpty =>
           logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
             log"pipelined consumer ${MDC(STAGE, stage)} until its producer(s) " +
-            log"${MDC(MISSING_PARENT_STAGES, deferral.pendingProducers.toSeq)} finish")
-          deferral.bufferedEvents += event
+            log"${MDC(MISSING_PARENT_STAGES, deferral.parents.toSeq)} finish")
+          deferral.delayedTaskCompletionEvents += event
           return
         case _ =>
       }
@@ -3925,19 +3925,19 @@ private[spark] class DAGScheduler(
    */
   private def releaseDeferredPipelinedConsumers(
       finishedStage: Stage, producerFailed: Boolean): Unit = {
-    if (pipelinedConsumerDeferrals.isEmpty) {
+    if (dependentStageMap.isEmpty) {
       return
     }
     // Consumers waiting on this producer.
-    val released = pipelinedConsumerDeferrals.filter {
-      case (_, d) => d.pendingProducers.contains(finishedStage)
+    val released = dependentStageMap.filter {
+      case (_, d) => d.parents.contains(finishedStage)
     }.keys.toArray
     for (consumer <- released) {
-      val deferral = pipelinedConsumerDeferrals(consumer)
-      deferral.pendingProducers -= finishedStage
-      if (deferral.pendingProducers.isEmpty) {
-        pipelinedConsumerDeferrals -= consumer
-        val events = deferral.bufferedEvents.toList
+      val deferral = dependentStageMap(consumer)
+      deferral.parents -= finishedStage
+      if (deferral.parents.isEmpty) {
+        dependentStageMap -= consumer
+        val events = deferral.delayedTaskCompletionEvents.toList
         if (producerFailed) {
           logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
             log"pipelined consumer ${MDC(STAGE, consumer)} because its producer " +
