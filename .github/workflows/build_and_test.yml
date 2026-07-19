@@ -1254,6 +1254,16 @@ jobs:
         name: docs-build-log
         path: /tmp/docs-build.log
         retention-days: 3
+    - name: Upload workspace root
+      if: always()
+      run: echo "$GITHUB_WORKSPACE" > /tmp/workspace-root.txt
+    - name: Upload workspace root artifact
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: docs-workspace-root
+        path: /tmp/workspace-root.txt
+        retention-days: 3
     - name: Tar documentation
       if: github.repository != 'apache/spark'
       run: tar cjf site.tar.bz2 docs/_site

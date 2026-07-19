@@ -29,8 +29,10 @@
 # To add annotations from a new workflow:
 # 1. In the source workflow, capture the build log with tee and upload it
 #    as an artifact matching the pattern "*-build-log".
-# 2. Add problem matcher JSON files to .github/problem-matchers/.
-# 3. Add the source workflow's name to the list below.
+# 2. Upload $GITHUB_WORKSPACE as an artifact matching "*-workspace-root"
+#    so the relay can strip the runner's absolute path prefix from log entries.
+# 3. Add problem matcher JSON files to .github/problem-matchers/.
+# 4. Add the source workflow's name to the list below.
 
 name: Report annotations
 
@@ -69,19 +71,41 @@ jobs:
           pattern: "*-build-log"
           merge-multiple: true
 
+      - name: Download workspace roots
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: "*-workspace-root"
+          merge-multiple: true
+
       - name: Replay logs through problem matchers
         if: steps.download-logs.outcome == 'success'
         run: |
+          # Read the fork's workspace root and strip it from paths so GitHub
+          # can map annotations to repo-relative files in the PR diff.
+          # (Absolute paths vary by runner: /home/runner/work/..., /__w/..., etc.)
+          ws_root=""
+          if [ -f workspace-root.txt ]; then
+            ws_root=$(tr -d '\n' < workspace-root.txt)
+            echo "Stripping workspace root: $ws_root"
+          fi
+
           # Register all available problem matchers.
           for matcher in .github/problem-matchers/*.json; do
             echo "::add-matcher::$matcher"
           done
 
-          # Replay each build log so the runner creates annotations.
+          # Replay each build log with absolute paths stripped to repo-relative.
           for log in *.log; do
             [ -f "$log" ] || continue
             echo "--- Replaying $log ---"
-            cat "$log"
+            if [ -n "$ws_root" ]; then
+              sed "s|${ws_root}/||g" "$log"
+            else
+              cat "$log"
+            fi
           done
 
           # Clean up matchers.
