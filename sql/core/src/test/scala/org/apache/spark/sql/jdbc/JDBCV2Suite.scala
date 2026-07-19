@@ -142,6 +142,10 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     .set("spark.sql.catalog.h2.pushDownLimit", "true")
     .set("spark.sql.catalog.h2.pushDownOffset", "true")
     .set("spark.sql.catalog.h2.pushDownJoin", "true")
+    .set("spark.sql.catalog.h2_no_limit", classOf[JDBCTableCatalog].getName)
+    .set("spark.sql.catalog.h2_no_limit.url", url)
+    .set("spark.sql.catalog.h2_no_limit.driver", "org.h2.Driver")
+    .set("spark.sql.catalog.h2_no_limit.pushDownLimit", "false")
 
   private def withConnection[T](f: Connection => T): T = {
     val conn = DriverManager.getConnection(url, new Properties())
@@ -487,6 +491,48 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         |""".stripMargin)
     checkPushedLimits(df, None, None)
     checkAnswer(df, Seq(Row("alex"), Row("alex")))
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL with a smaller per-branch LIMIT") {
+    // the first branch carries its own tighter LIMIT, which caps the value pushed to its scan
+    val df = sql(
+      """
+        |SELECT name FROM (SELECT name FROM h2.test.employee LIMIT 1)
+        |UNION ALL
+        |SELECT name FROM h2.test.employee
+        |LIMIT 3
+        |""".stripMargin)
+    checkPushedLimits(df, Some(1), Some(3))
+    assert(df.collect().length == 3)
+  }
+
+  test("SPARK-58093: LIMIT on top of UNION DISTINCT is not pushed down") {
+    // UNION DISTINCT de-duplicates across branches, so a branch capped at `limit` rows could
+    // contribute fewer than `limit` distinct rows; the recursion must stop at the Aggregate
+    // that implements DISTINCT
+    val df = sql(
+      """
+        |SELECT name FROM h2.test.employee WHERE dept = 6
+        |UNION
+        |SELECT name FROM h2.test.employee WHERE dept = 1
+        |LIMIT 3
+        |""".stripMargin)
+    checkPushedLimits(df, None, None)
+    checkAnswer(df, Seq(Row("jen"), Row("amy"), Row("cathy")))
+  }
+
+  test("SPARK-58093: push down LIMIT through UNION ALL with mixed pushdown support") {
+    // h2_no_limit points at the same database with limit pushdown disabled, so only the first
+    // branch pushes the limit and the per-branch LocalLimit still caps the second
+    val df = sql(
+      """
+        |SELECT name FROM h2.test.employee
+        |UNION ALL
+        |SELECT name FROM h2_no_limit.test.employee
+        |LIMIT 2
+        |""".stripMargin)
+    checkPushedLimits(df, Some(2), None)
+    assert(df.collect().length == 2)
   }
 
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {

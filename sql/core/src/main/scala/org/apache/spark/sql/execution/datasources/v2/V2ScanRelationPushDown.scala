@@ -1051,13 +1051,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // The union of branches that each keep at most `limit` rows still contains the first `limit`
       // rows of the whole union, as UNION ALL does not de-duplicate. The union may return more than
       // `limit` rows, so this is only a partial push.
-      val newChildren = u.children.map(child => pushDownLimit(child, limit)._1)
+      val newChildren = u.children.map {
+        case l @ LocalLimit(IntegerLiteral(value), _) =>
+          // The per-branch limit inserted by `LimitPushDown`, or the branch's own tighter limit.
+          // Push the smaller of the two caps; the branch keeps its `LocalLimit` either way.
+          val (newChild, _) = pushDownLimit(l.child, math.min(limit, value))
+          l.withNewChildren(Seq(newChild))
+        case child => pushDownLimit(child, limit)._1
+      }
       (u.withNewChildren(newChildren), false)
-    case l @ LocalLimit(IntegerLiteral(_), _) =>
-      // `LimitPushDown` inserts this per-branch limit with the same value as the limit above the
-      // union, so the incoming limit can be pushed through it.
-      val (newChild, _) = pushDownLimit(l.child, limit)
-      (l.withNewChildren(Seq(newChild)), false)
     case other => (other, false)
   }
 
