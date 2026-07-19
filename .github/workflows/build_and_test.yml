@@ -1218,6 +1218,15 @@ jobs:
         cd docs
         bundle install --retry=100
     - run: echo "$GITHUB_WORKSPACE"
+    - name: Fix remote URL for problem matcher (fork runs only)
+      # The checkout above always uses repository: apache/spark, so .git/config
+      # contains url = https://github.com/apache/spark. When running from a fork,
+      # GITHUB_REPOSITORY is e.g. nchammas/spark, but the runner verifies file
+      # annotations by looking for GITHUB_REPOSITORY in .git/config -- it won't
+      # find it and silently drops every file path from annotations. Re-pointing
+      # origin to the fork URL fixes the mismatch without changing the working tree.
+      if: github.repository != 'apache/spark'
+      run: git remote set-url origin https://github.com/${{ github.repository }}
     - name: Register javadoc problem matcher
       run: echo "::add-matcher::.github/problem-matchers/javadoc.json"
     - name: Run documentation build
