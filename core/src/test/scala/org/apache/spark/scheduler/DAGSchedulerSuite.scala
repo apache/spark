@@ -6239,47 +6239,28 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: a consumer is a group member even if a REGULAR dep precedes the " +
-      "pipelined one in its dependency list") {
-    // isPipelinedGroupMember's consumer walk does `rdd.dependencies.exists { case pipelined =>
-    // true;
-    // case regularShuffle => false; case narrow => descend }`. `exists` must continue PAST the
-    // regular-shuffle `false` to find a pipelined dep later in the same list. Put the regular dep
-    // FIRST to exercise that ordering: the consumer must still be recognized as a group member (its
-    // task set marked isPipelined), and co-schedule with the pipelined producer once the regular
-    // parent is done.
-    val regularProducerRdd = new MyRDD(sc, 2, Nil)
-    val regularDep = new ShuffleDependency(regularProducerRdd, new HashPartitioner(2))
-    val pipelinedProducerRdd = new MyRDD(sc, 2, Nil)
-    val pipelinedDep = new PipelinedShuffleDependency(pipelinedProducerRdd, new HashPartitioner(2))
-    // Regular dep FIRST, pipelined dep SECOND.
-    val consumerRdd =
-      new MyRDD(sc, 2, List(regularDep, pipelinedDep), tracker = mapOutputTracker)
-    submit(consumerRdd, Array(0, 1))
+  test("pipelined shuffle: a regular-shuffle prefix feeding a pipelined producer is rejected") {
+    // Also mixed: a regular shuffle in the PREFIX that feeds a pipelined producer
+    // (regularRoot --regular--> producer(pipelined) --pipelined--> consumer). Spec S7 would treat
+    // the regular edge as an ordinary external input to the group, but v1/M1 (RTM scope: the shape
+    // is scan-of-files --pipelined--> stateful, with no upstream shuffle) rejects ANY regular
+    // shuffle in a pipelined job up front rather than supporting a mid-DAG regular prefix.
+    val regularRoot = new MyRDD(sc, 2, Nil)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(2))
+    val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+    val failListener = new JobListener {
+      override def taskSucceeded(index: Int, result: Any): Unit = {}
+      override def jobFailed(exception: Exception): Unit = failure.set(exception)
+    }
+    submit(consumerRdd, Array(0, 1), listener = failListener)
 
-    // Consumer waits on the regular parent; complete it so the consumer is reconsidered.
-    val regularStageId = taskSets.find { ts =>
-      scheduler.stageIdToStage(ts.stageId).rdd eq regularProducerRdd
-    }.get.stageId
-    completeShuffleMapStageSuccessfully(regularStageId, 0, 2)
-
-    // The consumer is now co-scheduled with the pipelined producer, and its task set must be marked
-    // isPipelined (which requires isPipelinedGroupMember to have found the pipelined dep despite
-    // the
-    // regular dep appearing first).
-    val consumerTaskSet = taskSets.find { ts =>
-      scheduler.stageIdToStage(ts.stageId).rdd eq consumerRdd
-    }.get
-    assert(consumerTaskSet.isPipelined,
-      "a consumer reading a pipelined dep must be a group member even when a regular dep is " +
-      "listed " +
-        "before it")
-    val pipelinedStageId = taskSets.find { ts =>
-      scheduler.stageIdToStage(ts.stageId).rdd eq pipelinedProducerRdd
-    }.get.stageId
-    completeShuffleMapStageSuccessfully(pipelinedStageId, 0, 2)
-    complete(consumerTaskSet, Seq((Success, 42), (Success, 43)))
-    assert(results === Map(0 -> 42, 1 -> 43))
+    assert(failure.get() != null, "a pipelined job with a regular-shuffle prefix must fail")
+    assert(failure.get().getMessage.contains("all-regular or all-pipelined"),
+      s"expected a mixed-job rejection, got: ${failure.get().getMessage}")
+    assert(taskSets.isEmpty, "no stage should be submitted for a rejected mixed job")
     assertDataStructuresEmpty()
   }
 
@@ -7281,90 +7262,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       "a pipelined group member's FetchFailed must NOT resubmit a single stage (SC-233883)")
     assert(!scheduler.runningStages.exists(_.isInstanceOf[ShuffleMapStage]),
       "the pipelined producer must not be left running/resubmitted after the group fails")
-    sc.listenerBus.waitUntilEmpty()
-    assertDataStructuresEmpty()
-  }
-
-  test("pipelined shuffle: a FetchFailed on a pipelined producer reading its regular input fails " +
-      "the group (SC-233883)") {
-    // Spec S7: a pipelined group's regular INPUT edge is an ordinary shuffle. Shape:
-    //   regularRoot --regular--> producer(pipelined) --pipelined--> consumer.
-    // If a producer task fails to fetch its regular input, the failedStage is the producer itself
-    // (a
-    // group member), so the FetchFailed must still abort the whole group rather than resubmit the
-    // producer in isolation. This also guards the teardown path: abortStage(failedStage=producer)
-    // must fail the job even though a single-stage resubmit is what the base scheduler would do.
-    val rootRdd = new MyRDD(sc, 2, Nil)
-    val regularDep = new ShuffleDependency(rootRdd, new HashPartitioner(2))
-    val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
-    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
-    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-    submit(consumerRdd, Array(0, 1))
-
-    // The regular root runs first (it is a sequencing parent of the producer); complete it.
-    val rootTs = taskSets.find { ts =>
-      scheduler.stageIdToStage(ts.stageId).rdd eq rootRdd
-    }.get
-    complete(rootTs, Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
-
-    // Now the producer (pipelined) and its consumer are co-scheduled. A producer task fails
-    // fetching
-    // the REGULAR input from the root.
-    val producerTs = taskSets.find { ts =>
-      scheduler.stageIdToStage(ts.stageId).rdd eq producerRdd
-    }.get
-    val taskSetsBeforeFetchFailure = taskSets.size
-    runEvent(makeCompletionEvent(
-      producerTs.tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), regularDep.shuffleId, 0L, 0, 0, "ignored"),
-      null))
-
-    scheduler.resubmitFailedStages()
-    assert(failure != null,
-      "a FetchFailed on a pipelined producer (reading its regular input) must fail the job")
-    assert(taskSets.size === taskSetsBeforeFetchFailure,
-      "the group must not resubmit a single stage on a producer's regular-input FetchFailed")
-    assert(!scheduler.runningStages.exists(s => s.rdd.eq(producerRdd) || s.rdd.eq(consumerRdd)),
-      "neither producer nor consumer may be left running after the group fails")
-    sc.listenerBus.waitUntilEmpty()
-    assertDataStructuresEmpty()
-  }
-
-  test("pipelined shuffle: a group-aborting FetchFailed still unregisters the dead executor's " +
-      "regular outputs") {
-    // When a FetchFailed on a pipelined group member routes to group-abort, it must STILL
-    // unregister
-    // the failed executor's (regular, durable) shuffle outputs -- the FetchFailed is authoritative
-    // evidence that executor's data is gone, and other/concurrent jobs sharing it must not keep
-    // stale MapOutputTracker entries (with an external shuffle service an ExecutorLost would not
-    // clean them). Shape: regularRoot --regular--> producer(pipelined) --pipelined--> consumer; the
-    // producer fetch-fails its regular input from hostA-exec, aborting the group. Assert
-    // removeOutputsOnExecutor(hostA-exec) was still invoked (the base FetchFailed path does this;
-    // the group-abort path must not skip it).
-    val rootRdd = new MyRDD(sc, 2, Nil)
-    val regularDep = new ShuffleDependency(rootRdd, new HashPartitioner(2))
-    val producerRdd = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
-    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
-    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
-    submit(consumerRdd, Array(0, 1))
-
-    val rootTs = taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq rootRdd).get
-    complete(rootTs, Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
-    val producerTs =
-      taskSets.find(ts => scheduler.stageIdToStage(ts.stageId).rdd eq producerRdd).get
-
-    runEvent(makeCompletionEvent(
-      producerTs.tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), regularDep.shuffleId, 0L, 0, 0, "ignored"),
-      null))
-    scheduler.resubmitFailedStages()
-    assert(failure != null, "the group must fail on the producer's regular-input FetchFailed")
-    // The dead executor's regular outputs are unregistered even though the group was aborted.
-    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
     sc.listenerBus.waitUntilEmpty()
     assertDataStructuresEmpty()
   }
