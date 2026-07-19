@@ -1041,4 +1041,19 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       input)
   }
 
+  test("JsonToStructs, GetJsonObject, JsonTuple are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
+    assert(jsonToStructs.stateful)
+    assert(jsonToStructs.freshCopyIfContainsStatefulExpression() ne jsonToStructs)
+
+    val getJsonObject = GetJsonObject(Literal("{}"), Literal("$.a"))
+    assert(getJsonObject.stateful)
+    assert(getJsonObject.freshCopyIfContainsStatefulExpression() ne getJsonObject)
+
+    val jsonTuple = JsonTuple(Literal("{}") :: Literal("a") :: Nil)
+    assert(jsonTuple.stateful)
+    assert(jsonTuple.freshCopyIfContainsStatefulExpression() ne jsonTuple)
+  }
+
 }
