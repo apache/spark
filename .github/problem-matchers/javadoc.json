@@ -5,7 +5,7 @@
       "severity": "error",
       "pattern": [
         {
-          "regexp": "(?:^|(?<=\\s))([/a-zA-Z](?:(?!/target/)\\S)*):(\\d+):(\\d+):\\s+error:\\s+(.+)",
+          "regexp": "(/(?:(?!/target/)\\S)*):(\\d+):(\\d+):\\s+error:\\s+(.+)",
           "file": 1,
           "line": 2,
           "column": 3,
