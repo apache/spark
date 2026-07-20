@@ -90,6 +90,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
     "flow definition with streaming source",
     CreateFlowCommand(batchRelation, streamRelation, comment = None))
 
+  assertSupportedInBatchPlan(
+    "AUTO CDC streaming table definition with streaming source",
+    CreateStreamingTableAutoCdc(
+      name = batchRelation,
+      columns = Nil,
+      partitioning = Nil,
+      tableSpec = emptyTableSpec,
+      ifNotExists = false,
+      source = streamRelation,
+      keys = Nil,
+      deleteCondition = None,
+      sequenceByExpr = attribute,
+      includeColumns = None,
+      excludeColumns = None))
 
   /*
     =======================================================================================

@@ -37,6 +37,9 @@ import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
  */
 object UnsupportedOperationChecker extends Logging {
 
+  // Pipeline definition commands are always root plans and must reach SparkStrategies.Pipelines
+  // for their dedicated errors. Materialized views are intentionally excluded because their
+  // queries are batch queries and must continue to reject streaming sources here.
   private def isPipelineDefinition(plan: LogicalPlan): Boolean = plan match {
     case _: CreateStreamingTableAsSelect | _: CreateStreamingTableAutoCdc |
         _: CreateFlowCommand => true
