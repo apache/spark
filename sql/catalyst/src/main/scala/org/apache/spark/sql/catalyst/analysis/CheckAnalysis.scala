@@ -678,11 +678,11 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _)
               if condition.dataType != BooleanType =>
-            throw SparkException.internalError(
-              msg = s"join condition '${toSQLExpr(condition)}' " +
-                s"of type ${toSQLType(condition.dataType)} is not a boolean.",
-              context = j.origin.getQueryContext,
-              summary = j.origin.context.summary)
+            j.failAnalysis(
+              errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
+              messageParameters = Map(
+                "joinCondition" -> toSQLExpr(condition),
+                "conditionType" -> toSQLType(condition.dataType)))
 
           case j @ AsOfJoin(_, _, _, _, _, _, Some(toleranceAssertion), _, _, _, _, _, _, _) =>
             if (!toleranceAssertion.foldable) {
