@@ -1168,11 +1168,28 @@ jobs:
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
+      env:
+        # needed so that gh api is not rate limited
+        GH_TOKEN: ${{ github.token }}
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        BRANCH="${GITHUB_REF#refs/heads/}"
+        PR_NUMBER=$(gh pr list \
+          --repo apache/spark \
+          --head "${{ github.repository_owner }}:${BRANCH}" \
+          --state open \
+          --json number \
+          --jq '.[0].number' 2>/dev/null || true)
+        if [ -n "$PR_NUMBER" ]; then
+          echo "Found PR #${PR_NUMBER}; using exact merge ref refs/pull/${PR_NUMBER}/merge"
+          git fetch https://github.com/apache/spark.git "refs/pull/${PR_NUMBER}/merge"
+          git checkout FETCH_HEAD
+        else
+          echo "No open PR found against apache/spark; falling back to squash merge"
+          git fetch https://github.com/$GITHUB_REPOSITORY.git "${BRANCH}"
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+        fi
     # Cache local repositories. Note that GitHub Actions cache has a 10G limit.
     - name: Cache SBT and Maven
       uses: actions/cache@v5
