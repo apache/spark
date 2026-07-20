@@ -69,7 +69,8 @@ private[spark] class ShuffleMapStage(
    * here, monotonically: a partition is added when its map task succeeds and is NEVER removed on
    * executor/host loss.
    *
-   * This is the crux of avoiding the SC-235532 hang: if a pipelined shuffle's availability were
+   * This is the crux of avoiding the streaming-writer resubmit hang: if a pipelined shuffle's
+   * availability were
    * read from the `MapOutputTracker`, losing an executor that held a completed (already-consumed)
    * pipelined output would strip it there, flip `isAvailable` to false, and make the DAGScheduler
    * resubmit the producer -- whose streaming writer then blocks forever waiting for termination
