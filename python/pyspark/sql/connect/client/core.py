@@ -1887,6 +1887,8 @@ class SparkConnectClient(object):
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}
+            if b.HasField("create_broadcast_result"):
+                yield {"create_broadcast_result": b.create_broadcast_result.broadcast_id}
             if b.HasField("checkpoint_command_result"):
                 yield {
                     "checkpoint_command_result": proto_to_remote_cached_dataframe(
@@ -2515,6 +2517,27 @@ class SparkConnectClient(object):
         _, properties, _ = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
+
+    def _create_broadcast(self, artifact_hash: str, size_bytes: int) -> int:
+        """(SPARK-51705) Create a broadcast variable from an already-uploaded cache artifact and
+        return the server-assigned (driver-side) broadcast id."""
+        logger.debug("Creating a broadcast variable")
+        cmd = pb2.Command()
+        cmd.create_broadcast_command.artifact_hash = artifact_hash
+        cmd.create_broadcast_command.size_bytes = size_bytes
+        _, properties, _ = self.execute_command(cmd)
+        return properties["create_broadcast_result"]
+
+    def _unpersist_broadcast(
+        self, broadcast_id: int, blocking: bool = False, destroy: bool = False
+    ) -> None:
+        """(SPARK-51705) Unpersist (or destroy) a broadcast variable created over Connect."""
+        logger.debug("Unpersisting a broadcast variable")
+        cmd = pb2.Command()
+        cmd.unpersist_broadcast_command.broadcast_id = broadcast_id
+        cmd.unpersist_broadcast_command.blocking = blocking
+        cmd.unpersist_broadcast_command.destroy = destroy
+        self.execute_command(cmd)
 
     def _delete_ml_cache(self, cache_ids: List[str], evict_only: bool = False) -> List[str]:
         # try best to delete the cache

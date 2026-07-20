@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.service
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable
@@ -31,7 +32,7 @@ import com.google.common.collect.Lists
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.api.python.SimplePythonFunction
+import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectTestUtils}
@@ -104,6 +105,48 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
     assertThrows[InvalidPlanInput] {
       sessionHolder.getDataFrameOrThrow(key1)
     }
+  }
+
+  test("SPARK-51705: broadcast registry put, get and remove") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val pb1 = new PythonBroadcast(Files.createTempFile("broadcast", "").toString)
+    val pb2 = new PythonBroadcast(Files.createTempFile("broadcast", "").toString)
+    val bcast1 = spark.sparkContext.broadcast(pb1)
+    val bcast2 = spark.sparkContext.broadcast(pb2)
+
+    // The registry is keyed by the driver-side broadcast id, which is the client handle.
+    val id1 = sessionHolder.registerBroadcast(bcast1)
+    val id2 = sessionHolder.registerBroadcast(bcast2)
+    assert(id1 == bcast1.id)
+    assert(id2 == bcast2.id)
+    assert(sessionHolder.getBroadcast(id1).contains(bcast1))
+    assert(sessionHolder.getBroadcast(id2).contains(bcast2))
+
+    // Unknown id is None -- resolveBroadcasts turns this into BROADCAST_NOT_FOUND.
+    assert(sessionHolder.getBroadcast(Long.MaxValue).isEmpty)
+
+    // Remove one, the other survives.
+    assert(sessionHolder.removeBroadcast(id1).contains(bcast1))
+    assert(sessionHolder.getBroadcast(id1).isEmpty)
+    assert(sessionHolder.getBroadcast(id2).contains(bcast2))
+  }
+
+  test("SPARK-51705: close() sweeps registered broadcasts") {
+    // Use an unregistered holder marked Started (not createDummySessionHolder) so that close()
+    // runs the full cleanup -- for a still-Pending session in tests close() returns early -- and
+    // so the closed holder is not left behind in the global session manager store.
+    val sessionHolder =
+      SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = spark)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val pb = new PythonBroadcast(Files.createTempFile("broadcast", "").toString)
+    val bcast = spark.sparkContext.broadcast(pb)
+    val id = sessionHolder.registerBroadcast(bcast)
+    assert(sessionHolder.getBroadcast(id).contains(bcast))
+
+    sessionHolder.close()
+    assert(sessionHolder.getBroadcast(id).isEmpty)
   }
 
   private def streamingForeachBatchFunction(pysparkPythonPath: String): Array[Byte] = {

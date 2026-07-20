@@ -1826,6 +1826,7 @@ class PythonUDF(google.protobuf.message.Message):
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
     ADDITIONAL_INCLUDES_FIELD_NUMBER: builtins.int
+    BROADCAST_IDS_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1840,6 +1841,15 @@ class PythonUDF(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Optional) Additional includes for the Python UDF."""
+    @property
+    def broadcast_ids(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """(Optional) (SPARK-51705) Server-assigned ids of broadcast variables referenced by this UDF.
+        Resolved by SparkConnectPlanner against the per-session SessionHolder broadcasts registry
+        into SimplePythonFunction.broadcastVars. The ids are the driver-side Broadcast ids returned
+        by CreateBroadcastResult (which the executor/worker also key on), not opaque handles.
+        """
     def __init__(
         self,
         *,
@@ -1848,6 +1858,7 @@ class PythonUDF(google.protobuf.message.Message):
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
         additional_includes: collections.abc.Iterable[builtins.str] | None = ...,
+        broadcast_ids: collections.abc.Iterable[builtins.int] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["output_type", b"output_type"]
@@ -1857,6 +1868,8 @@ class PythonUDF(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "additional_includes",
             b"additional_includes",
+            "broadcast_ids",
+            b"broadcast_ids",
             "command",
             b"command",
             "eval_type",

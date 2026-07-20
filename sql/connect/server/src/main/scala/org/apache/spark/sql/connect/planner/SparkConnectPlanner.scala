@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.io.{File, FileOutputStream}
+import java.nio.file.Files
 import java.util.{HashMap, Properties, UUID}
 
 import scala.collection.mutable
@@ -31,7 +33,8 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, SimplePythonFunction}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
@@ -2225,10 +2228,31 @@ class SparkConnectPlanner(
       pythonIncludes = (fun.getAdditionalIncludesList.asScala.toSeq ++
         sessionHolder.artifactManager.getPythonIncludes).asJava,
       pythonVer = fun.getPythonVer,
-      // Empty broadcast variables
-      broadcastVars = Lists.newArrayList(),
+      // (SPARK-51705) Resolve broadcast variables referenced by this UDF from the per-session
+      // registry. Empty list when the UDF references no broadcasts.
+      broadcastVars = resolveBroadcasts(fun.getBroadcastIdsList),
       // Accumulator if available
       accumulator = sessionHolder.pythonAccumulator.orNull)
+  }
+
+  /**
+   * (SPARK-51705) Resolve the broadcast ids referenced by a Python UDF into the driver-side
+   * Broadcast[PythonBroadcast] handles from the per-session SessionHolder registry. An id that is
+   * unknown (never created on this session, or belonging to another session) fails loudly with
+   * BROADCAST_NOT_FOUND rather than silently emitting an empty list -- which would otherwise
+   * surface as BROADCAST_VARIABLE_NOT_LOADED on the Python worker.
+   */
+  private def resolveBroadcasts(broadcastIds: java.util.List[java.lang.Long])
+      : java.util.List[Broadcast[PythonBroadcast]] = {
+    val resolved = new java.util.ArrayList[Broadcast[PythonBroadcast]](broadcastIds.size())
+    broadcastIds.forEach { boxedId =>
+      val id = boxedId.longValue()
+      val bcast = sessionHolder
+        .getBroadcast(id)
+        .getOrElse(throw InvalidInputErrors.broadcastNotFound(id))
+      resolved.add(bcast)
+    }
+    resolved
   }
 
   /**
@@ -2930,6 +2954,10 @@ class SparkConnectPlanner(
         handlePipelineCommand(command.getPipelineCommand, responseObserver)
       case proto.Command.CommandTypeCase.EXECUTE_EXTERNAL_COMMAND =>
         handleExecuteExternalCommand(command.getExecuteExternalCommand, responseObserver)
+      case proto.Command.CommandTypeCase.CREATE_BROADCAST_COMMAND =>
+        handleCreateBroadcastCommand(command.getCreateBroadcastCommand, responseObserver)
+      case proto.Command.CommandTypeCase.UNPERSIST_BROADCAST_COMMAND =>
+        handleUnpersistBroadcastCommand(command.getUnpersistBroadcastCommand)
 
       case other =>
         throw InvalidInputErrors.invalidOneOfField(other, command.getDescriptorForType)
@@ -4007,6 +4035,81 @@ class SparkConnectPlanner(
     val dfId = removeCachedRemoteRelationCommand.getRelation.getRelationId
     logInfo(log"Removing DataFrame with id ${MDC(DATAFRAME_ID, dfId)} from the cache")
     sessionHolder.removeCachedDataFrame(dfId)
+    executeHolder.eventsManager.postFinished()
+  }
+
+  /**
+   * (SPARK-51705) Materialize a broadcast variable from an already-uploaded cache/<sha256>
+   * artifact and register it on this session.
+   *
+   * The client uploaded cloudpickle(value) through the existing artifact cache channel; here we
+   * read the block back (decrypting transparently under spark.io.encryption), stage it to a temp
+   * file under the local dir (PythonBroadcast needs a path, and the cache block may be memory
+   * only), wrap it in a PythonBroadcast, and broadcast it on the live driver SparkContext -- the
+   * same object pythonAccumulator uses. The returned broadcast id is the driver-side
+   * Broadcast.id, which the client embeds into the pickled UDF closure and which the worker keys
+   * on.
+   */
+  private def handleCreateBroadcastCommand(
+      command: proto.CreateBroadcastCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val hash = command.getArtifactHash
+    val blockManager = session.sparkContext.env.blockManager
+    val blockId = sessionHolder.artifactManager.getCachedBlockId(hash).getOrElse {
+      throw InvalidInputErrors.cannotFindCachedLocalRelation(hash)
+    }
+    // Stage the (possibly memory-only, possibly encrypted) cache block to a temp file that
+    // PythonBroadcast can read. Mirrors the block-read idiom in transformCachedLocalRelation.
+    val bytes = blockManager
+      .getLocalBytes(blockId)
+      .getOrElse {
+        throw InvalidInputErrors.notFoundCachedLocalRelation(blockId.hash, blockId.sessionUUID)
+      }
+    val dir = new File(Utils.getLocalDir(session.sparkContext.conf))
+    val file = Files.createTempFile(dir.toPath, "broadcast", "").toFile
+    try {
+      val in = bytes.toInputStream()
+      val out = new FileOutputStream(file)
+      Utils.tryWithSafeFinally {
+        Utils.copyStream(in, out)
+      } {
+        out.close()
+        in.close()
+      }
+    } finally {
+      blockManager.releaseLock(blockId)
+    }
+
+    val pythonBroadcast = new PythonBroadcast(file.getAbsolutePath)
+    val bcast = session.sparkContext.broadcast(pythonBroadcast)
+    val broadcastId = sessionHolder.registerBroadcast(bcast)
+    logInfo(log"Created broadcast with id ${MDC(LogKeys.BROADCAST_ID, broadcastId)}")
+
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setCreateBroadcastResult(
+          proto.CreateBroadcastResult
+            .newBuilder()
+            .setBroadcastId(broadcastId)
+            .build())
+        .build())
+  }
+
+  /**
+   * (SPARK-51705) Release a broadcast variable created over Spark Connect. Unknown ids are a
+   * no-op (idempotent unpersist), consistent with the client possibly retrying.
+   */
+  private def handleUnpersistBroadcastCommand(command: proto.UnpersistBroadcastCommand): Unit = {
+    val broadcastId = command.getBroadcastId
+    if (command.getDestroy) {
+      sessionHolder.removeBroadcast(broadcastId).foreach(_.destroy(command.getBlocking))
+    } else {
+      sessionHolder.getBroadcast(broadcastId).foreach(_.unpersist(command.getBlocking))
+    }
     executeHolder.eventsManager.postFinished()
   }
 

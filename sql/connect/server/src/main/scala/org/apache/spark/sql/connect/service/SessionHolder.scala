@@ -24,12 +24,15 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
 import com.google.common.cache.{Cache, CacheBuilder}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkSQLException}
+import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.DataFrame
@@ -425,6 +428,21 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // Clean up ML cache (only if ML models were created)
     mlCache.close()
 
+    // (SPARK-51705) Destroy all broadcast variables created over Spark Connect, freeing the
+    // driver + executor blocks. Best-effort: a failure to destroy one must not abort the sweep.
+    broadcasts.forEach { (id, bcast) =>
+      try {
+        bcast.destroy()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(
+            log"Failed to destroy broadcast ${MDC(LogKeys.BROADCAST_ID, id)} " +
+              log"while closing session ${MDC(LogKeys.SESSION_ID, sessionId)}",
+            e)
+      }
+    }
+    broadcasts.clear()
+
     session.cleanupPythonWorkerLogs()
 
     eventManager.postClosed()
@@ -585,6 +603,29 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    */
   private[connect] val pythonAccumulator: Option[PythonAccumulator] =
     Try(session.sparkContext.collectionAccumulator[Array[Byte]]).toOption
+
+  /**
+   * (SPARK-51705) Registry of broadcast variables created over Spark Connect for this session,
+   * keyed by the driver-side broadcast id (Broadcast.id). This id is what the client embeds in
+   * the pickled UDF closure (via Broadcast._from_id) and what the executor/worker keys on, so it
+   * is used both as the client handle (CreateBroadcastResult.broadcast_id /
+   * PythonUDF.broadcast_ids) and as the registry key. Membership in this per-session map enforces
+   * isolation: SparkConnectPlanner.resolveBroadcasts rejects ids that are absent
+   * (BROADCAST_NOT_FOUND). Sibling to `pythonAccumulator`.
+   */
+  private[connect] val broadcasts: ConcurrentMap[Long, Broadcast[PythonBroadcast]] =
+    new ConcurrentHashMap()
+
+  private[connect] def registerBroadcast(bcast: Broadcast[PythonBroadcast]): Long = {
+    broadcasts.put(bcast.id, bcast)
+    bcast.id
+  }
+
+  private[connect] def getBroadcast(id: Long): Option[Broadcast[PythonBroadcast]] =
+    Option(broadcasts.get(id))
+
+  private[connect] def removeBroadcast(id: Long): Option[Broadcast[PythonBroadcast]] =
+    Option(broadcasts.remove(id))
 
   /**
    * Transform a relation into a logical plan, using the plan cache if enabled. The plan cache is

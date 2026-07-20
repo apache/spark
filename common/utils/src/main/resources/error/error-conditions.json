@@ -1254,6 +1254,11 @@
           "<message>"
         ]
       },
+      "BROADCAST_NOT_FOUND" : {
+        "message" : [
+          "Cannot find a broadcast variable with id: <id>. It may never have been created on this session, may belong to another session, or may have been unpersisted or destroyed."
+        ]
+      },
       "CANNOT_FIND_CACHED_LOCAL_RELATION" : {
         "message" : [
           "Cannot find a cached local relation for hash: <hash>"
