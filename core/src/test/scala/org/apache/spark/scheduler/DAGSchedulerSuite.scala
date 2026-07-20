@@ -7440,18 +7440,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
-  test("pipelined shuffle: buffered consumer TaskEnd events are still emitted when the job " +
-      "aborts") {
-    // A consumer's successful task completions are buffered (deferred) with their TaskEnd NOT yet
-    // posted while the producer runs. If the job is then torn down (here: the consumer's own task
-    // hits a FetchFailed, which aborts the group), those buffered successes must still emit their
-    // TaskEnd -- otherwise a listener that tracks active tasks (e.g. AppStatusListener, which only
-    // removes a stage once activeTasks hits 0) would leak the consumer stage as perpetually
-    // running.
-    // Mechanism: aborting the job tears down the still-running producer via
-    // cancelRunningIndependentStages, whose markStageAsFinished releases the consumer's deferral
-    // and
-    // drops its buffered events, posting their TaskEnd. This test guards that end-to-end invariant.
+  test("pipelined shuffle: a deferred consumer TaskEnd fires inline, so an abort cannot leak the " +
+      "stage as running") {
+    // Fine-grained model (S5.1): a consumer's successful task posts its TaskEnd in real time as the
+    // task finishes -- only the stage/job-completion bookkeeping is deferred. So even if the job is
+    // later torn down before the producer finishes (here: the consumer's OTHER task hits a
+    // FetchFailed, which aborts the group), the earlier success's TaskEnd has ALREADY been emitted.
+    // A listener that tracks active tasks (e.g. AppStatusListener, which removes a stage once
+    // activeTasks hits 0) therefore never leaks the consumer stage as perpetually running -- the
+    // leak the coarse model had to patch by re-emitting buffered TaskEnds at teardown simply cannot
+    // arise here.
     val endedTaskIds = new java.util.concurrent.ConcurrentHashMap[Long, Boolean]()
     val recordingListener = new SparkListener {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit =
@@ -7476,25 +7474,23 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assert(scheduler.dependentStageMap.size === 1,
         "the consumer must be co-scheduled with a running producer (a deferral must exist)")
 
-      // Consumer partition 0 succeeds -> buffered (deferred), so no TaskEnd is posted yet. Give it
-      // a
-      // known taskId so we can assert its TaskEnd fires on teardown.
+      // Consumer partition 0 succeeds. Its completion bookkeeping is deferred (no job result yet),
+      // but its TaskEnd is posted INLINE, right now. Give it a known taskId so we can assert that.
       val bufferedTaskId = 7007L
       runEvent(makeCompletionEvent(consumerTaskSet.tasks(0), Success, 42,
         taskInfo = createFakeTaskInfoWithId(bufferedTaskId)))
       sc.listenerBus.waitUntilEmpty()
-      assert(!endedTaskIds.containsKey(bufferedTaskId),
-        "the buffered consumer completion must not post its TaskEnd while deferred")
+      assert(endedTaskIds.containsKey(bufferedTaskId),
+        "the consumer completion's TaskEnd must be posted inline, as the task finishes")
+      assert(results.isEmpty, "the consumer's job result must still be deferred (producer running)")
       assert(scheduler.dependentStageMap.get(scheduler.stageIdToStage(consumerTaskSet.stageId))
         .exists(_.delayedTaskCompletionEvents.nonEmpty),
-        "the consumer's successful completion must be buffered while its producer runs")
+        "the consumer's completion bookkeeping must be buffered while its producer runs")
 
       // The consumer's OTHER task now hits a FetchFailed. For a pipelined group member this aborts
-      // the whole group (PR8 group-atomic failure) -- WITHOUT the producer ever finishing, so
-      // teardown goes through abortStage -> failJobAndIndependentStages ->
-      // cleanupStateForJobAndIndependentStages (NOT the producer-completion release path, which
-      // already posts TaskEnd correctly). The buffered success for partition 0 must still emit its
-      // TaskEnd on that cleanup path.
+      // the whole group (group-atomic failure) WITHOUT the producer ever finishing. The already-
+      // deferred success is dropped (its result must not be applied), and no duplicate TaskEnd is
+      // emitted for it -- it was already delivered above.
       runEvent(makeCompletionEvent(
         consumerTaskSet.tasks(1),
         FetchFailed(makeBlockManagerId("hostA"), pipelinedDep.shuffleId, 0L, 0, 0, "ignored"),
@@ -7502,11 +7498,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       scheduler.resubmitFailedStages()
       assert(failure.get() != null, "the job must fail")
 
-      // The buffered consumer success must still have produced a TaskEnd on teardown.
       sc.listenerBus.waitUntilEmpty()
-      assert(endedTaskIds.containsKey(bufferedTaskId),
-        "a buffered consumer TaskEnd must still be emitted when the job aborts, to avoid leaking " +
-          "the stage as perpetually running in active-task listeners")
+      assert(results.isEmpty,
+        "the deferred consumer success must be dropped on abort, not applied as a result")
       assertDataStructuresEmpty()
     } finally {
       sc.removeSparkListener(recordingListener)
