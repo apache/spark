@@ -2318,7 +2318,7 @@ object functions {
   def regr_avgx(y: Column, x: Column): Column = Column.fn("regr_avgx", y, x)
 
   /**
-   * Aggregate function: returns the average of the independent variable for non-null pairs in a
+   * Aggregate function: returns the average of the dependent variable for non-null pairs in a
    * group, where `y` is the dependent variable and `x` is the independent variable.
    *
    * @group agg_funcs
@@ -2399,7 +2399,7 @@ object functions {
   def any_value(e: Column): Column = Column.fn("any_value", e)
 
   /**
-   * Aggregate function: returns some value of `e` for a group of rows. If `isIgnoreNull` is true,
+   * Aggregate function: returns some value of `e` for a group of rows. If `ignoreNulls` is true,
    * returns only non-null values.
    *
    * @group agg_funcs
@@ -3597,7 +3597,7 @@ object functions {
   def ceil(e: Column): Column = Column.fn("ceil", e)
 
   /**
-   * Computes the ceiling of the given value of `e` to 0 decimal places.
+   * Computes the ceiling of the given value of `columnName` to 0 decimal places.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -4958,7 +4958,7 @@ object functions {
   def random(): Column = random(lit(SparkClassUtils.random.nextLong))
 
   /**
-   * Returns the bucket number for the given input column.
+   * Returns the bit position for the given input column.
    *
    * @group misc_funcs
    * @since 3.5.0
@@ -4967,7 +4967,7 @@ object functions {
     Column.fn("bitmap_bit_position", col)
 
   /**
-   * Returns the bit position for the given input column.
+   * Returns the bucket number for the given input column.
    *
    * @group misc_funcs
    * @since 3.5.0
@@ -7684,7 +7684,7 @@ object functions {
    *
    * Only considers the date part of the input. For example:
    * {{{
-   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * datediff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
    * // returns 1
    * }}}
    *
@@ -7707,7 +7707,7 @@ object functions {
    *
    * Only considers the date part of the input. For example:
    * {{{
-   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * date_diff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
    * // returns 1
    * }}}
    *
@@ -8796,7 +8796,7 @@ object functions {
   def time_to_micros(e: Column): Column = Column.fn("time_to_micros", e)
 
   /**
-   * Parses the `timestamp` expression with the `format` expression to a timestamp without time
+   * Parses the `timestamp` expression with the `format` expression to a timestamp with local time
    * zone. Returns null with invalid input.
    *
    * @group datetime_funcs
@@ -8806,8 +8806,9 @@ object functions {
     Column.fn("to_timestamp_ltz", timestamp, format)
 
   /**
-   * Parses the `timestamp` expression with the default format to a timestamp without time zone.
-   * The default format follows casting rules to a timestamp. Returns null with invalid input.
+   * Parses the `timestamp` expression with the default format to a timestamp with local time
+   * zone. The default format follows casting rules to a timestamp. Returns null with invalid
+   * input.
    *
    * @group datetime_funcs
    * @since 3.5.0
@@ -9291,7 +9292,7 @@ object functions {
    * to a single state. The final state is converted into the final result by applying a finish
    * function.
    * {{{
-   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
+   *   df.select(reduce(col("i"), lit(0), (acc, x) => acc + x, _ * 10))
    * }}}
    *
    * @param expr
@@ -9319,7 +9320,7 @@ object functions {
    * Applies a binary operator to an initial state and all elements in the array, and reduces this
    * to a single state.
    * {{{
-   *   df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x))
+   *   df.select(reduce(col("i"), lit(0), (acc, x) => acc + x))
    * }}}
    *
    * @param expr
