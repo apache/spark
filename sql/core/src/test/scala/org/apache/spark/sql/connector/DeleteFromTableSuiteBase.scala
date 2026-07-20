@@ -80,7 +80,10 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(5, "hr", "new-text"),
         Row(6, "hr", "new-text")))
 
-    sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)")
+    val expectedCopiedRows = if (deltaDelete) 0L else 3L
+    checkAnswer(
+      sql(s"DELETE FROM $tableNameAsString WHERE pk IN (2, 5)"),
+      Seq(Row("num_affected_rows", 2L), Row("num_copied_rows", expectedCopiedRows)))
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

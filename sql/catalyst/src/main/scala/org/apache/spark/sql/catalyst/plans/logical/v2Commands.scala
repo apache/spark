@@ -222,7 +222,8 @@ case class InsertOnlyMerge(
     table: NamedRelation,
     query: LogicalPlan,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand with TransactionalWrite {
+    analyzedQuery: Option[LogicalPlan] = None,
+    override val output: Seq[Attribute] = Nil) extends V2WriteCommand with TransactionalWrite {
   override val isByName: Boolean = false
   override val withSchemaEvolution: Boolean = false
   override val writePrivileges: Set[TableWritePrivilege] = Set(TableWritePrivilege.INSERT)
@@ -353,6 +354,13 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
   def operation: RowLevelOperation
   def condition: Expression
   def originalTable: NamedRelation
+
+  override def output: Seq[Attribute] = {
+    EliminateSubqueryAliases(table) match {
+      case ExtractV2Table(table: RowLevelOperationTable) => table.operationOutput
+      case _ => Nil
+    }
+  }
 
   protected def operationResolved: Boolean = {
     val attr = query.output.head

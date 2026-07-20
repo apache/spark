@@ -51,7 +51,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
 
-    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _, _) =>
       val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
       val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()

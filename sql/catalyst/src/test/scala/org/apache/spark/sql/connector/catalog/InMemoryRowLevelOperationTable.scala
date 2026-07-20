@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LogicalExpres
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
 import org.apache.spark.sql.connector.write.{BatchWrite, DeltaBatchWrite, DeltaWrite, DeltaWriteBuilder, DeltaWriter, DeltaWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, RequiresDistributionAndOrdering, RowLevelOperation, RowLevelOperationBuilder, RowLevelOperationInfo, SupportsDelta, Write, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -78,6 +78,9 @@ class InMemoryRowLevelOperationTable private (
   private final val SPLIT_UPDATES = "split-updates"
   private final val NO_METADATA = "no-metadata"
   private final val noMetadata = properties.getOrDefault(NO_METADATA, "false") == "true"
+  private final val commandOutputSchema = new StructType()
+    .add("metric", StringType, nullable = false)
+    .add("value", LongType, nullable = false)
 
   // used in row-level operation tests to verify replaced partitions
   var replacedPartitions: Seq[Seq[Any]] = Seq.empty
@@ -126,6 +129,8 @@ class InMemoryRowLevelOperationTable private (
     extends RowLevelOperation with RowLevelOperationWithOptions {
     var configuredScan: InMemoryBatchScan = _
 
+    override def outputSchema(): StructType = commandOutputSchema
+
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
         Array.empty
@@ -149,11 +154,14 @@ class InMemoryRowLevelOperationTable private (
       new WriteBuilder {
         override def build(): Write = if (noMetadata) {
           new Write {
+            override def output(): Array[InternalRow] = commandOutput
             override def toBatch: BatchWrite = PartitionBasedReplaceData(configuredScan)
             override def description: String = "InMemoryWrite"
           }
         } else {
           new Write with RequiresDistributionAndOrdering {
+            override def output(): Array[InternalRow] = commandOutput
+
             override def requiredDistribution: Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
             }
@@ -196,6 +204,8 @@ class InMemoryRowLevelOperationTable private (
     extends RowLevelOperation with SupportsDelta with RowLevelOperationWithOptions {
     private final val PK_COLUMN_REF = FieldReference("pk")
 
+    override def outputSchema(): StructType = commandOutputSchema
+
     override def requiredMetadataAttributes(): Array[NamedReference] = {
       if (noMetadata) {
         Array.empty
@@ -215,10 +225,12 @@ class InMemoryRowLevelOperationTable private (
       new DeltaWriteBuilder {
         override def build(): DeltaWrite = if (noMetadata) {
           new DeltaWrite {
+            override def output(): Array[InternalRow] = commandOutput
             override def toBatch: DeltaBatchWrite = TestDeltaBatchWrite
           }
         } else {
           new DeltaWrite with RequiresDistributionAndOrdering {
+            override def output(): Array[InternalRow] = commandOutput
 
             override def requiredDistribution(): Distribution = {
               Distributions.clustered(Array(PARTITION_COLUMN_REF))
