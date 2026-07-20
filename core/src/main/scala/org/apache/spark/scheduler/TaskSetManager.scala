@@ -135,19 +135,30 @@ private[spark] class TaskSetManager(
   // Executor exit codes treated as OOM (see spark.task.oomRetryExecutorExitCodes); when an
   // executor exits with one of these, the tasks it was running have their OOM retry count bumped.
   private val oomRetryExecutorExitCodes = conf.get(config.OOM_RETRY_EXECUTOR_EXIT_CODES).toSet
-  // The executor total cores of this TaskSet's ResourceProfile. A TaskSetManager is tied to a
-  // single ResourceProfile, so this is constant for its lifetime and caps the OOM retry cpus.
-  private val executorCoresLimit: Int = {
-    val rp = sched.sc.resourceProfileManager.resourceProfileFromId(taskSet.resourceProfileId)
-    rp.getExecutorCores.getOrElse(conf.get(EXECUTOR_CORES))
-  }
+  // The executor total cores that caps the OOM retry cpus, if known. A TaskSetManager is tied to
+  // a single ResourceProfile, so this is constant for its lifetime. It is taken from the
+  // ResourceProfile's executor cores, falling back to an explicitly configured
+  // spark.executor.cores (e.g. for a TaskResourceProfile whose tasks run on default-profile
+  // executors). It is None only when neither is set (e.g. Standalone / local-cluster without
+  // spark.executor.cores, where an executor uses the worker's available cores); in that case the
+  // OOM retry cpus are not capped here and the executor's actual free cpus at offer time still
+  // bound them (see oomRetryNeedsMoreCpus).
+  private val executorCoresLimit: Option[Int] =
+    sched.sc.resourceProfileManager
+      .resourceProfileFromId(taskSet.resourceProfileId)
+      .getExecutorCores
+      .orElse(conf.getOption(EXECUTOR_CORES.key).map(_.toInt))
 
   // The number of CPUs a retry of the given task should request, given the ResourceProfile's
   // base taskCpus. For a task that has failed with OOM, this grows by oomRetryCpusIncrement per
-  // OOM failure, capped at the executor total cores.
+  // OOM failure, capped at the executor total cores when that is known. The result is floored at
+  // baseCpus, so an absent/small cap never shrinks the request below the base, and an extreme
+  // increment that overflows the Int arithmetic degrades gracefully to baseCpus rather than
+  // producing a non-positive request (which would trip the cpus > 0 assertion in TaskDescription
+  // after scheduler state was already mutated).
   private def effectiveCpusFor(index: Int, baseCpus: Int): Int = {
     val requested = baseCpus + oomRetryCpusIncrement * numOomRetries(index)
-    math.min(requested, executorCoresLimit)
+    executorCoresLimit.map(_.min(requested)).getOrElse(requested).max(baseCpus)
   }
 
   // Add the tid of task into this HashSet when the task is killed by other attempt tasks.
@@ -1102,11 +1113,14 @@ private[spark] class TaskSetManager(
             info.id, taskSet.id, tid, ef.description))
           return
         }
-        // Grow the CPUs allocated to the retry of a task that failed with a (non-fatal)
-        // SparkOutOfMemoryError, so it runs with fewer concurrent tasks and a larger
-        // execution-memory share. Barrier tasks are excluded (uniform, gang-scheduled resources).
-        if (oomRetryCpusIncrement > 0 && !isBarrier &&
-            ef.className == classOf[SparkOutOfMemoryError].getName) {
+        // Grow the CPUs allocated to the retry of a task that failed out-of-memory: either a
+        // non-fatal SparkOutOfMemoryError (unable to acquire execution memory) or a fatal JVM
+        // heap OutOfMemoryError. A fatal heap OOM also kills the executor (exit code 52) whose
+        // ExecutorExited is handled in executorLost; the Executor sends this ExceptionFailure
+        // before it exits, so either event may reach the driver first. Whichever arrives first
+        // does the increment; the info.finished guard at the top of handleFailedTask makes the
+        // second a no-op, so there is no double counting.
+        if (oomRetryCpusIncrement > 0 && !isBarrier && TaskSetManager.isOom(ef)) {
           numOomRetries(index) += 1
         }
         val key = ef.description
@@ -1574,6 +1588,17 @@ private[spark] object TaskSetManager {
   // Shared empty set used as default value for executorIdToTaskIds lookups
   // to avoid allocating a new empty set on each executorLost call.
   private val EMPTY_LONG_SET = new OpenHashSet[Long](0)
+
+  // Whether an ExceptionFailure represents an OutOfMemoryError: either a fatal JVM heap
+  // OutOfMemoryError or the non-fatal SparkOutOfMemoryError (which subclasses OutOfMemoryError).
+  // Prefers the preserved Throwable and falls back to the serialized class name, since the
+  // exception may not have been preserved (see ExceptionFailure preserveCause) and its class may
+  // not be loadable in the driver. Used by the spark.task.oomRetryCpusIncrement feature.
+  private def isOom(ef: ExceptionFailure): Boolean = {
+    ef.exception.exists(_.isInstanceOf[OutOfMemoryError]) ||
+      ef.className == classOf[OutOfMemoryError].getName ||
+      ef.className == classOf[SparkOutOfMemoryError].getName
+  }
 }
 
 /**
