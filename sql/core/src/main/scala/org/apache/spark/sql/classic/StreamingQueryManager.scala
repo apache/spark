@@ -226,6 +226,15 @@ class StreamingQueryManager private[sql] (
 
     (sink, trigger) match {
       case (_: SupportsWrite, trigger: ContinuousTrigger) =>
+        // Sink evolution persists per-sink metadata via the V3 commit log, which is written only
+        // by MicroBatchExecution.markMicroBatchEnd. ContinuousExecution.commit writes just V1
+        // commit metadata and never goes through that path, so the sink metadata would be silently
+        // never persisted. Reject the combination explicitly instead of silently dropping it.
+        if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
+          throw new SparkIllegalArgumentException(
+            errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CONTINUOUS_PROCESSING_NOT_SUPPORTED"
+          )
+        }
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
           trigger,

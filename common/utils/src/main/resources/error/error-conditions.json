@@ -1623,6 +1623,12 @@
     ],
     "sqlState" : "22023"
   },
+  "CREATE_EXTERNAL_TABLE_WITHOUT_LOCATION" : {
+    "message" : [
+      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
+    ],
+    "sqlState" : "42601"
+  },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
       "Not allowed to create the permanent view <name> without explicitly assigning an alias for the expression <attr>."
@@ -4880,6 +4886,11 @@
           "ANALYZE TABLE(S) ... COMPUTE STATISTICS ... <ctx> must be either NOSCAN or empty."
         ]
       },
+      "COMMENT_ON_COLUMN_INCORRECT_IDENTIFIER" : {
+        "message" : [
+          "COMMENT ON COLUMN requires an identifier with at least two parts. Please qualify the column with the table name (e.g. `table.column`, `database.table.column`, or `catalog.database.table.column`)."
+        ]
+      },
       "CREATE_FUNC_WITH_COLUMN_CONSTRAINTS" : {
         "message" : [
           "CREATE FUNCTION with constraints on parameters is not allowed."
@@ -7362,6 +7373,11 @@
           "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
         ]
       },
+      "CONTINUOUS_PROCESSING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming sink evolution cannot be used together with continuous processing. Continuous processing persists only V1 commit metadata and would silently drop the per-sink metadata that sink evolution requires. Disable sink evolution by setting spark.sql.streaming.queryEvolution.enableSinkEvolution to false, or use a micro-batch trigger instead of Trigger.Continuous."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
@@ -9627,11 +9643,6 @@
   "_LEGACY_ERROR_TEMP_1068" : {
     "message" : [
       "<database> is a system preserved database, you cannot use it as current database. To access global temporary views, you should use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM <database>.viewName."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1069" : {
-    "message" : [
-      "CREATE EXTERNAL TABLE must be accompanied by LOCATION."
     ]
   },
   "_LEGACY_ERROR_TEMP_1071" : {
