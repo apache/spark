@@ -184,6 +184,30 @@ class SparkConnectServerListenerSuite
     }
   }
 
+  test("SPARK-58097: getSession falls back to a scan for legacy sessionId-keyed rows") {
+    // A History Server disk store written by an older Spark keys SessionInfo on sessionId alone,
+    // so a composite-key read misses while the row is still enumerable via the view. Simulate that
+    // by making the composite-key read of SessionInfo fail; the row remains reachable through the
+    // view, exactly as a legacy on-disk store presents it after an upgrade with no replay.
+    val legacyStore = new InMemoryStore {
+      override def read[T](klass: Class[T], naturalKey: Object): T = {
+        if (klass == classOf[SessionInfo]) throw new NoSuchElementException()
+        else super.read(klass, naturalKey)
+      }
+    }
+    val store = new SparkConnectServerAppStatusStore(legacyStore)
+    val sessionId = "legacy-session-uuid"
+    legacyStore.write(new SessionInfo(sessionId, 1000L, "userA", 2000L, 3L))
+
+    val session = store.getSession("userA", sessionId)
+    assert(session.isDefined)
+    assert(session.get.userId === "userA")
+    assert(session.get.sessionId === sessionId)
+    assert(session.get.totalExecution === 3L)
+    // A composite-key miss with no matching row still returns None.
+    assert(store.getSession("userB", sessionId).isEmpty)
+  }
+
   test(
     "update execution info when event reordering causes job and sql" +
       " start to come after operation closed") {

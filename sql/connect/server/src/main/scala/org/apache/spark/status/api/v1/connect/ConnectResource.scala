@@ -20,7 +20,7 @@ package org.apache.spark.status.api.v1.connect
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.MediaType
 
-import org.apache.spark.sql.connect.ui.{ExecutionInfo, SessionInfo, SparkConnectServerAppStatusStore}
+import org.apache.spark.sql.connect.ui.{ConnectUiUtils, ExecutionInfo, SessionInfo, SparkConnectServerAppStatusStore}
 import org.apache.spark.status.api.v1.{BadParameterException, BaseAppResource, NotFoundException}
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -38,7 +38,8 @@ private[v1] class ConnectResource extends BaseAppResource {
   }
 
   // A session is identified by the composite (userId, sessionId): two users may share the same
-  // session UUID, so userId is required to resolve exactly one session.
+  // session UUID, so userId is required to resolve exactly one session. userId is an opaque
+  // identifier passed as a base64url token so it survives the UI request sanitization intact.
   @GET
   @Path("sessions/{sessionId}")
   def session(
@@ -47,9 +48,16 @@ private[v1] class ConnectResource extends BaseAppResource {
     if (userId == null || userId.isEmpty) {
       throw new BadParameterException("userId is required.")
     }
+    val decodedUserId =
+      try {
+        ConnectUiUtils.decodeUserId(userId)
+      } catch {
+        case _: IllegalArgumentException =>
+          throw new BadParameterException("userId must be a base64url-encoded string.")
+      }
     val store = new SparkConnectServerAppStatusStore(ui.store.store)
     store
-      .getSession(userId, sessionId)
+      .getSession(decodedUserId, sessionId)
       .map(prepareSessionData)
       .getOrElse(throw new NotFoundException("unknown session id: " + sessionId))
   }

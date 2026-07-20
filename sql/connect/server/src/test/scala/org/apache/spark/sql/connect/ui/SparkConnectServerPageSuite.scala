@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.ui
 import java.util.{Calendar, Locale}
 
 import jakarta.servlet.http.HttpServletRequest
+import org.apache.commons.text.StringEscapeUtils
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 import org.scalatest.BeforeAndAfter
 
@@ -110,7 +111,7 @@ class SparkConnectServerPageSuite
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sessionId")
-    when(request.getParameter("userId")).thenReturn("userId")
+    when(request.getParameter("userId")).thenReturn(ConnectUiUtils.encodeUserId("userId"))
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
     when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
     when(tab.store).thenReturn(store)
@@ -158,7 +159,7 @@ class SparkConnectServerPageSuite
 
     val request = mock(classOf[HttpServletRequest])
     when(request.getParameter("id")).thenReturn("sharedSession")
-    when(request.getParameter("userId")).thenReturn("userA")
+    when(request.getParameter("userId")).thenReturn(ConnectUiUtils.encodeUserId("userA"))
     val tab = mock(classOf[SparkConnectServerTab], RETURNS_SMART_NULLS)
     when(tab.startTime).thenReturn(Calendar.getInstance().getTime)
     when(tab.store).thenReturn(store)
@@ -170,5 +171,20 @@ class SparkConnectServerPageSuite
     // Only userA's operation is listed; userB's must not leak into userA's session page.
     assert(html.contains("query from a"))
     assert(!html.contains("query from b"))
+  }
+
+  test("SPARK-58097: encoded userId survives UI request sanitization") {
+    // Mirror XssSafeRequest.stripXSS: strip newlines/apostrophes, then HTML-escape (version 4.0).
+    val newlineAndQuote = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
+    def stripXSS(s: String): String =
+      StringEscapeUtils.escapeHtml4(newlineAndQuote.replaceAllIn(s, ""))
+
+    // Opaque user ids with characters the sanitizer would otherwise strip or escape.
+    Seq("a'b", "alice+tag", "user=name", "plain", "a/b&c").foreach { userId =>
+      val token = ConnectUiUtils.encodeUserId(userId)
+      // The base64url token passes through request sanitization unchanged, so it round-trips.
+      assert(stripXSS(token) === token, s"token for '$userId' was altered by sanitization")
+      assert(ConnectUiUtils.decodeUserId(stripXSS(token)) === userId)
+    }
   }
 }
