@@ -2810,7 +2810,14 @@ private[spark] class DAGScheduler(
       // are properly notified and can chose to handle it. For instance, some listeners are
       // doing their own accounting and if they don't get the task end event they think
       // tasks are still running when they really aren't.
-      postTaskEnd(event)
+      //
+      // Exception: a replayed pipelined-consumer completion (finishOnly) already fired its TaskEnd
+      // inline when the task first completed; only the deferred stage/job bookkeeping was
+      // re-posted. If the stage was torn down (e.g. a sibling aborted the group) before this replay
+      // dequeues, re-posting TaskEnd here would double-count it in listeners. Skip for finishOnly.
+      if (!event.finishOnly) {
+        postTaskEnd(event)
+      }
 
       // Skip all the actions if the stage has been cancelled.
       return
