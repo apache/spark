@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.api.metric.CustomShuffleTaskMetric;
 
 /**
  * Optional extension for partition writing that is optimized for transferring a single
@@ -36,4 +37,11 @@ public interface SingleSpillShuffleMapOutputWriter {
       File mapOutputFile,
       long[] partitionLengths,
       long[] checksums) throws IOException;
+
+  /**
+   * The values of the custom shuffle metrics for this map task.
+   */
+  default CustomShuffleTaskMetric[] currentMetricsValues() {
+    return new CustomShuffleTaskMetric[0];
+  }
 }

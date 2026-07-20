@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
 import java.util.Optional
 
 import org.apache.spark.shuffle.api.{ShuffleExecutorComponents, ShuffleMapOutputWriter, ShufflePartitionWriter, SingleSpillShuffleMapOutputWriter}
@@ -56,6 +57,21 @@ private[spark] class CustomMetricReportingExecutorComponents(
   override def createSingleFileMapOutputWriter(
       shuffleId: Int, mapId: Long): Optional[SingleSpillShuffleMapOutputWriter] =
     delegate.createSingleFileMapOutputWriter(shuffleId, mapId)
+      .map[SingleSpillShuffleMapOutputWriter] { writer =>
+        new CustomMetricReportingSingleSpillMapOutputWriter(writer, reportedMetrics)
+      }
+}
+
+private[spark] class CustomMetricReportingSingleSpillMapOutputWriter(
+    delegate: SingleSpillShuffleMapOutputWriter,
+    reportedMetrics: Array[CustomShuffleTaskMetric])
+  extends SingleSpillShuffleMapOutputWriter {
+
+  override def transferMapSpillFile(
+      mapSpillFile: File, partitionLengths: Array[Long], checksums: Array[Long]): Unit =
+    delegate.transferMapSpillFile(mapSpillFile, partitionLengths, checksums)
+
+  override def currentMetricsValues(): Array[CustomShuffleTaskMetric] = reportedMetrics
 }
 
 private[spark] class CustomMetricReportingMapOutputWriter(
