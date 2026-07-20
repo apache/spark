@@ -19172,6 +19172,10 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
         A new Column of Boolean type, where each value indicates whether the corresponding array
         from the input column contains the specified value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_position`
+
     Examples
     --------
     Example 1: Basic usage of array_contains function.
@@ -19410,6 +19414,11 @@ def array_join(
         A new column of string type, where each value is the result of joining the corresponding
         array from the input column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.concat`
+    :meth:`pyspark.sql.functions.concat_ws`
+
     Examples
     --------
     Example 1: Basic usage of array_join function.
@@ -19603,6 +19612,10 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         position of the value in the given array if found and 0 otherwise.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_contains`
 
     Examples
     --------
@@ -19995,6 +20008,11 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     :class:`~pyspark.sql.Column`
         an array with the given value prepended.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_append`
+    :meth:`pyspark.sql.functions.array_insert`
+
     Examples
     --------
     Example 1: Prepending a column value to an array column
@@ -20087,6 +20105,10 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         A new column that is an array excluding the given value from the input column.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_compact`
 
     Examples
     --------
@@ -20184,6 +20206,12 @@ def array_distinct(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that is an array of unique values from the input column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_intersect`
+    :meth:`pyspark.sql.functions.array_union`
+
     Examples
     --------
     Example 1: Removing duplicate values from a simple array
@@ -20278,6 +20306,11 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     -----
     Supports Spark Connect.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_append`
+    :meth:`pyspark.sql.functions.array_prepend`
+
     Examples
     --------
     Example 1: Inserting a value at a specific position
@@ -20369,6 +20402,12 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     Notes
     -----
     This function does not preserve the order of the elements in the input arrays.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_union`
 
     Examples
     --------
@@ -20463,6 +20502,12 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     -----
     This function does not preserve the order of the elements in the input arrays.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_except`
+    :meth:`pyspark.sql.functions.array_intersect`
+
     Examples
     --------
     Example 1: Basic usage
@@ -20556,6 +20601,12 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     -----
     This function does not preserve the order of the elements in the input arrays.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_distinct`
+    :meth:`pyspark.sql.functions.array_intersect`
+    :meth:`pyspark.sql.functions.array_union`
+
     Examples
     --------
     Example 1: Basic usage
@@ -20642,6 +20693,10 @@ def array_compact(col: "ColumnOrName") -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_remove`
 
     Examples
     --------
@@ -20734,6 +20789,11 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_insert`
+    :meth:`pyspark.sql.functions.array_prepend`
 
     Examples
     --------
@@ -22884,6 +22944,12 @@ def array_min(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that contains the minimum value of each array.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_max`
+    :meth:`pyspark.sql.functions.array_sort`
+    :meth:`pyspark.sql.functions.sort_array`
+
     Examples
     --------
     Example 1: Basic usage with integer array
@@ -22969,6 +23035,12 @@ def array_max(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column that contains the maximum value of each array.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array_min`
+    :meth:`pyspark.sql.functions.array_sort`
+    :meth:`pyspark.sql.functions.sort_array`
+
     Examples
     --------
     Example 1: Basic usage with integer array
@@ -23051,6 +23123,11 @@ def array_size(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains the size of each array.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cardinality`
+    :meth:`pyspark.sql.functions.size`
 
     Examples
     --------
@@ -23274,6 +23351,10 @@ def array_sort(
     -------
     :class:`~pyspark.sql.Column`
         sorted array.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sort_array`
 
     Examples
     --------
@@ -23901,6 +23982,10 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains an array of repeated elements.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.array`
 
     Examples
     --------
