@@ -2292,6 +2292,10 @@ def acos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column object representing the inverse cosine of the input.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cos`
+
     Examples
     --------
     Example 1: Compute the inverse cosine
@@ -2347,6 +2351,10 @@ def acosh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         A new column object representing the inverse hyperbolic cosine of the input.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cosh`
+
     Examples
     --------
     Example 1: Compute the inverse hyperbolic cosine
@@ -2397,6 +2405,10 @@ def asin(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         inverse sine of `col`, as if computed by `java.lang.Math.asin()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sin`
 
     Examples
     --------
@@ -2450,6 +2462,10 @@ def asinh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sinh`
+
     Examples
     --------
     Example 1: Compute the inverse hyperbolic sine
@@ -2501,6 +2517,11 @@ def atan(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan2`
+    :meth:`pyspark.sql.functions.tan`
+
     Examples
     --------
     Example 1: Compute the inverse tangent
@@ -2551,6 +2572,10 @@ def atanh(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tanh`
 
     Examples
     --------
@@ -2772,6 +2797,11 @@ def cos(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         cosine of the angle, as if computed by `java.lang.Math.cos()`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.acos`
+    :meth:`pyspark.sql.functions.sec`
+
     Examples
     --------
     Example 1: Compute the cosine
@@ -2824,6 +2854,10 @@ def cosh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.acosh`
+
     Examples
     --------
     Example 1: Compute the cosine
@@ -2874,6 +2908,10 @@ def cot(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         cotangent of the angle.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.tan`
 
     Examples
     --------
@@ -2926,6 +2964,10 @@ def csc(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         cosecant of the angle.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sin`
 
     Examples
     --------
@@ -3383,6 +3425,10 @@ def sec(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         Secant of the angle.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cos`
+
     Examples
     --------
     Example 1: Compute the secant
@@ -3518,6 +3564,11 @@ def sin(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         sine of the angle, as if computed by `java.lang.Math.sin()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.asin`
+    :meth:`pyspark.sql.functions.csc`
+
     Examples
     --------
     Example 1: Compute the sine
@@ -3571,6 +3622,10 @@ def sinh(col: "ColumnOrName") -> Column:
         hyperbolic sine of the given value,
         as if computed by `java.lang.Math.sinh()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.asinh`
+
     Examples
     --------
     Example 1: Compute the hyperbolic sine
@@ -3621,6 +3676,12 @@ def tan(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         tangent of the given value, as if computed by `java.lang.Math.tan()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan`
+    :meth:`pyspark.sql.functions.atan2`
+    :meth:`pyspark.sql.functions.cot`
 
     Examples
     --------
@@ -3674,6 +3735,10 @@ def tanh(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hyperbolic tangent of the given value
         as if computed by `java.lang.Math.tanh()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atanh`
 
     Examples
     --------
@@ -6103,6 +6168,10 @@ def degrees(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         angle in degrees, as if computed by `java.lang.Math.toDegrees()`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.radians`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6141,6 +6210,10 @@ def radians(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         angle in radians, as if computed by `java.lang.Math.toRadians()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.degrees`
 
     Examples
     --------
@@ -6186,6 +6259,11 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
         in polar coordinates that corresponds to the point
         (`x`, `y`) in Cartesian coordinates,
         as if computed by `java.lang.Math.atan2()`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.atan`
+    :meth:`pyspark.sql.functions.hypot`
 
     Examples
     --------
