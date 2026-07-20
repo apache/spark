@@ -369,7 +369,7 @@ class KafkaOffsetReaderSuite extends SharedSparkSession with KafkaTest {
     val topic = newTopic()
     testUtils.createTopic(topic, partitions = 3)
 
-    val ttlMs = 200 // short TTL so the test doesn't need to sleep long
+    val ttlMs = 2000 // large enough to not expire during two sequential fetches
     val describeCount = new AtomicInteger(0)
     val countingStrategy = new SubscribeStrategy(Seq(topic)) {
       override def assignedTopicPartitions(admin: Admin): Set[TopicPartition] = {
