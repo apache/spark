@@ -1206,7 +1206,7 @@ class DataFrame:
         :class:`DataFrame`
             Hinted DataFrame
 
-        .. note:: See also https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html
+        .. note:: See also `Hints <https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-hints.html>`
 
         Examples
         --------
