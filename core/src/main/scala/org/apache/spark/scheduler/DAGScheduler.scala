@@ -2811,58 +2811,69 @@ private[spark] class DAGScheduler(
 
     val stage = stageIdToStage(task.stageId)
 
-    // Group-observable completion (S5): if this stage is a pipelined consumer co-scheduled with a
-    // still-running pipelined producer, defer its *successful* completion in full until the
-    // producer(s) finish. Buffer the whole CompletionEvent and return before ANY of its side
-    // effects run (accumulator update, task-end listener event, stage/job completion) -- otherwise
-    // a consumer finishing ahead of its producer would advance job completion and cancel the
-    // still-running producer, or expose its output early. Deferring the entire event (not just the
-    // completion bookkeeping) is the coarse model, and crucially it makes the side effects run
-    // exactly ONCE, at replay: markStageAsFinished re-posts the buffered event once the last
-    // producer completes (or drops it if a producer fails, S6), and it then re-enters here and runs
-    // the side effects normally. This deferral check must therefore precede updateAccumulators and
-    // postTaskEnd. Inert for jobs with no pipelined dependency (the map is empty).
-    if (event.reason == Success) {
-      dependentStageMap.get(stage) match {
-        case Some(deferral) if deferral.parents.nonEmpty =>
-          logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
-            log"pipelined consumer ${MDC(STAGE, stage)} until its producer(s) " +
-            log"${MDC(MISSING_PARENT_STAGES, deferral.parents.toSeq)} finish")
-          deferral.delayedTaskCompletionEvents += event
-          return
+    // Group-observable completion (spec S5), fine-grained model: a pipelined consumer's per-task
+    // side effects (accumulator update, task-end listener event) run in real time as its tasks
+    // finish -- exactly as for any other stage -- and ONLY the stage/job-completion decision is
+    // deferred until the producer(s) finish. Deferring the completion decision is what matters:
+    // advancing it early would let a consumer that finished ahead of its producer complete the job
+    // and cancel the still-running producer (via cancelRunningIndependentStages), or expose the
+    // consumer's output before the producer's. Its per-task facts, by contrast, are true when they
+    // happen (S5.1: task-level listener events flow in real time), so they must not be frozen for
+    // the producer's remaining lifetime.
+    //
+    // Two flags drive this. `finishOnly` is set on a replayed event (see
+    // releaseDeferredPipelinedConsumers): its per-task effects already ran inline on first
+    // completion, so on replay we skip straight to the completion bookkeeping and never apply them
+    // twice. `deferCompletion` is true for a fresh Success from a pipelined consumer whose
+    // producers are still running: run the per-task effects now, then buffer the event and return
+    // before the completion bookkeeping. Both are inert for a job with no pipelined dependency (the
+    // map is empty), so the regular path is unchanged.
+    val deferCompletion = !event.finishOnly && event.reason == Success &&
+      dependentStageMap.get(stage).exists(_.parents.nonEmpty)
+
+    if (!event.finishOnly) {
+      // Make sure the task's accumulators are updated before any other processing happens, so that
+      // we can post a task end event before any jobs or stages are updated. The accumulators are
+      // only updated in certain cases.
+      event.reason match {
+        case Success =>
+          task match {
+            case rt: ResultTask[_, _] =>
+              val resultStage = stage.asInstanceOf[ResultStage]
+              resultStage.activeJob match {
+                case Some(job) =>
+                  // Only update the accumulator once for each result task.
+                  if (!job.finished(rt.outputId)) {
+                    updateAccumulators(event)
+                  }
+                case None => // Ignore update if task's job has finished.
+              }
+            case _ =>
+              updateAccumulators(event)
+          }
+        case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
         case _ =>
       }
+      if (trackingCacheVisibility) {
+        // Update rdd blocks' visibility status.
+        blockManagerMaster.updateRDDBlockVisibility(
+          event.taskInfo.taskId, visible = event.reason == Success)
+      }
+
+      postTaskEnd(event)
     }
 
-    // Make sure the task's accumulators are updated before any other processing happens, so that
-    // we can post a task end event before any jobs or stages are updated. The accumulators are
-    // only updated in certain cases.
-    event.reason match {
-      case Success =>
-        task match {
-          case rt: ResultTask[_, _] =>
-            val resultStage = stage.asInstanceOf[ResultStage]
-            resultStage.activeJob match {
-              case Some(job) =>
-                // Only update the accumulator once for each result task.
-                if (!job.finished(rt.outputId)) {
-                  updateAccumulators(event)
-                }
-              case None => // Ignore update if task's job has finished.
-            }
-          case _ =>
-            updateAccumulators(event)
-        }
-      case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
-      case _ =>
+    // Now that the per-task effects have run, defer the completion bookkeeping if this is a
+    // co-scheduled pipelined consumer whose producer(s) are still running. It is replayed
+    // (finishOnly = true) once the last producer finishes, or dropped if a producer fails (S6).
+    if (deferCompletion) {
+      val deferral = dependentStageMap(stage)
+      logInfo(log"Deferring completion of task ${MDC(TASK_ID, event.taskInfo.taskId)} in " +
+        log"pipelined consumer ${MDC(STAGE, stage)} until its producer(s) " +
+        log"${MDC(MISSING_PARENT_STAGES, deferral.parents.toSeq)} finish")
+      deferral.delayedTaskCompletionEvents += event
+      return
     }
-    if (trackingCacheVisibility) {
-      // Update rdd blocks' visibility status.
-      blockManagerMaster.updateRDDBlockVisibility(
-        event.taskInfo.taskId, visible = event.reason == Success)
-    }
-
-    postTaskEnd(event)
 
     event.reason match {
       case Success =>
@@ -3921,7 +3932,15 @@ private[spark] class DAGScheduler(
    * consumer was deferred on, remove it from that consumer's pending-producer set. When a consumer
    * has no pending producers left, either replay its buffered completion events (producer succeeded)
    * or drop them (a producer failed -- the group will be torn down and rerun, so the consumer's
-   * buffered successes must not be applied; S6). Inert unless `finishedStage` is a tracked producer.
+   * buffered completions must not be applied; S6). Inert unless `finishedStage` is a tracked
+   * producer.
+   *
+   * Only the deferred stage/job-completion bookkeeping is buffered here; each event's per-task side
+   * effects (accumulator update, task-end listener event) already ran inline when the task first
+   * completed (fine-grained model, S5). So replay re-posts each event with `finishOnly = true` (run
+   * the completion bookkeeping only, never the per-task effects again), and the drop path simply
+   * discards the buffered events -- there is nothing left to emit, since the consumer's TaskEnd
+   * events were already delivered in real time.
    */
   private def releaseDeferredPipelinedConsumers(
       finishedStage: Stage, producerFailed: Boolean): Unit = {
@@ -3942,15 +3961,17 @@ private[spark] class DAGScheduler(
           logInfo(log"Dropping ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
             log"pipelined consumer ${MDC(STAGE, consumer)} because its producer " +
             log"${MDC(STAGE, finishedStage)} failed; the group will be rerun")
-          // The buffered tasks genuinely succeeded, so still emit their TaskEnd events -- otherwise
-          // listeners that track active tasks (e.g. AppStatusListener) would believe these tasks
-          // are still running. We deliberately do NOT run the stage/job completion bookkeeping:
-          // the group failed and will be rerun, so the consumer's results must not be applied.
-          events.foreach(postTaskEnd)
+          // Only the deferred stage/job-completion bookkeeping was buffered; the consumer's
+          // per-task effects (including its TaskEnd events) already ran inline when the tasks first
+          // completed. The group failed and will be rerun, so that completion bookkeeping must NOT
+          // be applied -- simply discard the buffered events. (There is nothing to re-emit: unlike
+          // the coarse model, no TaskEnd was withheld.)
         } else {
           logInfo(log"Replaying ${MDC(NUM_EVENTS, events.size.toLong)} deferred completion(s) for " +
             log"pipelined consumer ${MDC(STAGE, consumer)} now that its producers have finished")
-          events.foreach(eventProcessLoop.post)
+          // Re-post each event to run ONLY the deferred completion bookkeeping (finishOnly = true);
+          // the per-task effects already ran inline and must not be applied again.
+          events.foreach(e => eventProcessLoop.post(e.copy(finishOnly = true)))
         }
       }
     }
