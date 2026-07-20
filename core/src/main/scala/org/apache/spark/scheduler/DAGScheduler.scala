@@ -710,10 +710,8 @@ private[spark] class DAGScheduler(
     stage
   }
 
-  private def pipelinedUnsupportedError(reason: String): SparkException = new SparkException(
-    errorClass = "PIPELINED_SHUFFLE_UNSUPPORTED",
-    messageParameters = scala.collection.immutable.Map("reason" -> reason),
-    cause = null)
+  private def pipelinedUnsupportedError(reason: String): PipelinedShuffleUnsupportedException =
+    new PipelinedShuffleUnsupportedException(reason)
 
   /**
    * Fail-fast on producer-side idioms a pipelined shuffle cannot support in v1 (spec S9), checked
@@ -725,11 +723,11 @@ private[spark] class DAGScheduler(
    * mis-scheduling. Inert for a regular ShuffleDependency.
    *
    * Group-level idioms are handled elsewhere, since they are properties of the group rather than a
-   * single producer stage: fan-out (a producer with more than one consumer) is rejected up front
-   * at job submission by `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created);
-   * mixed resource profiles and a regular shuffle internal to a group are structural invariants
-   * that do not arise for v1's single-profile, all-pipelined job shape and so are not checked
-   * (see `checkPipelinedGroupsSupportedInRDDGraph`).
+   * single producer stage: fan-out (a producer with more than one consumer) and a mixed-resource-
+   * profile group are rejected up front at job submission by
+   * `checkPipelinedGroupsSupportedInRDDGraph` (before any stage is created). A regular shuffle
+   * internal to a group does not arise for v1's all-pipelined job shape (groups are split at
+   * regular-shuffle boundaries, S3) and so is not checked.
    */
   private def checkPipelinedProducerSupported(shuffleDep: ShuffleDependency[_, _, _]): Unit = {
     if (!shuffleDep.isInstanceOf[PipelinedShuffleDependency[_, _, _]]) {
@@ -758,7 +756,7 @@ private[spark] class DAGScheduler(
     }
     // Push-based shuffle merge as the pipelined shuffle: exposes output only after a
     // post-completion finalize step, the opposite of incremental reads. A
-    // PipelinedShuffleDependency disables merge in its constructor (M1.6), so this is a defensive
+    // PipelinedShuffleDependency disables merge in its constructor, so this is a defensive
     // backstop against that being bypassed.
     if (shuffleDep.shuffleMergeEnabled) {
       throw pipelinedUnsupportedError("push-based shuffle merge as a pipelined shuffle")
@@ -1153,14 +1151,15 @@ private[spark] class DAGScheduler(
    *    shuffle. Checked here (not at stage creation) so a reject leaves no partial stage state, and
    *    so BOTH the producer chain (rooted at pd.rdd) and each consumer chain (rooted at a consuming
    *    RDD) are covered from the whole-graph view.
+   *  - Mixed resource profiles across the group's RDDs. The gang slot check (S4) compares one
+   *    demand against one profile's capacity, so v1 requires a group to be single-profile; more
+   *    than one distinct explicit profile is rejected. Per-profile accounting is a follow-up.
    *
-   * (The other S9 group-level rows -- mixed resource profiles and a regular shuffle internal to a
-   * group -- are structural invariants that do not arise for the single-profile,
-   * prefix*->PG->suffix* shapes v1 targets: a group is single-profile by construction here, and
-   * groups are split at
-   * regular-shuffle boundaries (S3). The remaining producer-side idioms -- barrier, DRA,
-   * indeterminate, checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage
-   * creation, where a producer-only throw leaves no partial state.)
+   * (The remaining S9 group-level row -- a regular shuffle internal to a group -- is a structural
+   * invariant that does not arise for the prefix*->PG->suffix* shapes v1 targets: groups are split
+   * at regular-shuffle boundaries (S3). The producer-side idioms -- barrier, DRA, indeterminate,
+   * checksum, push-merge -- are rejected in checkPipelinedProducerSupported at stage creation,
+   * where a producer-only throw leaves no partial state.)
    */
   private def checkPipelinedGroupsSupportedInRDDGraph(finalRDD: RDD[_]): Unit = {
     // Walk the whole RDD graph once, collecting for each pipelined shuffleId the distinct consumer
@@ -1169,10 +1168,12 @@ private[spark] class DAGScheduler(
     val consumersByShuffleId = new HashMap[Int, HashSet[Int]]
     val producerRoots = new HashSet[RDD[_]]           // RDDs that WRITE a pipelined shuffle
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
+    val resourceProfiles = new HashSet[ResourceProfile]  // distinct RPs across the group's RDDs
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       if (rdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
         reliablyCheckpointed += rdd
       }
+      Option(rdd.getResourceProfile()).foreach(resourceProfiles += _)
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
           consumersByShuffleId.getOrElseUpdate(pd.shuffleId, new HashSet[Int]) += rdd.id
@@ -1185,6 +1186,16 @@ private[spark] class DAGScheduler(
     if (consumersByShuffleId.values.exists(_.size > 1)) {
       throw pipelinedUnsupportedError(
         "a pipelined producer with more than one consumer (fan-out / branching)")
+    }
+    // Mixed resource profiles within a group (spec S9). The gang slot check (S4) compares one
+    // demand against one profile's capacity (maxNumConcurrentTasks is defined per profile), so v1
+    // requires a group to be single-profile and fails fast otherwise; per-profile accounting is a
+    // follow-up. An RDD with no explicit profile contributes nothing (it runs under the default),
+    // so only distinct EXPLICIT profiles are counted -- more than one means the group spans
+    // profiles. This is a real check, not just a documented assumption: nothing else enforces it.
+    if (resourceProfiles.size > 1) {
+      throw pipelinedUnsupportedError(
+        "members of a pipelined group with differing resource profiles (single-profile required)")
     }
     // Reject a reliable checkpoint anywhere in a pipelined-group MEMBER's within-stage chain (spec
     // S9). Keyed on checkpointData being ReliableRDDCheckpointData, not isCheckpointed, since the
@@ -2053,10 +2064,11 @@ private[spark] class DAGScheduler(
           return
         }
 
-      case e: Exception with SparkThrowable if e.getCondition == "PIPELINED_SHUFFLE_UNSUPPORTED" =>
+      case e: PipelinedShuffleUnsupportedException =>
         // An up-front idiom rejection (checkPipelinedGroupsSupportedInRDDGraph / a producer-side
         // check in createResultStage), not a stage-creation failure. Log it as such (the generic
-        // "Creating new stage failed" message below would be misleading).
+        // "Creating new stage failed" message below would be misleading). Matched by TYPE, not by
+        // the error-condition string, so a rename or a wrapped cause cannot misroute it.
         logWarning(log"Rejecting job ${MDC(JOB_ID, jobId)}: unsupported pipelined-shuffle idiom", e)
         listener.jobFailed(e)
         return
@@ -4592,6 +4604,20 @@ private[spark] object DAGScheduler {
   // as more failure events come in
   val RESUBMIT_TIMEOUT = 200
 }
+
+/**
+ * Thrown when a job uses a pipelined-shuffle idiom that v1 does not support (fan-out, a barrier /
+ * indeterminate / checksum-retry / push-merge producer, a reliable checkpoint in a member's chain,
+ * or a mixed-resource-profile group; spec S9). `handleJobSubmitted` matches on this TYPE to
+ * distinguish an up-front idiom rejection from an ordinary stage-creation failure, rather than on
+ * the error-condition string (which a rename or a wrapped cause would silently break). Carries the
+ * `PIPELINED_SHUFFLE_UNSUPPORTED` error class so the user-facing message is unchanged.
+ */
+private[scheduler] class PipelinedShuffleUnsupportedException(reason: String)
+  extends SparkException(
+    errorClass = "PIPELINED_SHUFFLE_UNSUPPORTED",
+    messageParameters = scala.collection.immutable.Map("reason" -> reason),
+    cause = null)
 
 /**
  * A NOT thread-safe set that only keeps the last `capacity` elements added to it.

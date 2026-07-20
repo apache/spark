@@ -7606,6 +7606,26 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("pipelined shuffle: a group whose members have differing resource profiles is rejected") {
+    // The gang slot check (S4) compares one demand against one profile's capacity, so v1 requires a
+    // group to be single-profile and fails fast otherwise (spec S9). Give the producer and consumer
+    // two distinct, non-default resource profiles: checkPipelinedGroupsSupportedInRDDGraph collects
+    // more than one distinct profile across the group's RDDs and rejects up front.
+    val rpA = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(4))
+      .require(new TaskResourceRequests().cpus(1)).build()
+    val rpB = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(8))
+      .require(new TaskResourceRequests().cpus(2)).build()
+    val producerRdd = new MyRDD(sc, 2, Nil).withResources(rpA)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+      .withResources(rpB)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "differing resource profiles")
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle idioms are NOT rejected (inertness of the pipelined fail-fast)") {
     // The pipelined fail-fast checks (indeterminate producer, reliable-checkpoint-in-chain) must be
     // inert for a job with NO pipelined dependency: a regular shuffle whose producer is BOTH
