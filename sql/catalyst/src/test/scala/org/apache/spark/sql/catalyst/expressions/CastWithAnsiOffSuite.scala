@@ -942,4 +942,48 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("SPARK-58217: cast large decimal to timestamp with overflow with ansi off") {
+    // Create a Decimal large enough that multiplying by MICROS_PER_SECOND overflows Long
+    val largeDecimal = Literal(Decimal(
+      new java.math.BigDecimal("99999999999999999999"), 38, 0))
+    checkEvaluation(
+      cast(largeDecimal, TimestampType, UTC_OPT), null)
+
+    // Negative overflow should also return null
+    val negativeDecimal = Literal(Decimal(
+      new java.math.BigDecimal("-99999999999999999999"), 38, 0))
+    checkEvaluation(
+      cast(negativeDecimal, TimestampType, UTC_OPT), null)
+
+    // Decimal with non-zero scale whose integer part overflows Long when scaled
+    val scaledDecimal = Literal(Decimal(
+      new java.math.BigDecimal("99999999999999999999.999999"), 38, 6))
+    checkEvaluation(
+      cast(scaledDecimal, TimestampType, UTC_OPT), null)
+
+    // A normal Decimal value should still work (1 second after epoch)
+    val normalDecimal = Literal(Decimal(1L, 10, 0))
+    checkEvaluation(
+      cast(normalDecimal, TimestampType, UTC_OPT), MICROS_PER_SECOND)
+
+    // Zero value should return epoch
+    val zeroDecimal = Literal(Decimal(0L, 10, 0))
+    checkEvaluation(
+      cast(zeroDecimal, TimestampType, UTC_OPT), 0L)
+
+    // Boundary: Long.MAX_VALUE / MICROS_PER_SECOND = 9223372036854
+    // 9223372036854 * 1000000 = 9223372036854000000 < Long.MAX_VALUE -> should pass
+    val justUnder = Literal(Decimal(
+      new java.math.BigDecimal("9223372036854"), 20, 0))
+    checkEvaluation(
+      cast(justUnder, TimestampType, UTC_OPT),
+      new java.math.BigDecimal("9223372036854").longValue * MICROS_PER_SECOND)
+
+    // 9223372036855 * 1000000 = 9223372036855000000 > Long.MAX_VALUE -> should overflow
+    val justOver = Literal(Decimal(
+      new java.math.BigDecimal("9223372036855"), 20, 0))
+    checkEvaluation(
+      cast(justOver, TimestampType, UTC_OPT), null)
+  }
 }
