@@ -64,6 +64,8 @@ import org.apache.spark.util.ArrayImplicits._
     Arguments:
       * sep - The separator placed between the concatenated values.
         An expression that evaluates to a string.
+      * str - The values to concatenate, skipping null values. There can be one or more of them.
+        Each is an expression that evaluates to a string or an array of strings.
   """,
   examples = """
     Examples:
