@@ -7251,7 +7251,8 @@ object functions {
    * @param sep
    *   The words separator. A column that evaluates to a string. Must be a constant.
    * @param exprs
-   *   The list of columns to work on. Each a column that evaluates to a string.
+   *   The list of columns to work on. Each a column that evaluates to a string or an array of
+   *   strings.
    * @note
    *   Input strings which are null are skipped.
    *
