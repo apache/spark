@@ -1,12 +1,12 @@
 # Continuous Integration on GitHub Actions
 
-The continuous integration build is critical to enabling contributors to make changes to Spark with the confidence that they have not inadvertently broken anything.
+The continuous integration build is critical to the project's health and development velocity. It enables contributors to make changes to Spark with the confidence that they have not inadvertently broken anything.
 
 There are several considerations to keep in mind when making changes to the build.
 
 ## Push heavy workflows out to forks
 
-The Apache Software Foundation (ASF) has an Enterprise GitHub plan. This covers all repos under [the `apache` GitHub organization][org]. There is an [organization-wide limit][limit] on the number of concurrent jobs that can run on GitHub Actions. This limit can often cause jobs to queue up, bringing development to a crawl.
+The Apache Software Foundation (ASF) has an Enterprise GitHub plan which covers all repos under [the `apache` GitHub organization][org]. There is an [organization-wide limit][limit] on the number of concurrent jobs that can run on GitHub Actions. This limit can often cause jobs to queue up, bringing development to a crawl.
 
 [org]: https://github.com/apache
 [limit]: https://docs.github.com/en/actions/reference/limits#job-concurrency-limits-for-github-hosted-runners
@@ -16,17 +16,16 @@ Workflows triggered by `on: pull_request` [count against the base repo's (i.e. t
 [base]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
 [important]: https://github.com/apache/spark/pull/32092
 
-### Downsides of avoiding `on: pull_request`
+### Downsides of avoiding the `pull_request` workflow trigger
 
-Keeping the build running is a top priority, but it comes with some downsides, mainly because several features of GitHub Actions work best (or work only) when using `on: pull_request`.
+The [`pull_request` workflow trigger][prt] provides several benefits that make working with workflows easier, including:
 
-A key example is that when using `on: pull_request` GitHub creates a stable merge reference that all jobs associated with the pull request use. Without this, we have to be [careful to recreate a stable reference ourselves][ref] so that all jobs are testing the same code.
+[prt]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
 
-[ref]: https://github.com/apache/spark/pull/55879
+1. The workflow runs against the target repo's context (i.e. `apache/spark`).
+2. GitHub provides a stable merge reference.
 
-Another example is inline pull request annotations. These do not work naturally with `on: push` as they require the workflow that creates the annotations to run on the base repository (and not a fork) and run against the exact latest commit on the pull request (as opposed to a synthetic merge commit). It's possible to work around these problems, but it's [not pretty].
-
-[not pretty]: https://github.com/apache/spark/pull/57015
+Without these benefits, some GitHub Actions patterns become more difficult or impossible to implement.
 
 If in the future GitHub somehow allows workflows to run `on: pull_request` while counting those jobs against the forks' limits instead of ours, that would help eliminate various distortions of our build caused by the move away from `on: pull_request`. We would get the best functionality from GitHub Actions without hitting job run limits.
 
