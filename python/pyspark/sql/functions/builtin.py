@@ -6473,6 +6473,14 @@ def row_number() -> Column:
     :class:`~pyspark.sql.Column`
         the column for calculating row numbers.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6513,6 +6521,14 @@ def dense_rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating ranks.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -6557,6 +6573,14 @@ def rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating ranks.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -6673,6 +6697,14 @@ def cume_dist() -> Column:
     :class:`~pyspark.sql.Column`
         the column for calculating cumulative distribution.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -6707,6 +6739,14 @@ def percent_rank() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for calculating relative rank.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.ntile`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
@@ -9021,6 +9061,11 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     :class:`~pyspark.sql.Column`
         value of nth row.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.first_value`
+    :meth:`pyspark.sql.functions.last_value`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -9135,6 +9180,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     See Also
     --------
     :meth:`pyspark.sql.functions.last_value`
+    :meth:`pyspark.sql.functions.nth_value`
 
     Examples
     --------
@@ -9188,6 +9234,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     See Also
     --------
     :meth:`pyspark.sql.functions.first_value`
+    :meth:`pyspark.sql.functions.nth_value`
 
     Examples
     --------
@@ -9355,6 +9402,14 @@ def ntile(n: int) -> Column:
     -------
     :class:`~pyspark.sql.Column`
         portioned group id.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.cume_dist`
+    :meth:`pyspark.sql.functions.dense_rank`
+    :meth:`pyspark.sql.functions.percent_rank`
+    :meth:`pyspark.sql.functions.rank`
+    :meth:`pyspark.sql.functions.row_number`
 
     Examples
     --------
